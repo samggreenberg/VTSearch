@@ -6,11 +6,25 @@ A Flask web application for audio clip evaluation with LAION-CLAP embeddings.
 
 ### 1. Install Dependencies
 
+Choose the requirements file based on your system:
+
+**For GPU systems** (with NVIDIA GPU):
 ```bash
 cd ~/vectorytones
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-gpu.txt
 ```
+
+**For CPU-only systems** (Chromebook, Mac, or systems without GPU):
+```bash
+cd ~/vectorytones
+source venv/bin/activate
+pip install -r requirements-cpu.txt
+```
+
+The main difference is the PyTorch version:
+- `requirements-gpu.txt` installs full PyTorch with CUDA support (~2GB)
+- `requirements-cpu.txt` installs PyTorch CPU-only (~500MB)
 
 ### 2. Download and Setup Datasets
 
@@ -61,14 +75,15 @@ Visit http://localhost:5000
 
 ```
 vectorytones/
-├── app.py                  # Flask application
-├── setup_datasets.py       # Dataset download & embedding script
-├── requirements.txt        # Python dependencies
-├── static/                 # Frontend assets
-├── templates/              # HTML templates
-└── data/                   # Downloaded datasets (not in git)
-    ├── ESC-50-master/      # ESC-50 audio files
-    └── embeddings/         # Precomputed CLAP embeddings
+├── app.py                      # Flask application
+├── setup_datasets.py           # Dataset download & embedding script
+├── requirements-gpu.txt        # Python dependencies (GPU systems)
+├── requirements-cpu.txt        # Python dependencies (CPU-only systems)
+├── static/                     # Frontend assets
+├── templates/                  # HTML templates
+└── data/                       # Downloaded datasets (not in git)
+    ├── ESC-50-master/          # ESC-50 audio files
+    └── embeddings/             # Precomputed CLAP embeddings
 ```
 
 ## Tech Stack
