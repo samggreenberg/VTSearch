@@ -38,7 +38,7 @@ NUM_CLIPS = 20
 clips = {}  # id -> {id, duration, file_size, embedding, wav_bytes}
 good_votes: set[int] = set()
 bad_votes: set[int] = set()
-inclusion = 0  # Inclusion setting: -10 to +10, default 0
+inclusion: int = 0  # Inclusion setting: -10 to +10, default 0
 
 # Load CLAP model for audio/text embeddings
 clap_model: Optional[ClapModel] = None
@@ -723,14 +723,14 @@ def train_model(X_train, y_train, input_dim, inclusion_value=0):
     # Adjust weights based on inclusion
     if inclusion_value >= 0:
         # Increase weight for True samples
-        weight_true *= (2.0 ** inclusion_value)
+        weight_true *= 2.0**inclusion_value
     else:
         # Increase weight for False samples
-        weight_false *= (2.0 ** (-inclusion_value))
+        weight_false *= 2.0 ** (-inclusion_value)
 
     # Create sample weights
     weights = torch.where(y_train == 1, weight_true, weight_false).squeeze()
-    loss_fn = nn.BCELoss(reduction='none')
+    loss_fn = nn.BCELoss(reduction="none")
 
     model.train()
     for _ in range(200):
@@ -759,14 +759,14 @@ def find_optimal_threshold(scores, labels, inclusion_value=0):
     """
     sorted_pairs = sorted(zip(scores, labels), reverse=True)
     best_threshold = 0.5
-    best_cost = float('inf')
+    best_cost = float("inf")
 
     # Calculate weights based on inclusion
     if inclusion_value >= 0:
         fpr_weight = 1.0
-        fnr_weight = 2.0 ** inclusion_value
+        fnr_weight = 2.0**inclusion_value
     else:
-        fpr_weight = 2.0 ** inclusion_value
+        fpr_weight = 2.0**inclusion_value
         fnr_weight = 1.0
 
     for i in range(len(sorted_pairs)):
@@ -869,7 +869,9 @@ def train_and_score(inclusion_value=0):
     input_dim = X.shape[1]
 
     # Calculate threshold using cross-calibration
-    threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion_value)
+    threshold = calculate_cross_calibration_threshold(
+        X_list, y_list, input_dim, inclusion_value
+    )
 
     # Train final model on all data
     model = train_model(X, y, input_dim, inclusion_value)
@@ -1001,7 +1003,9 @@ def export_detector():
     input_dim = X.shape[1]
 
     # Calculate threshold using cross-calibration with inclusion
-    threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion)
+    threshold = calculate_cross_calibration_threshold(
+        X_list, y_list, input_dim, inclusion
+    )
 
     # Train final model on all data with inclusion
     model = train_model(X, y, input_dim, inclusion)
