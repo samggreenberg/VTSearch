@@ -52,8 +52,16 @@ video_processor: Optional[VideoMAEImageProcessor] = None
 # Dataset management
 DATA_DIR = Path("data")
 AUDIO_DIR = DATA_DIR / "audio"
+VIDEO_DIR = DATA_DIR / "video"
 EMBEDDINGS_DIR = DATA_DIR / "embeddings"
 ESC50_URL = "https://github.com/karolpiczak/ESC-50/archive/master.zip"
+
+# Video datasets
+# Using a custom small video dataset similar to ESC-50
+# Format: GitHub repo with videos organized by category folders
+SAMPLE_VIDEOS_URL = "https://github.com/sample-datasets/video-clips/archive/refs/heads/main.zip"
+SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150  # Approximate size
+CLIPS_PER_VIDEO_CATEGORY = 10  # Approximate number of clips per category
 
 # Progress tracking for long-running operations
 progress_lock = threading.Lock()
@@ -161,42 +169,22 @@ DEMO_DATASETS = {
         "description": "Household and human sounds",
         "media_type": "audio",
     },
-    "sports_video": {
+    "actions_video": {
         "categories": [
-            "basketball",
-            "soccer",
-            "tennis",
-            "swimming",
-            "running",
-            "cycling",
-            "skateboarding",
-            "surfing",
+            "ApplyEyeMakeup",
+            "ApplyLipstick",
+            "BrushingTeeth",
+            "CliffDiving",
+            "HandstandWalking",
+            "JumpRope",
+            "PushUps",
+            "TaiChi",
+            "YoYo",
+            "Drumming",
         ],
-        "description": "Short sports action clips",
+        "description": "Human action recognition clips",
         "media_type": "video",
-    },
-    "animals_video": {
-        "categories": [
-            "dog_playing",
-            "cat_jumping",
-            "bird_flying",
-            "fish_swimming",
-            "horse_running",
-        ],
-        "description": "Animal movement clips",
-        "media_type": "video",
-    },
-    "nature_video": {
-        "categories": [
-            "waterfall",
-            "ocean_waves",
-            "sunset",
-            "forest",
-            "clouds",
-            "rain_falling",
-        ],
-        "description": "Natural scenery clips",
-        "media_type": "video",
+        "source": "ucf101",
     },
 }
 
@@ -627,6 +615,55 @@ def load_esc50_metadata(esc50_dir: Path) -> dict:
     return metadata
 
 
+def download_ucf101_subset() -> Path:
+    """Download UCF-101 action recognition videos.
+
+    Note: UCF-101 is distributed as a RAR file. For demo purposes, we'll
+    try to download from a mirror or use a smaller subset if available.
+    """
+    # Try to download from a ZIP mirror or subset
+    video_dir = VIDEO_DIR / "ucf101"
+    VIDEO_DIR.mkdir(exist_ok=True, parents=True)
+
+    # For now, check if videos already exist
+    if video_dir.exists() and any(video_dir.glob("*/*.avi")):
+        return video_dir
+
+    # If not available, raise an error with instructions
+    raise ValueError(
+        "UCF-101 video dataset not found. To use video datasets:\n"
+        "1. Download UCF-101 from https://www.crcv.ucf.edu/data/UCF101.php\n"
+        "2. Extract to data/video/ucf101/ directory\n"
+        "3. Or use 'Load from Folder' to import your own video files\n\n"
+        "The UCF-101 dataset is ~6.5GB and distributed as a RAR file.\n"
+        "For automatic download support, we recommend using smaller datasets\n"
+        "or organizing your own video collection in folders by category."
+    )
+
+
+def load_video_metadata_from_folders(video_dir: Path, categories: list[str]) -> dict:
+    """Load video file metadata from category folders."""
+    metadata = {}
+
+    for category_folder in video_dir.iterdir():
+        if not category_folder.is_dir():
+            continue
+
+        category_name = category_folder.name
+        if category_name not in categories:
+            continue
+
+        # Find all video files in this category
+        for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
+            for video_path in category_folder.glob(ext):
+                metadata[video_path.name] = {
+                    "category": category_name,
+                    "path": video_path,
+                }
+
+    return metadata
+
+
 def load_demo_dataset(dataset_name: str):
     """Load a demo dataset, downloading and embedding if necessary."""
     global clips
@@ -637,13 +674,6 @@ def load_demo_dataset(dataset_name: str):
     dataset_info = DEMO_DATASETS[dataset_name]
     media_type = dataset_info.get("media_type", "audio")
 
-    # For video datasets, return a placeholder message for now
-    if media_type == "video":
-        raise ValueError(
-            f"Video dataset '{dataset_name}' not yet implemented. "
-            "Video datasets require actual video files to be downloaded and embedded."
-        )
-
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{dataset_name}.pkl"
     if pkl_file.exists():
@@ -652,16 +682,101 @@ def load_demo_dataset(dataset_name: str):
 
         # Check if any clips were actually loaded
         if len(clips) == 0:
-            # Pickle file exists but audio files are missing, delete and re-embed
+            # Pickle file exists but media files are missing, delete and re-embed
             update_progress(
-                "loading", f"Audio files missing, re-embedding {dataset_name}...", 0, 0
+                "loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0
             )
             pkl_file.unlink()
         else:
             update_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
-    # Need to download and embed
+    # Process based on media type
+    if media_type == "video":
+        # Handle video datasets
+        video_source = dataset_info.get("source", "ucf101")
+
+        if video_source == "ucf101":
+            try:
+                video_dir = download_ucf101_subset()
+            except ValueError as e:
+                # If UCF-101 is not available, provide helpful error message
+                update_progress("idle", "")
+                raise e
+
+            metadata = load_video_metadata_from_folders(video_dir, dataset_info["categories"])
+            video_files = [(meta["path"], meta) for meta in metadata.values()]
+
+            # Generate embeddings for videos
+            clips.clear()
+            clip_id = 1
+            total = len(video_files)
+            update_progress(
+                "embedding", f"Starting embedding for {total} video files...", 0, total
+            )
+
+            for i, (video_path, meta) in enumerate(video_files):
+                update_progress(
+                    "embedding",
+                    f"Embedding {meta['category']}: {video_path.name} ({i + 1}/{total})",
+                    i + 1,
+                    total,
+                )
+
+                embedding = embed_video_file(video_path)
+                if embedding is None:
+                    continue
+
+                with open(video_path, "rb") as f:
+                    video_bytes = f.read()
+
+                # Get duration using OpenCV
+                try:
+                    cap = cv2.VideoCapture(str(video_path))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                    duration = frame_count / fps if fps > 0 else 0
+                    cap.release()
+                except Exception:
+                    duration = 0
+
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": "video",
+                    "duration": duration,
+                    "file_size": len(video_bytes),
+                    "md5": hashlib.md5(video_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "wav_bytes": None,
+                    "video_bytes": video_bytes,
+                    "filename": video_path.name,
+                    "category": meta["category"],
+                }
+                clip_id += 1
+
+            # Save for future use
+            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(pkl_file, "wb") as f:
+                pickle.dump(
+                    {
+                        "name": dataset_name,
+                        "clips": {
+                            cid: {
+                                k: v.tolist() if isinstance(v, np.ndarray) else v
+                                for k, v in clip.items()
+                                if k not in ["wav_bytes", "video_bytes"]
+                            }
+                            for cid, clip in clips.items()
+                        },
+                        "video_dir": str(video_dir.absolute()),
+                    },
+                    f,
+                )
+
+            update_progress("idle", f"Loaded {dataset_name} dataset")
+            return
+
+    # Handle audio datasets (existing ESC-50 logic)
     audio_dir = download_esc50()
     metadata = load_esc50_metadata(audio_dir.parent)
 
@@ -1529,17 +1644,40 @@ def demo_dataset_list():
         pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
         is_ready = pkl_file.exists()
 
-        # Calculate number of files (40 clips per ESC-50 category)
+        media_type = dataset_info.get("media_type", "audio")
+
+        # Calculate number of files
         num_categories = len(dataset_info["categories"])
-        num_files = num_categories * CLIPS_PER_CATEGORY
+        if media_type == "video":
+            # For video datasets, estimate based on available files or use default
+            num_files = num_categories * CLIPS_PER_VIDEO_CATEGORY
+        else:
+            # For audio datasets (ESC-50 has 40 clips per category)
+            num_files = num_categories * CLIPS_PER_CATEGORY
 
         # Calculate download size
         if is_ready:
             # If ready, show the actual .pkl file size
             download_size_mb = pkl_file.stat().st_size / (1024 * 1024)
         else:
-            # If not ready, user needs to download full ESC-50
-            download_size_mb = ESC50_DOWNLOAD_SIZE_MB
+            # If not ready, estimate download size
+            if media_type == "video":
+                # Check if video files exist
+                video_source = dataset_info.get("source", "ucf101")
+                if video_source == "ucf101":
+                    video_dir = VIDEO_DIR / "ucf101"
+                    if video_dir.exists():
+                        # Videos are present, just need to embed
+                        download_size_mb = 0
+                        is_ready = False  # Not embedded yet, but videos available
+                    else:
+                        # Need to download/obtain videos (manual process for UCF-101)
+                        download_size_mb = 0  # Manual download required
+                else:
+                    download_size_mb = SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB
+            else:
+                # Audio dataset - ESC-50 download
+                download_size_mb = ESC50_DOWNLOAD_SIZE_MB
 
         demos.append(
             {
