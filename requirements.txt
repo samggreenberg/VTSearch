@@ -2,5 +2,6 @@ flask
 numpy
 torch
 torchvision
-laion-clap
+transformers
+accelerate
 scikit-learn

@@ -9,10 +9,11 @@ import pickle
 import zipfile
 from pathlib import Path
 
-import laion_clap
 import librosa
 import requests
+import torch
 from tqdm import tqdm
+from transformers import ClapModel, ClapProcessor
 
 # Configuration
 DATA_DIR = Path("data")
@@ -167,14 +168,15 @@ def load_esc50_metadata(esc50_dir: Path) -> dict:
 
 def load_clap_model():
     """Load pretrained LAION-CLAP model."""
-    print("🤖 Loading LAION-CLAP model...")
-    model = laion_clap.CLAP_Module(enable_fusion=False, amodel="HTSAT-base")
-    model.load_ckpt()  # Downloads pretrained checkpoint
+    print("🤖 Loading CLAP model (Hugging Face)...")
+    model_id = "laion/clap-htsat-unfused"
+    model = ClapModel.from_pretrained(model_id)
+    processor = ClapProcessor.from_pretrained(model_id)
     print("  ✓ Model loaded")
-    return model
+    return model, processor
 
 
-def generate_embeddings(audio_dir: Path, model, metadata: dict) -> dict:
+def generate_embeddings(audio_dir: Path, model, processor, metadata: dict) -> dict:
     """Generate CLAP embeddings for all audio files."""
     print("🎵 Generating CLAP embeddings...")
 
@@ -188,7 +190,17 @@ def generate_embeddings(audio_dir: Path, model, metadata: dict) -> dict:
         audio_data, sr = librosa.load(audio_file, sr=SAMPLE_RATE, mono=True)
 
         # Get embedding from CLAP
-        embedding = model.get_audio_embedding_from_data(x=audio_data, use_tensor=False)
+        inputs = processor(
+            audio=audio_data,
+            sampling_rate=SAMPLE_RATE,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=480000,
+            truncation=True,
+        )
+        with torch.no_grad():
+            outputs = model.audio_model(**inputs)
+            embedding = model.audio_projection(outputs.pooler_output).numpy()
 
         # Store embedding and metadata
         embeddings_data[filename] = {
@@ -281,11 +293,11 @@ def main():
     print()
 
     # Step 3: Load CLAP model
-    model = load_clap_model()
+    model, processor = load_clap_model()
     print()
 
     # Step 4: Generate embeddings
-    embeddings_data = generate_embeddings(audio_dir, model, metadata)
+    embeddings_data = generate_embeddings(audio_dir, model, processor, metadata)
     print(f"  ✓ Generated {len(embeddings_data)} embeddings")
     print()
 

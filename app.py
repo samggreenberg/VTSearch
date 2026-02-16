@@ -1,16 +1,23 @@
+import os
+
+# Limit threads to reduce memory overhead in constrained environments
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+import gc
 import hashlib
 import io
 import math
 import struct
-from typing import Optional
 import wave
+from typing import Optional
 
-import laion_clap
 import numpy as np
 import torch
 import torch.nn as nn
 from flask import Flask, jsonify, request, send_file
 from sklearn.mixture import GaussianMixture
+from transformers import ClapModel, ClapProcessor
 
 app = Flask(__name__)
 
@@ -18,7 +25,7 @@ app = Flask(__name__)
 # Clip generation
 # ---------------------------------------------------------------------------
 
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 48000
 NUM_CLIPS = 20
 
 clips = {}  # id -> {id, duration, file_size, embedding, wav_bytes}
@@ -26,7 +33,8 @@ good_votes: set[int] = set()
 bad_votes: set[int] = set()
 
 # Load CLAP model for audio/text embeddings
-clap_model: Optional[laion_clap.CLAP_Module] = None
+clap_model: Optional[ClapModel] = None
+clap_processor: Optional[ClapProcessor] = None
 
 
 def generate_wav(frequency: float, duration: float) -> bytes:
@@ -55,6 +63,7 @@ def wav_bytes_to_float(wav_bytes: bytes) -> np.ndarray:
 
 
 def init_clips():
+    print("DEBUG: Generating synthetic waveforms...", flush=True)
     for i in range(1, NUM_CLIPS + 1):
         freq = 200 + (i - 1) * 50  # 200 Hz .. 1150 Hz
         duration = round(1.0 + (i % 5) * 0.5, 1)  # 1.0 – 3.0 s
@@ -70,6 +79,7 @@ def init_clips():
         }
 
     # Compute CLAP audio embeddings for all clips in one batch
+    print("DEBUG: Converting audio to float arrays...", flush=True)
     audio_arrays = []
     max_len = 0
     for i in range(1, NUM_CLIPS + 1):
@@ -77,33 +87,49 @@ def init_clips():
         audio_arrays.append(arr)
         max_len = max(max_len, len(arr))
 
-    # Pad all arrays to the same length for batched inference
-    padded = np.zeros((NUM_CLIPS, max_len), dtype=np.float32)
-    for idx, arr in enumerate(audio_arrays):
-        padded[idx, : len(arr)] = arr
-
-    if clap_model is None:
+    if clap_model is None or clap_processor is None:
         raise RuntimeError("CLAP model not loaded")
     else:
-        embeddings = clap_model.get_audio_embedding_from_data(padded)
+        print(
+            f"DEBUG: Running CLAP inference on {len(audio_arrays)} items...", flush=True
+        )
+        inputs = clap_processor(
+            audio=audio_arrays,
+            return_tensors="pt",
+            padding="max_length",  # Pad to 10s to match HTSAT training
+            max_length=480000,  # 48kHz * 10s
+            truncation=True,
+            sampling_rate=SAMPLE_RATE,
+        )
+        with torch.no_grad():
+            outputs = clap_model.audio_model(**inputs)
+            embeddings = clap_model.audio_projection(outputs.pooler_output).numpy()
+        print("DEBUG: Inference complete.", flush=True)
 
     for i in range(1, NUM_CLIPS + 1):
         clips[i]["embedding"] = embeddings[i - 1]
 
 
 def initialize_app():
-    global clap_model
+    global clap_model, clap_processor
+    print("DEBUG: initialize_app called", flush=True)
+
+    # Optimize for low-memory environments
+    torch.set_num_threads(1)
+    gc.collect()
+
     if clap_model is None:
-        clap_model = laion_clap.CLAP_Module(enable_fusion=False)
-        clap_model.load_ckpt()  # downloads default pretrained checkpoint
+        print("DEBUG: Loading CLAP model (Hugging Face)...", flush=True)
+        # Use the unfused model (~600MB) and low_cpu_mem_usage to avoid RAM spikes
+        model_id = "laion/clap-htsat-unfused"
+        clap_model = ClapModel.from_pretrained(model_id, low_cpu_mem_usage=True)
+        clap_processor = ClapProcessor.from_pretrained(model_id)
+        print("DEBUG: CLAP model loaded.", flush=True)
 
     if not clips:
+        print("DEBUG: Initializing clips...", flush=True)
         init_clips()
-
-
-@app.before_request
-def ensure_initialized():
-    initialize_app()
+        print("DEBUG: Clips initialized.", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +211,7 @@ def calculate_gmm_threshold(scores):
         gmm.fit(X)
 
         # Get the means of the two components
-        means = gmm.means_.flatten()
+        means = np.ravel(gmm.means_)
         # stds = np.sqrt(gmm.covariances_.flatten())
 
         # Identify which component is "low" (Bad) and which is "high" (Good)
@@ -210,8 +236,13 @@ def sort_clips():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    text_embedding = clap_model.get_text_embedding([text])
-    text_vec = text_embedding[0]
+    if clap_model is None or clap_processor is None:
+        return jsonify({"error": "CLAP model not loaded"}), 500
+
+    inputs = clap_processor(text=[text], return_tensors="pt")
+    with torch.no_grad():
+        outputs = clap_model.text_model(**inputs)
+        text_vec = clap_model.text_projection(outputs.pooler_output).numpy()[0]
 
     results = []
     scores = []
@@ -428,4 +459,7 @@ def import_labels():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Initialize before server starts to avoid lazy-loading crashes
+    initialize_app()
+    # Disable reloader and debug mode to save memory (prevents OOM in Codespaces)
+    app.run(debug=False, use_reloader=False, port=5000)
