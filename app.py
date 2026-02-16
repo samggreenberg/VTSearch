@@ -17,6 +17,7 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import librosa
 import numpy as np
 import requests
@@ -24,7 +25,7 @@ import torch
 import torch.nn as nn
 from flask import Flask, jsonify, request, send_file
 from sklearn.mixture import GaussianMixture
-from transformers import ClapModel, ClapProcessor
+from transformers import ClapModel, ClapProcessor, VideoMAEImageProcessor, VideoMAEModel
 
 app = Flask(__name__)
 
@@ -35,7 +36,7 @@ app = Flask(__name__)
 SAMPLE_RATE = 48000
 NUM_CLIPS = 20
 
-clips = {}  # id -> {id, duration, file_size, embedding, wav_bytes}
+clips = {}  # id -> {id, type, duration, file_size, embedding, wav_bytes, video_bytes}
 good_votes: dict[int, None] = {}  # OrderedDict behavior via dict (Python 3.7+)
 bad_votes: dict[int, None] = {}  # OrderedDict behavior via dict (Python 3.7+)
 inclusion: int = 0  # Inclusion setting: -10 to +10, default 0
@@ -43,6 +44,10 @@ inclusion: int = 0  # Inclusion setting: -10 to +10, default 0
 # Load CLAP model for audio/text embeddings
 clap_model: Optional[ClapModel] = None
 clap_processor: Optional[ClapProcessor] = None
+
+# Load VideoMAE model for video embeddings
+video_model: Optional[VideoMAEModel] = None
+video_processor: Optional[VideoMAEImageProcessor] = None
 
 # Dataset management
 DATA_DIR = Path("data")
@@ -90,6 +95,7 @@ DEMO_DATASETS = {
             "thunderstorm",
         ],
         "description": "Animal and nature sounds",
+        "media_type": "audio",
     },
     "natural": {
         "categories": [
@@ -105,6 +111,7 @@ DEMO_DATASETS = {
             "frog",
         ],
         "description": "Natural environmental sounds",
+        "media_type": "audio",
     },
     "urban": {
         "categories": [
@@ -129,6 +136,7 @@ DEMO_DATASETS = {
             "hand_saw",
         ],
         "description": "Urban and mechanical sounds",
+        "media_type": "audio",
     },
     "household": {
         "categories": [
@@ -151,6 +159,44 @@ DEMO_DATASETS = {
             "footsteps",
         ],
         "description": "Household and human sounds",
+        "media_type": "audio",
+    },
+    "sports_video": {
+        "categories": [
+            "basketball",
+            "soccer",
+            "tennis",
+            "swimming",
+            "running",
+            "cycling",
+            "skateboarding",
+            "surfing",
+        ],
+        "description": "Short sports action clips",
+        "media_type": "video",
+    },
+    "animals_video": {
+        "categories": [
+            "dog_playing",
+            "cat_jumping",
+            "bird_flying",
+            "fish_swimming",
+            "horse_running",
+        ],
+        "description": "Animal movement clips",
+        "media_type": "video",
+    },
+    "nature_video": {
+        "categories": [
+            "waterfall",
+            "ocean_waves",
+            "sunset",
+            "forest",
+            "clouds",
+            "rain_falling",
+        ],
+        "description": "Natural scenery clips",
+        "media_type": "video",
     },
 }
 
@@ -188,12 +234,14 @@ def init_clips():
         wav_bytes = generate_wav(freq, duration)
         clips[i] = {
             "id": i,
+            "type": "audio",
             "frequency": freq,
             "duration": duration,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": None,
             "wav_bytes": wav_bytes,
+            "video_bytes": None,
             "filename": f"synthetic_{i}.wav",
             "category": "synthetic",
         }
@@ -231,7 +279,7 @@ def init_clips():
 
 
 def initialize_app():
-    global clap_model, clap_processor
+    global clap_model, clap_processor, video_model, video_processor
     print("DEBUG: initialize_app called", flush=True)
 
     # Optimize for low-memory environments
@@ -245,6 +293,14 @@ def initialize_app():
         clap_model = ClapModel.from_pretrained(model_id, low_cpu_mem_usage=True)
         clap_processor = ClapProcessor.from_pretrained(model_id)
         print("DEBUG: CLAP model loaded.", flush=True)
+
+    if video_model is None:
+        print("DEBUG: Loading VideoMAE model (Hugging Face)...", flush=True)
+        # Use VideoMAE for video embeddings
+        model_id = "MCG-NJU/videomae-base"
+        video_model = VideoMAEModel.from_pretrained(model_id, low_cpu_mem_usage=True)
+        video_processor = VideoMAEImageProcessor.from_pretrained(model_id)
+        print("DEBUG: VideoMAE model loaded.", flush=True)
 
     # Don't automatically load clips - user will load dataset via UI
     print("DEBUG: Ready to load dataset via UI", flush=True)
@@ -288,35 +344,54 @@ def load_dataset_from_pickle(file_path: Path):
         clips_data = data
 
     # Convert to the app's clip format
-    missing_audio = 0
+    missing_media = 0
     for clip_id, clip_info in clips_data.items():
-        # Load the actual audio file if we have a filename and audio_dir
-        wav_bytes = None
-        if "wav_bytes" in clip_info:
-            wav_bytes = clip_info["wav_bytes"]
-        elif "filename" in clip_info and "audio_dir" in data:
-            audio_path = Path(data["audio_dir"]) / clip_info["filename"]
-            if audio_path.exists():
-                with open(audio_path, "rb") as f:
-                    wav_bytes = f.read()
-            else:
-                missing_audio += 1
+        # Determine media type
+        media_type = clip_info.get("type", "audio")
 
-        if wav_bytes:
+        # Load the actual media file
+        wav_bytes = None
+        video_bytes = None
+
+        if media_type == "audio":
+            if "wav_bytes" in clip_info:
+                wav_bytes = clip_info["wav_bytes"]
+            elif "filename" in clip_info and "audio_dir" in data:
+                audio_path = Path(data["audio_dir"]) / clip_info["filename"]
+                if audio_path.exists():
+                    with open(audio_path, "rb") as f:
+                        wav_bytes = f.read()
+                else:
+                    missing_media += 1
+        else:  # video
+            if "video_bytes" in clip_info:
+                video_bytes = clip_info["video_bytes"]
+            elif "filename" in clip_info and "video_dir" in data:
+                video_path = Path(data["video_dir"]) / clip_info["filename"]
+                if video_path.exists():
+                    with open(video_path, "rb") as f:
+                        video_bytes = f.read()
+                else:
+                    missing_media += 1
+
+        if wav_bytes or video_bytes:
+            media_bytes = wav_bytes or video_bytes
             clips[clip_id] = {
                 "id": clip_id,
+                "type": media_type,
                 "duration": clip_info.get("duration", 0),
-                "file_size": clip_info.get("file_size", len(wav_bytes)),
-                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "file_size": clip_info.get("file_size", len(media_bytes)),
+                "md5": hashlib.md5(media_bytes).hexdigest(),
                 "embedding": np.array(clip_info["embedding"]),
                 "wav_bytes": wav_bytes,
-                "filename": clip_info.get("filename", f"clip_{clip_id}.wav"),
+                "video_bytes": video_bytes,
+                "filename": clip_info.get("filename", f"clip_{clip_id}.{media_type}"),
                 "category": clip_info.get("category", "unknown"),
             }
 
-    if missing_audio > 0:
+    if missing_media > 0:
         print(
-            f"WARNING: {missing_audio} audio files missing from {file_path}", flush=True
+            f"WARNING: {missing_media} media files missing from {file_path}", flush=True
         )
 
 
@@ -348,26 +423,80 @@ def embed_audio_file(audio_path: Path) -> Optional[np.ndarray]:
         return None
 
 
+def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
+    """Generate VideoMAE embedding for a single video file."""
+    if video_model is None or video_processor is None:
+        return None
+
+    try:
+        # Load video with OpenCV
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            print(f"Error opening video {video_path}")
+            return None
+
+        frames = []
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Sample 16 frames evenly spaced throughout the video
+        num_frames = 16
+        indices = np.linspace(0, frame_count - 1, num_frames, dtype=int)
+
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                # Convert BGR to RGB
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(frame)
+
+        cap.release()
+
+        if len(frames) < num_frames:
+            print(f"Error: only got {len(frames)} frames from {video_path}")
+            return None
+
+        # Process frames with VideoMAE processor
+        inputs = video_processor(frames, return_tensors="pt")
+
+        # Get embedding from VideoMAE
+        with torch.no_grad():
+            outputs = video_model(**inputs)
+            # Use the pooled output (CLS token)
+            embedding = outputs.last_hidden_state[:, 0, :].numpy()
+
+        return embedding[0]
+    except Exception as e:
+        print(f"Error embedding {video_path}: {e}")
+        return None
+
+
 def load_dataset_from_folder(folder_path: Path):
-    """Generate dataset from a folder of audio files."""
+    """Generate dataset from a folder of audio or video files."""
     global clips
 
-    update_progress("embedding", "Scanning audio files...", 0, 0)
+    update_progress("embedding", "Scanning media files...", 0, 0)
 
     # Find all audio files
     audio_files = []
     for ext in ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a"]:
         audio_files.extend(folder_path.glob(ext))
 
-    if not audio_files:
-        raise ValueError("No audio files found in folder")
+    # Find all video files
+    video_files = []
+    for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
+        video_files.extend(folder_path.glob(ext))
+
+    if not audio_files and not video_files:
+        raise ValueError("No audio or video files found in folder")
 
     clips.clear()
     clip_id = 1
 
-    total = len(audio_files)
+    # Process audio files
+    total_audio = len(audio_files)
     for i, audio_path in enumerate(audio_files):
-        update_progress("embedding", f"Embedding {audio_path.name}...", i + 1, total)
+        update_progress("embedding", f"Embedding audio {audio_path.name}...", i + 1, total_audio)
 
         embedding = embed_audio_file(audio_path)
         if embedding is None:
@@ -386,12 +515,51 @@ def load_dataset_from_folder(folder_path: Path):
 
         clips[clip_id] = {
             "id": clip_id,
+            "type": "audio",
             "duration": duration,
             "file_size": len(file_bytes),
             "md5": hashlib.md5(file_bytes).hexdigest(),
             "embedding": embedding,
             "wav_bytes": file_bytes,
+            "video_bytes": None,
             "filename": audio_path.name,
+            "category": "custom",
+        }
+        clip_id += 1
+
+    # Process video files
+    total_video = len(video_files)
+    for i, video_path in enumerate(video_files):
+        update_progress("embedding", f"Embedding video {video_path.name}...", i + 1, total_video)
+
+        embedding = embed_video_file(video_path)
+        if embedding is None:
+            continue
+
+        # Load file to get video_bytes
+        with open(video_path, "rb") as f:
+            file_bytes = f.read()
+
+        # Get duration using OpenCV
+        try:
+            cap = cv2.VideoCapture(str(video_path))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+            duration = frame_count / fps if fps > 0 else 0
+            cap.release()
+        except Exception:
+            duration = 0
+
+        clips[clip_id] = {
+            "id": clip_id,
+            "type": "video",
+            "duration": duration,
+            "file_size": len(file_bytes),
+            "md5": hashlib.md5(file_bytes).hexdigest(),
+            "embedding": embedding,
+            "wav_bytes": None,
+            "video_bytes": file_bytes,
+            "filename": video_path.name,
             "category": "custom",
         }
         clip_id += 1
@@ -466,6 +634,16 @@ def load_demo_dataset(dataset_name: str):
     if dataset_name not in DEMO_DATASETS:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
+    dataset_info = DEMO_DATASETS[dataset_name]
+    media_type = dataset_info.get("media_type", "audio")
+
+    # For video datasets, return a placeholder message for now
+    if media_type == "video":
+        raise ValueError(
+            f"Video dataset '{dataset_name}' not yet implemented. "
+            "Video datasets require actual video files to be downloaded and embedded."
+        )
+
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{dataset_name}.pkl"
     if pkl_file.exists():
@@ -526,11 +704,13 @@ def load_demo_dataset(dataset_name: str):
 
         clips[clip_id] = {
             "id": clip_id,
+            "type": "audio",
             "duration": duration,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": embedding,
             "wav_bytes": wav_bytes,
+            "video_bytes": None,
             "filename": audio_path.name,
             "category": meta["category"],
         }
@@ -564,6 +744,7 @@ def export_dataset_to_file() -> bytes:
         "clips": {
             cid: {
                 "id": clip["id"],
+                "type": clip.get("type", "audio"),
                 "duration": clip["duration"],
                 "file_size": clip["file_size"],
                 "md5": clip["md5"],
@@ -572,7 +753,8 @@ def export_dataset_to_file() -> bytes:
                 else clip["embedding"],
                 "filename": clip.get("filename", f"clip_{cid}.wav"),
                 "category": clip.get("category", "unknown"),
-                "wav_bytes": clip["wav_bytes"],
+                "wav_bytes": clip.get("wav_bytes"),
+                "video_bytes": clip.get("video_bytes"),
             }
             for cid, clip in clips.items()
         }
@@ -600,6 +782,7 @@ def list_clips():
     for c in clips.values():
         clip_data = {
             "id": c["id"],
+            "type": c.get("type", "audio"),
             "duration": c["duration"],
             "file_size": c["file_size"],
             "filename": c.get("filename", f"clip_{c['id']}.wav"),
@@ -622,6 +805,32 @@ def clip_audio(clip_id):
         io.BytesIO(c["wav_bytes"]),
         mimetype="audio/wav",
         download_name=f"clip_{clip_id}.wav",
+    )
+
+
+@app.route("/api/clips/<int:clip_id>/video")
+def clip_video(clip_id):
+    c = clips.get(clip_id)
+    if not c:
+        return jsonify({"error": "not found"}), 404
+    if c.get("type") != "video" or not c.get("video_bytes"):
+        return jsonify({"error": "not a video clip"}), 400
+
+    # Determine mimetype based on filename extension
+    filename = c.get("filename", "")
+    if filename.endswith(".webm"):
+        mimetype = "video/webm"
+    elif filename.endswith(".mov"):
+        mimetype = "video/quicktime"
+    elif filename.endswith(".avi"):
+        mimetype = "video/x-msvideo"
+    else:
+        mimetype = "video/mp4"
+
+    return send_file(
+        io.BytesIO(c["video_bytes"]),
+        mimetype=mimetype,
+        download_name=f"clip_{clip_id}.mp4",
     )
 
 
@@ -1340,6 +1549,7 @@ def demo_dataset_list():
                 "num_files": num_files,
                 "download_size_mb": round(download_size_mb, 1),
                 "description": dataset_info.get("description", ""),
+                "media_type": dataset_info.get("media_type", "audio"),
             }
         )
     return jsonify({"datasets": demos})
