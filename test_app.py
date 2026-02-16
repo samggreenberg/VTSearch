@@ -1,14 +1,13 @@
 import hashlib
 import io
-import json
-import struct
 import wave
 
 import numpy as np
-import torch
 import pytest
 
 import app as app_module
+
+app_module.initialize_app()
 
 
 @pytest.fixture(autouse=True)
