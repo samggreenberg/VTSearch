@@ -72,11 +72,21 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
+Choose the appropriate requirements file based on your system:
+
+**For CPU only** (recommended if you don't have a compatible GPU):
+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-cpu.txt
 ```
 
-This installs Flask and NumPy.
+**For GPU** (NVIDIA CUDA-compatible systems):
+
+```bash
+pip install -r requirements-gpu.txt
+```
+
+This installs Flask, NumPy, PyTorch, and other audio processing dependencies.
 
 ## Running the app
 
@@ -114,12 +124,14 @@ You should see all 36 tests pass.
 
 ```
 vectorytones/
-├── app.py           # Flask backend — routes, audio generation, voting
+├── app.py                   # Flask backend — routes, audio generation, voting
 ├── static/
-│   └── index.html   # Frontend UI (HTML, CSS, JavaScript)
+│   └── index.html           # Frontend UI (HTML, CSS, JavaScript)
 ├── templates/
-│   └── index.html   # Duplicate of static/index.html
-├── test_app.py      # Test suite
-├── requirements.txt # Python dependencies
-└── README.md        # This file
+│   └── index.html           # Duplicate of static/index.html
+├── test_app.py              # Test suite
+├── requirements-cpu.txt     # CPU-only Python dependencies
+├── requirements-gpu.txt     # GPU-enabled Python dependencies
+├── requirements.txt         # Generic Python dependencies (deprecated)
+└── README.md                # This file
 ```
