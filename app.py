@@ -152,6 +152,7 @@ def list_clips():
                 "frequency": c["frequency"],
                 "duration": c["duration"],
                 "file_size": c["file_size"],
+                "md5": c["md5"],
             }
         )
     return jsonify(result)
