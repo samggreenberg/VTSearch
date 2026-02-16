@@ -23,6 +23,7 @@ NUM_CLIPS = 20
 clips = {}  # id -> {id, duration, file_size, embedding, wav_bytes}
 good_votes: set[int] = set()
 bad_votes: set[int] = set()
+loaded_detector = None  # Stores loaded detector model and metadata
 
 # Load CLAP model for audio/text embeddings
 clap_model = laion_clap.CLAP_Module(enable_fusion=False)
@@ -357,6 +358,116 @@ def get_votes():
             "bad": sorted(bad_votes),
         }
     )
+
+
+@app.route("/api/export-detector", methods=["POST"])
+def export_detector():
+    """Export the current trained detector model."""
+    if not good_votes or not bad_votes:
+        return jsonify({"error": "need at least one good and one bad vote to export"}), 400
+
+    # Train the model to get current detector
+    X_list = []
+    y_list = []
+    for cid in good_votes:
+        X_list.append(clips[cid]["embedding"])
+        y_list.append(1.0)
+    for cid in bad_votes:
+        X_list.append(clips[cid]["embedding"])
+        y_list.append(0.0)
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    input_dim = X.shape[1]
+
+    # Calculate threshold and train model
+    threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim)
+    model = train_model(X, y, input_dim)
+
+    # Save model state dict and metadata to bytes
+    buf = io.BytesIO()
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'input_dim': input_dim,
+        'threshold': threshold,
+    }, buf)
+    buf.seek(0)
+
+    return send_file(
+        buf,
+        mimetype="application/octet-stream",
+        as_attachment=True,
+        download_name="detector.pth"
+    )
+
+
+@app.route("/api/load-detector", methods=["POST"])
+def load_detector():
+    """Load a detector model from uploaded file."""
+    global loaded_detector
+
+    if 'file' not in request.files:
+        return jsonify({"error": "no file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "no file selected"}), 400
+
+    try:
+        # Read the uploaded file into bytes
+        file_bytes = file.read()
+        buf = io.BytesIO(file_bytes)
+
+        # Load the detector
+        detector_data = torch.load(buf, weights_only=True)
+        input_dim = detector_data['input_dim']
+        threshold = detector_data['threshold']
+
+        # Recreate the model architecture
+        model = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+            nn.Sigmoid(),
+        )
+        model.load_state_dict(detector_data['model_state_dict'])
+        model.eval()
+
+        # Store the loaded detector
+        loaded_detector = {
+            'model': model,
+            'threshold': threshold,
+            'input_dim': input_dim,
+        }
+
+        return jsonify({"ok": True, "message": "Detector loaded successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Failed to load detector: {str(e)}"}), 400
+
+
+@app.route("/api/loaded-sort", methods=["POST"])
+def loaded_sort():
+    """Sort clips using the loaded detector."""
+    global loaded_detector
+
+    if loaded_detector is None:
+        return jsonify({"error": "no detector loaded"}), 400
+
+    model = loaded_detector['model']
+    threshold = loaded_detector['threshold']
+
+    # Score every clip
+    all_ids = sorted(clips.keys())
+    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    X_all = torch.tensor(all_embs, dtype=torch.float32)
+
+    with torch.no_grad():
+        scores = model(X_all).squeeze(1).tolist()
+
+    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 
 if __name__ == "__main__":

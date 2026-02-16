@@ -24,6 +24,10 @@
   .sort-bar input[type="text"]:focus { border-color: #7c8aff; }
   .sort-bar input[type="text"]::placeholder { color: #555; }
   .sort-bar .sort-status { font-size: 0.7rem; color: #666; margin-top: 4px; }
+  .sort-bar input[type="file"] { width: 100%; padding: 6px 8px; border: 1px solid #2a2d3a; border-radius: 4px; background: #1a1d27; color: #e0e0e0; font-size: 0.75rem; margin-top: 4px; }
+  .sort-bar .export-btn { width: 100%; margin-top: 8px; padding: 6px; background: #5a6d4d; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+  .sort-bar .export-btn:hover { background: #6a7d5d; }
+  .sort-bar .export-btn:disabled { background: #3a3d4a; color: #666; cursor: not-allowed; }
   #clip-list { overflow-y: auto; flex: 1; }
   .clip-item { padding: 10px 16px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #1e2030; transition: background 0.15s; }
   .clip-item:hover { background: #1e2030; }
@@ -71,10 +75,15 @@
         <label><input type="radio" name="sort-mode" value="none" checked> None</label>
         <label><input type="radio" name="sort-mode" value="text"> Text</label>
         <label><input type="radio" name="sort-mode" value="learned"> Learn</label>
+        <label><input type="radio" name="sort-mode" value="load"> Load</label>
       </div>
       <div id="text-sort-wrap" style="display:none">
         <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
       </div>
+      <div id="load-sort-wrap" style="display:none">
+        <input type="file" id="detector-file" accept=".pth">
+      </div>
+      <button id="export-detector-btn" class="export-btn" disabled>Export Detector</button>
       <span class="sort-label" style="margin-top:8px">Select</span>
       <div class="sort-mode">
         <label><input type="radio" name="select-mode" value="good" checked> Good</label>
@@ -110,10 +119,11 @@
   let votes = { good: [], bad: [] };
   let selected = null;
   let sortOrder = null;   // null = default, or [{id, score}, ...]
-  let sortMode = "none";  // "none" | "text" | "learned"
+  let sortMode = "none";  // "none" | "text" | "learned" | "load"
   let selectMode = "good"; // "good" | "hard"
   let threshold = null;    // threshold for Good/Bad boundary
   let sortTimer = null;
+  let detectorLoaded = false; // whether a detector has been loaded
 
   const clipList = document.getElementById("clip-list");
   const center = document.getElementById("center");
@@ -121,6 +131,9 @@
   const badList = document.getElementById("bad-list");
   const textSortInput = document.getElementById("text-sort");
   const textSortWrap = document.getElementById("text-sort-wrap");
+  const loadSortWrap = document.getElementById("load-sort-wrap");
+  const detectorFileInput = document.getElementById("detector-file");
+  const exportDetectorBtn = document.getElementById("export-detector-btn");
   const sortStatus = document.getElementById("sort-status");
   const nextClipBtn = document.getElementById("next-clip-btn");
 
@@ -130,6 +143,7 @@
     radio.addEventListener("change", () => {
       sortMode = radio.value;
       textSortWrap.style.display = sortMode === "text" ? "" : "none";
+      loadSortWrap.style.display = sortMode === "load" ? "" : "none";
       sortStatus.textContent = "";
       if (sortMode === "none") {
         sortOrder = null;
@@ -139,6 +153,12 @@
         onTextSortInput();
       } else if (sortMode === "learned") {
         fetchLearnedSort();
+      } else if (sortMode === "load") {
+        if (detectorLoaded) {
+          fetchLoadedSort();
+        } else {
+          sortStatus.textContent = "Load a detector file first";
+        }
       }
     });
   });
@@ -201,6 +221,89 @@
     renderClipList();
   }
 
+  // ---- Loaded detector sort ----
+
+  async function fetchLoadedSort() {
+    sortStatus.textContent = "Sorting...";
+    const res = await fetch("/api/loaded-sort", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      sortOrder = null;
+      threshold = null;
+      sortStatus.textContent = "No detector loaded";
+      renderClipList();
+      return;
+    }
+    const data = await res.json();
+    sortOrder = data.results;  // [{id, score}, ...]
+    threshold = data.threshold;
+    sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+    renderClipList();
+  }
+
+  // ---- Detector file upload ----
+
+  detectorFileInput.addEventListener("change", async () => {
+    const file = detectorFileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    sortStatus.textContent = "Loading detector...";
+    const res = await fetch("/api/load-detector", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      sortStatus.textContent = `Error: ${error.error}`;
+      detectorLoaded = false;
+      return;
+    }
+
+    detectorLoaded = true;
+    sortStatus.textContent = "Detector loaded";
+    fetchLoadedSort();
+  });
+
+  // ---- Export detector ----
+
+  exportDetectorBtn.addEventListener("click", async () => {
+    sortStatus.textContent = "Exporting...";
+    const res = await fetch("/api/export-detector", {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      sortStatus.textContent = `Error: ${error.error}`;
+      return;
+    }
+
+    // Download the file
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "detector.pth";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    sortStatus.textContent = "Detector exported";
+  });
+
+  // ---- Update export button state ----
+
+  function updateExportButton() {
+    exportDetectorBtn.disabled = votes.good.length === 0 || votes.bad.length === 0;
+  }
+
   // ---- Next Clip Selection ----
 
   nextClipBtn.addEventListener("click", () => {
@@ -256,6 +359,7 @@
     const res = await fetch("/api/votes");
     votes = await res.json();
     renderVotes();
+    updateExportButton();
     if (selected) renderCenter();
   }
 
@@ -321,6 +425,7 @@
     });
     await fetchVotes();
     if (sortMode === "learned") fetchLearnedSort();
+    if (sortMode === "load" && detectorLoaded) fetchLoadedSort();
   }
 
   function renderVotes() {
