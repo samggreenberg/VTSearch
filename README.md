@@ -1,6 +1,6 @@
 # VectoryTones
 
-A media explorer web app. Browse collections of audio clips, video clips, images, or text paragraphs — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, X-CLIP, CLIP, or E5-large-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
+A media explorer web app. Browse collections of audio clips, images, or text paragraphs — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, or E5-large-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
 
 ## Prerequisites
 
@@ -127,7 +127,6 @@ Available demos:
 | **natural** | Audio | Natural environmental sounds (ESC-50) |
 | **urban** | Audio | Urban and mechanical sounds (ESC-50) |
 | **household** | Audio | Household and human sounds (ESC-50) |
-| **actions_video** | Video | Human action recognition clips (UCF-101) |
 | **objects_images** | Image | Common objects and animals (CIFAR-10) |
 | **news_paragraphs** | Text | News article paragraphs (20 Newsgroups) |
 
@@ -154,8 +153,6 @@ vectorytones/
 ├── app.py                   # Flask backend — routes, embedding models, voting,
 │                            #   sorting (text, learned, detector, example, label-file),
 │                            #   dataset management, and demo dataset downloads
-├── setup_datasets.py        # Standalone script to download ESC-50 and generate
-│                            #   LAION-CLAP embeddings for themed audio datasets
 ├── static/
 │   └── index.html           # Single-page frontend (HTML, CSS, vanilla JS)
 ├── templates/
@@ -165,7 +162,6 @@ vectorytones/
 ├── requirements-cpu.txt     # CPU-only dependencies (PyTorch CPU wheel)
 ├── requirements-gpu.txt     # GPU-enabled dependencies (PyTorch with CUDA)
 ├── requirements-dev.txt     # Dev dependencies (requirements.txt + pytest)
-├── SETUP_DATASETS.md        # Guide for the standalone dataset setup script
 ├── TEST_COVERAGE_ANALYSIS.md
 ├── .gitignore
 └── README.md
