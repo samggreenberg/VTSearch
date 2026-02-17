@@ -40,6 +40,12 @@
   .sort-bar input[type="text"]:focus { border-color: #7c8aff; }
   .sort-bar input[type="text"]::placeholder { color: #555; }
   .sort-bar .sort-status { font-size: 0.7rem; color: #666; margin-top: 4px; }
+  .sort-progress { display: none; margin-top: 6px; }
+  .sort-progress.active { display: block; }
+  .sort-progress-bar { width: 100%; height: 6px; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 3px; overflow: hidden; position: relative; }
+  .sort-progress-fill { height: 100%; width: 30%; background: linear-gradient(90deg, #7c8aff, #a0aaff); border-radius: 3px; position: absolute; animation: sort-progress-slide 1.2s ease-in-out infinite; }
+  @keyframes sort-progress-slide { 0% { left: -30%; } 100% { left: 100%; } }
+  .sort-progress-label { font-size: 0.7rem; color: #888; margin-top: 3px; text-align: center; }
   #clip-list { overflow-y: auto; flex: 1; }
   .clip-item { padding: 10px 16px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #1e2030; transition: background 0.15s; border-left: 3px solid transparent; }
   .clip-item:hover { background: #1e2030; }
@@ -211,6 +217,12 @@
         <span id="inclusion-value">0</span>
       </div>
       <div id="sort-status" class="sort-status"></div>
+      <div id="sort-progress" class="sort-progress">
+        <div class="sort-progress-bar">
+          <div class="sort-progress-fill"></div>
+        </div>
+        <div class="sort-progress-label" id="sort-progress-label">Searching and sorting...</div>
+      </div>
     </div>
     <div id="clip-list"></div>
     <div class="stripe-overview" id="stripe-overview">
@@ -310,6 +322,18 @@
   const learnedRadio = document.getElementById("learned-radio");
   const loadRadio = document.getElementById("load-radio");
   const sortStatus = document.getElementById("sort-status");
+  const sortProgress = document.getElementById("sort-progress");
+  const sortProgressLabel = document.getElementById("sort-progress-label");
+
+  function showSortProgress(label) {
+    sortStatus.textContent = "";
+    sortProgressLabel.textContent = label;
+    sortProgress.classList.add("active");
+  }
+
+  function hideSortProgress() {
+    sortProgress.classList.remove("active");
+  }
   const stripeOverview = document.getElementById("stripe-overview");
   const stripeContainer = document.getElementById("stripe-container");
   const inclusionSlider = document.getElementById("inclusion-slider");
@@ -795,7 +819,7 @@
   // ---- Text sort ----
 
   async function fetchTextSort(text) {
-    sortStatus.textContent = "Searching and sorting...";
+    showSortProgress("Searching and sorting\u2026");
     try {
       const res = await fetch("/api/sort", {
         method: "POST",
@@ -808,9 +832,11 @@
       const data = await res.json();
       sortOrder = data.results.map(e => ({ id: e.id, score: e.similarity }));
       threshold = data.threshold;
+      hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
       renderClipList();
     } catch (error) {
+      hideSortProgress();
       sortStatus.textContent = `Error: ${error.message}`;
       console.error("Sort error:", error);
     }
@@ -833,7 +859,7 @@
   // ---- Learned sort ----
 
   async function fetchLearnedSort() {
-    sortStatus.textContent = "Training\u2026";
+    showSortProgress("Training\u2026");
     try {
       const res = await fetch("/api/learned-sort", {
         method: "POST",
@@ -842,6 +868,7 @@
       if (!res.ok) {
         sortOrder = null;
         threshold = null;
+        hideSortProgress();
         sortStatus.textContent = "Vote good & bad first";
         renderClipList();
         return;
@@ -849,9 +876,11 @@
       const data = await res.json();
       sortOrder = data.results;  // [{id, score}, ...]
       threshold = data.threshold;
+      hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
       renderClipList();
     } catch (error) {
+      hideSortProgress();
       sortStatus.textContent = `Error: ${error.message}`;
       console.error("Learned sort error:", error);
     }
@@ -864,7 +893,7 @@
       sortStatus.textContent = "Load a detector first";
       return;
     }
-    sortStatus.textContent = "Scoring with loaded detector\u2026";
+    showSortProgress("Scoring with loaded detector\u2026");
     try {
       const res = await fetch("/api/detector-sort", {
         method: "POST",
@@ -874,6 +903,7 @@
       if (!res.ok) {
         sortOrder = null;
         threshold = null;
+        hideSortProgress();
         sortStatus.textContent = "Failed to score with detector";
         renderClipList();
         return;
@@ -881,9 +911,11 @@
       const data = await res.json();
       sortOrder = data.results;  // [{id, score}, ...]
       threshold = data.threshold;
+      hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
       renderClipList();
     } catch (error) {
+      hideSortProgress();
       sortStatus.textContent = `Error: ${error.message}`;
       console.error("Detector sort error:", error);
     }
