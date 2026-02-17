@@ -543,7 +543,7 @@ def load_demo_dataset(dataset_name: str, clips: dict, e5_model):
                             cid: {
                                 k: v.tolist() if isinstance(v, np.ndarray) else v
                                 for k, v in clip.items()
-                                if k not in ["wav_bytes", "video_bytes", "image_bytes"]
+                                if k not in ["wav_bytes", "video_bytes"]
                             }
                             for cid, clip in clips.items()
                         },
@@ -650,13 +650,7 @@ def load_demo_dataset(dataset_name: str, clips: dict, e5_model):
                             cid: {
                                 k: v.tolist() if isinstance(v, np.ndarray) else v
                                 for k, v in clip.items()
-                                if k
-                                not in [
-                                    "wav_bytes",
-                                    "video_bytes",
-                                    "image_bytes",
-                                    "text_content",
-                                ]
+                                if k not in ["wav_bytes", "video_bytes", "image_bytes"]
                             }
                             for cid, clip in clips.items()
                         },
@@ -854,6 +848,12 @@ def export_dataset_to_file(clips: dict) -> bytes:
                 "category": clip.get("category", "unknown"),
                 "wav_bytes": clip.get("wav_bytes"),
                 "video_bytes": clip.get("video_bytes"),
+                "image_bytes": clip.get("image_bytes"),
+                "text_content": clip.get("text_content"),
+                "word_count": clip.get("word_count"),
+                "character_count": clip.get("character_count"),
+                "width": clip.get("width"),
+                "height": clip.get("height"),
             }
             for cid, clip in clips.items()
         }

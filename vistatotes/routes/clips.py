@@ -1,6 +1,7 @@
 """Blueprint for clip-related routes."""
 
 import io
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
 
@@ -60,10 +61,11 @@ def clip_video(clip_id):
     else:
         mimetype = "video/mp4"
 
+    ext = Path(filename).suffix if filename else ".mp4"
     return send_file(
         io.BytesIO(c["video_bytes"]),
         mimetype=mimetype,
-        download_name=f"clip_{clip_id}.mp4",
+        download_name=f"clip_{clip_id}{ext}",
     )
 
 

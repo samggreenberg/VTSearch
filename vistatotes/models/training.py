@@ -119,7 +119,7 @@ def find_optimal_threshold(scores, labels, inclusion_value=0):
         fpr_weight = 1.0
         fnr_weight = 2.0**inclusion_value
     else:
-        fpr_weight = 2.0**inclusion_value
+        fpr_weight = 2.0 ** (-inclusion_value)
         fnr_weight = 1.0
 
     for i in range(len(sorted_pairs)):

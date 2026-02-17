@@ -24,7 +24,7 @@ from vistatotes.datasets import (
     load_demo_dataset,
 )
 from vistatotes.models import get_e5_model
-from vistatotes.utils import bad_votes, clips, good_votes, get_progress, update_progress
+from vistatotes.utils import bad_votes, clips, good_votes, label_history, get_progress, update_progress
 
 datasets_bp = Blueprint("datasets", __name__)
 
@@ -34,6 +34,7 @@ def clear_dataset():
     clips.clear()
     good_votes.clear()
     bad_votes.clear()
+    label_history.clear()
 
 
 @datasets_bp.route("/api/dataset/status")
