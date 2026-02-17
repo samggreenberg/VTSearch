@@ -14,7 +14,13 @@ from transformers import (
     XCLIPProcessor,
 )
 
-from config import CLAP_MODEL_ID, CLIP_MODEL_ID, E5_MODEL_ID, XCLIP_MODEL_ID
+from config import (
+    CLAP_MODEL_ID,
+    CLIP_MODEL_ID,
+    E5_MODEL_ID,
+    MODELS_CACHE_DIR,
+    XCLIP_MODEL_ID,
+)
 
 # Model instances
 clap_model: Optional[ClapModel] = None
@@ -33,6 +39,10 @@ def initialize_models() -> None:
 
     print("DEBUG: initialize_models called", flush=True)
 
+    # Create models cache directory if it doesn't exist
+    MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_dir = str(MODELS_CACHE_DIR)
+
     # Optimize for low-memory environments
     torch.set_num_threads(1)
     gc.collect()
@@ -40,22 +50,28 @@ def initialize_models() -> None:
     # Load CLAP model for Sounds modality
     if clap_model is None:
         print("DEBUG: Loading CLAP model for Sounds (Hugging Face)...", flush=True)
-        clap_model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True)
-        clap_processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID)
+        clap_model = ClapModel.from_pretrained(
+            CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
+        )
+        clap_processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir)
         print("DEBUG: CLAP model loaded.", flush=True)
 
     # Load X-CLIP model for Videos modality
     if xclip_model is None:
         print("DEBUG: Loading X-CLIP model for Videos (Hugging Face)...", flush=True)
-        xclip_model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True)
-        xclip_processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID)
+        xclip_model = XCLIPModel.from_pretrained(
+            XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
+        )
+        xclip_processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir)
         print("DEBUG: X-CLIP model loaded.", flush=True)
 
     # Load CLIP model for Images modality
     if clip_model is None:
         print("DEBUG: Loading CLIP model for Images (Hugging Face)...", flush=True)
-        clip_model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True)
-        clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID)
+        clip_model = CLIPModel.from_pretrained(
+            CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
+        )
+        clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir)
         print("DEBUG: CLIP model loaded.", flush=True)
 
     # Load E5-LARGE-V2 model for Paragraphs modality
@@ -64,7 +80,7 @@ def initialize_models() -> None:
             "DEBUG: Loading E5-LARGE-V2 model for Paragraphs (SentenceTransformers)...",
             flush=True,
         )
-        e5_model = SentenceTransformer(E5_MODEL_ID)
+        e5_model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)
         print("DEBUG: E5-LARGE-V2 model loaded.", flush=True)
 
     print("DEBUG: All models loaded and ready", flush=True)

@@ -13,6 +13,7 @@ VIDEO_DIR = DATA_DIR / "video"
 IMAGE_DIR = DATA_DIR / "images"
 PARAGRAPH_DIR = DATA_DIR / "paragraphs"
 EMBEDDINGS_DIR = DATA_DIR / "embeddings"
+MODELS_CACHE_DIR = DATA_DIR / "models"
 
 # Dataset URLs
 ESC50_URL = "https://github.com/karolpiczak/ESC-50/archive/master.zip"
