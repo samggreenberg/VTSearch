@@ -26,6 +26,7 @@ import torch.nn as nn
 from flask import Flask, jsonify, request, send_file
 from PIL import Image
 from sentence_transformers import SentenceTransformer
+from sklearn.datasets import fetch_20newsgroups
 from sklearn.mixture import GaussianMixture
 from transformers import (
     ClapModel,
@@ -80,6 +81,12 @@ SAMPLE_VIDEOS_URL = (
 )
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150  # Approximate size
 CLIPS_PER_VIDEO_CATEGORY = 10  # Approximate number of clips per category
+
+# Image datasets
+# CIFAR-10 dataset - 10 classes of 32x32 color images
+CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
+CIFAR10_DOWNLOAD_SIZE_MB = 170  # Approximate size
+IMAGES_PER_CIFAR10_CATEGORY = 100  # We'll use a subset for demo purposes
 
 # Progress tracking for long-running operations
 progress_lock = threading.Lock()
@@ -611,6 +618,29 @@ def embed_image_file(image_path: Path) -> Optional[np.ndarray]:
         return None
 
 
+def embed_image_file_from_pil(image: Image.Image) -> Optional[np.ndarray]:
+    """Generate CLIP embedding for a PIL Image."""
+    if clip_model is None or clip_processor is None:
+        return None
+
+    try:
+        # Ensure RGB mode
+        image = image.convert("RGB")
+
+        # Process image with CLIP processor
+        inputs = clip_processor(images=image, return_tensors="pt")
+
+        # Get embedding from CLIP vision model
+        with torch.no_grad():
+            outputs = clip_model.get_image_features(**inputs)
+            embedding = outputs.numpy()
+
+        return embedding[0]
+    except Exception as e:
+        print(f"Error embedding image: {e}")
+        return None
+
+
 def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
     """Generate E5-LARGE-V2 embedding for a text/paragraph file."""
     if e5_model is None:
@@ -831,6 +861,54 @@ def load_esc50_metadata(esc50_dir: Path) -> dict:
     return metadata
 
 
+def download_cifar10() -> Path:
+    """Download and extract CIFAR-10 dataset."""
+    import tarfile
+
+    tar_path = DATA_DIR / "cifar-10-python.tar.gz"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not tar_path.exists():
+        update_progress("downloading", "Starting CIFAR-10 download...", 0, 0)
+        download_file_with_progress(CIFAR10_URL, tar_path)
+
+    extract_dir = DATA_DIR / "cifar-10-batches-py"
+    if not extract_dir.exists():
+        update_progress("downloading", "Extracting CIFAR-10...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(DATA_DIR)
+
+    return extract_dir
+
+
+def load_cifar10_batch(file_path: Path) -> tuple:
+    """Load a CIFAR-10 batch file and return images and labels."""
+    with open(file_path, "rb") as f:
+        batch = pickle.load(f, encoding="bytes")
+
+    # CIFAR-10 label names
+    label_names = [
+        "airplane",
+        "automobile",
+        "bird",
+        "cat",
+        "deer",
+        "dog",
+        "frog",
+        "horse",
+        "ship",
+        "truck",
+    ]
+
+    images = batch[b"data"]
+    labels = batch[b"labels"]
+
+    # Reshape images from (10000, 3072) to (10000, 32, 32, 3)
+    images = images.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+
+    return images, labels, label_names
+
+
 def download_ucf101_subset() -> Path:
     """Download UCF-101 action recognition videos.
 
@@ -928,6 +1006,51 @@ def load_paragraph_metadata_from_folders(
     return metadata
 
 
+def download_20newsgroups(categories: list[str]) -> tuple:
+    """Download and prepare 20 Newsgroups dataset.
+
+    Returns:
+        tuple: (texts, labels, category_names) where texts is list of strings,
+               labels is list of category indices, and category_names is list of category names
+    """
+    update_progress("downloading", "Downloading 20 Newsgroups dataset...", 0, 0)
+
+    # Map our category names to 20 newsgroups categories
+    # We'll use a subset that maps well to common news categories
+    category_mapping = {
+        "world": "talk.politics.misc",
+        "sports": "rec.sport.baseball",
+        "business": "misc.forsale",
+        "science": "sci.space",
+    }
+
+    # Get the actual newsgroup categories to download
+    newsgroup_categories = [category_mapping.get(cat, cat) for cat in categories]
+
+    # Download the dataset (sklearn handles caching automatically)
+    newsgroups = fetch_20newsgroups(
+        subset="train",
+        categories=newsgroup_categories,
+        remove=("headers", "footers", "quotes"),
+        shuffle=True,
+        random_state=42,
+    )
+
+    # Map back to our category names
+    texts = newsgroups.data
+    labels = newsgroups.target
+    target_names = [
+        list(category_mapping.keys())[
+            list(category_mapping.values()).index(newsgroups.target_names[i])
+        ]
+        if newsgroups.target_names[i] in category_mapping.values()
+        else newsgroups.target_names[i]
+        for i in range(len(newsgroups.target_names))
+    ]
+
+    return texts, labels, target_names
+
+
 def load_demo_dataset(dataset_name: str):
     """Load a demo dataset, downloading and embedding if necessary."""
     global clips
@@ -961,58 +1084,60 @@ def load_demo_dataset(dataset_name: str):
         image_source = dataset_info.get("source", "cifar10_sample")
 
         if image_source == "cifar10_sample":
-            # Check if image dataset exists
-            image_dir = DATA_DIR / "images" / "cifar10_sample"
-            if not image_dir.exists() or not any(image_dir.glob("*/*.png")):
-                # Dataset not available - provide helpful error message
-                update_progress("idle", "")
-                raise ValueError(
-                    "CIFAR-10 sample dataset not found. To use image datasets:\n"
-                    "1. Download CIFAR-10 from https://www.cs.toronto.edu/~kriz/cifar.html\n"
-                    "2. Extract sample images to data/images/cifar10_sample/ organized by category\n"
-                    "3. Or use 'Load from Folder' to import your own image files\n\n"
-                    "Expected directory structure:\n"
-                    "  data/images/cifar10_sample/airplane/*.png\n"
-                    "  data/images/cifar10_sample/automobile/*.png\n"
-                    "  etc."
-                )
+            # Download CIFAR-10 if needed
+            cifar_dir = download_cifar10()
 
-            metadata = load_image_metadata_from_folders(
-                image_dir, dataset_info["categories"]
-            )
-            image_files = [(meta["path"], meta) for meta in metadata.values()]
+            # Load CIFAR-10 training batch
+            batch_file = cifar_dir / "data_batch_1"
+            images, labels, label_names = load_cifar10_batch(batch_file)
+
+            # Filter to requested categories
+            category_indices = {
+                label_names[i]: i for i in range(len(label_names))
+            }
+            requested_categories = dataset_info["categories"]
+
+            # Collect images for requested categories
+            selected_images = []
+            selected_labels = []
+
+            for cat in requested_categories:
+                if cat in category_indices:
+                    cat_idx = category_indices[cat]
+                    # Get first N images of this category
+                    cat_mask = [i for i, lbl in enumerate(labels) if lbl == cat_idx]
+                    for idx in cat_mask[:IMAGES_PER_CIFAR10_CATEGORY]:
+                        selected_images.append(images[idx])
+                        selected_labels.append(cat)
 
             # Generate embeddings for images
             clips.clear()
             clip_id = 1
-            total = len(image_files)
+            total = len(selected_images)
             update_progress(
-                "embedding", f"Starting embedding for {total} image files...", 0, total
+                "embedding", f"Starting embedding for {total} images...", 0, total
             )
 
-            for i, (image_path, meta) in enumerate(image_files):
+            for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
                 update_progress(
                     "embedding",
-                    f"Embedding {meta['category']}: {image_path.name} ({i + 1}/{total})",
+                    f"Embedding {category}: image {i + 1}/{total}",
                     i + 1,
                     total,
                 )
 
-                embedding = embed_image_file(image_path)
+                # Convert numpy array to PIL Image
+                img = Image.fromarray(image_array.astype('uint8'), 'RGB')
+
+                # Convert to bytes
+                img_buffer = io.BytesIO()
+                img.save(img_buffer, format='PNG')
+                image_bytes = img_buffer.getvalue()
+
+                # Get embedding
+                embedding = embed_image_file_from_pil(img)
                 if embedding is None:
                     continue
-
-                with open(image_path, "rb") as f:
-                    image_bytes = f.read()
-
-                # Get image dimensions
-                try:
-                    img = Image.open(image_path)
-                    width = img.width
-                    height = img.height
-                except Exception:
-                    width = 0
-                    height = 0
 
                 clips[clip_id] = {
                     "id": clip_id,
@@ -1024,10 +1149,10 @@ def load_demo_dataset(dataset_name: str):
                     "wav_bytes": None,
                     "video_bytes": None,
                     "image_bytes": image_bytes,
-                    "filename": image_path.name,
-                    "category": meta["category"],
-                    "width": width,
-                    "height": height,
+                    "filename": f"{category}_{clip_id}.png",
+                    "category": category,
+                    "width": img.width,
+                    "height": img.height,
                 }
                 clip_id += 1
 
@@ -1045,7 +1170,6 @@ def load_demo_dataset(dataset_name: str):
                             }
                             for cid, clip in clips.items()
                         },
-                        "image_dir": str(image_dir.absolute()),
                     },
                     f,
                 )
@@ -1058,62 +1182,67 @@ def load_demo_dataset(dataset_name: str):
         paragraph_source = dataset_info.get("source", "ag_news_sample")
 
         if paragraph_source == "ag_news_sample":
-            # Check if paragraph dataset exists
-            text_dir = DATA_DIR / "text" / "ag_news_sample"
-            if not text_dir.exists() or not any(text_dir.glob("*/*.txt")):
-                # Dataset not available - provide helpful error message
-                update_progress("idle", "")
-                raise ValueError(
-                    "AG News sample dataset not found. To use paragraph datasets:\n"
-                    "1. Download AG News from https://huggingface.co/datasets/ag_news\n"
-                    "2. Extract sample paragraphs to data/text/ag_news_sample/ organized by category\n"
-                    "3. Or use 'Load from Folder' to import your own text files\n\n"
-                    "Expected directory structure:\n"
-                    "  data/text/ag_news_sample/world/*.txt\n"
-                    "  data/text/ag_news_sample/sports/*.txt\n"
-                    "  data/text/ag_news_sample/business/*.txt\n"
-                    "  data/text/ag_news_sample/science/*.txt"
-                )
-
-            metadata = load_paragraph_metadata_from_folders(
-                text_dir, dataset_info["categories"]
+            # Use 20 Newsgroups dataset from scikit-learn
+            texts, labels, category_names = download_20newsgroups(
+                dataset_info["categories"]
             )
-            text_files = [(meta["path"], meta) for meta in metadata.values()]
+
+            # Limit number of texts per category for demo
+            max_per_category = 50
+            selected_texts = []
+            selected_categories = []
+
+            for cat_name in dataset_info["categories"]:
+                if cat_name in category_names:
+                    cat_idx = category_names.index(cat_name)
+                    cat_texts = [
+                        texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx
+                    ]
+                    # Limit to max_per_category
+                    for text in cat_texts[:max_per_category]:
+                        selected_texts.append(text)
+                        selected_categories.append(cat_name)
 
             # Generate embeddings for paragraphs
             clips.clear()
             clip_id = 1
-            total = len(text_files)
+            total = len(selected_texts)
             update_progress(
                 "embedding",
-                f"Starting embedding for {total} paragraph files...",
+                f"Starting embedding for {total} paragraphs...",
                 0,
                 total,
             )
 
-            for i, (text_path, meta) in enumerate(text_files):
+            for i, (text_content, category) in enumerate(
+                zip(selected_texts, selected_categories)
+            ):
                 update_progress(
                     "embedding",
-                    f"Embedding {meta['category']}: {text_path.name} ({i + 1}/{total})",
+                    f"Embedding {category}: paragraph {i + 1}/{total}",
                     i + 1,
                     total,
                 )
 
-                embedding = embed_paragraph_file(text_path)
-                if embedding is None:
+                # Truncate very long texts (keep first 1000 chars for demo)
+                text_content = text_content[:1000].strip()
+                if not text_content:
                     continue
 
-                # Read text content
-                try:
-                    with open(text_path, "r", encoding="utf-8") as f:
-                        text_content = f.read().strip()
-                    word_count = len(text_content.split())
-                    character_count = len(text_content)
-                except Exception:
-                    text_content = ""
-                    word_count = 0
-                    character_count = 0
+                # Embed with E5-LARGE-V2 using "passage:" prefix
+                if e5_model is None:
+                    continue
 
+                try:
+                    embedding = e5_model.encode(
+                        f"passage: {text_content}", normalize_embeddings=True
+                    )
+                except Exception as e:
+                    print(f"Error embedding paragraph: {e}")
+                    continue
+
+                word_count = len(text_content.split())
+                character_count = len(text_content)
                 text_bytes = text_content.encode("utf-8")
 
                 clips[clip_id] = {
@@ -1127,8 +1256,8 @@ def load_demo_dataset(dataset_name: str):
                     "video_bytes": None,
                     "image_bytes": None,
                     "text_content": text_content,
-                    "filename": text_path.name,
-                    "category": meta["category"],
+                    "filename": f"{category}_{clip_id}.txt",
+                    "category": category,
                     "word_count": word_count,
                     "character_count": character_count,
                 }
@@ -1154,7 +1283,6 @@ def load_demo_dataset(dataset_name: str):
                             }
                             for cid, clip in clips.items()
                         },
-                        "text_dir": str(text_dir.absolute()),
                     },
                     f,
                 )
@@ -2227,6 +2355,12 @@ def demo_dataset_list():
                         download_size_mb = 0  # Manual download required
                 else:
                     download_size_mb = SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB
+            elif media_type == "image":
+                # CIFAR-10 dataset
+                download_size_mb = CIFAR10_DOWNLOAD_SIZE_MB
+            elif media_type == "paragraph":
+                # 20 Newsgroups is small (scikit-learn downloads automatically)
+                download_size_mb = 15  # Approximate size
             else:
                 # Audio dataset - ESC-50 download
                 download_size_mb = ESC50_DOWNLOAD_SIZE_MB
