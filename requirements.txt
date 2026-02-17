@@ -8,3 +8,5 @@ scikit-learn
 librosa
 requests
 opencv-python
+sentence-transformers
+pillow

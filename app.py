@@ -24,8 +24,19 @@ import requests
 import torch
 import torch.nn as nn
 from flask import Flask, jsonify, request, send_file
+from PIL import Image
+from sentence_transformers import SentenceTransformer
 from sklearn.mixture import GaussianMixture
-from transformers import ClapModel, ClapProcessor, VideoMAEImageProcessor, VideoMAEModel
+from transformers import (
+    ClapModel,
+    ClapProcessor,
+    CLIPModel,
+    CLIPProcessor,
+    VideoMAEImageProcessor,
+    VideoMAEModel,
+    XCLIPModel,
+    XCLIPProcessor,
+)
 
 app = Flask(__name__)
 
@@ -41,13 +52,20 @@ good_votes: dict[int, None] = {}  # OrderedDict behavior via dict (Python 3.7+)
 bad_votes: dict[int, None] = {}  # OrderedDict behavior via dict (Python 3.7+)
 inclusion: int = 0  # Inclusion setting: -10 to +10, default 0
 
-# Load CLAP model for audio/text embeddings
+# Load CLAP model for audio/text embeddings (Sounds modality)
 clap_model: Optional[ClapModel] = None
 clap_processor: Optional[ClapProcessor] = None
 
-# Load VideoMAE model for video embeddings
-video_model: Optional[VideoMAEModel] = None
-video_processor: Optional[VideoMAEImageProcessor] = None
+# Load X-CLIP model for video embeddings (Videos modality)
+xclip_model: Optional[XCLIPModel] = None
+xclip_processor: Optional[XCLIPProcessor] = None
+
+# Load CLIP model for image embeddings (Images modality)
+clip_model: Optional[CLIPModel] = None
+clip_processor: Optional[CLIPProcessor] = None
+
+# Load E5-LARGE-V2 model for text embeddings (Paragraphs modality)
+e5_model: Optional[SentenceTransformer] = None
 
 # Dataset management
 DATA_DIR = Path("data")
@@ -186,6 +204,34 @@ DEMO_DATASETS = {
         "media_type": "video",
         "source": "ucf101",
     },
+    "objects_images": {
+        "categories": [
+            "airplane",
+            "automobile",
+            "bird",
+            "cat",
+            "deer",
+            "dog",
+            "frog",
+            "horse",
+            "ship",
+            "truck",
+        ],
+        "description": "Common objects and animals (CIFAR-10 style)",
+        "media_type": "image",
+        "source": "cifar10_sample",
+    },
+    "news_paragraphs": {
+        "categories": [
+            "world",
+            "sports",
+            "business",
+            "science",
+        ],
+        "description": "News article paragraphs from different categories",
+        "media_type": "paragraph",
+        "source": "ag_news_sample",
+    },
 }
 
 
@@ -267,28 +313,43 @@ def init_clips():
 
 
 def initialize_app():
-    global clap_model, clap_processor, video_model, video_processor
+    global clap_model, clap_processor, xclip_model, xclip_processor, clip_model, clip_processor, e5_model
     print("DEBUG: initialize_app called", flush=True)
 
     # Optimize for low-memory environments
     torch.set_num_threads(1)
     gc.collect()
 
+    # Load CLAP model for Sounds modality
     if clap_model is None:
-        print("DEBUG: Loading CLAP model (Hugging Face)...", flush=True)
+        print("DEBUG: Loading CLAP model for Sounds (Hugging Face)...", flush=True)
         # Use the unfused model (~600MB) and low_cpu_mem_usage to avoid RAM spikes
         model_id = "laion/clap-htsat-unfused"
         clap_model = ClapModel.from_pretrained(model_id, low_cpu_mem_usage=True)
         clap_processor = ClapProcessor.from_pretrained(model_id)
         print("DEBUG: CLAP model loaded.", flush=True)
 
-    if video_model is None:
-        print("DEBUG: Loading VideoMAE model (Hugging Face)...", flush=True)
-        # Use VideoMAE for video embeddings
-        model_id = "MCG-NJU/videomae-base"
-        video_model = VideoMAEModel.from_pretrained(model_id, low_cpu_mem_usage=True)
-        video_processor = VideoMAEImageProcessor.from_pretrained(model_id)
-        print("DEBUG: VideoMAE model loaded.", flush=True)
+    # Load X-CLIP model for Videos modality
+    if xclip_model is None:
+        print("DEBUG: Loading X-CLIP model for Videos (Hugging Face)...", flush=True)
+        model_id = "microsoft/xclip-base-patch32"
+        xclip_model = XCLIPModel.from_pretrained(model_id, low_cpu_mem_usage=True)
+        xclip_processor = XCLIPProcessor.from_pretrained(model_id)
+        print("DEBUG: X-CLIP model loaded.", flush=True)
+
+    # Load CLIP model for Images modality
+    if clip_model is None:
+        print("DEBUG: Loading CLIP model for Images (Hugging Face)...", flush=True)
+        model_id = "openai/clip-vit-base-patch32"
+        clip_model = CLIPModel.from_pretrained(model_id, low_cpu_mem_usage=True)
+        clip_processor = CLIPProcessor.from_pretrained(model_id)
+        print("DEBUG: CLIP model loaded.", flush=True)
+
+    # Load E5-LARGE-V2 model for Paragraphs modality
+    if e5_model is None:
+        print("DEBUG: Loading E5-LARGE-V2 model for Paragraphs (SentenceTransformers)...", flush=True)
+        e5_model = SentenceTransformer("intfloat/e5-large-v2")
+        print("DEBUG: E5-LARGE-V2 model loaded.", flush=True)
 
     # Don't automatically load clips - user will load dataset via UI
     print("DEBUG: Ready to load dataset via UI", flush=True)
@@ -340,31 +401,64 @@ def load_dataset_from_pickle(file_path: Path):
         # Load the actual media file
         wav_bytes = None
         video_bytes = None
+        image_bytes = None
+        text_content = None
+        media_bytes = None
 
         if media_type == "audio":
             if "wav_bytes" in clip_info:
                 wav_bytes = clip_info["wav_bytes"]
+                media_bytes = wav_bytes
             elif "filename" in clip_info and "audio_dir" in data:
                 audio_path = Path(data["audio_dir"]) / clip_info["filename"]
                 if audio_path.exists():
                     with open(audio_path, "rb") as f:
                         wav_bytes = f.read()
+                        media_bytes = wav_bytes
                 else:
                     missing_media += 1
-        else:  # video
+
+        elif media_type == "video":
             if "video_bytes" in clip_info:
                 video_bytes = clip_info["video_bytes"]
+                media_bytes = video_bytes
             elif "filename" in clip_info and "video_dir" in data:
                 video_path = Path(data["video_dir"]) / clip_info["filename"]
                 if video_path.exists():
                     with open(video_path, "rb") as f:
                         video_bytes = f.read()
+                        media_bytes = video_bytes
                 else:
                     missing_media += 1
 
-        if wav_bytes or video_bytes:
-            media_bytes = wav_bytes or video_bytes
-            clips[clip_id] = {
+        elif media_type == "image":
+            if "image_bytes" in clip_info:
+                image_bytes = clip_info["image_bytes"]
+                media_bytes = image_bytes
+            elif "filename" in clip_info and "image_dir" in data:
+                image_path = Path(data["image_dir"]) / clip_info["filename"]
+                if image_path.exists():
+                    with open(image_path, "rb") as f:
+                        image_bytes = f.read()
+                        media_bytes = image_bytes
+                else:
+                    missing_media += 1
+
+        elif media_type == "paragraph":
+            if "text_content" in clip_info:
+                text_content = clip_info["text_content"]
+                media_bytes = text_content.encode("utf-8")  # For MD5 hash
+            elif "filename" in clip_info and "text_dir" in data:
+                text_path = Path(data["text_dir"]) / clip_info["filename"]
+                if text_path.exists():
+                    with open(text_path, "r", encoding="utf-8") as f:
+                        text_content = f.read()
+                        media_bytes = text_content.encode("utf-8")
+                else:
+                    missing_media += 1
+
+        if media_bytes:
+            clip_data = {
                 "id": clip_id,
                 "type": media_type,
                 "duration": clip_info.get("duration", 0),
@@ -373,9 +467,20 @@ def load_dataset_from_pickle(file_path: Path):
                 "embedding": np.array(clip_info["embedding"]),
                 "wav_bytes": wav_bytes,
                 "video_bytes": video_bytes,
+                "image_bytes": image_bytes,
+                "text_content": text_content,
                 "filename": clip_info.get("filename", f"clip_{clip_id}.{media_type}"),
                 "category": clip_info.get("category", "unknown"),
             }
+            # Add media-specific metadata
+            if media_type == "image":
+                clip_data["width"] = clip_info.get("width")
+                clip_data["height"] = clip_info.get("height")
+            elif media_type == "paragraph":
+                clip_data["word_count"] = clip_info.get("word_count")
+                clip_data["character_count"] = clip_info.get("character_count")
+
+            clips[clip_id] = clip_data
 
     if missing_media > 0:
         print(
@@ -412,8 +517,8 @@ def embed_audio_file(audio_path: Path) -> Optional[np.ndarray]:
 
 
 def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
-    """Generate VideoMAE embedding for a single video file."""
-    if video_model is None or video_processor is None:
+    """Generate X-CLIP embedding for a single video file."""
+    if xclip_model is None or xclip_processor is None:
         return None
 
     try:
@@ -426,32 +531,39 @@ def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
         frames = []
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        # Sample 16 frames evenly spaced throughout the video
-        num_frames = 16
+        # Sample 8 frames evenly spaced throughout the video (X-CLIP default)
+        num_frames = 8
+        if frame_count < num_frames:
+            num_frames = max(1, frame_count)
+
         indices = np.linspace(0, frame_count - 1, num_frames, dtype=int)
 
         for idx in indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
             if ret:
-                # Convert BGR to RGB
+                # Convert BGR to RGB and then to PIL Image
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(frame)
+                pil_frame = Image.fromarray(frame)
+                frames.append(pil_frame)
 
         cap.release()
 
-        if len(frames) < num_frames:
-            print(f"Error: only got {len(frames)} frames from {video_path}")
+        if len(frames) == 0:
+            print(f"Error: could not extract frames from {video_path}")
             return None
 
-        # Process frames with VideoMAE processor
-        inputs = video_processor(frames, return_tensors="pt")
+        # Process frames with X-CLIP processor
+        # X-CLIP expects a list of PIL Images
+        inputs = xclip_processor(
+            videos=list(frames),
+            return_tensors="pt"
+        )
 
-        # Get embedding from VideoMAE
+        # Get embedding from X-CLIP
         with torch.no_grad():
-            outputs = video_model(**inputs)
-            # Use the pooled output (CLS token)
-            embedding = outputs.last_hidden_state[:, 0, :].numpy()
+            outputs = xclip_model.get_video_features(**inputs)
+            embedding = outputs.numpy()
 
         return embedding[0]
     except Exception as e:
@@ -459,100 +571,180 @@ def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
         return None
 
 
-def load_dataset_from_folder(folder_path: Path):
-    """Generate dataset from a folder of audio or video files."""
+def embed_image_file(image_path: Path) -> Optional[np.ndarray]:
+    """Generate CLIP embedding for a single image file."""
+    if clip_model is None or clip_processor is None:
+        return None
+
+    try:
+        # Load image with PIL
+        image = Image.open(image_path).convert("RGB")
+
+        # Process image with CLIP processor
+        inputs = clip_processor(images=image, return_tensors="pt")
+
+        # Get embedding from CLIP vision model
+        with torch.no_grad():
+            outputs = clip_model.get_image_features(**inputs)
+            embedding = outputs.numpy()
+
+        return embedding[0]
+    except Exception as e:
+        print(f"Error embedding {image_path}: {e}")
+        return None
+
+
+def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
+    """Generate E5-LARGE-V2 embedding for a text/paragraph file."""
+    if e5_model is None:
+        return None
+
+    try:
+        # Read text file
+        with open(text_path, "r", encoding="utf-8") as f:
+            text_content = f.read().strip()
+
+        if not text_content:
+            print(f"Warning: empty text file {text_path}")
+            return None
+
+        # Embed with E5-LARGE-V2 using "passage:" prefix
+        # This is important for E5 model to distinguish between passages and queries
+        embedding = e5_model.encode(f"passage: {text_content}", normalize_embeddings=True)
+
+        return embedding
+    except Exception as e:
+        print(f"Error embedding {text_path}: {e}")
+        return None
+
+
+def load_dataset_from_folder(folder_path: Path, media_type: str = "sounds"):
+    """Generate dataset from a folder of media files.
+
+    Args:
+        folder_path: Path to folder containing media files
+        media_type: One of "sounds", "videos", "images", "paragraphs"
+    """
     global clips
 
     update_progress("embedding", "Scanning media files...", 0, 0)
 
-    # Find all audio files
-    audio_files = []
-    for ext in ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a"]:
-        audio_files.extend(folder_path.glob(ext))
+    # Define file extensions for each media type
+    media_extensions = {
+        "sounds": ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a"],
+        "videos": ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"],
+        "images": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+        "paragraphs": ["*.txt", "*.md"],
+    }
 
-    # Find all video files
-    video_files = []
-    for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
-        video_files.extend(folder_path.glob(ext))
+    # Define embedding functions for each media type
+    embed_functions = {
+        "sounds": embed_audio_file,
+        "videos": embed_video_file,
+        "images": embed_image_file,
+        "paragraphs": embed_paragraph_file,
+    }
 
-    if not audio_files and not video_files:
-        raise ValueError("No audio or video files found in folder")
+    # Map modality names to internal type strings
+    type_mapping = {
+        "sounds": "audio",
+        "videos": "video",
+        "images": "image",
+        "paragraphs": "paragraph",
+    }
+
+    if media_type not in media_extensions:
+        raise ValueError(f"Invalid media type: {media_type}")
+
+    # Find all files of the specified media type
+    media_files = []
+    for ext in media_extensions[media_type]:
+        media_files.extend(folder_path.glob(ext))
+
+    if not media_files:
+        raise ValueError(f"No {media_type} files found in folder")
 
     clips.clear()
     clip_id = 1
 
-    # Process audio files
-    total_audio = len(audio_files)
-    for i, audio_path in enumerate(audio_files):
-        update_progress("embedding", f"Embedding audio {audio_path.name}...", i + 1, total_audio)
+    # Process all media files
+    total_files = len(media_files)
+    embed_func = embed_functions[media_type]
 
-        embedding = embed_audio_file(audio_path)
+    for i, file_path in enumerate(media_files):
+        update_progress("embedding", f"Embedding {media_type} {file_path.name}...", i + 1, total_files)
+
+        embedding = embed_func(file_path)
         if embedding is None:
             continue
 
-        # Load file to get wav_bytes
-        with open(audio_path, "rb") as f:
+        # Load file to get bytes
+        with open(file_path, "rb") as f:
             file_bytes = f.read()
 
-        # Get duration
-        try:
-            audio_data, sr = librosa.load(audio_path, sr=SAMPLE_RATE, mono=True)
-            duration = len(audio_data) / sr
-        except Exception:
-            duration = 0
-
-        clips[clip_id] = {
+        # Initialize clip data
+        clip_data = {
             "id": clip_id,
-            "type": "audio",
-            "duration": duration,
+            "type": type_mapping[media_type],
             "file_size": len(file_bytes),
             "md5": hashlib.md5(file_bytes).hexdigest(),
             "embedding": embedding,
-            "wav_bytes": file_bytes,
-            "video_bytes": None,
-            "filename": audio_path.name,
+            "filename": file_path.name,
             "category": "custom",
-        }
-        clip_id += 1
-
-    # Process video files
-    total_video = len(video_files)
-    for i, video_path in enumerate(video_files):
-        update_progress("embedding", f"Embedding video {video_path.name}...", i + 1, total_video)
-
-        embedding = embed_video_file(video_path)
-        if embedding is None:
-            continue
-
-        # Load file to get video_bytes
-        with open(video_path, "rb") as f:
-            file_bytes = f.read()
-
-        # Get duration using OpenCV
-        try:
-            cap = cv2.VideoCapture(str(video_path))
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-            duration = frame_count / fps if fps > 0 else 0
-            cap.release()
-        except Exception:
-            duration = 0
-
-        clips[clip_id] = {
-            "id": clip_id,
-            "type": "video",
-            "duration": duration,
-            "file_size": len(file_bytes),
-            "md5": hashlib.md5(file_bytes).hexdigest(),
-            "embedding": embedding,
             "wav_bytes": None,
-            "video_bytes": file_bytes,
-            "filename": video_path.name,
-            "category": "custom",
+            "video_bytes": None,
+            "image_bytes": None,
+            "text_content": None,
+            "duration": 0,
         }
+
+        # Set media-specific fields
+        if media_type == "sounds":
+            clip_data["wav_bytes"] = file_bytes
+            # Get duration
+            try:
+                audio_data, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
+                clip_data["duration"] = len(audio_data) / sr
+            except Exception:
+                pass
+
+        elif media_type == "videos":
+            clip_data["video_bytes"] = file_bytes
+            # Get duration using OpenCV
+            try:
+                cap = cv2.VideoCapture(str(file_path))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                clip_data["duration"] = frame_count / fps if fps > 0 else 0
+                cap.release()
+            except Exception:
+                pass
+
+        elif media_type == "images":
+            clip_data["image_bytes"] = file_bytes
+            # Get image dimensions
+            try:
+                img = Image.open(file_path)
+                clip_data["width"] = img.width
+                clip_data["height"] = img.height
+            except Exception:
+                pass
+
+        elif media_type == "paragraphs":
+            # Store text content directly (not as bytes)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text_content = f.read().strip()
+                clip_data["text_content"] = text_content
+                clip_data["word_count"] = len(text_content.split())
+                clip_data["character_count"] = len(text_content)
+            except Exception:
+                pass
+
+        clips[clip_id] = clip_data
         clip_id += 1
 
-    update_progress("idle", f"Loaded {len(clips)} clips from folder")
+    update_progress("idle", f"Loaded {len(clips)} {media_type} clips from folder")
 
 
 def download_file_with_progress(url: str, dest_path: Path):
@@ -949,6 +1141,49 @@ def clip_video(clip_id):
     )
 
 
+@app.route("/api/clips/<int:clip_id>/image")
+def clip_image(clip_id):
+    c = clips.get(clip_id)
+    if not c:
+        return jsonify({"error": "not found"}), 404
+    if c.get("type") != "image" or not c.get("image_bytes"):
+        return jsonify({"error": "not an image clip"}), 400
+
+    # Determine mimetype based on filename extension
+    filename = c.get("filename", "")
+    if filename.endswith(".png"):
+        mimetype = "image/png"
+    elif filename.endswith(".gif"):
+        mimetype = "image/gif"
+    elif filename.endswith(".webp"):
+        mimetype = "image/webp"
+    elif filename.endswith(".bmp"):
+        mimetype = "image/bmp"
+    else:
+        mimetype = "image/jpeg"
+
+    return send_file(
+        io.BytesIO(c["image_bytes"]),
+        mimetype=mimetype,
+        download_name=f"clip_{clip_id}.jpg",
+    )
+
+
+@app.route("/api/clips/<int:clip_id>/paragraph")
+def clip_paragraph(clip_id):
+    c = clips.get(clip_id)
+    if not c:
+        return jsonify({"error": "not found"}), 404
+    if c.get("type") != "paragraph" or not c.get("text_content"):
+        return jsonify({"error": "not a paragraph clip"}), 400
+
+    return jsonify({
+        "content": c.get("text_content", ""),
+        "word_count": c.get("word_count", 0),
+        "character_count": c.get("character_count", 0),
+    })
+
+
 @app.route("/api/clips/<int:clip_id>/vote", methods=["POST"])
 def vote_clip(clip_id):
     if clip_id not in clips:
@@ -1022,23 +1257,57 @@ def sort_clips():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    if clap_model is None or clap_processor is None:
-        return jsonify({"error": "CLAP model not loaded"}), 500
+    # Determine media type from current clips
+    if not clips:
+        return jsonify({"error": "No clips loaded"}), 400
 
-    inputs = clap_processor(text=[text], return_tensors="pt")  # type: ignore
-    with torch.no_grad():
-        outputs = clap_model.text_model(**inputs)
-        text_vec = clap_model.text_projection(outputs.pooler_output).numpy()[0]
+    media_type = next(iter(clips.values())).get("type", "audio")
+
+    # Embed text query based on media type
+    text_vec = None
+    if media_type == "audio":
+        # Use CLAP for audio/sounds
+        if clap_model is None or clap_processor is None:
+            return jsonify({"error": "CLAP model not loaded"}), 500
+        inputs = clap_processor(text=[text], return_tensors="pt")  # type: ignore
+        with torch.no_grad():
+            outputs = clap_model.text_model(**inputs)
+            text_vec = clap_model.text_projection(outputs.pooler_output).numpy()[0]
+
+    elif media_type == "video":
+        # Use X-CLIP for videos
+        if xclip_model is None or xclip_processor is None:
+            return jsonify({"error": "X-CLIP model not loaded"}), 500
+        inputs = xclip_processor(text=[text], return_tensors="pt")
+        with torch.no_grad():
+            text_vec = xclip_model.get_text_features(**inputs).numpy()[0]
+
+    elif media_type == "image":
+        # Use CLIP for images
+        if clip_model is None or clip_processor is None:
+            return jsonify({"error": "CLIP model not loaded"}), 500
+        inputs = clip_processor(text=[text], return_tensors="pt")
+        with torch.no_grad():
+            text_vec = clip_model.get_text_features(**inputs).numpy()[0]
+
+    elif media_type == "paragraph":
+        # Use E5-LARGE-V2 for paragraphs with "query:" prefix
+        if e5_model is None:
+            return jsonify({"error": "E5 model not loaded"}), 500
+        text_vec = e5_model.encode(f"query: {text}", normalize_embeddings=True)
+
+    else:
+        return jsonify({"error": f"Unknown media type: {media_type}"}), 400
 
     results = []
     scores = []
     for clip_id, clip in clips.items():
-        audio_vec = clip["embedding"]
-        norm_product = np.linalg.norm(audio_vec) * np.linalg.norm(text_vec)
+        media_vec = clip["embedding"]
+        norm_product = np.linalg.norm(media_vec) * np.linalg.norm(text_vec)
         if norm_product == 0:
             similarity = 0.0
         else:
-            similarity = float(np.dot(audio_vec, text_vec) / norm_product)
+            similarity = float(np.dot(media_vec, text_vec) / norm_product)
         results.append({"id": clip_id, "similarity": round(similarity, 4)})
         scores.append(similarity)
 
@@ -1753,12 +2022,13 @@ def load_dataset_file():
 
 @app.route("/api/dataset/load-folder", methods=["POST"])
 def load_dataset_folder():
-    """Generate dataset from a folder of audio files."""
+    """Generate dataset from a folder of media files."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
 
     folder_path = data.get("path")
+    media_type = data.get("media_type", "sounds")  # Default to sounds for backward compatibility
 
     if not folder_path:
         return jsonify({"error": "No folder path provided"}), 400
@@ -1770,7 +2040,7 @@ def load_dataset_folder():
     def load_task():
         try:
             clear_dataset()
-            load_dataset_from_folder(folder)
+            load_dataset_from_folder(folder, media_type=media_type)
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
