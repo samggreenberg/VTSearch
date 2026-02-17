@@ -14,6 +14,7 @@ from vectorytones.models.loader import (
     get_xclip_model,
     initialize_models,
 )
+from vectorytones.models.progress import analyze_labeling_progress
 from vectorytones.models.training import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
@@ -41,4 +42,6 @@ __all__ = [
     "calculate_gmm_threshold",
     "find_optimal_threshold",
     "calculate_cross_calibration_threshold",
+    # Progress
+    "analyze_labeling_progress",
 ]

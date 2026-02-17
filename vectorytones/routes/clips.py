@@ -4,7 +4,7 @@ import io
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vectorytones.utils import bad_votes, clips, good_votes
+from vectorytones.utils import add_label_to_history, bad_votes, clips, good_votes
 
 clips_bp = Blueprint("clips", __name__)
 
@@ -138,12 +138,14 @@ def vote_clip(clip_id):
         else:
             bad_votes.pop(clip_id, None)
             good_votes[clip_id] = None
+            add_label_to_history(clip_id, "good")
     else:
         if clip_id in bad_votes:
             bad_votes.pop(clip_id, None)
         else:
             good_votes.pop(clip_id, None)
             bad_votes[clip_id] = None
+            add_label_to_history(clip_id, "bad")
 
     print(f"DEBUG: Vote '{vote}' recorded for clip {clip_id}", flush=True)
     return jsonify({"ok": True})

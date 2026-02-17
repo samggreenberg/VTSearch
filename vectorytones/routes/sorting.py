@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from config import DATA_DIR, SAMPLE_RATE
 from vectorytones.models import (
+    analyze_labeling_progress,
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     embed_audio_file,
@@ -19,7 +20,15 @@ from vectorytones.models import (
     train_and_score,
     train_model,
 )
-from vectorytones.utils import bad_votes, clips, get_inclusion, good_votes, set_inclusion
+from vectorytones.utils import (
+    add_label_to_history,
+    bad_votes,
+    clips,
+    get_inclusion,
+    good_votes,
+    label_history,
+    set_inclusion,
+)
 
 sorting_bp = Blueprint("sorting", __name__)
 
@@ -147,9 +156,11 @@ def import_labels():
         if label == "good":
             bad_votes.pop(cid, None)
             good_votes[cid] = None
+            add_label_to_history(cid, "good")
         else:
             good_votes.pop(cid, None)
             bad_votes[cid] = None
+            add_label_to_history(cid, "bad")
         applied += 1
 
     return jsonify({"applied": applied, "skipped": skipped})
@@ -442,5 +453,23 @@ def label_file_sort():
             }
         )
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@sorting_bp.route("/api/labeling-progress", methods=["POST"])
+def labeling_progress():
+    """Analyze labeling progress and calculate stopping condition metrics."""
+    if not good_votes or not bad_votes:
+        return jsonify({"error": "need at least one good and one bad vote"}), 400
+
+    if not label_history:
+        return jsonify({"error": "no label history available"}), 400
+
+    try:
+        analysis = analyze_labeling_progress(
+            clips, label_history, good_votes, bad_votes, get_inclusion()
+        )
+        return jsonify(analysis)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

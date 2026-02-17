@@ -150,6 +150,35 @@
   .dataset-bar .dataset-info { font-size: 0.85rem; color: #aaa; }
   .dataset-bar button { padding: 6px 16px; border: 1px solid #2a2d3a; border-radius: 4px; background: #1a1d27; color: #aaa; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
   .dataset-bar button:hover { background: #252940; color: #e0e0e0; }
+
+  /* Progress tracking button */
+  .progress-check-bar { padding: 12px 16px; border-bottom: 1px solid #2a2d3a; }
+  .progress-check-bar button { width: 100%; padding: 8px 0; border: 1px solid #7c8aff; border-radius: 4px; background: transparent; color: #7c8aff; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+  .progress-check-bar button:hover { background: #7c8aff; color: #fff; }
+  .progress-check-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Progress popup modal */
+  .modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); }
+  .modal.show { display: flex; align-items: center; justify-content: center; }
+  .modal-content { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 24px; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-header h2 { font-size: 1.3rem; color: #7c8aff; margin: 0; }
+  .modal-close { background: transparent; border: none; color: #aaa; font-size: 1.5rem; cursor: pointer; padding: 0; width: 32px; height: 32px; }
+  .modal-close:hover { color: #fff; }
+  .modal-body { color: #e0e0e0; }
+  .progress-chart { margin: 16px 0; }
+  .progress-chart h3 { font-size: 1rem; color: #aaa; margin-bottom: 8px; }
+  .progress-chart canvas { max-width: 100%; }
+  .progress-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .progress-stat { background: #14161e; padding: 12px; border-radius: 4px; border: 1px solid #2a2d3a; }
+  .progress-stat-label { font-size: 0.75rem; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+  .progress-stat-value { font-size: 1.2rem; color: #7c8aff; font-weight: bold; }
+  .progress-recommendation { background: #252940; padding: 12px; border-radius: 4px; border-left: 3px solid #7c8aff; margin-top: 16px; }
+  .progress-recommendation h3 { font-size: 0.9rem; color: #7c8aff; margin-bottom: 4px; }
+  .progress-recommendation p { font-size: 0.85rem; color: #aaa; margin: 0; }
+
+  /* Label count display */
+  .label-count { font-size: 0.75rem; color: #888; font-weight: normal; }
 </style>
 </head>
 <body>
@@ -270,9 +299,12 @@
   <!-- Right panel -->
   <div class="panel-right">
     <input type="file" id="import-file" accept=".json" style="display:none">
+    <div class="progress-check-bar">
+      <button id="check-progress-btn">Check Labeling Progress</button>
+    </div>
     <div class="vote-section">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h3 class="good" style="margin: 0;">Good</h3>
+        <h3 class="good" style="margin: 0;">Good <span class="label-count" id="good-count">(0)</span></h3>
         <select id="good-sort-mode" style="font-size: 0.75rem; padding: 2px 4px; background: #2a2a2a; color: #aaa; border: 1px solid #444; border-radius: 3px;">
           <option value="clip">By Clip#</option>
           <option value="order">By Click</option>
@@ -282,13 +314,53 @@
     </div>
     <div class="vote-section">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <h3 class="bad" style="margin: 0;">Bad</h3>
+        <h3 class="bad" style="margin: 0;">Bad <span class="label-count" id="bad-count">(0)</span></h3>
         <select id="bad-sort-mode" style="font-size: 0.75rem; padding: 2px 4px; background: #2a2a2a; color: #aaa; border: 1px solid #444; border-radius: 3px;">
           <option value="clip">By Clip#</option>
           <option value="order">By Click</option>
         </select>
       </div>
       <div id="bad-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Modal -->
+<div id="progress-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Labeling Progress Analysis</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="progress-summary">
+        <div class="progress-stat">
+          <div class="progress-stat-label">Total Labels</div>
+          <div class="progress-stat-value" id="stat-total-labels">0</div>
+        </div>
+        <div class="progress-stat">
+          <div class="progress-stat-label">Total Clips</div>
+          <div class="progress-stat-value" id="stat-total-clips">0</div>
+        </div>
+      </div>
+      <div class="progress-chart">
+        <h3>Error Cost Over Time</h3>
+        <p style="font-size: 0.8rem; color: #888; margin-bottom: 8px;">
+          Lower is better. When the line levels out, you're probably not making progress.
+        </p>
+        <canvas id="error-cost-chart" width="700" height="250"></canvas>
+      </div>
+      <div class="progress-chart">
+        <h3>Prediction Stability</h3>
+        <p style="font-size: 0.8rem; color: #888; margin-bottom: 8px;">
+          Shows how many unlabeled clips change prediction at each step. When this stabilizes near zero, you're probably not making progress.
+        </p>
+        <canvas id="stability-chart" width="700" height="250"></canvas>
+      </div>
+      <div class="progress-recommendation">
+        <h3>Recommendation</h3>
+        <p id="recommendation-text">Loading...</p>
+      </div>
     </div>
   </div>
 </div>
@@ -1493,9 +1565,327 @@
     importFile.value = "";
   });
 
+  // ---- Progress tracking ----
+
+  const checkProgressBtn = document.getElementById("check-progress-btn");
+  const progressModal = document.getElementById("progress-modal");
+  const modalClose = document.getElementById("modal-close");
+  const goodCountSpan = document.getElementById("good-count");
+  const badCountSpan = document.getElementById("bad-count");
+
+  // Update label counts
+  function updateLabelCounts() {
+    goodCountSpan.textContent = `(${votes.good.length})`;
+    badCountSpan.textContent = `(${votes.bad.length})`;
+  }
+
+  checkProgressBtn.addEventListener("click", async () => {
+    if (votes.good.length === 0 || votes.bad.length === 0) {
+      alert("Need at least one good and one bad vote to check progress");
+      return;
+    }
+
+    checkProgressBtn.disabled = true;
+    checkProgressBtn.textContent = "Analyzing...";
+
+    try {
+      const res = await fetch("/api/labeling-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.error || "Failed to analyze progress");
+        return;
+      }
+
+      const data = await res.json();
+      displayProgressResults(data);
+      progressModal.classList.add("show");
+    } catch (e) {
+      alert("Error analyzing progress: " + e.message);
+    } finally {
+      checkProgressBtn.disabled = false;
+      checkProgressBtn.textContent = "Check Labeling Progress";
+    }
+  });
+
+  modalClose.addEventListener("click", () => {
+    progressModal.classList.remove("show");
+  });
+
+  progressModal.addEventListener("click", (e) => {
+    if (e.target === progressModal) {
+      progressModal.classList.remove("show");
+    }
+  });
+
+  function displayProgressResults(data) {
+    // Update summary stats
+    document.getElementById("stat-total-labels").textContent = data.total_labels;
+    document.getElementById("stat-total-clips").textContent = data.total_clips;
+
+    // Render error cost chart
+    renderErrorCostChart(data.error_cost_over_time);
+
+    // Render stability chart
+    renderStabilityChart(data.stability_over_time);
+
+    // Generate recommendation
+    const recommendation = generateRecommendation(data);
+    document.getElementById("recommendation-text").textContent = recommendation;
+  }
+
+  function renderErrorCostChart(errorCostData) {
+    const canvas = document.getElementById("error-cost-chart");
+    const ctx = canvas.getContext("2d");
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!errorCostData || errorCostData.length === 0) {
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("No data available", 20, canvas.height / 2);
+      return;
+    }
+
+    // Extract data
+    const numLabels = errorCostData.map(d => d.num_labels);
+    const errorCosts = errorCostData.map(d => d.error_cost);
+
+    // Chart dimensions
+    const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = canvas.width - padding.left - padding.right;
+    const chartHeight = canvas.height - padding.top - padding.bottom;
+
+    // Scales
+    const maxLabels = Math.max(...numLabels);
+    const maxCost = Math.max(...errorCosts);
+    const minCost = Math.min(...errorCosts);
+
+    const xScale = (val) => padding.left + (val / maxLabels) * chartWidth;
+    const yScale = (val) => padding.top + chartHeight - ((val - minCost) / (maxCost - minCost || 1)) * chartHeight;
+
+    // Draw axes
+    ctx.strokeStyle = "#2a2d3a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = "#1e2030";
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 5; i++) {
+      const y = padding.top + (chartHeight * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw line
+    ctx.strokeStyle = "#7c8aff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < errorCostData.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(errorCosts[i]);
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // Draw points
+    ctx.fillStyle = "#7c8aff";
+    for (let i = 0; i < errorCostData.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(errorCosts[i]);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Labels
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Number of Labels", canvas.width / 2, canvas.height - 10);
+
+    ctx.save();
+    ctx.translate(15, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Error Cost", 0, 0);
+    ctx.restore();
+
+    // Axis labels
+    ctx.textAlign = "center";
+    ctx.fillText("0", padding.left, canvas.height - padding.bottom + 15);
+    ctx.fillText(maxLabels.toString(), padding.left + chartWidth, canvas.height - padding.bottom + 15);
+
+    ctx.textAlign = "right";
+    ctx.fillText(maxCost.toFixed(2), padding.left - 5, padding.top + 5);
+    ctx.fillText(minCost.toFixed(2), padding.left - 5, padding.top + chartHeight + 5);
+  }
+
+  function renderStabilityChart(stabilityData) {
+    const canvas = document.getElementById("stability-chart");
+    const ctx = canvas.getContext("2d");
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!stabilityData || stabilityData.length === 0) {
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("No data available", 20, canvas.height / 2);
+      return;
+    }
+
+    // Extract data (skip first entry since it has no previous to compare)
+    const dataToPlot = stabilityData.slice(1);
+    if (dataToPlot.length === 0) {
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("Need more labels for stability analysis", 20, canvas.height / 2);
+      return;
+    }
+
+    const numLabels = dataToPlot.map(d => d.num_labels);
+    const numFlips = dataToPlot.map(d => d.num_flips);
+
+    // Chart dimensions
+    const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = canvas.width - padding.left - padding.right;
+    const chartHeight = canvas.height - padding.top - padding.bottom;
+
+    // Scales
+    const maxLabels = Math.max(...numLabels);
+    const maxFlips = Math.max(...numFlips, 1);
+
+    const xScale = (val) => padding.left + (val / maxLabels) * chartWidth;
+    const yScale = (val) => padding.top + chartHeight - (val / maxFlips) * chartHeight;
+
+    // Draw axes
+    ctx.strokeStyle = "#2a2d3a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = "#1e2030";
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 5; i++) {
+      const y = padding.top + (chartHeight * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw line
+    ctx.strokeStyle = "#4caf50";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < dataToPlot.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(numFlips[i]);
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // Draw points
+    ctx.fillStyle = "#4caf50";
+    for (let i = 0; i < dataToPlot.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(numFlips[i]);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Labels
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Number of Labels", canvas.width / 2, canvas.height - 10);
+
+    ctx.save();
+    ctx.translate(15, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Prediction Flips", 0, 0);
+    ctx.restore();
+
+    // Axis labels
+    ctx.textAlign = "center";
+    ctx.fillText("0", padding.left, canvas.height - padding.bottom + 15);
+    ctx.fillText(maxLabels.toString(), padding.left + chartWidth, canvas.height - padding.bottom + 15);
+
+    ctx.textAlign = "right";
+    ctx.fillText(maxFlips.toString(), padding.left - 5, padding.top + 5);
+    ctx.fillText("0", padding.left - 5, padding.top + chartHeight + 5);
+  }
+
+  function generateRecommendation(data) {
+    const errorCostData = data.error_cost_over_time;
+    const stabilityData = data.stability_over_time;
+
+    if (errorCostData.length < 5) {
+      return "Keep labeling! You need more labels to assess progress (at least 5 training steps).";
+    }
+
+    // Check if error cost has plateaued (last 30% of data)
+    const last30PercentCount = Math.max(3, Math.floor(errorCostData.length * 0.3));
+    const recentErrorCosts = errorCostData.slice(-last30PercentCount).map(d => d.error_cost);
+    const errorCostRange = Math.max(...recentErrorCosts) - Math.min(...recentErrorCosts);
+    const avgErrorCost = recentErrorCosts.reduce((a, b) => a + b, 0) / recentErrorCosts.length;
+    const errorCostStability = errorCostRange / (avgErrorCost || 1);
+
+    // Check if prediction flips have decreased
+    const recentStability = stabilityData.slice(-last30PercentCount);
+    const recentFlips = recentStability.map(d => d.num_flips);
+    const avgRecentFlips = recentFlips.reduce((a, b) => a + b, 0) / (recentFlips.length || 1);
+
+    let recommendation = "";
+
+    if (errorCostStability < 0.1 && avgRecentFlips < 5) {
+      recommendation = "🛑 STOP LABELING: Both error cost and predictions have stabilized. Additional labels are unlikely to improve the model significantly. You've reached a good stopping point!";
+    } else if (errorCostStability < 0.15) {
+      recommendation = "⚠️ CONSIDER STOPPING: Error cost has mostly plateaued. You may be approaching diminishing returns. Consider stopping or labeling a few more diverse examples.";
+    } else if (avgRecentFlips < 3) {
+      recommendation = "⚠️ PREDICTIONS STABLE: Predictions on unlabeled clips aren't changing much. The model's decisions are solidifying. Consider whether additional labels will help.";
+    } else {
+      recommendation = "✅ KEEP LABELING: The model is still learning! Both error cost and predictions are changing, indicating that new labels are improving the model.";
+    }
+
+    return recommendation;
+  }
+
+  // Modify fetchVotes to update label counts
+  const originalFetchVotes = fetchVotes;
+  fetchVotes = async function() {
+    await originalFetchVotes();
+    updateLabelCounts();
+  };
+
   // Initialize
   checkDatasetStatus();
   fetchInclusion();
+  updateLabelCounts();
 })();
 </script>
 </body>
