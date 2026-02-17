@@ -9,3 +9,4 @@ librosa
 requests
 opencv-python-headless
 tqdm
+sentence-transformers

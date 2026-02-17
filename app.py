@@ -565,7 +565,7 @@ def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
 
         # Process frames with X-CLIP processor
         # X-CLIP expects a list of PIL Images
-        inputs = xclip_processor(videos=list(frames), return_tensors="pt")
+        inputs = xclip_processor(videos=list(frames), return_tensors="pt") # type: ignore
 
         # Get embedding from X-CLIP
         with torch.no_grad():
