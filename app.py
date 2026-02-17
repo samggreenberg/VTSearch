@@ -1499,6 +1499,18 @@ def export_dataset_to_file() -> bytes:
 # Routes
 # ---------------------------------------------------------------------------
 
+@app.before_request
+def log_request_info():
+    """Log incoming requests to debug connection issues."""
+    if "/api/dataset/progress" not in request.path:
+        print(f"DEBUG: Incoming {request.method} {request.path}", flush=True)
+
+@app.after_request
+def log_response_info(response):
+    if "/api/dataset/progress" not in request.path:
+        print(f"DEBUG: Outgoing {response.status_code}", flush=True)
+    return response
+
 
 @app.route("/")
 def index():
@@ -1619,13 +1631,21 @@ def clip_paragraph(clip_id):
 @app.route("/api/clips/<int:clip_id>/vote", methods=["POST"])
 def vote_clip(clip_id):
     if clip_id not in clips:
+        print(f"DEBUG: Vote failed - Clip {clip_id} not found", flush=True)
         return jsonify({"error": "not found"}), 404
-    data = request.get_json(force=True)
+
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        print(f"DEBUG: Vote failed - JSON error: {e}", flush=True)
+        return jsonify({"error": "Invalid request body"}), 400
+
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
 
     vote = data.get("vote")
     if vote not in ("good", "bad"):
+        print(f"DEBUG: Vote failed - Invalid vote '{vote}'", flush=True)
         return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
 
     if vote == "good":
@@ -1641,6 +1661,7 @@ def vote_clip(clip_id):
             good_votes.pop(clip_id, None)
             bad_votes[clip_id] = None
 
+    print(f"DEBUG: Vote '{vote}' recorded for clip {clip_id}", flush=True)
     return jsonify({"ok": True})
 
 
@@ -1681,16 +1702,24 @@ def calculate_gmm_threshold(scores):
 @app.route("/api/sort", methods=["POST"])
 def sort_clips():
     """Return clips sorted by cosine similarity to a text query."""
-    data = request.get_json(force=True)
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        print(f"DEBUG: Sort failed - JSON error: {e}", flush=True)
+        return jsonify({"error": "Invalid request body"}), 400
+
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
 
     text = data.get("text", "").strip()
+    print(f"DEBUG: Sort request for '{text}'", flush=True)
+
     if not text:
         return jsonify({"error": "text is required"}), 400
 
     # Determine media type from current clips
     if not clips:
+        print("DEBUG: Sort failed - No clips loaded", flush=True)
         return jsonify({"error": "No clips loaded"}), 400
 
     media_type = next(iter(clips.values())).get("type", "audio")
@@ -1700,6 +1729,7 @@ def sort_clips():
     if media_type == "audio":
         # Use CLAP for audio/sounds
         if clap_model is None or clap_processor is None:
+            print("DEBUG: Sort failed - CLAP model not loaded", flush=True)
             return jsonify({"error": "CLAP model not loaded"}), 500
         inputs = clap_processor(text=[text], return_tensors="pt")  # type: ignore
         with torch.no_grad():
@@ -1714,6 +1744,7 @@ def sort_clips():
     elif media_type == "video":
         # Use X-CLIP for videos
         if xclip_model is None or xclip_processor is None:
+            print("DEBUG: Sort failed - X-CLIP model not loaded", flush=True)
             return jsonify({"error": "X-CLIP model not loaded"}), 500
         inputs = xclip_processor(text=[text], return_tensors="pt")  # type: ignore
         with torch.no_grad():
@@ -1722,6 +1753,7 @@ def sort_clips():
     elif media_type == "image":
         # Use CLIP for images
         if clip_model is None or clip_processor is None:
+            print("DEBUG: Sort failed - CLIP model not loaded", flush=True)
             return jsonify({"error": "CLIP model not loaded"}), 500
         inputs = clip_processor(text=[text], return_tensors="pt")  # type: ignore
         with torch.no_grad():
@@ -1730,6 +1762,7 @@ def sort_clips():
     elif media_type == "paragraph":
         # Use E5-LARGE-V2 for paragraphs with "query:" prefix
         if e5_model is None:
+            print("DEBUG: Sort failed - E5 model not loaded", flush=True)
             return jsonify({"error": "E5 model not loaded"}), 500
         text_vec = e5_model.encode(f"query: {text}", normalize_embeddings=True)
 

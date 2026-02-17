@@ -343,6 +343,7 @@
   const menuDetectorImport = document.getElementById("menu-detector-import");
   const menuDetectorExport = document.getElementById("menu-detector-export");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
+  const importFile = document.getElementById("import-file");
 
   // ---- Dataset Management ----
 
@@ -1369,8 +1370,6 @@
   });
 
   // ---- Label import handler ----
-
-  const importFile = document.getElementById("import-file");
 
   importFile.addEventListener("change", async () => {
     const file = importFile.files[0];
