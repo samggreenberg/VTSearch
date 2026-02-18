@@ -532,7 +532,16 @@
 
     if (datasetLoaded) {
       showMainUI();
-      datasetInfo.textContent = `${status.num_clips} clips loaded`;
+      const mediaHeaderConfig = {
+        "audio":     { icon: "🔊", label: "audio" },
+        "video":     { icon: "🎬", label: "video" },
+        "image":     { icon: "🖼️", label: "image" },
+        "paragraph": { icon: "📄", label: "text" },
+      };
+      const mhc = mediaHeaderConfig[status.media_type];
+      datasetInfo.textContent = mhc
+        ? `${mhc.icon} ${status.num_clips} ${mhc.label} clips loaded`
+        : `${status.num_clips} clips loaded`;
     } else {
       showWelcomeScreen();
     }
@@ -1535,15 +1544,7 @@
       if (isGood) className += " labeled-good";
       if (isBad) className += " labeled-bad";
       div.className = className;
-      // Icon based on media type
-      const mediaIcons = {
-        "video": "🎬 ",
-        "image": "🖼️ ",
-        "paragraph": "📄 ",
-        "audio": "🔊 "
-      };
-      const mediaIcon = mediaIcons[c.type] || "";
-      let html = `<div style="font-weight: 500;">${mediaIcon}${c.filename || 'Clip #' + c.id}</div>`;
+      let html = `<div style="font-weight: 500;">${c.filename || 'Clip #' + c.id}</div>`;
       if (scoreMap[c.id] !== undefined) {
         html += `<span class="sim">${(scoreMap[c.id] * 100).toFixed(1)}%</span>`;
       }

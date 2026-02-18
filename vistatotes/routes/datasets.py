@@ -31,11 +31,15 @@ def clear_dataset():
 @datasets_bp.route("/api/dataset/status")
 def dataset_status():
     """Return the current dataset status."""
+    media_type = None
+    if clips:
+        media_type = next(iter(clips.values())).get("type", "audio")
     return jsonify(
         {
             "loaded": len(clips) > 0,
             "num_clips": len(clips),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
+            "media_type": media_type,
         }
     )
 
