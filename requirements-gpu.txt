@@ -1,3 +1,4 @@
+-r requirements-importers.txt
 flask
 numpy
 torch

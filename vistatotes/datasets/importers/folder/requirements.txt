@@ -1,0 +1,3 @@
+# Folder importer – no additional dependencies.
+# librosa (audio), opencv-python-headless (video), and Pillow (images) are
+# already listed in the core requirements files.

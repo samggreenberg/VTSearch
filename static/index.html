@@ -337,6 +337,7 @@
         <div class="progress-message" id="progress-message">Loading...</div>
       </div>
       <div class="demo-datasets" id="demo-datasets" style="display:none"></div>
+      <div id="extended-importer-form" style="display:none"></div>
       <button class="back-button" id="back-button" style="display:none">Back</button>
     </div>
   </div>
@@ -520,6 +521,7 @@
   const progressText = document.getElementById("progress-text");
   const progressMessage = document.getElementById("progress-message");
   const demoDatasetsDiv = document.getElementById("demo-datasets");
+  const extendedImporterForm = document.getElementById("extended-importer-form");
   const backButton = document.getElementById("back-button");
   const loadFileBtn = document.getElementById("load-file-btn");
   const loadFolderBtn = document.getElementById("load-folder-btn");
@@ -593,6 +595,7 @@
     datasetOptions.style.display = "flex";
     datasetProgress.style.display = "none";
     demoDatasetsDiv.style.display = "none";
+    extendedImporterForm.style.display = "none";
     backButton.style.display = "none";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
@@ -612,6 +615,7 @@
   function showProgress() {
     datasetOptions.style.display = "none";
     demoDatasetsDiv.style.display = "none";
+    extendedImporterForm.style.display = "none";
     datasetProgress.style.display = "block";
     backButton.style.display = "none";
     // Reset progress bar to indeterminate state
@@ -842,6 +846,93 @@
       stopProgressPolling();
     }
   }
+
+  // ---- Extended importers (auto-discovered via /api/dataset/importers) ----
+
+  async function loadExtendedImporters() {
+    try {
+      const res = await fetch("/api/dataset/importers");
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const importer of data.importers) {
+        const btn = document.createElement("button");
+        btn.className = "dataset-option";
+        btn.innerHTML = `<h3>🔌 ${importer.display_name}</h3><p>${importer.description}</p>`;
+        btn.addEventListener("click", () => showExtendedImporterForm(importer));
+        datasetOptions.appendChild(btn);
+      }
+    } catch (_) {
+      // Extended importers are optional – silently ignore failures.
+    }
+  }
+
+  function showExtendedImporterForm(importer) {
+    datasetOptions.style.display = "none";
+    backButton.style.display = "block";
+
+    const inputStyle = "width:100%;padding:8px;background:#252940;border:1px solid #2a2d3a;border-radius:4px;color:#e0e0e0;box-sizing:border-box;";
+    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
+    html += `<h3 style="margin-bottom:16px;color:#e0e0e0;">${importer.display_name}</h3>`;
+    html += `<form id="ext-imp-form">`;
+    for (const field of importer.fields) {
+      html += `<div style="margin-bottom:14px;">`;
+      html += `<label style="display:block;margin-bottom:5px;color:#aaa;font-size:0.85rem;">${field.label}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${field.key}" accept="${field.accept}" style="color:#e0e0e0;width:100%;" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${field.key}" style="${inputStyle}">`;
+        for (const opt of field.options) {
+          html += `<option value="${opt}"${opt === field.default ? " selected" : ""}>${opt}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        const itype = field.field_type === "url" ? "url" : "text";
+        html += `<input type="${itype}" name="${field.key}" value="${field.default}" placeholder="${field.description}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) {
+        html += `<div style="margin-top:4px;font-size:0.75rem;color:#666;">${field.description}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<button type="submit" style="width:100%;padding:10px;background:#7c8aff;border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Start Import</button>`;
+    html += `</form></div>`;
+
+    extendedImporterForm.innerHTML = html;
+    extendedImporterForm.style.display = "block";
+
+    document.getElementById("ext-imp-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = {};
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+      startProgressPolling();
+      try {
+        const res = await fetch(`/api/dataset/import/${importer.name}`, { method: "POST", headers, body });
+        if (!res.ok) {
+          const err = await res.json();
+          progressMessage.textContent = `Error: ${err.error}`;
+          progressMessage.style.color = "#f44336";
+          stopProgressPolling();
+        }
+      } catch (err) {
+        progressMessage.textContent = `Error: ${err.message}`;
+        progressMessage.style.color = "#f44336";
+        stopProgressPolling();
+      }
+    });
+  }
+
+  loadExtendedImporters();
 
   backButton.addEventListener("click", () => {
     showWelcomeScreen();

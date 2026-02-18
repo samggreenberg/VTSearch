@@ -5,6 +5,8 @@ from vistatotes.datasets.downloader import (download_20newsgroups,
                                             download_cifar10, download_esc50,
                                             download_file_with_progress,
                                             download_ucf101_subset)
+from vistatotes.datasets.importers import get_importer, list_importers
+from vistatotes.datasets.importers.base import DatasetImporter, ImporterField
 from vistatotes.datasets.loader import (export_dataset_to_file,
                                         load_cifar10_batch,
                                         load_dataset_from_folder,
@@ -16,6 +18,11 @@ from vistatotes.datasets.loader import (export_dataset_to_file,
 
 __all__ = [
     "DEMO_DATASETS",
+    # Importer registry
+    "DatasetImporter",
+    "ImporterField",
+    "get_importer",
+    "list_importers",
     # Downloader functions
     "download_file_with_progress",
     "download_esc50",
