@@ -34,4 +34,4 @@ IMAGES_PER_CIFAR10_CATEGORY = 100
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"
 XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
 CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
-E5_MODEL_ID = "intfloat/e5-large-v2"
+E5_MODEL_ID = "intfloat/e5-base-v2"
