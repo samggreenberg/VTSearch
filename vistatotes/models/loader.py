@@ -35,7 +35,7 @@ def initialize_models() -> None:
     - **CLAP** (``CLAP_MODEL_ID``) – audio embeddings.
     - **X-CLIP** (``XCLIP_MODEL_ID``) – video embeddings.
     - **CLIP** (``CLIP_MODEL_ID``) – image embeddings.
-    - **E5-large-v2** (``E5_MODEL_ID``) – paragraph embeddings.
+    - **E5-base-v2** (``E5_MODEL_ID``) – paragraph embeddings.
 
     Sets ``torch.set_num_threads(1)`` and calls ``gc.collect()`` before loading
     to reduce peak memory usage in constrained environments.
@@ -83,7 +83,7 @@ def initialize_models() -> None:
     # Load E5-LARGE-V2 model for Paragraphs modality
     if e5_model is None:
         print(
-            "DEBUG: Loading E5-LARGE-V2 model for Paragraphs (SentenceTransformers)...",
+            "DEBUG: Loading E5-BASE-V2 model for Paragraphs (SentenceTransformers)...",
             flush=True,
         )
         e5_model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)

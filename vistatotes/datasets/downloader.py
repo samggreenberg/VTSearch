@@ -54,24 +54,24 @@ def download_esc50() -> Path:
     """Download and extract the ESC-50 environmental sounds dataset.
 
     Downloads ``esc50.zip`` from the configured ``ESC50_URL`` into ``DATA_DIR``
-    if it is not already present, then extracts it. Both steps report progress
-    via :func:`update_progress`.
+    if it is not already present, then extracts it and deletes the zip to
+    reclaim disk space. Both steps report progress via :func:`update_progress`.
 
     Returns:
         Path to the ``audio/`` subdirectory inside the extracted ``ESC-50-master``
         directory (e.g. ``data/ESC-50-master/audio``).
     """
     zip_path = DATA_DIR / "esc50.zip"
+    extract_dir = DATA_DIR / "ESC-50-master"
     DATA_DIR.mkdir(exist_ok=True)
 
-    if not zip_path.exists():
-        update_progress("downloading", "Starting download...", 0, 0)
-        download_file_with_progress(
-            ESC50_URL, zip_path, ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024
-        )
-
-    extract_dir = DATA_DIR / "ESC-50-master"
     if not extract_dir.exists():
+        if not zip_path.exists():
+            update_progress("downloading", "Starting download...", 0, 0)
+            download_file_with_progress(
+                ESC50_URL, zip_path, ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024
+            )
+
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
@@ -84,6 +84,8 @@ def download_esc50() -> Path:
                 )
                 zip_ref.extract(member, DATA_DIR)
 
+        zip_path.unlink(missing_ok=True)
+
     return extract_dir / "audio"
 
 
@@ -91,8 +93,9 @@ def download_cifar10() -> Path:
     """Download and extract the CIFAR-10 image classification dataset.
 
     Downloads ``cifar-10-python.tar.gz`` from the configured ``CIFAR10_URL``
-    into ``DATA_DIR`` if it is not already present, then extracts it. Both steps
-    report progress via :func:`update_progress`.
+    into ``DATA_DIR`` if it is not already present, then extracts it and deletes
+    the archive to reclaim disk space. Both steps report progress via
+    :func:`update_progress`.
 
     Returns:
         Path to the ``cifar-10-batches-py/`` directory containing the raw pickle
@@ -101,19 +104,21 @@ def download_cifar10() -> Path:
     import tarfile
 
     tar_path = DATA_DIR / "cifar-10-python.tar.gz"
+    extract_dir = DATA_DIR / "cifar-10-batches-py"
     DATA_DIR.mkdir(exist_ok=True)
 
-    if not tar_path.exists():
-        update_progress("downloading", "Starting CIFAR-10 download...", 0, 0)
-        download_file_with_progress(
-            CIFAR10_URL, tar_path, CIFAR10_DOWNLOAD_SIZE_MB * 1024 * 1024
-        )
-
-    extract_dir = DATA_DIR / "cifar-10-batches-py"
     if not extract_dir.exists():
+        if not tar_path.exists():
+            update_progress("downloading", "Starting CIFAR-10 download...", 0, 0)
+            download_file_with_progress(
+                CIFAR10_URL, tar_path, CIFAR10_DOWNLOAD_SIZE_MB * 1024 * 1024
+            )
+
         update_progress("downloading", "Extracting CIFAR-10...", 0, 0)
         with tarfile.open(tar_path, "r:gz") as tar_ref:
             tar_ref.extractall(DATA_DIR)
+
+        tar_path.unlink(missing_ok=True)
 
     return extract_dir
 
