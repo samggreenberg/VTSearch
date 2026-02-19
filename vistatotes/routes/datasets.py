@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, send_file
 
 from config import (CIFAR10_DOWNLOAD_SIZE_MB, CLIPS_PER_CATEGORY,
-                    CLIPS_PER_VIDEO_CATEGORY, DATA_DIR, EMBEDDINGS_DIR,
+                    CLIPS_PER_VIDEO_CATEGORY, EMBEDDINGS_DIR,
                     ESC50_DOWNLOAD_SIZE_MB, IMAGES_PER_CIFAR10_CATEGORY,
                     SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB, VIDEO_DIR)
 from vistatotes.datasets import (DEMO_DATASETS, export_dataset_to_file,

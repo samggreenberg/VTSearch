@@ -44,7 +44,7 @@ class TestImporterBaseIcon:
         assert DatasetImporter.icon == "🔌"
 
     def test_to_dict_includes_icon(self):
-        from vistatotes.datasets.importers.base import DatasetImporter, ImporterField
+        from vistatotes.datasets.importers.base import DatasetImporter
 
         class DummyImporter(DatasetImporter):
             name = "dummy"

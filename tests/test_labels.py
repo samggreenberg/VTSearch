@@ -66,7 +66,7 @@ class TestImportLabels:
     def test_import_overrides_existing_label(self, client):
         app_module.good_votes[1] = None
         labels = [{"md5": app_module.clips[1]["md5"], "label": "bad"}]
-        resp = client.post("/api/labels/import", json={"labels": labels})
+        client.post("/api/labels/import", json={"labels": labels})
         assert 1 not in app_module.good_votes
         assert 1 in app_module.bad_votes
 

@@ -76,7 +76,7 @@ class TestStartupState:
                 for child in ast.walk(node):
                     if isinstance(child, ast.Call):
                         func = child.func
-                        name = (
+                        _ = (
                             func.id
                             if isinstance(func, ast.Name)
                             else getattr(func, "attr", "")

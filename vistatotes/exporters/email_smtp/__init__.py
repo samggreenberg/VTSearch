@@ -10,7 +10,6 @@ generate an App Password at https://myaccount.google.com/apppasswords.
 
 from __future__ import annotations
 
-import json
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
