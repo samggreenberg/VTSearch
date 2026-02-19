@@ -19,16 +19,42 @@ inclusion: int = 0
 # Favorite detectors: name -> {name, media_type, weights, threshold, created_at}
 favorite_detectors: dict[str, dict[str, Any]] = {}
 
+# ---------------------------------------------------------------------------
+# Labeling progress caches
+# ---------------------------------------------------------------------------
+# All three caches are keyed by (time_index, inclusion_value) so that a change
+# in inclusion_value automatically bypasses stale entries.  They are cleared
+# together with label_history in clear_votes().
+
+# Maps (time_index, inclusion_value) -> (model, threshold, good_ids, bad_ids)
+# model is nn.Sequential or None; threshold is float or None.
+progress_model_cache: dict[tuple[int, int], tuple[Any, Any, list[int], list[int]]] = {}
+
+# Maps (time_index, inclusion_value) -> num_flips (int)
+# Stores how many previously-unlabelled clips changed their predicted label
+# when moving from the previous valid model step to this one.
+progress_flips_cache: dict[tuple[int, int], int] = {}
+
+# Maps (time_index, inclusion_value) -> {clip_id: prediction (0 or 1)}
+# Stores the binary predictions for every unlabelled clip at this step so
+# that the next step can compute flips without re-running the old model.
+progress_predictions_cache: dict[tuple[int, int], dict[int, int]] = {}
+
 
 def clear_votes() -> None:
     """Clear all votes and the full label history.
 
     Removes all entries from ``good_votes``, ``bad_votes``, and
-    ``label_history`` in place. Does not affect the ``clips`` dict.
+    ``label_history`` in place.  Also invalidates the labeling-progress
+    model/flips/predictions caches so stale entries are never reused after
+    a session reset.  Does not affect the ``clips`` dict.
     """
     good_votes.clear()
     bad_votes.clear()
     label_history.clear()
+    progress_model_cache.clear()
+    progress_flips_cache.clear()
+    progress_predictions_cache.clear()
 
 
 def clear_clips() -> None:

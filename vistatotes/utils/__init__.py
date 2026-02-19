@@ -7,7 +7,10 @@ from vistatotes.utils.state import (add_favorite_detector,
                                     favorite_detectors, get_favorite_detectors,
                                     get_favorite_detectors_by_media,
                                     get_inclusion, good_votes, inclusion,
-                                    label_history, remove_favorite_detector,
+                                    label_history, progress_flips_cache,
+                                    progress_model_cache,
+                                    progress_predictions_cache,
+                                    remove_favorite_detector,
                                     rename_favorite_detector, set_inclusion)
 
 __all__ = [
@@ -32,4 +35,8 @@ __all__ = [
     "rename_favorite_detector",
     "get_favorite_detectors",
     "get_favorite_detectors_by_media",
+    # Labeling-progress caches
+    "progress_model_cache",
+    "progress_flips_cache",
+    "progress_predictions_cache",
 ]

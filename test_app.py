@@ -1290,3 +1290,245 @@ class TestAutoDetect:
             threshold = result["threshold"]
             for hit in result["hits"]:
                 assert hit["score"] >= threshold - 1e-6  # float tolerance
+
+
+# ---------------------------------------------------------------------------
+# Labeling Progress Cache
+# ---------------------------------------------------------------------------
+
+
+class TestLabelingProgressCache:
+    """Tests for model/flips/predictions caching in the labeling progress system."""
+
+    @pytest.fixture(autouse=True)
+    def clear_caches(self):
+        from vistatotes.utils.state import (
+            progress_flips_cache,
+            progress_model_cache,
+            progress_predictions_cache,
+        )
+
+        progress_model_cache.clear()
+        progress_flips_cache.clear()
+        progress_predictions_cache.clear()
+        yield
+        progress_model_cache.clear()
+        progress_flips_cache.clear()
+        progress_predictions_cache.clear()
+
+    def _make_history(self, good_ids, bad_ids):
+        """Return a label_history list built from good and bad clip IDs."""
+        import time as time_mod
+
+        t = time_mod.time()
+        history = [(cid, "good", t) for cid in good_ids]
+        history += [(cid, "bad", t) for cid in bad_ids]
+        return history
+
+    # -- recreate_model_at_time caching --
+
+    def test_model_cache_populated_on_first_call(self):
+        """recreate_model_at_time populates progress_model_cache."""
+        from vistatotes.models.progress import recreate_model_at_time
+        from vistatotes.utils.state import progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        t = len(history) - 1
+        recreate_model_at_time(app_module.clips, history, t, inclusion_value=0)
+
+        assert (t, 0) in progress_model_cache
+
+    def test_model_cache_returns_same_object_on_second_call(self):
+        """The second call to recreate_model_at_time must return the cached tuple."""
+        from vistatotes.models.progress import recreate_model_at_time
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        t = len(history) - 1
+
+        result1 = recreate_model_at_time(app_module.clips, history, t, 0)
+        result2 = recreate_model_at_time(app_module.clips, history, t, 0)
+
+        # Both calls should return the exact same tuple object from cache
+        assert result1 is result2
+
+    def test_model_cache_all_steps_populated(self):
+        """recreate_model_at_time called for every step caches every step."""
+        from vistatotes.models.progress import recreate_model_at_time
+        from vistatotes.utils.state import progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        for t in range(len(history)):
+            recreate_model_at_time(app_module.clips, history, t, 0)
+
+        assert len(progress_model_cache) == len(history)
+
+    def test_model_cache_keyed_by_inclusion_value(self):
+        """Different inclusion values produce separate cache entries."""
+        from vistatotes.models.progress import recreate_model_at_time
+        from vistatotes.utils.state import progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        t = len(history) - 1
+
+        recreate_model_at_time(app_module.clips, history, t, inclusion_value=0)
+        recreate_model_at_time(app_module.clips, history, t, inclusion_value=5)
+
+        assert (t, 0) in progress_model_cache
+        assert (t, 5) in progress_model_cache
+
+    def test_none_models_are_cached(self):
+        """Steps that lack both classes are also cached (with model=None)."""
+        from vistatotes.models.progress import recreate_model_at_time
+        from vistatotes.utils.state import progress_model_cache
+
+        # Only good labels → cannot train → model must be None
+        history = [(1, "good", 0.0)]
+        recreate_model_at_time(app_module.clips, history, 0, 0)
+
+        assert (0, 0) in progress_model_cache
+        model, threshold, _, _ = progress_model_cache[(0, 0)]
+        assert model is None
+        assert threshold is None
+
+    # -- calculate_prediction_stability_over_time caching --
+
+    def test_flips_cache_populated_after_stability_call(self):
+        """Stability function populates progress_flips_cache for valid steps."""
+        from vistatotes.models.progress import calculate_prediction_stability_over_time
+        from vistatotes.utils.state import progress_flips_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        calculate_prediction_stability_over_time(app_module.clips, history, inclusion_value=0)
+
+        # At least one valid step must be cached
+        assert any(key[1] == 0 for key in progress_flips_cache)
+
+    def test_predictions_cache_populated_after_stability_call(self):
+        """Stability function populates progress_predictions_cache."""
+        from vistatotes.models.progress import calculate_prediction_stability_over_time
+        from vistatotes.utils.state import progress_predictions_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        calculate_prediction_stability_over_time(app_module.clips, history, 0)
+
+        assert len(progress_predictions_cache) > 0
+        for predictions in progress_predictions_cache.values():
+            for pred in predictions.values():
+                assert pred in (0, 1)
+
+    def test_stability_second_call_reuses_flips_cache(self):
+        """A second stability call must produce identical results from cache."""
+        from vistatotes.models.progress import calculate_prediction_stability_over_time
+        from vistatotes.utils.state import progress_flips_cache, progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+
+        result1 = calculate_prediction_stability_over_time(app_module.clips, history, 0)
+        model_entries_after_first = len(progress_model_cache)
+        flips_entries_after_first = len(progress_flips_cache)
+
+        result2 = calculate_prediction_stability_over_time(app_module.clips, history, 0)
+
+        # No new models trained and no new flips computed
+        assert len(progress_model_cache) == model_entries_after_first
+        assert len(progress_flips_cache) == flips_entries_after_first
+        # Results must be identical
+        assert result1 == result2
+
+    def test_stability_flips_cache_keyed_by_inclusion_value(self):
+        """Stability cache entries are separate per inclusion_value."""
+        from vistatotes.models.progress import calculate_prediction_stability_over_time
+        from vistatotes.utils.state import progress_flips_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        calculate_prediction_stability_over_time(app_module.clips, history, inclusion_value=0)
+        calculate_prediction_stability_over_time(app_module.clips, history, inclusion_value=3)
+
+        keys_iv0 = {k for k in progress_flips_cache if k[1] == 0}
+        keys_iv3 = {k for k in progress_flips_cache if k[1] == 3}
+        assert len(keys_iv0) > 0
+        assert len(keys_iv3) > 0
+
+    # -- cache invalidation --
+
+    def test_clear_votes_empties_all_caches(self):
+        """clear_votes() must wipe progress_model_cache, _flips_cache, and _predictions_cache."""
+        from vistatotes.models.progress import (
+            calculate_prediction_stability_over_time,
+            recreate_model_at_time,
+        )
+        from vistatotes.utils import clear_votes
+        from vistatotes.utils.state import (
+            progress_flips_cache,
+            progress_model_cache,
+            progress_predictions_cache,
+        )
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        t = len(history) - 1
+
+        # Populate all three caches
+        recreate_model_at_time(app_module.clips, history, t, 0)
+        calculate_prediction_stability_over_time(app_module.clips, history, 0)
+
+        assert progress_model_cache
+        assert progress_flips_cache
+        assert progress_predictions_cache
+
+        clear_votes()
+
+        assert not progress_model_cache
+        assert not progress_flips_cache
+        assert not progress_predictions_cache
+
+    # -- analyze_labeling_progress end-to-end --
+
+    def test_analyze_labeling_progress_populates_model_and_flips_caches(self):
+        """Full analyze_labeling_progress call populates both caches."""
+        from vistatotes.models.progress import analyze_labeling_progress
+        from vistatotes.utils.state import progress_flips_cache, progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        good_d = {k: None for k in [1, 2, 3]}
+        bad_d = {k: None for k in [18, 19, 20]}
+
+        analyze_labeling_progress(app_module.clips, history, good_d, bad_d, 0)
+
+        assert progress_model_cache
+        assert progress_flips_cache
+
+    def test_analyze_labeling_progress_second_call_uses_cache(self):
+        """Second analyze_labeling_progress call should find all steps cached."""
+        from vistatotes.models.progress import analyze_labeling_progress
+        from vistatotes.utils.state import progress_model_cache
+
+        history = self._make_history([1, 2, 3], [18, 19, 20])
+        good_d = {k: None for k in [1, 2, 3]}
+        bad_d = {k: None for k in [18, 19, 20]}
+
+        result1 = analyze_labeling_progress(app_module.clips, history, good_d, bad_d, 0)
+        cache_size = len(progress_model_cache)
+
+        result2 = analyze_labeling_progress(app_module.clips, history, good_d, bad_d, 0)
+
+        # No additional model training on second call
+        assert len(progress_model_cache) == cache_size
+        assert result1 == result2
+
+    def test_new_label_step_trains_only_new_model(self):
+        """Adding a label only trains a model for the new step, not old ones."""
+        from vistatotes.models.progress import calculate_prediction_stability_over_time
+        from vistatotes.utils.state import progress_model_cache
+
+        # First call with 5 labels
+        history = self._make_history([1, 2], [18, 19])
+        calculate_prediction_stability_over_time(app_module.clips, history, 0)
+        cache_size_before = len(progress_model_cache)
+
+        # Simulate one more label appended
+        import time as time_mod
+        history.append((3, "good", time_mod.time()))
+        calculate_prediction_stability_over_time(app_module.clips, history, 0)
+
+        # Exactly one new entry should have been added for the new step
+        assert len(progress_model_cache) == cache_size_before + 1

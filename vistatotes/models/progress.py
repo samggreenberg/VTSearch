@@ -21,6 +21,10 @@ def recreate_model_at_time(
     ``time_index``, then trains an MLP and computes a threshold using those labels.
     Later labels for the same clip override earlier ones (last label wins).
 
+    Results are cached in :data:`~vistatotes.utils.state.progress_model_cache` keyed
+    by ``(time_index, inclusion_value)`` so that subsequent calls for the same step
+    skip training entirely.
+
     Args:
         clips_dict: Mapping of clip ID to clip data dict. Each value must contain
             an ``"embedding"`` key with a ``numpy.ndarray`` embedding vector.
@@ -47,6 +51,12 @@ def recreate_model_at_time(
         - ``bad_ids`` is a list of clip IDs currently labelled bad (may be
           non-empty even when ``model`` is ``None``).
     """
+    from vistatotes.utils.state import progress_model_cache
+
+    cache_key = (time_index, inclusion_value)
+    if cache_key in progress_model_cache:
+        return progress_model_cache[cache_key]
+
     if time_index < 0 or time_index >= len(label_history):
         return None, None, [], []
 
@@ -65,7 +75,11 @@ def recreate_model_at_time(
 
     # Need at least one of each to train
     if not good_ids or not bad_ids:
-        return None, None, list(good_ids), list(bad_ids)
+        result: tuple[Optional[nn.Sequential], Optional[float], list[int], list[int]] = (
+            None, None, list(good_ids), list(bad_ids)
+        )
+        progress_model_cache[cache_key] = result
+        return result
 
     # Build training data
     X_list: list[np.ndarray] = []
@@ -80,7 +94,9 @@ def recreate_model_at_time(
             y_list.append(0.0)
 
     if len(X_list) < 2:
-        return None, None, list(good_ids), list(bad_ids)
+        result = (None, None, list(good_ids), list(bad_ids))
+        progress_model_cache[cache_key] = result
+        return result
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -94,7 +110,9 @@ def recreate_model_at_time(
         scores = model(X).squeeze(1).tolist()
     threshold = find_optimal_threshold(scores, y_list, inclusion_value)
 
-    return model, threshold, list(good_ids), list(bad_ids)
+    result = (model, threshold, list(good_ids), list(bad_ids))
+    progress_model_cache[cache_key] = result
+    return result
 
 
 def calculate_error_cost_over_time(
@@ -234,6 +252,13 @@ def calculate_prediction_stability_over_time(
     label (flipped) compared to the previous time step. A decreasing flip count
     is a sign that the model's predictions are stabilising.
 
+    Flip counts and per-step predictions are cached in
+    :data:`~vistatotes.utils.state.progress_flips_cache` and
+    :data:`~vistatotes.utils.state.progress_predictions_cache` (keyed by
+    ``(time_index, inclusion_value)``).  On a second call only the newest,
+    uncached step is evaluated; all historical steps are read from the cache
+    directly, so no old model needs to be run across the whole dataset again.
+
     Args:
         clips_dict: Mapping of clip ID to clip data dict. Each value must contain
             an ``"embedding"`` key with a ``numpy.ndarray`` embedding vector.
@@ -253,8 +278,9 @@ def calculate_prediction_stability_over_time(
           label changed since the previous time step (0 for the first valid step).
         - ``"num_unlabeled"`` (``int``): Number of unlabelled clips at this step.
     """
+    from vistatotes.utils.state import progress_flips_cache, progress_predictions_cache
+
     results: list[dict[str, Any]] = []
-    previous_predictions: Optional[dict[int, int]] = None
 
     # Get all clip IDs
     all_clip_ids = sorted(clips_dict.keys())
@@ -269,22 +295,37 @@ def calculate_prediction_stability_over_time(
 
         # Get IDs of currently labeled clips
         labeled_ids = set(good_ids) | set(bad_ids)
-
-        # Get unlabeled clips
         unlabeled_ids = [cid for cid in all_clip_ids if cid not in labeled_ids]
+        num_labels = len(good_ids) + len(bad_ids)
+
+        cache_key = (t, inclusion_value)
 
         if not unlabeled_ids:
+            if cache_key not in progress_flips_cache:
+                progress_flips_cache[cache_key] = 0
             results.append(
                 {
                     "time_index": t,
-                    "num_labels": len(good_ids) + len(bad_ids),
+                    "num_labels": num_labels,
                     "num_flips": 0,
                     "num_unlabeled": 0,
                 }
             )
             continue
 
-        # Score unlabeled clips
+        # Use cached flips if available for this step
+        if cache_key in progress_flips_cache:
+            results.append(
+                {
+                    "time_index": t,
+                    "num_labels": num_labels,
+                    "num_flips": progress_flips_cache[cache_key],
+                    "num_unlabeled": len(unlabeled_ids),
+                }
+            )
+            continue
+
+        # Score unlabeled clips using the (cached) model
         unlabeled_embs = np.array([clips_dict[cid]["embedding"] for cid in unlabeled_ids])
         X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
 
@@ -296,26 +337,34 @@ def calculate_prediction_stability_over_time(
             cid: 1 if score >= threshold else 0
             for cid, score in zip(unlabeled_ids, scores)
         }
+        progress_predictions_cache[cache_key] = predictions
 
-        # Count flips from previous time step
+        # Find the most recent cached predictions from a prior valid step
+        previous_predictions: Optional[dict[int, int]] = None
+        for prev_t in range(t - 1, -1, -1):
+            prev_key = (prev_t, inclusion_value)
+            if prev_key in progress_predictions_cache:
+                previous_predictions = progress_predictions_cache[prev_key]
+                break
+
+        # Count flips from the previous valid step
         num_flips = 0
         if previous_predictions is not None:
-            # Only count flips for clips that were unlabeled in both time steps
             common_unlabeled = set(predictions.keys()) & set(previous_predictions.keys())
             for cid in common_unlabeled:
                 if predictions[cid] != previous_predictions[cid]:
                     num_flips += 1
 
+        progress_flips_cache[cache_key] = num_flips
+
         results.append(
             {
                 "time_index": t,
-                "num_labels": len(good_ids) + len(bad_ids),
+                "num_labels": num_labels,
                 "num_flips": num_flips,
                 "num_unlabeled": len(unlabeled_ids),
             }
         )
-
-        previous_predictions = predictions
 
     return results
 
