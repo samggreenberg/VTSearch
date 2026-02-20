@@ -176,7 +176,9 @@ def demo_dataset_list():
         # this check stays generic as new demo datasets are added.
         if is_ready:
             required_folder = dataset_info.get("required_folder")
-            if required_folder is not None and not required_folder.exists():
+            if required_folder is not None and (
+                not required_folder.exists() or not any(required_folder.iterdir())
+            ):
                 is_ready = False
 
         # Calculate number of files
