@@ -86,6 +86,18 @@ def main() -> None:
         action="store_true",
         help="List available eval datasets and exit.",
     )
+    parser.add_argument(
+        "--plot-dir",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Generate visualisation PNGs in DIR (default: no plots).",
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="Disable plot generation even when --plot-dir is set.",
+    )
 
     args = parser.parse_args()
 
@@ -127,6 +139,18 @@ def main() -> None:
         with open(args.output, "w") as f:
             f.write(json_str)
         print(f"\nResults written to {args.output}")
+
+    # Generate visualisations
+    if args.plot_dir and not args.no_plot:
+        from vtsearch.eval.visualize import plot_eval_results
+
+        generated = plot_eval_results(results, output_dir=args.plot_dir)
+        if generated:
+            print(f"\nPlots written to {args.plot_dir}/:")
+            for p in generated:
+                print(f"  {p.name}")
+        else:
+            print("\nNo plots generated (no results to visualise).")
 
 
 if __name__ == "__main__":

@@ -150,15 +150,21 @@ class TestSimulateVotingIterations:
     def test_returns_rows(self):
         clips = _make_separable_clips(n_per_cat=10)
         rows = simulate_voting_iterations(
-            clips, target_category="alpha", seed=42,
-            dataset_name="test_ds", inclusion=0, sim_fraction=0.5,
+            clips,
+            target_category="alpha",
+            seed=42,
+            dataset_name="test_ds",
+            inclusion=0,
+            sim_fraction=0.5,
         )
         assert len(rows) > 0
 
     def test_row_schema(self):
         clips = _make_separable_clips(n_per_cat=10)
         rows = simulate_voting_iterations(
-            clips, target_category="alpha", seed=42,
+            clips,
+            target_category="alpha",
+            seed=42,
             dataset_name="test_ds",
         )
         expected_keys = {"seed", "dataset", "category", "t", "cost", "fpr", "fnr"}
@@ -196,7 +202,10 @@ class TestSimulateVotingIterations:
         """With overlapping data, cost should generally decrease as more votes come in."""
         clips = _make_overlapping_clips(n_per_cat=30, dim=16)
         rows = simulate_voting_iterations(
-            clips, "alpha", seed=42, sim_fraction=0.5,
+            clips,
+            "alpha",
+            seed=42,
+            sim_fraction=0.5,
         )
         costs = [r["cost"] for r in rows]
         # Compare average of first quarter vs last quarter

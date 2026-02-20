@@ -62,10 +62,7 @@ def _make_vote_sequence(
     rng: np.random.RandomState,
 ) -> list[tuple[int, str]]:
     """Build a shuffled list of ``(clip_id, label)`` pairs from simulation IDs."""
-    votes = [
-        (cid, "good" if clips_dict[cid]["category"] == target_category else "bad")
-        for cid in sim_ids
-    ]
+    votes = [(cid, "good" if clips_dict[cid]["category"] == target_category else "bad") for cid in sim_ids]
     order = rng.permutation(len(votes))
     return [votes[i] for i in order]
 
@@ -88,10 +85,7 @@ def _evaluate_on_test(
     with torch.no_grad():
         scores = model(X).squeeze(1).tolist()
 
-    true_labels = [
-        1.0 if clips_dict[cid]["category"] == target_category else 0.0
-        for cid in test_ids
-    ]
+    true_labels = [1.0 if clips_dict[cid]["category"] == target_category else 0.0 for cid in test_ids]
 
     total_pos = sum(1 for lbl in true_labels if lbl == 1.0)
     total_neg = len(true_labels) - total_pos
@@ -182,15 +176,11 @@ def simulate_voting_iterations(
         input_dim = X.shape[1]
 
         # Train and find threshold (mirrors train_and_score)
-        threshold = calculate_cross_calibration_threshold(
-            X_list, y_list, input_dim, inclusion
-        )
+        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion)
         model = train_model(X, y, input_dim, inclusion)
 
         # Evaluate on held-out test set
-        metrics = _evaluate_on_test(
-            model, threshold, clips_dict, test_ids, target_category, inclusion
-        )
+        metrics = _evaluate_on_test(model, threshold, clips_dict, test_ids, target_category, inclusion)
 
         rows.append(
             {

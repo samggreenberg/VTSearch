@@ -8,6 +8,8 @@ accelerate
 scikit-learn
 requests
 tqdm
+matplotlib
+pandas
 
 # Per-media-type dependencies.
 # Each media type declares its own requirements in its subdirectory.
