@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from PIL import Image
 
-from vistatotes.media.base import Extractor
+from vtsearch.media.base import Extractor
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ class TestImageClassExtractor:
         return buf.getvalue()
 
     def test_from_config(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor.from_config("my-ext", {"target_class": "car", "threshold": 0.5})
         assert ext.name == "my-ext"
@@ -89,7 +89,7 @@ class TestImageClassExtractor:
         assert ext.media_type == "image"
 
     def test_to_dict(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor("test", "person", threshold=0.3, model_id="yolo11n.pt")
         d = ext.to_dict()
@@ -118,7 +118,7 @@ class TestImageClassExtractor:
         return mock_model, mock_result
 
     def test_extract_returns_matching_boxes(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         detections = [
             (0, 0.9, [10.0, 20.0, 100.0, 200.0]),
@@ -140,7 +140,7 @@ class TestImageClassExtractor:
         assert len(hits[0]["bbox"]) == 4
 
     def test_extract_filters_below_threshold(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         detections = [(0, 0.2, [10.0, 20.0, 100.0, 200.0])]
         mock_model, mock_result = self._make_mock_yolo_model(detections)
@@ -155,7 +155,7 @@ class TestImageClassExtractor:
         assert len(hits) == 0
 
     def test_extract_filters_wrong_class(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         detections = [(1, 0.9, [10.0, 20.0, 100.0, 200.0])]
         mock_model, mock_result = self._make_mock_yolo_model(detections)
@@ -170,7 +170,7 @@ class TestImageClassExtractor:
         assert len(hits) == 0
 
     def test_extract_missing_image_bytes(self):
-        from vistatotes.media.image.extractor import ImageClassExtractor
+        from vtsearch.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor("test", "person")
         # Provide a real no-op model to avoid import
@@ -186,7 +186,7 @@ class TestImageClassExtractor:
 class TestFavoriteExtractors:
     @pytest.fixture(autouse=True)
     def clear_favorites(self):
-        from vistatotes.utils.state import favorite_extractors
+        from vtsearch.utils.state import favorite_extractors
 
         favorite_extractors.clear()
         yield
@@ -340,7 +340,7 @@ class TestFavoriteExtractors:
 
     def test_stored_extractor_has_correct_fields(self, client):
         self._post_extractor(client, "field-check")
-        from vistatotes.utils.state import favorite_extractors
+        from vtsearch.utils.state import favorite_extractors
 
         assert "field-check" in favorite_extractors
         stored = favorite_extractors["field-check"]
@@ -358,7 +358,7 @@ class TestFavoriteExtractors:
 
 class TestExtractEndpoint:
     def test_extract_requires_clips(self, client):
-        from vistatotes.utils.state import clips
+        from vtsearch.utils.state import clips
 
         saved = dict(clips)
         clips.clear()
@@ -398,14 +398,14 @@ class TestExtractEndpoint:
 class TestAutoExtract:
     @pytest.fixture(autouse=True)
     def clear_favorites(self):
-        from vistatotes.utils.state import favorite_extractors
+        from vtsearch.utils.state import favorite_extractors
 
         favorite_extractors.clear()
         yield
         favorite_extractors.clear()
 
     def test_no_clips_returns_400(self, client):
-        from vistatotes.utils.state import clips
+        from vtsearch.utils.state import clips
 
         saved = dict(clips)
         clips.clear()
@@ -422,7 +422,7 @@ class TestAutoExtract:
 
     def test_no_matching_media_type_returns_400(self, client):
         # Clips are audio; add an image extractor
-        from vistatotes.utils.state import favorite_extractors
+        from vtsearch.utils.state import favorite_extractors
 
         favorite_extractors["img-ext"] = {
             "name": "img-ext",

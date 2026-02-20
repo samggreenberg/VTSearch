@@ -5,7 +5,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 # Visual feedback for startup
-print("⏳ Initializing VistaTotes...", flush=True)
+print("⏳ Initializing VTSearch...", flush=True)
 
 import hashlib
 
@@ -15,10 +15,10 @@ from flask import Flask
 
 # Import refactored modules
 from config import DATA_DIR, NUM_CLIPS
-from vistatotes.audio import generate_wav
-from vistatotes.models import embed_audio_file, initialize_models
-from vistatotes.routes import clips_bp, datasets_bp, detectors_bp, exporters_bp, main_bp, sorting_bp
-from vistatotes.utils import clips
+from vtsearch.audio import generate_wav
+from vtsearch.models import embed_audio_file, initialize_models
+from vtsearch.routes import clips_bp, datasets_bp, detectors_bp, exporters_bp, main_bp, sorting_bp
+from vtsearch.utils import clips
 
 app = Flask(__name__)
 
@@ -57,7 +57,7 @@ def init_clips():
         temp_path.unlink()
 
 
-# Model initialization is now handled by vistatotes.models.initialize_models()
+# Model initialization is now handled by vtsearch.models.initialize_models()
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ app.register_blueprint(exporters_bp)
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="VistaTotes \u2014 media explorer web app")
+    parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app")
     parser.add_argument("--local", action="store_true", help="Run in local development mode")
     parser.add_argument(
         "--autodetect",
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     exporter = None
 
     if args.autodetect and args.importer:
-        from vistatotes.datasets.importers import get_importer, list_importers
+        from vtsearch.datasets.importers import get_importer, list_importers
 
         importer = get_importer(args.importer)
         if importer is None:
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         importer.add_cli_arguments(parser)
 
     if args.autodetect and args.exporter:
-        from vistatotes.exporters import get_exporter, list_exporters
+        from vtsearch.exporters import get_exporter, list_exporters
 
         exporter = get_exporter(args.exporter)
         if exporter is None:
@@ -144,7 +144,7 @@ if __name__ == "__main__":
             if not args.detector:
                 parser.error("--autodetect with --importer requires --detector")
 
-            from vistatotes.cli import autodetect_importer_main
+            from vtsearch.cli import autodetect_importer_main
 
             field_values = {f.key: getattr(args, f.key, f.default or None) for f in importer.fields}
             autodetect_importer_main(args.importer, field_values, args.detector, args.exporter, exporter_field_values)
@@ -154,7 +154,7 @@ if __name__ == "__main__":
             if not args.detector:
                 parser.error("--autodetect requires --detector")
 
-            from vistatotes.cli import autodetect_main
+            from vtsearch.cli import autodetect_main
 
             autodetect_main(args.dataset, args.detector, args.exporter, exporter_field_values)
 
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         print("\U0001f680 Running in PRODUCTION mode", flush=True)
         initialize_models()
 
-        print("\u2705 VistaTotes is ready!", flush=True)
+        print("\u2705 VTSearch is ready!", flush=True)
         print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
 
         app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

@@ -1,4 +1,4 @@
-"""Tests for the CLI autodetect feature (vistatotes/cli.py)."""
+"""Tests for the CLI autodetect feature (vtsearch/cli.py)."""
 
 import argparse
 import json
@@ -10,14 +10,14 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vistatotes.cli import (
+from vtsearch.cli import (
     _build_results_dict,
     _detect_media_type,
     _run_exporter,
     run_autodetect,
     run_autodetect_with_importer,
 )
-from vistatotes.datasets.loader import export_dataset_to_file
+from vtsearch.datasets.loader import export_dataset_to_file
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ class TestImporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values."""
 
     def test_folder_importer_adds_expected_args(self):
-        from vistatotes.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderImporter
 
         imp = FolderImporter()
         parser = argparse.ArgumentParser()
@@ -292,7 +292,7 @@ class TestImporterCLIArguments:
         assert args.media_type == "images"
 
     def test_folder_importer_media_type_default(self):
-        from vistatotes.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderImporter
 
         imp = FolderImporter()
         parser = argparse.ArgumentParser()
@@ -302,7 +302,7 @@ class TestImporterCLIArguments:
         assert args.media_type == "sounds"
 
     def test_folder_importer_rejects_invalid_media_type(self):
-        from vistatotes.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderImporter
 
         imp = FolderImporter()
         parser = argparse.ArgumentParser()
@@ -312,7 +312,7 @@ class TestImporterCLIArguments:
             parser.parse_args(["--path", "/tmp/data", "--media-type", "invalid"])
 
     def test_pickle_importer_adds_file_arg(self):
-        from vistatotes.datasets.importers.pickle import PickleImporter
+        from vtsearch.datasets.importers.pickle import PickleImporter
 
         imp = PickleImporter()
         parser = argparse.ArgumentParser()
@@ -322,7 +322,7 @@ class TestImporterCLIArguments:
         assert args.file == "/tmp/dataset.pkl"
 
     def test_http_archive_importer_adds_expected_args(self):
-        from vistatotes.datasets.importers.http_zip import HttpArchiveImporter
+        from vtsearch.datasets.importers.http_zip import HttpArchiveImporter
 
         imp = HttpArchiveImporter()
         parser = argparse.ArgumentParser()
@@ -333,14 +333,14 @@ class TestImporterCLIArguments:
         assert args.media_type == "images"
 
     def test_validate_catches_missing_required_field(self):
-        from vistatotes.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderImporter
 
         imp = FolderImporter()
         with pytest.raises(ValueError, match="Missing required argument: --path"):
             imp.validate_cli_field_values({"media_type": "sounds"})
 
     def test_validate_passes_with_all_fields(self):
-        from vistatotes.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderImporter
 
         imp = FolderImporter()
         # Should not raise
@@ -593,7 +593,7 @@ class TestExporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values on exporters."""
 
     def test_file_exporter_adds_filepath_arg(self):
-        from vistatotes.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileExporter
 
         exp = FileExporter()
         parser = argparse.ArgumentParser()
@@ -603,7 +603,7 @@ class TestExporterCLIArguments:
         assert args.filepath == "/tmp/results.json"
 
     def test_file_exporter_filepath_default(self):
-        from vistatotes.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileExporter
 
         exp = FileExporter()
         parser = argparse.ArgumentParser()
@@ -613,7 +613,7 @@ class TestExporterCLIArguments:
         assert args.filepath == "autodetect_results.json"
 
     def test_email_smtp_exporter_adds_expected_args(self):
-        from vistatotes.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailSmtpExporter
 
         exp = EmailSmtpExporter()
         parser = argparse.ArgumentParser()
@@ -636,7 +636,7 @@ class TestExporterCLIArguments:
         assert args.smtp_port == "587"
 
     def test_email_smtp_exporter_custom_host_and_port(self):
-        from vistatotes.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailSmtpExporter
 
         exp = EmailSmtpExporter()
         parser = argparse.ArgumentParser()
@@ -660,7 +660,7 @@ class TestExporterCLIArguments:
         assert args.smtp_port == "465"
 
     def test_gui_exporter_adds_no_args(self):
-        from vistatotes.exporters.gui import GuiExporter
+        from vtsearch.exporters.gui import GuiExporter
 
         exp = GuiExporter()
         parser = argparse.ArgumentParser()
@@ -671,14 +671,14 @@ class TestExporterCLIArguments:
         assert not hasattr(args, "filepath")
 
     def test_validate_catches_missing_required_field(self):
-        from vistatotes.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailSmtpExporter
 
         exp = EmailSmtpExporter()
         with pytest.raises(ValueError, match="Missing required argument: --to"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_with_all_fields(self):
-        from vistatotes.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailSmtpExporter
 
         exp = EmailSmtpExporter()
         # Should not raise
@@ -693,13 +693,13 @@ class TestExporterCLIArguments:
         )
 
     def test_file_exporter_validate_passes(self):
-        from vistatotes.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileExporter
 
         exp = FileExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.json"})
 
     def test_gui_exporter_validate_passes_empty(self):
-        from vistatotes.exporters.gui import GuiExporter
+        from vtsearch.exporters.gui import GuiExporter
 
         exp = GuiExporter()
         # No required fields — empty dict is fine
@@ -849,7 +849,7 @@ class TestAutodetectMainWithExporter:
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         output_file = tmp_path / "fn_export.json"
-        from vistatotes.cli import autodetect_main
+        from vtsearch.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),
@@ -866,7 +866,7 @@ class TestAutodetectMainWithExporter:
         dataset_path = _make_dataset_file(tmp_path, app_module.clips)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
-        from vistatotes.cli import autodetect_main
+        from vtsearch.cli import autodetect_main
 
         autodetect_main(str(dataset_path), str(detector_path))
 
@@ -882,7 +882,7 @@ class TestAutodetectImporterMainWithExporter:
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         output_file = tmp_path / "importer_export.json"
-        from vistatotes.cli import autodetect_importer_main
+        from vtsearch.cli import autodetect_importer_main
 
         autodetect_importer_main(
             "pickle",

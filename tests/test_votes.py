@@ -1,6 +1,6 @@
 import app as app_module
-from vistatotes.models.progress import _cache_good_ids, _cache_bad_ids, _ensure_cache
-from vistatotes.utils import clips, label_history
+from vtsearch.models.progress import _cache_good_ids, _cache_bad_ids, _ensure_cache
+from vtsearch.utils import clips, label_history
 
 
 class TestVoteClip:

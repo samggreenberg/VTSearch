@@ -4,10 +4,10 @@ import app as app_module
 
 # Import refactored modules and make them accessible through app_module
 from config import NUM_CLIPS, SAMPLE_RATE
-from vistatotes.audio import generate_wav
-from vistatotes.models import initialize_models, train_and_score
-from vistatotes.models.progress import clear_progress_cache
-from vistatotes.utils import bad_votes, clips, good_votes, label_history
+from vtsearch.audio import generate_wav
+from vtsearch.models import initialize_models, train_and_score
+from vtsearch.models.progress import clear_progress_cache
+from vtsearch.utils import bad_votes, clips, good_votes, label_history
 
 # Attach to app_module for backward compatibility with existing tests
 app_module.NUM_CLIPS = NUM_CLIPS

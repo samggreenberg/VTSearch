@@ -1,4 +1,4 @@
-# VistaTotes
+# VTSearch
 
 Media explorer web app for browsing/voting on audio, images, or text. Semantic sorting (LAION-CLAP, CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + vanilla JS + PyTorch.
 
@@ -13,14 +13,14 @@ Media explorer web app for browsing/voting on audio, images, or text. Semantic s
 
 ## Architecture
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing
-- `vistatotes/cli.py` — CLI autodetect: load dataset + detector, run inference, export results
+- `vtsearch/cli.py` — CLI autodetect: load dataset + detector, run inference, export results
 - `config.py` — Constants (SAMPLE_RATE, NUM_CLIPS, paths, model IDs)
-- `vistatotes/routes/` — Flask blueprints: `main.py`, `clips.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`
-- `vistatotes/models/` — Embeddings, training, model loading, progress tracking
-- `vistatotes/datasets/` — Dataset loading, downloading, importers (folder/pickle/http_zip/rss_feed/youtube_playlist)
-- `vistatotes/exporters/` — Results exporters (file/gui/email_smtp/csv_file/webhook)
-- `vistatotes/media/` — Media type plugins: audio, image, text, video
-- `vistatotes/utils/` — Global state (`clips` dict, votes), progress utilities
+- `vtsearch/routes/` — Flask blueprints: `main.py`, `clips.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`
+- `vtsearch/models/` — Embeddings, training, model loading, progress tracking
+- `vtsearch/datasets/` — Dataset loading, downloading, importers (folder/pickle/http_zip/rss_feed/youtube_playlist)
+- `vtsearch/exporters/` — Results exporters (file/gui/email_smtp/csv_file/webhook)
+- `vtsearch/media/` — Media type plugins: audio, image, text, video
+- `vtsearch/utils/` — Global state (`clips` dict, votes), progress utilities
 - `static/index.html` — HTML structure (270 lines)
 - `static/styles.css` — All CSS styles
 - `static/app.js` — All frontend JavaScript
@@ -43,7 +43,7 @@ Media explorer web app for browsing/voting on audio, images, or text. Semantic s
   - `test_processors.py` — Media processor tests
 
 ## Key Details
-- Global state lives in `vistatotes/utils/state.py`: `clips`, `good_votes`, `bad_votes` are module-level dicts
+- Global state lives in `vtsearch/utils/state.py`: `clips`, `good_votes`, `bad_votes` are module-level dicts
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - `data/` dir created at runtime for embeddings, model cache, media files
 - OMP_NUM_THREADS and MKL_NUM_THREADS set to 1 for memory optimization

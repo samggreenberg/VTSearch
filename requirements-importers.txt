@@ -1,12 +1,12 @@
 # Aggregated requirements for all dataset importers.
 #
-# Each importer lives in vistatotes/datasets/importers/<name>/ and has its
+# Each importer lives in vtsearch/datasets/importers/<name>/ and has its
 # own requirements.txt listing any packages it needs beyond the core deps.
 #
 # To add a new importer's dependencies, append a line here:
-#   -r vistatotes/datasets/importers/<name>/requirements.txt
+#   -r vtsearch/datasets/importers/<name>/requirements.txt
 #
 # ── Built-in importers ──────────────────────────────────────────────────────
--r vistatotes/datasets/importers/pickle/requirements.txt
--r vistatotes/datasets/importers/folder/requirements.txt
--r vistatotes/datasets/importers/http_zip/requirements.txt
+-r vtsearch/datasets/importers/pickle/requirements.txt
+-r vtsearch/datasets/importers/folder/requirements.txt
+-r vtsearch/datasets/importers/http_zip/requirements.txt

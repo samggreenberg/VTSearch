@@ -9,7 +9,7 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-MARKER="/tmp/.vistatotes-deps-installed"
+MARKER="/tmp/.vtsearch-deps-installed"
 
 if [ -f "$MARKER" ]; then
   exit 0

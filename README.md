@@ -1,4 +1,4 @@
-# VistaTotes
+# VTSearch
 
 A media explorer web app. Browse collections of audio clips, images, or text paragraphs — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, or E5-large-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
 
@@ -47,8 +47,8 @@ brew install git
 ## Getting the code
 
 ```bash
-git clone https://github.com/samggreenberg/vistatotes.git
-cd vistatotes
+git clone https://github.com/samggreenberg/vtsearch.git
+cd vtsearch
 ```
 
 ## Setting up a virtual environment
@@ -176,10 +176,10 @@ python -m pytest tests/ -v
 ## Project structure
 
 ```
-vistatotes/
+vtsearch/
 ├── app.py                          # Flask entry point, registers blueprints
 ├── config.py                       # Constants (SAMPLE_RATE, paths, model IDs)
-├── vistatotes/                     # Main application package
+├── vtsearch/                     # Main application package
 │   ├── routes/                     # Flask blueprints
 │   │   ├── main.py                 #   Core routes
 │   │   ├── clips.py                #   Clip endpoints
@@ -233,7 +233,7 @@ vistatotes/
 
 ## Extending with plugins
 
-VistaTotes has a plugin architecture for media types, data importers, and results exporters. See [EXTENDING.md](EXTENDING.md) for full documentation, including:
+VTSearch has a plugin architecture for media types, data importers, and results exporters. See [EXTENDING.md](EXTENDING.md) for full documentation, including:
 
 - **[Adding a Data Importer](EXTENDING.md#adding-a-data-importer)** — Auto-discovered plugins that load datasets from new sources (S3, databases, APIs, etc.). Subclass `DatasetImporter`, expose an `IMPORTER` instance, and the system wires up API routes and UI forms automatically.
 - **[Adding a Results Exporter](EXTENDING.md#adding-a-results-exporter)** — Export votes, labels, or detector weights in new formats by adding routes to the appropriate blueprint.

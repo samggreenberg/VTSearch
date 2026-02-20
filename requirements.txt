@@ -11,21 +11,21 @@ tqdm
 
 # Per-media-type dependencies.
 # Each media type declares its own requirements in its subdirectory.
-# To add a new media type, create vistatotes/media/<yourtype>/requirements.txt
+# To add a new media type, create vtsearch/media/<yourtype>/requirements.txt
 # and add a -r line below pointing to it.
--r vistatotes/media/audio/requirements.txt
--r vistatotes/media/video/requirements.txt
--r vistatotes/media/image/requirements.txt
--r vistatotes/media/text/requirements.txt
+-r vtsearch/media/audio/requirements.txt
+-r vtsearch/media/video/requirements.txt
+-r vtsearch/media/image/requirements.txt
+-r vtsearch/media/text/requirements.txt
 
 # Per-importer dependencies.
 # Each importer declares its own requirements in its subdirectory.
-# To add a new importer, create vistatotes/datasets/importers/<name>/requirements.txt,
+# To add a new importer, create vtsearch/datasets/importers/<name>/requirements.txt,
 # then add a -r line to requirements-importers.txt.
 -r requirements-importers.txt
 
 # Per-exporter dependencies.
 # Each exporter declares its own requirements in its subdirectory.
-# To add a new exporter, create vistatotes/exporters/<name>/requirements.txt,
+# To add a new exporter, create vtsearch/exporters/<name>/requirements.txt,
 # then add a -r line to requirements-exporters.txt.
 -r requirements-exporters.txt

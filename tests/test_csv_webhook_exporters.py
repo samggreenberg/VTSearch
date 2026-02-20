@@ -8,12 +8,12 @@ from unittest import mock
 import pytest
 
 import app as app_module
-from vistatotes.cli import (
+from vtsearch.cli import (
     _build_results_dict,
     _run_exporter,
     run_autodetect,
 )
-from vistatotes.datasets.loader import export_dataset_to_file
+from vtsearch.datasets.loader import export_dataset_to_file
 
 
 # ---------------------------------------------------------------------------
@@ -73,32 +73,32 @@ class TestCsvExporterMetadata:
     """CSV exporter metadata and registration."""
 
     def test_csv_exporter_registered(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("csv")
         assert exp is not None
 
     def test_csv_exporter_display_name(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("csv")
         assert exp.display_name == "Save to CSV"
 
     def test_csv_exporter_icon(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("csv")
         assert exp.icon == "\U0001f4ca"
 
     def test_csv_exporter_has_filepath_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("csv")
         keys = [f.key for f in exp.fields]
         assert "filepath" in keys
 
     def test_csv_exporter_to_dict(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("csv")
         d = exp.to_dict()
@@ -116,7 +116,7 @@ class TestCsvExporterCLI:
     """CLI argument parsing for the CSV exporter."""
 
     def test_adds_filepath_arg(self):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         parser = argparse.ArgumentParser()
@@ -126,7 +126,7 @@ class TestCsvExporterCLI:
         assert args.filepath == "/tmp/results.csv"
 
     def test_filepath_default(self):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         parser = argparse.ArgumentParser()
@@ -136,13 +136,13 @@ class TestCsvExporterCLI:
         assert args.filepath == "autodetect_results.csv"
 
     def test_validate_passes(self):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.csv"})
 
     def test_validate_missing_filepath(self):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         with pytest.raises(ValueError, match="Missing required argument: --filepath"):
@@ -158,7 +158,7 @@ class TestCsvExporterExport:
     """Tests for the CSV export() method."""
 
     def test_creates_csv_file(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = _make_sample_results()
@@ -170,7 +170,7 @@ class TestCsvExporterExport:
         assert "Saved" in result["message"]
 
     def test_csv_has_correct_header(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = _make_sample_results()
@@ -183,7 +183,7 @@ class TestCsvExporterExport:
         assert header == ["detector", "threshold", "filename", "category", "score"]
 
     def test_csv_has_correct_row_count(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = _make_sample_results()
@@ -197,7 +197,7 @@ class TestCsvExporterExport:
         assert len(rows) == 4
 
     def test_csv_row_values(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = _make_sample_results()
@@ -214,7 +214,7 @@ class TestCsvExporterExport:
         assert first_row[4] == "0.95"
 
     def test_csv_empty_results(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = {"media_type": "audio", "detectors_run": 0, "results": {}}
@@ -225,7 +225,7 @@ class TestCsvExporterExport:
         assert "0 hit(s)" in result["message"]
 
     def test_csv_creates_parent_dirs(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = _make_sample_results()
@@ -235,14 +235,14 @@ class TestCsvExporterExport:
         assert filepath.exists()
 
     def test_csv_empty_filepath_raises(self):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         with pytest.raises(ValueError, match="file path is required"):
             exp.export({}, {"filepath": ""})
 
     def test_csv_multiple_detectors(self, tmp_path):
-        from vistatotes.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvExporter
 
         exp = CsvExporter()
         results = {
@@ -307,46 +307,46 @@ class TestWebhookExporterMetadata:
     """Webhook exporter metadata and registration."""
 
     def test_webhook_exporter_registered(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp is not None
 
     def test_webhook_exporter_display_name(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp.display_name == "Webhook (HTTP POST)"
 
     def test_webhook_exporter_icon(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp.icon == "\U0001f310"
 
     def test_webhook_exporter_has_url_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         keys = [f.key for f in exp.fields]
         assert "url" in keys
 
     def test_webhook_exporter_has_auth_header_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         keys = [f.key for f in exp.fields]
         assert "auth_header" in keys
 
     def test_webhook_auth_header_not_required(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         auth_field = next(f for f in exp.fields if f.key == "auth_header")
         assert auth_field.required is False
 
     def test_webhook_exporter_to_dict(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("webhook")
         d = exp.to_dict()
@@ -363,7 +363,7 @@ class TestWebhookExporterCLI:
     """CLI argument parsing for the Webhook exporter."""
 
     def test_adds_url_arg(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         parser = argparse.ArgumentParser()
@@ -373,21 +373,21 @@ class TestWebhookExporterCLI:
         assert args.url == "https://example.com/hook"
 
     def test_validate_passes_with_url(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         # auth_header is optional, so only url is needed
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
     def test_validate_missing_url(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_without_auth_header(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         # Should not raise
@@ -403,7 +403,7 @@ class TestWebhookExporterExport:
     """Tests for the Webhook export() method using mocked HTTP."""
 
     def test_posts_json_to_url(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -412,7 +412,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         mock_post.assert_called_once()
@@ -422,7 +422,7 @@ class TestWebhookExporterExport:
         assert "200" in result["message"]
 
     def test_sends_auth_header_when_provided(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -431,14 +431,14 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
         call_kwargs = mock_post.call_args
         assert call_kwargs.kwargs["headers"]["Authorization"] == "Bearer my-token"
 
     def test_no_auth_header_when_empty(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -447,21 +447,21 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
         assert "Authorization" not in call_kwargs.kwargs["headers"]
 
     def test_empty_url_raises(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         with pytest.raises(ValueError, match="webhook URL is required"):
             exp.export({}, {"url": ""})
 
     def test_http_error_propagates(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -469,12 +469,12 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
     def test_message_contains_hit_count(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -483,14 +483,14 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
         assert "1 detector(s)" in result["message"]
 
     def test_result_includes_status_code_and_url(self):
-        from vistatotes.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookExporter
 
         exp = WebhookExporter()
         results = _make_sample_results()
@@ -499,7 +499,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -520,7 +520,7 @@ class TestWebhookExporterIntegration:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vistatotes.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 
     def test_unknown_exporter_still_raises(self):

@@ -1,7 +1,7 @@
-# Extending VistaTotes
+# Extending VTSearch
 
 This guide explains how to add a new **Data Importer**, **Results Exporter**, or
-**Media Type** to VistaTotes.  Each section describes the interface contract,
+**Media Type** to VTSearch.  Each section describes the interface contract,
 where files go, and how to wire up dependencies.
 
 ---
@@ -23,9 +23,9 @@ routes or core code are needed.
 
 ### How discovery works
 
-The registry in `vistatotes/datasets/importers/__init__.py` uses `pkgutil` to
+The registry in `vtsearch/datasets/importers/__init__.py` uses `pkgutil` to
 scan for **sub-packages** (directories with `__init__.py`) under
-`vistatotes/datasets/importers/`.  For each sub-package it finds, it imports the
+`vtsearch/datasets/importers/`.  For each sub-package it finds, it imports the
 module and looks for a module-level attribute named `IMPORTER`.  If that
 attribute exists and is a `DatasetImporter` instance, it is registered
 automatically.
@@ -39,22 +39,22 @@ crashing the whole app.
 Create a new sub-package directory:
 
 ```
-vistatotes/datasets/importers/<your_importer>/
+vtsearch/datasets/importers/<your_importer>/
 ├── __init__.py       # Importer class + IMPORTER instance (required)
 └── requirements.txt  # Pip dependencies, even if empty (required)
 ```
 
 ### What to implement
 
-Subclass `DatasetImporter` from `vistatotes.datasets.importers.base` and set the
+Subclass `DatasetImporter` from `vtsearch.datasets.importers.base` and set the
 required class attributes.  Then implement the `run()` method and expose a
 module-level `IMPORTER` instance.
 
 ```python
-# vistatotes/datasets/importers/s3/__init__.py
+# vtsearch/datasets/importers/s3/__init__.py
 
-from vistatotes.datasets.importers.base import DatasetImporter, ImporterField
-from vistatotes.datasets.loader import load_dataset_from_folder
+from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+from vtsearch.datasets.loader import load_dataset_from_folder
 
 
 class S3Importer(DatasetImporter):
@@ -111,7 +111,7 @@ class S3Importer(DatasetImporter):
         import boto3
         from pathlib import Path
         from config import DATA_DIR
-        from vistatotes.utils import update_progress
+        from vtsearch.utils import update_progress
 
         bucket = field_values["bucket"]
         prefix = field_values.get("prefix", "")
@@ -169,7 +169,7 @@ IMPORTER = S3Importer()
 2. The user fills out the form and submits it.  The frontend sends
    `POST /api/dataset/import/<name>` with either a JSON body or
    `multipart/form-data` (if any field has `field_type="file"`).
-3. The route handler in `vistatotes/routes/datasets.py` extracts `field_values`
+3. The route handler in `vtsearch/routes/datasets.py` extracts `field_values`
    from the request, clears the current dataset, and calls `importer.run()`
    in a background daemon thread.
 4. The frontend polls `GET /api/dataset/progress` to show a progress bar.
@@ -179,7 +179,7 @@ IMPORTER = S3Importer()
 Call `update_progress()` from your `run()` method to give the user feedback:
 
 ```python
-from vistatotes.utils import update_progress
+from vtsearch.utils import update_progress
 
 update_progress("downloading", "Downloading file 3/10", 3, 10)
 #                ^status        ^message              ^cur ^total
@@ -190,12 +190,12 @@ and stored as an error in the progress tracker.
 
 ### Wiring up dependencies
 
-1. Create `vistatotes/datasets/importers/<name>/requirements.txt` listing any
+1. Create `vtsearch/datasets/importers/<name>/requirements.txt` listing any
    pip packages your importer needs (create the file even if empty — see
    [Dependency Management](#dependency-management) below).
 2. Add a reference line to `requirements-importers.txt`:
    ```
-   -r vistatotes/datasets/importers/<name>/requirements.txt
+   -r vtsearch/datasets/importers/<name>/requirements.txt
    ```
 3. If using `requirements-cpu.txt`, add the packages inline in that file too
    (it uses inline pins instead of `-r` includes for version control).
@@ -204,7 +204,7 @@ and stored as an error in the progress tracker.
 
 ## Adding a Results Exporter
 
-VistaTotes currently exports three kinds of results, each served from an
+VTSearch currently exports three kinds of results, each served from an
 existing API endpoint.  There is no abstract base class or auto-discovery
 mechanism for exporters (unlike importers).  Adding a new exporter means adding
 a new route to the appropriate blueprint.
@@ -221,13 +221,13 @@ a new route to the appropriate blueprint.
 
 Decide which blueprint your exporter belongs to based on what it exports:
 
-- **Dataset-level exports** (clip data, metadata) → `vistatotes/routes/datasets.py` on `datasets_bp`
-- **Sorting / voting / model exports** (labels, detectors, scores) → `vistatotes/routes/sorting.py` on `sorting_bp`
+- **Dataset-level exports** (clip data, metadata) → `vtsearch/routes/datasets.py` on `datasets_bp`
+- **Sorting / voting / model exports** (labels, detectors, scores) → `vtsearch/routes/sorting.py` on `sorting_bp`
 
 ### Example: CSV results exporter
 
 ```python
-# Add to vistatotes/routes/sorting.py (or datasets.py)
+# Add to vtsearch/routes/sorting.py (or datasets.py)
 
 import csv
 import io
@@ -255,17 +255,17 @@ def export_results_csv():
     return send_file(
         io.BytesIO(buf.getvalue().encode("utf-8")),
         mimetype="text/csv",
-        download_name="vistatotes_results.csv",
+        download_name="vtsearch_results.csv",
         as_attachment=True,
     )
 ```
 
 ### Accessing state for export
 
-All global state is available from `vistatotes.utils`:
+All global state is available from `vtsearch.utils`:
 
 ```python
-from vistatotes.utils import clips, good_votes, bad_votes, label_history
+from vtsearch.utils import clips, good_votes, bad_votes, label_history
 ```
 
 | Variable         | Type                             | Contents                            |
@@ -298,19 +298,19 @@ own plugin system in the future.
 
 ## Adding a Media Type
 
-Media types define how VistaTotes handles a particular kind of content: how to
+Media types define how VTSearch handles a particular kind of content: how to
 embed files into vectors, how to serve clips over HTTP, what file extensions to
 scan for, and what demo datasets are available.
 
 Unlike importers, media types use **explicit registration** — you import your
-class and call `register()` in `vistatotes/media/__init__.py`.
+class and call `register()` in `vtsearch/media/__init__.py`.
 
 ### File structure
 
-Create a new subdirectory under `vistatotes/media/`:
+Create a new subdirectory under `vtsearch/media/`:
 
 ```
-vistatotes/media/<your_type>/
+vtsearch/media/<your_type>/
 ├── __init__.py       # Can be empty
 ├── media_type.py     # Your MediaType subclass (required)
 └── requirements.txt  # Pip dependencies (required, even if empty)
@@ -318,11 +318,11 @@ vistatotes/media/<your_type>/
 
 ### What to implement
 
-Subclass `MediaType` from `vistatotes.media.base` and implement all abstract
+Subclass `MediaType` from `vtsearch.media.base` and implement all abstract
 properties and methods.
 
 ```python
-# vistatotes/media/code/media_type.py
+# vtsearch/media/code/media_type.py
 
 from __future__ import annotations
 
@@ -333,7 +333,7 @@ from typing import Optional
 import numpy as np
 from flask import Response, jsonify
 
-from vistatotes.media.base import DemoDataset, MediaType
+from vtsearch.media.base import DemoDataset, MediaType
 
 
 class CodeMediaType(MediaType):
@@ -487,11 +487,11 @@ class CodeMediaType(MediaType):
 
 ### Register the new type
 
-Add two lines to `vistatotes/media/__init__.py`, alongside the existing
+Add two lines to `vtsearch/media/__init__.py`, alongside the existing
 registrations at the bottom of the file:
 
 ```python
-from vistatotes.media.code.media_type import CodeMediaType   # noqa: E402
+from vtsearch.media.code.media_type import CodeMediaType   # noqa: E402
 register(CodeMediaType())
 ```
 
@@ -540,7 +540,7 @@ additional changes:
 
 ### Making dataset export aware of custom clip fields
 
-The existing `export_dataset_to_file()` in `vistatotes/datasets/loader.py`
+The existing `export_dataset_to_file()` in `vtsearch/datasets/loader.py`
 serializes a fixed set of keys (`wav_bytes`, `video_bytes`, `image_bytes`,
 `text_content`, `word_count`, `character_count`, `width`, `height`).  If your
 media type stores clip data under different keys, add those keys to the export
@@ -558,19 +558,19 @@ and render accordingly.
 
 ## Dependency Management
 
-VistaTotes uses a layered requirements file structure to keep dependencies
+VTSearch uses a layered requirements file structure to keep dependencies
 modular:
 
 ```
 requirements.txt              # Core deps + includes per-media + per-importer
-├── vistatotes/media/audio/requirements.txt
-├── vistatotes/media/video/requirements.txt
-├── vistatotes/media/image/requirements.txt
-├── vistatotes/media/text/requirements.txt
+├── vtsearch/media/audio/requirements.txt
+├── vtsearch/media/video/requirements.txt
+├── vtsearch/media/image/requirements.txt
+├── vtsearch/media/text/requirements.txt
 ├── requirements-importers.txt          # Aggregates all importer deps
-│   ├── vistatotes/datasets/importers/pickle/requirements.txt
-│   ├── vistatotes/datasets/importers/folder/requirements.txt
-│   └── vistatotes/datasets/importers/http_zip/requirements.txt
+│   ├── vtsearch/datasets/importers/pickle/requirements.txt
+│   ├── vtsearch/datasets/importers/folder/requirements.txt
+│   └── vtsearch/datasets/importers/http_zip/requirements.txt
 requirements-cpu.txt          # CPU-specific pins (lists packages INLINE)
 requirements-gpu.txt          # GPU-specific (minimal, includes importers)
 requirements-dev.txt          # Dev tools (pytest)
@@ -578,7 +578,7 @@ requirements-dev.txt          # Dev tools (pytest)
 
 ### For a new media type
 
-1. **Create** `vistatotes/media/<type>/requirements.txt` listing any packages
+1. **Create** `vtsearch/media/<type>/requirements.txt` listing any packages
    your embedder needs beyond core deps.  If none, add a comment explaining why
    it's empty:
    ```
@@ -586,19 +586,19 @@ requirements-dev.txt          # Dev tools (pytest)
    ```
 2. **Add** a `-r` line to `requirements.txt`:
    ```
-   -r vistatotes/media/<type>/requirements.txt
+   -r vtsearch/media/<type>/requirements.txt
    ```
 3. **Add** the packages inline to `requirements-cpu.txt` under a comment header
    (this file uses inline pins for CPU version compatibility instead of `-r`
    includes):
    ```
-   # Code (vistatotes/media/code/requirements.txt)
+   # Code (vtsearch/media/code/requirements.txt)
    some-package>=1.0
    ```
 
 ### For a new importer
 
-1. **Create** `vistatotes/datasets/importers/<name>/requirements.txt`.  Even if
+1. **Create** `vtsearch/datasets/importers/<name>/requirements.txt`.  Even if
    your importer has no extra deps, create the file with a comment:
    ```
    # S3 importer dependencies
@@ -606,7 +606,7 @@ requirements-dev.txt          # Dev tools (pytest)
    ```
 2. **Add** a `-r` line to `requirements-importers.txt`:
    ```
-   -r vistatotes/datasets/importers/<name>/requirements.txt
+   -r vtsearch/datasets/importers/<name>/requirements.txt
    ```
 3. **Add** packages inline to `requirements-cpu.txt` if CPU-specific pins are
    needed.
@@ -635,11 +635,11 @@ reference it from `requirements.txt` with `-r`).
 
 ### New Importer Checklist
 
-- [ ] Create `vistatotes/datasets/importers/<name>/__init__.py`
+- [ ] Create `vtsearch/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, clips)` — populate `clips` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
-- [ ] Create `vistatotes/datasets/importers/<name>/requirements.txt`
+- [ ] Create `vtsearch/datasets/importers/<name>/requirements.txt`
 - [ ] Add `-r` line to `requirements-importers.txt`
 - [ ] Add inline deps to `requirements-cpu.txt` if needed
 - [ ] Test: start the app and check `GET /api/dataset/importers` includes your importer
@@ -647,7 +647,7 @@ reference it from `requirements.txt` with `-r`).
 ### New Exporter Checklist
 
 - [ ] Add a route function to the appropriate blueprint (`datasets_bp` or `sorting_bp`)
-- [ ] Import state from `vistatotes.utils` (`clips`, `good_votes`, `bad_votes`, etc.)
+- [ ] Import state from `vtsearch.utils` (`clips`, `good_votes`, `bad_votes`, etc.)
 - [ ] Return data via `send_file()` (binary downloads) or `jsonify()` (JSON)
 - [ ] Add any new dependencies to `requirements.txt`
 - [ ] Add a UI trigger in `static/index.html` if needed
@@ -655,11 +655,11 @@ reference it from `requirements.txt` with `-r`).
 
 ### New Media Type Checklist
 
-- [ ] Create `vistatotes/media/<type>/` directory with `__init__.py`, `media_type.py`, `requirements.txt`
+- [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`, `requirements.txt`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Register in `vistatotes/media/__init__.py` with `register(YourType())`
+- [ ] Register in `vtsearch/media/__init__.py` with `register(YourType())`
 - [ ] Add `-r` line to `requirements.txt` pointing to your `requirements.txt`
 - [ ] Add inline deps to `requirements-cpu.txt`
-- [ ] Update `export_dataset_to_file()` in `vistatotes/datasets/loader.py` if you use custom clip keys
+- [ ] Update `export_dataset_to_file()` in `vtsearch/datasets/loader.py` if you use custom clip keys
 - [ ] Add rendering logic in `static/index.html` if the generic viewer isn't sufficient
 - [ ] Test: start the app, import a folder of your media type, verify clips appear and are sortable

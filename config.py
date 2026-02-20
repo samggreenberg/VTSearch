@@ -1,4 +1,4 @@
-"""Configuration and constants for VistaTotes."""
+"""Configuration and constants for VTSearch."""
 
 from pathlib import Path
 

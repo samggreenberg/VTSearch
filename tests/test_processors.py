@@ -2,7 +2,7 @@
 
 import pytest
 
-from vistatotes.media.base import Detector, Extractor, Processor
+from vtsearch.media.base import Detector, Extractor, Processor
 
 
 # ---------------------------------------------------------------------------

@@ -116,7 +116,7 @@ class TestFavoriteDetectors:
 
     @pytest.fixture(autouse=True)
     def clear_favorites(self):
-        from vistatotes.utils.state import favorite_detectors
+        from vtsearch.utils.state import favorite_detectors
 
         favorite_detectors.clear()
         yield
@@ -341,7 +341,7 @@ class TestFavoriteDetectors:
         det = self._export_detector(client)
         self._post_favorite(client, "field-check", det)
 
-        from vistatotes.utils.state import favorite_detectors
+        from vtsearch.utils.state import favorite_detectors
 
         assert "field-check" in favorite_detectors
         stored = favorite_detectors["field-check"]
@@ -357,7 +357,7 @@ class TestAutoDetect:
 
     @pytest.fixture(autouse=True)
     def clear_favorites(self):
-        from vistatotes.utils.state import favorite_detectors
+        from vtsearch.utils.state import favorite_detectors
 
         favorite_detectors.clear()
         yield

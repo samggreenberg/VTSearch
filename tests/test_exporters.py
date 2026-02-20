@@ -55,7 +55,7 @@ EMPTY_RESULTS = {
 
 class TestExporterField:
     def test_to_dict_contains_required_keys(self):
-        from vistatotes.exporters.base import ExporterField
+        from vtsearch.exporters.base import ExporterField
 
         f = ExporterField(key="fp", label="File Path", field_type="text")
         d = f.to_dict()
@@ -69,7 +69,7 @@ class TestExporterField:
         assert "placeholder" in d
 
     def test_defaults(self):
-        from vistatotes.exporters.base import ExporterField
+        from vtsearch.exporters.base import ExporterField
 
         f = ExporterField(key="x", label="X", field_type="text")
         assert f.required is True
@@ -79,7 +79,7 @@ class TestExporterField:
         assert f.description == ""
 
     def test_custom_values(self):
-        from vistatotes.exporters.base import ExporterField
+        from vtsearch.exporters.base import ExporterField
 
         f = ExporterField(
             key="mode",
@@ -104,14 +104,14 @@ class TestExporterField:
 
 class TestResultsExporterBase:
     def test_export_raises_not_implemented(self):
-        from vistatotes.exporters.base import ResultsExporter
+        from vtsearch.exporters.base import ResultsExporter
 
         exp = ResultsExporter()
         with pytest.raises(NotImplementedError):
             exp.export({}, {})
 
     def test_to_dict_contains_standard_keys(self):
-        from vistatotes.exporters.base import ExporterField, ResultsExporter
+        from vtsearch.exporters.base import ExporterField, ResultsExporter
 
         class Dummy(ResultsExporter):
             name = "dummy"
@@ -139,7 +139,7 @@ class TestResultsExporterBase:
 
 class TestExporterRegistry:
     def test_list_exporters_returns_all_builtins(self):
-        from vistatotes.exporters import list_exporters
+        from vtsearch.exporters import list_exporters
 
         names = {e.name for e in list_exporters()}
         assert "gui" in names
@@ -147,7 +147,7 @@ class TestExporterRegistry:
         assert "email_smtp" in names
 
     def test_get_exporter_known(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         for name in ("gui", "file", "email_smtp"):
             exp = get_exporter(name)
@@ -155,12 +155,12 @@ class TestExporterRegistry:
             assert exp.name == name
 
     def test_get_exporter_unknown_returns_none(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         assert get_exporter("no_such_exporter") is None
 
     def test_each_exporter_has_display_name_and_icon(self):
-        from vistatotes.exporters import list_exporters
+        from vtsearch.exporters import list_exporters
 
         for exp in list_exporters():
             assert exp.display_name, f"{exp.name} missing display_name"
@@ -168,7 +168,7 @@ class TestExporterRegistry:
             assert exp.description, f"{exp.name} missing description"
 
     def test_each_exporter_fields_are_valid(self):
-        from vistatotes.exporters import list_exporters
+        from vtsearch.exporters import list_exporters
 
         for exp in list_exporters():
             for f in exp.fields:
@@ -186,13 +186,13 @@ class TestExporterRegistry:
 
 class TestGuiExporter:
     def test_has_no_fields(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("gui")
         assert exp.fields == []
 
     def test_export_returns_message_and_display_results(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(SAMPLE_RESULTS, {})
@@ -201,7 +201,7 @@ class TestGuiExporter:
         assert result["display_results"] is SAMPLE_RESULTS
 
     def test_export_counts_hits_in_message(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(SAMPLE_RESULTS, {})
@@ -210,7 +210,7 @@ class TestGuiExporter:
         assert "2" in result["message"]  # 2 detectors
 
     def test_export_empty_results(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(EMPTY_RESULTS, {})
@@ -225,14 +225,14 @@ class TestGuiExporter:
 
 class TestFileExporter:
     def test_has_filepath_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("file")
         keys = [f.key for f in exp.fields]
         assert "filepath" in keys
 
     def test_export_writes_json(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -245,7 +245,7 @@ class TestFileExporter:
             assert written["detectors_run"] == 2
 
     def test_export_creates_parent_dirs(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -254,14 +254,14 @@ class TestFileExporter:
             assert fpath.exists()
 
     def test_export_raises_on_empty_filepath(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("file")
         with pytest.raises(ValueError, match="file path"):
             exp.export(SAMPLE_RESULTS, {"filepath": ""})
 
     def test_export_message_contains_hit_count(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -270,7 +270,7 @@ class TestFileExporter:
             assert "4" in result["message"]  # 3 + 1 hits
 
     def test_to_dict_has_all_keys(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         d = get_exporter("file").to_dict()
         assert d["name"] == "file"
@@ -285,7 +285,7 @@ class TestFileExporter:
 
 class TestEmailSmtpExporter:
     def test_has_required_fields(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
@@ -296,14 +296,14 @@ class TestEmailSmtpExporter:
         assert "smtp_port" in keys
 
     def test_password_field_type_is_password(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         pwd_field = next(f for f in exp.fields if f.key == "smtp_password")
         assert pwd_field.field_type == "password"
 
     def test_export_raises_on_missing_to(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
@@ -319,7 +319,7 @@ class TestEmailSmtpExporter:
             )
 
     def test_export_raises_on_missing_from(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Sender"):
@@ -335,7 +335,7 @@ class TestEmailSmtpExporter:
             )
 
     def test_export_raises_on_missing_password(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="password"):
@@ -351,7 +351,7 @@ class TestEmailSmtpExporter:
             )
 
     def test_export_calls_smtp(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
 
@@ -360,7 +360,7 @@ class TestEmailSmtpExporter:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("vistatotes.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
+        with patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
             result = exp.export(
                 SAMPLE_RESULTS,
                 {
@@ -380,7 +380,7 @@ class TestEmailSmtpExporter:
         assert "you@example.com" in result["message"]
 
     def test_plain_text_builder(self):
-        from vistatotes.exporters.email_smtp import _build_plain_text
+        from vtsearch.exporters.email_smtp import _build_plain_text
 
         text = _build_plain_text(SAMPLE_RESULTS)
         assert "Auto-Detect Results" in text
@@ -389,7 +389,7 @@ class TestEmailSmtpExporter:
         assert "bark1.wav" in text
 
     def test_html_builder(self):
-        from vistatotes.exporters.email_smtp import _build_html
+        from vtsearch.exporters.email_smtp import _build_html
 
         html = _build_html(SAMPLE_RESULTS)
         assert "<html>" in html
@@ -398,14 +398,14 @@ class TestEmailSmtpExporter:
         assert "bark1.wav" in html
 
     def test_default_smtp_host_in_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         host_field = next(f for f in exp.fields if f.key == "smtp_host")
         assert host_field.default == "smtp.gmail.com"
 
     def test_default_smtp_port_in_field(self):
-        from vistatotes.exporters import get_exporter
+        from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         port_field = next(f for f in exp.fields if f.key == "smtp_port")
@@ -531,7 +531,7 @@ class TestExportEndpoint:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("vistatotes.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
+        with patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
             res = client.post(
                 "/api/exporters/export",
                 json={
