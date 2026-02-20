@@ -1335,12 +1335,22 @@
   // ---- Next Clip Selection ----
 
   function findNextClip() {
-    if (!sortOrder || sortOrder.length === 0) {
+    // Determine the ordered list to walk and effective threshold
+    let ordered = sortOrder;
+    let effectiveThreshold = threshold;
+    if (!ordered || ordered.length === 0) {
+      // Null sort: use clips in their current (arbitrary) order
+      ordered = clips.map(c => ({ id: c.id, score: 0 }));
+      // Treat threshold as the bottom for Hard mode
+      effectiveThreshold = -Infinity;
+    }
+
+    if (ordered.length === 0) {
       return null;
     }
 
     // Get unlabeled clips (not voted on)
-    const unlabeled = sortOrder.filter(item => {
+    const unlabeled = ordered.filter(item => {
       return !votes.good.includes(item.id) && !votes.bad.includes(item.id);
     });
 
@@ -1350,30 +1360,30 @@
 
     let nextClip;
     if (selectMode === "top") {
-      // Select highest scoring unlabeled clip
+      // Select highest scoring unlabeled clip (or first in order for null sort)
       nextClip = unlabeled[0];
     } else {
       // Select clip closest to threshold, breaking ties by index
-      // proximity to the threshold position in sortOrder
-      if (threshold === null) {
+      // proximity to the threshold position in ordered list
+      if (effectiveThreshold === null) {
         return null;
       }
       // Find threshold index: first position where score drops below threshold
-      let thresholdIdx = sortOrder.length;
-      for (let i = 0; i < sortOrder.length; i++) {
-        if (sortOrder[i].score < threshold) {
+      let thresholdIdx = ordered.length;
+      for (let i = 0; i < ordered.length; i++) {
+        if (ordered[i].score < effectiveThreshold) {
           thresholdIdx = i;
           break;
         }
       }
-      // Map clip id to its sortOrder index
+      // Map clip id to its ordered index
       const idToIdx = {};
-      sortOrder.forEach((item, idx) => { idToIdx[item.id] = idx; });
+      ordered.forEach((item, idx) => { idToIdx[item.id] = idx; });
 
       let minDist = Infinity;
       let minIdxDist = Infinity;
       for (const item of unlabeled) {
-        const dist = Math.abs(item.score - threshold);
+        const dist = Math.abs(item.score - effectiveThreshold);
         const idxDist = Math.abs(idToIdx[item.id] - thresholdIdx);
         if (dist < minDist || (dist === minDist && idxDist < minIdxDist)) {
           minDist = dist;
