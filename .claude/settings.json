@@ -5,7 +5,12 @@
       "Read",
       "Edit",
       "Write",
-      "NotebookEdit"
+      "NotebookEdit",
+      "Task",
+      "WebFetch",
+      "WebSearch",
+      "Glob",
+      "Grep"
     ]
   }
 }
