@@ -133,7 +133,7 @@ class ImageMediaType(MediaType):
         cache_dir = str(MODELS_CACHE_DIR)
         update_progress("loading", "Loading image embedder (CLIP model)...", 0, 0)
         self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-        self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir)
+        self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
