@@ -1363,8 +1363,8 @@
       // Select highest scoring unlabeled clip (or first in order for null sort)
       nextClip = unlabeled[0];
     } else {
-      // Select clip closest to threshold, breaking ties by index
-      // proximity to the threshold position in ordered list
+      // Select unlabeled clip closest to threshold by list position,
+      // breaking ties by score distance
       if (effectiveThreshold === null) {
         return null;
       }
@@ -1380,14 +1380,14 @@
       const idToIdx = {};
       ordered.forEach((item, idx) => { idToIdx[item.id] = idx; });
 
-      let minDist = Infinity;
       let minIdxDist = Infinity;
+      let minDist = Infinity;
       for (const item of unlabeled) {
-        const dist = Math.abs(item.score - effectiveThreshold);
         const idxDist = Math.abs(idToIdx[item.id] - thresholdIdx);
-        if (dist < minDist || (dist === minDist && idxDist < minIdxDist)) {
-          minDist = dist;
+        const dist = Math.abs(item.score - effectiveThreshold);
+        if (idxDist < minIdxDist || (idxDist === minIdxDist && dist < minDist)) {
           minIdxDist = idxDist;
+          minDist = dist;
           nextClip = item;
         }
       }
