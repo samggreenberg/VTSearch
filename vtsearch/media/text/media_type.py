@@ -71,21 +71,42 @@ class TextMediaType(MediaType):
     def demo_datasets(self) -> list:
         return [
             DemoDataset(
-                id="world_news",
-                label="World & Business News",
+                id="paragraphs_s",
+                label="Paragraphs (S)",
                 description=(
-                    "Paragraphs drawn from international news and business articles in the 20 Newsgroups collection."
+                    "Short articles about sports and space science from the"
+                    " 20 Newsgroups collection."
                 ),
-                categories=["world", "business"],
+                categories=["sports", "science"],
                 source="ag_news_sample",
             ),
             DemoDataset(
-                id="sports_science_news",
-                label="Sports & Science News",
+                id="paragraphs_m",
+                label="Paragraphs (M)",
                 description=(
-                    "Paragraphs drawn from sports coverage and science journalism in the 20 Newsgroups collection."
+                    "Articles spanning world affairs, business, computer graphics,"
+                    " and medicine from the 20 Newsgroups collection."
                 ),
-                categories=["sports", "science"],
+                categories=["world", "business", "technology", "medicine"],
+                source="ag_news_sample",
+            ),
+            DemoDataset(
+                id="paragraphs_l",
+                label="Paragraphs (L)",
+                description=(
+                    "Articles across eight topics including cars, hockey,"
+                    " electronics, cryptography, and religion from 20 Newsgroups."
+                ),
+                categories=[
+                    "cars",
+                    "hockey",
+                    "electronics",
+                    "crypto",
+                    "religion",
+                    "guns",
+                    "atheism",
+                    "mac",
+                ],
                 source="ag_news_sample",
             ),
         ]

@@ -12,7 +12,7 @@ from flask import Response, send_file
 from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
-from config import CLIP_MODEL_ID, MODELS_CACHE_DIR
+from config import CLIP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR
 from vtsearch.media.base import DemoDataset, MediaType
 
 
@@ -99,22 +99,62 @@ class ImageMediaType(MediaType):
     def demo_datasets(self) -> list:
         return [
             DemoDataset(
-                id="animals_images",
-                label="Animals & Wildlife",
+                id="images_s",
+                label="Images (S)",
                 description=(
-                    "400 photographs of birds, cats, dogs, horses, deer, and frogs sourced from the CIFAR-10 dataset."
+                    "Photographs of butterflies, sunflowers, starfish, and"
+                    " helicopters from the Caltech-101 dataset."
                 ),
-                categories=["bird", "cat", "deer", "dog", "frog", "horse"],
-                source="cifar10_sample",
+                categories=["butterfly", "sunflower", "starfish", "helicopter"],
+                source="caltech101",
+                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
             ),
             DemoDataset(
-                id="vehicles_images",
-                label="Vehicles & Transport",
+                id="images_m",
+                label="Images (M)",
                 description=(
-                    "400 photographs of airplanes, cars, ships, and trucks sourced from the CIFAR-10 dataset."
+                    "Photographs of dolphins, grand pianos, elephants, kangaroos,"
+                    " laptops, lobsters, watches, and flamingos from Caltech-101."
                 ),
-                categories=["airplane", "automobile", "ship", "truck"],
-                source="cifar10_sample",
+                categories=[
+                    "dolphin",
+                    "grand_piano",
+                    "elephant",
+                    "kangaroo",
+                    "laptop",
+                    "lobster",
+                    "watch",
+                    "flamingo",
+                ],
+                source="caltech101",
+                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
+            ),
+            DemoDataset(
+                id="images_l",
+                label="Images (L)",
+                description=(
+                    "Photographs across 15 diverse categories including animals,"
+                    " instruments, vehicles, and objects from Caltech-101."
+                ),
+                categories=[
+                    "scorpion",
+                    "stop_sign",
+                    "chandelier",
+                    "rhino",
+                    "rooster",
+                    "soccer_ball",
+                    "yin_yang",
+                    "leopards",
+                    "hawksbill",
+                    "revolver",
+                    "schooner",
+                    "ibis",
+                    "trilobite",
+                    "ceiling_fan",
+                    "dalmatian",
+                ],
+                source="caltech101",
+                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
             ),
         ]
 
