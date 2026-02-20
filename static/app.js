@@ -220,6 +220,11 @@
         await fetchClips();
         await fetchVotes();
 
+        // Auto-select first clip if none selected
+        if (clips.length > 0 && !selected) {
+          selectClip(clips[0].id);
+        }
+
         // Check if auto-detect mode is enabled
         const autodetectCheckbox = document.getElementById("autodetect-mode-checkbox");
         if (autodetectCheckbox && autodetectCheckbox.checked) {
@@ -2250,7 +2255,15 @@
   };
 
   // Initialize
-  checkDatasetStatus();
+  checkDatasetStatus().then(async () => {
+    if (datasetLoaded) {
+      await fetchClips();
+      await fetchVotes();
+      if (clips.length > 0 && !selected) {
+        selectClip(clips[0].id);
+      }
+    }
+  });
   fetchInclusion();
   updateLabelCounts();
   loadFavoriteDetectors();
