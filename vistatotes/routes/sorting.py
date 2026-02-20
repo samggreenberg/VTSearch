@@ -85,7 +85,19 @@ def sort_clips():
 
     # Total steps: 1 (embed) + len(clips) (similarities) + 1 (threshold)
     total_steps = 1 + len(clips) + 1
-    update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
+
+    # Check if the embedder needs loading (first use of this media type)
+    from vistatotes.media import get as media_get
+
+    try:
+        mt = media_get(media_type)
+        needs_loading = getattr(mt, "_model", None) is None
+    except KeyError:
+        needs_loading = False
+    if needs_loading:
+        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+    else:
+        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
 
     # Embed text query using refactored module
     text_vec = embed_text_query(text, media_type)

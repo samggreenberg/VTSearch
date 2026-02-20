@@ -15,6 +15,7 @@ from transformers import XCLIPModel, XCLIPProcessor
 from config import MODELS_CACHE_DIR, VIDEO_DIR, XCLIP_MODEL_ID
 from vistatotes.media.base import DemoDataset, MediaType
 
+
 def _extract_tensor(output: object) -> torch.Tensor:
     """Extract a plain tensor from model output.
 
@@ -140,15 +141,14 @@ class VideoMediaType(MediaType):
             return
         import gc
 
+        from vistatotes.utils import update_progress
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
+        update_progress("loading", "Loading video embedder (X-CLIP model)...", 0, 0)
         print("DEBUG: Loading X-CLIP model for Video...", flush=True)
-        self._model = XCLIPModel.from_pretrained(
-            XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
-        )
-        self._processor = XCLIPProcessor.from_pretrained(
-            XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False
-        )
+        self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
+        self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
         print("DEBUG: X-CLIP model loaded.", flush=True)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
@@ -158,6 +158,7 @@ class VideoMediaType(MediaType):
             return None
         try:
             import cv2  # noqa: PLC0415  (lazy import — cv2 is optional)
+
             cap = cv2.VideoCapture(str(file_path))
             if not cap.isOpened():
                 print(f"Error opening video {file_path}")
@@ -197,9 +198,7 @@ class VideoMediaType(MediaType):
         try:
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
-                text_vec = (
-                    _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
-                )
+                text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
             print(f"Error embedding text query for video: {e}")
@@ -220,6 +219,7 @@ class VideoMediaType(MediaType):
             video_bytes = f.read()
         try:
             import cv2  # noqa: PLC0415
+
             cap = cv2.VideoCapture(str(file_path))
             fps = cap.get(cv2.CAP_PROP_FPS)
             frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
