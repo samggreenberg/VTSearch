@@ -1,4 +1,4 @@
-"""Abstract base class for media types.
+"""Abstract base classes for media types and processors.
 
 To add a new media type:
 
@@ -199,7 +199,119 @@ class MediaType(ABC):
         """
 
 
-class Extractor(ABC):
+class Processor(ABC):
+    """Abstract base class for all processors (detectors, extractors, etc.).
+
+    A *Processor* takes a single media clip and produces an answer.  The
+    exact type of the answer depends on the subclass:
+
+    * A :class:`Detector` returns ``bool`` — "does this clip match?"
+    * An :class:`Extractor` returns ``list[dict]`` — "what details are
+      inside this clip?"
+
+    Every processor knows its :attr:`name` (a unique human-readable
+    identifier) and the :attr:`media_type` it operates on (e.g.
+    ``"audio"``, ``"image"``).
+
+    Subclasses must implement:
+
+    * :attr:`name`
+    * :attr:`media_type`
+    * :meth:`process` — run the processor on a single clip dict.
+
+    Subclasses *may* override:
+
+    * :meth:`load_model` — called once before first use to load heavy
+      resources (model weights, etc.).  Default is a no-op.
+    """
+
+    # ------------------------------------------------------------------
+    # Identity
+    # ------------------------------------------------------------------
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this processor, e.g. ``"dog_barks"``."""
+
+    @property
+    @abstractmethod
+    def media_type(self) -> str:
+        """The media ``type_id`` this processor operates on (e.g. ``"image"``)."""
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def load_model(self) -> None:
+        """Load any heavyweight resources (model weights, etc.).
+
+        Called lazily before the first :meth:`process` call.  The default
+        implementation is a no-op — override in subclasses that need
+        one-time model loading.
+        """
+
+    # ------------------------------------------------------------------
+    # Processing
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def process(self, clip: dict[str, Any]) -> Any:
+        """Run this processor on *clip* and return the result.
+
+        The return type depends on the subclass:
+
+        * :class:`Detector` → ``bool``
+        * :class:`Extractor` → ``list[dict[str, Any]]``
+        """
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable summary of this processor's metadata."""
+        return {
+            "name": self.name,
+            "media_type": self.media_type,
+        }
+
+
+class Detector(Processor):
+    """Abstract base class for detectors.
+
+    A *Detector* answers "is this clip Good?" with a boolean.  Each
+    concrete ``Detector`` operates on exactly **one** media type (declared
+    via :attr:`media_type`).
+
+    Subclasses must implement:
+
+    * :attr:`name` — unique identifier for this detector.
+    * :attr:`media_type` — which media type it works on.
+    * :meth:`detect` — run detection on a single clip dict and return
+      ``True`` if the clip matches, ``False`` otherwise.
+
+    The generic :meth:`process` method delegates to :meth:`detect`.
+    """
+
+    # ------------------------------------------------------------------
+    # Detection
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def detect(self, clip: dict[str, Any]) -> bool:
+        """Run detection on *clip* and return whether it matches.
+
+        Returns ``True`` if the clip is a positive match for this detector,
+        ``False`` otherwise.
+        """
+
+    def process(self, clip: dict[str, Any]) -> bool:
+        """Run detection on *clip* (delegates to :meth:`detect`)."""
+        return self.detect(clip)
+
+
+class Extractor(Processor):
     """Abstract base class for extractors.
 
     While a *Detector* answers "is this clip Good?" (True/False), an
@@ -219,37 +331,8 @@ class Extractor(ABC):
     * :meth:`extract` — run extraction on a single clip dict and return a
       list of result dicts.
 
-    Subclasses *may* override:
-
-    * :meth:`load_model` — called once before first use to load heavy
-      resources (model weights, etc.).  Default is a no-op.
+    The generic :meth:`process` method delegates to :meth:`extract`.
     """
-
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for this extractor, e.g. ``"yolo_person"``."""
-
-    @property
-    @abstractmethod
-    def media_type(self) -> str:
-        """The media ``type_id`` this extractor operates on (e.g. ``"image"``)."""
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
-    def load_model(self) -> None:
-        """Load any heavyweight resources (model weights, etc.).
-
-        Called lazily before the first :meth:`extract` call.  The default
-        implementation is a no-op — override in subclasses that need
-        one-time model loading.
-        """
 
     # ------------------------------------------------------------------
     # Extraction
@@ -280,13 +363,6 @@ class Extractor(ABC):
             ]
         """
 
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serialisable summary of this extractor's metadata."""
-        return {
-            "name": self.name,
-            "media_type": self.media_type,
-        }
+    def process(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run extraction on *clip* (delegates to :meth:`extract`)."""
+        return self.extract(clip)
