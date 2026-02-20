@@ -74,8 +74,7 @@ class TextMediaType(MediaType):
                 id="world_news",
                 label="World & Business News",
                 description=(
-                    "Paragraphs drawn from international news and business articles"
-                    " in the 20 Newsgroups collection."
+                    "Paragraphs drawn from international news and business articles in the 20 Newsgroups collection."
                 ),
                 categories=["world", "business"],
                 source="ag_news_sample",
@@ -84,8 +83,7 @@ class TextMediaType(MediaType):
                 id="sports_science_news",
                 label="Sports & Science News",
                 description=(
-                    "Paragraphs drawn from sports coverage and science journalism"
-                    " in the 20 Newsgroups collection."
+                    "Paragraphs drawn from sports coverage and science journalism in the 20 Newsgroups collection."
                 ),
                 categories=["sports", "science"],
                 source="ag_news_sample",
@@ -101,8 +99,11 @@ class TextMediaType(MediaType):
             return
         import gc
 
+        from vistatotes.utils import update_progress
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
+        update_progress("loading", "Loading text embedder (E5 model)...", 0, 0)
         print("DEBUG: Loading E5-base-v2 model for Text...", flush=True)
         self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)
         print("DEBUG: E5-base-v2 model loaded.", flush=True)
@@ -118,9 +119,7 @@ class TextMediaType(MediaType):
             if not text_content:
                 print(f"Warning: empty text file {file_path}")
                 return None
-            return self._model.encode(
-                f"passage: {text_content}", normalize_embeddings=True
-            )
+            return self._model.encode(f"passage: {text_content}", normalize_embeddings=True)
         except Exception as e:
             print(f"Error embedding {file_path}: {e}")
             return None

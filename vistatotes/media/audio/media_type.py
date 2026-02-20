@@ -125,15 +125,14 @@ class AudioMediaType(MediaType):
             return
         import gc
 
+        from vistatotes.utils import update_progress
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
+        update_progress("loading", "Loading audio embedder (CLAP model)...", 0, 0)
         print("DEBUG: Loading CLAP model for Audio...", flush=True)
-        self._model = ClapModel.from_pretrained(
-            CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
-        )
-        self._processor = ClapProcessor.from_pretrained(
-            CLAP_MODEL_ID, cache_dir=cache_dir
-        )
+        self._model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
+        self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir)
         print("DEBUG: CLAP model loaded.", flush=True)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
@@ -153,12 +152,7 @@ class AudioMediaType(MediaType):
             )
             with torch.no_grad():
                 outputs = self._model.audio_model(**inputs)
-                embedding = (
-                    self._model.audio_projection(outputs.pooler_output)
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+                embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
             return embedding[0]
         except Exception as e:
             print(f"Error embedding {file_path}: {e}")
@@ -173,12 +167,7 @@ class AudioMediaType(MediaType):
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
                 outputs = self._model.text_model(**inputs)
-                text_vec = (
-                    self._model.text_projection(outputs.pooler_output)
-                    .detach()
-                    .cpu()
-                    .numpy()[0]
-                )
+                text_vec = self._model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
             print(f"Error embedding text query for audio: {e}")

@@ -15,6 +15,7 @@ from transformers import CLIPModel, CLIPProcessor
 from config import CLIP_MODEL_ID, MODELS_CACHE_DIR
 from vistatotes.media.base import DemoDataset, MediaType
 
+
 def _extract_tensor(output: object) -> torch.Tensor:
     """Extract a plain tensor from model output.
 
@@ -101,8 +102,7 @@ class ImageMediaType(MediaType):
                 id="animals_images",
                 label="Animals & Wildlife",
                 description=(
-                    "400 photographs of birds, cats, dogs, horses, deer, and frogs"
-                    " sourced from the CIFAR-10 dataset."
+                    "400 photographs of birds, cats, dogs, horses, deer, and frogs sourced from the CIFAR-10 dataset."
                 ),
                 categories=["bird", "cat", "deer", "dog", "frog", "horse"],
                 source="cifar10_sample",
@@ -111,8 +111,7 @@ class ImageMediaType(MediaType):
                 id="vehicles_images",
                 label="Vehicles & Transport",
                 description=(
-                    "400 photographs of airplanes, cars, ships, and trucks sourced"
-                    " from the CIFAR-10 dataset."
+                    "400 photographs of airplanes, cars, ships, and trucks sourced from the CIFAR-10 dataset."
                 ),
                 categories=["airplane", "automobile", "ship", "truck"],
                 source="cifar10_sample",
@@ -128,15 +127,14 @@ class ImageMediaType(MediaType):
             return
         import gc
 
+        from vistatotes.utils import update_progress
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
+        update_progress("loading", "Loading image embedder (CLIP model)...", 0, 0)
         print("DEBUG: Loading CLIP model for Image...", flush=True)
-        self._model = CLIPModel.from_pretrained(
-            CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir
-        )
-        self._processor = CLIPProcessor.from_pretrained(
-            CLIP_MODEL_ID, cache_dir=cache_dir
-        )
+        self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
+        self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir)
         print("DEBUG: CLIP model loaded.", flush=True)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
@@ -176,9 +174,7 @@ class ImageMediaType(MediaType):
         try:
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
-                text_vec = (
-                    _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
-                )
+                text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
             print(f"Error embedding text query for image: {e}")
