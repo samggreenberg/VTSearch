@@ -142,7 +142,8 @@ class MediaType(ABC):
     def load_models(self) -> None:
         """Load (and cache) the embedding models for this media type.
 
-        Called once at application startup for every registered media type.
+        Called lazily the first time this media type needs to embed something
+        (i.e. on the first ``embed_media``, ``embed_text``, or getter call).
         Implementations must be idempotent — a second call should be a no-op.
         """
 

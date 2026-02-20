@@ -150,6 +150,8 @@ class TextMediaType(MediaType):
 
     # internal helper used by loader.py's get_e5_model() bridge
     def _get_model(self) -> Optional[SentenceTransformer]:
+        if self._model is None:
+            self.load_models()
         return self._model
 
     # ------------------------------------------------------------------

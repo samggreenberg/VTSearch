@@ -13,7 +13,6 @@ from config import (CIFAR10_DOWNLOAD_SIZE_MB, CLIPS_PER_CATEGORY,
 from vistatotes.datasets import (DEMO_DATASETS, export_dataset_to_file,
                                  get_importer, list_importers,
                                  load_demo_dataset)
-from vistatotes.models import get_e5_model
 from vistatotes.models.progress import clear_progress_cache
 from vistatotes.utils import (bad_votes, clips, get_progress, good_votes,
                               label_history, update_progress)
@@ -249,8 +248,7 @@ def load_demo_dataset_route():
     def load_task():
         try:
             clear_dataset()
-            e5_model = get_e5_model()
-            load_demo_dataset(dataset_name, clips, e5_model)
+            load_demo_dataset(dataset_name, clips)
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 

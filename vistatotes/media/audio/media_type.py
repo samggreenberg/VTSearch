@@ -186,6 +186,8 @@ class AudioMediaType(MediaType):
 
     # internal helpers used by loader.py's get_clap_model() bridge
     def _get_model_and_processor(self):
+        if self._model is None:
+            self.load_models()
         return self._model, self._processor
 
     # ------------------------------------------------------------------

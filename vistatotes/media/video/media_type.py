@@ -207,6 +207,8 @@ class VideoMediaType(MediaType):
 
     # internal helper used by loader.py's get_xclip_model() bridge
     def _get_model_and_processor(self):
+        if self._model is None:
+            self.load_models()
         return self._model, self._processor
 
     # ------------------------------------------------------------------

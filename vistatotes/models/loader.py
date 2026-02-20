@@ -1,9 +1,13 @@
 """Model loading and initialisation — delegates to the media type registry.
 
 All embedding models are now owned by their respective
-:class:`~vistatotes.media.base.MediaType` instances.  This module keeps its
-original public API (``initialize_models``, ``get_clap_model``, etc.) as
-thin wrappers so that existing callers continue to work unchanged.
+:class:`~vistatotes.media.base.MediaType` instances and are loaded **lazily**
+on first use (the first call to ``embed_media``, ``embed_text``, or a getter
+function such as ``get_clap_model``).
+
+This module keeps its original public API (``initialize_models``,
+``get_clap_model``, etc.) as thin wrappers so that existing callers continue
+to work unchanged.
 """
 
 import gc
@@ -12,27 +16,20 @@ from config import MODELS_CACHE_DIR
 
 
 def initialize_models() -> None:
-    """Load all embedding models by iterating the media type registry.
+    """Prepare the runtime environment for embedding models.
 
-    Each registered :class:`~vistatotes.media.base.MediaType` is responsible
-    for loading its own model(s) via
-    :meth:`~vistatotes.media.base.MediaType.load_models`.
-    Calling this function a second time is a no-op because each implementation
-    guards against re-loading with an early-return check.
+    Creates the model cache directory and configures PyTorch thread count.
+    Models themselves are **not** loaded here — each
+    :class:`~vistatotes.media.base.MediaType` loads its model lazily the
+    first time it is needed (e.g. when ``embed_media`` or ``embed_text``
+    is called).
     """
-    print("DEBUG: initialize_models called", flush=True)
-
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     import torch
+
     torch.set_num_threads(1)
     gc.collect()
-
-    from vistatotes.media import all_types
-    for media_type in all_types():
-        media_type.load_models()
-
-    print("DEBUG: All models loaded and ready", flush=True)
 
 
 # ---------------------------------------------------------------------------
