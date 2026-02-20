@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 
 # Limit threads to reduce memory overhead in constrained environments
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -7,6 +8,11 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 # Suppress Werkzeug request logging (GET/POST lines) — only show errors
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+# Suppress HF Hub "unauthenticated requests" warning — no token needed for
+# public model downloads; the warning is just noise.
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+warnings.filterwarnings("ignore", message=".*unauthenticated requests.*HF Hub.*")
 
 # Visual feedback for startup
 print("⏳ Initializing VTSearch...", flush=True)
