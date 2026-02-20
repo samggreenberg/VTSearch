@@ -10,10 +10,11 @@ from typing import Any, Optional
 import numpy as np
 from PIL import Image
 
-from config import EMBEDDINGS_DIR, IMAGES_PER_CIFAR10_CATEGORY
+from config import EMBEDDINGS_DIR, IMAGES_PER_CALTECH101_CATEGORY, IMAGES_PER_CIFAR10_CATEGORY, TEXTS_PER_CATEGORY
 from vtsearch.datasets.config import DEMO_DATASETS
 from vtsearch.datasets.downloader import (
     download_20newsgroups,
+    download_caltech101,
     download_cifar10,
     download_esc50,
     download_ucf101_subset,
@@ -612,6 +613,92 @@ def load_demo_dataset(
             update_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
+        elif image_source == "caltech101":
+            # Download Caltech-101 if needed
+            caltech_dir = download_caltech101()
+
+            # Scan category folders for images
+            metadata = load_image_metadata_from_folders(caltech_dir, dataset_info["categories"])
+
+            # Limit per category
+            cat_counts: dict[str, int] = {}
+            selected: list[tuple[Path, str]] = []
+            for fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                cat_counts.setdefault(cat, 0)
+                if cat_counts[cat] < IMAGES_PER_CALTECH101_CATEGORY:
+                    selected.append((meta["path"], cat))
+                    cat_counts[cat] += 1
+
+            from vtsearch.media import get as media_get
+
+            image_mt = media_get("image")
+
+            clips.clear()
+            clip_id = 1
+            total = len(selected)
+            update_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                update_progress(
+                    "embedding",
+                    f"Embedding {category}: {img_path.name} ({i + 1}/{total})",
+                    i + 1,
+                    total,
+                )
+
+                embedding = image_mt.embed_media(img_path)
+                if embedding is None:
+                    continue
+
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": "image",
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "wav_bytes": None,
+                    "video_bytes": None,
+                    "image_bytes": image_bytes,
+                    "text_content": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                }
+                clip_id += 1
+
+            # Save for future use
+            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(pkl_file, "wb") as f:
+                pickle.dump(
+                    {
+                        "name": dataset_name,
+                        "clips": {
+                            cid: {
+                                k: v.tolist() if isinstance(v, np.ndarray) else v
+                                for k, v in clip.items()
+                                if k not in ["wav_bytes", "video_bytes"]
+                            }
+                            for cid, clip in clips.items()
+                        },
+                    },
+                    f,
+                )
+
+            update_progress("idle", f"Loaded {dataset_name} dataset")
+            return
+
     elif media_type == "paragraph":
         # Handle paragraph datasets — use text media type from registry
         from vtsearch.media import get as media_get
@@ -625,7 +712,7 @@ def load_demo_dataset(
             texts, labels, category_names = download_20newsgroups(dataset_info["categories"])
 
             # Limit number of texts per category for demo
-            max_per_category = 50
+            max_per_category = TEXTS_PER_CATEGORY
             selected_texts = []
             selected_categories = []
 

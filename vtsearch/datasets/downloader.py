@@ -6,11 +6,14 @@ from pathlib import Path
 import requests
 
 from config import (
+    CALTECH101_DOWNLOAD_SIZE_MB,
+    CALTECH101_URL,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CIFAR10_URL,
     DATA_DIR,
     ESC50_DOWNLOAD_SIZE_MB,
     ESC50_URL,
+    IMAGE_DIR,
     VIDEO_DIR,
 )
 from vtsearch.utils import update_progress
@@ -115,6 +118,48 @@ def download_cifar10() -> Path:
     return extract_dir
 
 
+def download_caltech101() -> Path:
+    """Download and extract the Caltech-101 image classification dataset.
+
+    Downloads ``caltech-101.zip`` from the configured ``CALTECH101_URL``
+    into ``DATA_DIR`` if it is not already present, then extracts it and
+    deletes the archive to reclaim disk space.
+
+    Returns:
+        Path to the ``101_ObjectCategories/`` directory containing category
+        subfolders of JPEG images (e.g.
+        ``data/caltech-101/101_ObjectCategories``).
+    """
+    zip_path = DATA_DIR / "caltech-101.zip"
+    extract_dir = DATA_DIR / "caltech-101"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    categories_dir = extract_dir / "101_ObjectCategories"
+    if not categories_dir.exists():
+        if not zip_path.exists():
+            update_progress("downloading", "Starting Caltech-101 download...", 0, 0)
+            download_file_with_progress(CALTECH101_URL, zip_path, CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024)
+
+        update_progress("downloading", "Extracting Caltech-101...", 0, 0)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            members = zip_ref.namelist()
+            total = len(members)
+            for i, member in enumerate(members, 1):
+                if i % 100 == 0 or i == total:
+                    update_progress(
+                        "downloading",
+                        f"Extracting Caltech-101 ({i}/{total})...",
+                        i,
+                        total,
+                    )
+                zip_ref.extract(member, extract_dir)
+
+        zip_path.unlink(missing_ok=True)
+
+    return categories_dir
+
+
 def download_ucf101_subset() -> Path:
     """Return the path to the UCF-101 video dataset, raising if it is not present.
 
@@ -190,13 +235,29 @@ def download_20newsgroups(
 
     update_progress("downloading", "Downloading 20 Newsgroups dataset...", 0, 0)
 
-    # Map our category names to 20 newsgroups categories
-    # We'll use a subset that maps well to common news categories
+    # Map our category names to 20 newsgroups categories.
+    # Covers all 20 newsgroups under shorter, friendlier aliases.
     category_mapping = {
         "world": "talk.politics.misc",
         "sports": "rec.sport.baseball",
         "business": "misc.forsale",
         "science": "sci.space",
+        "technology": "comp.graphics",
+        "medicine": "sci.med",
+        "cars": "rec.autos",
+        "hockey": "rec.sport.hockey",
+        "electronics": "sci.electronics",
+        "crypto": "sci.crypt",
+        "religion": "soc.religion.christian",
+        "guns": "talk.politics.guns",
+        "atheism": "alt.atheism",
+        "mac": "comp.sys.mac.hardware",
+        "pc_hardware": "comp.sys.ibm.pc.hardware",
+        "windows": "comp.os.ms-windows.misc",
+        "x_windows": "comp.windows.x",
+        "motorcycles": "rec.motorcycles",
+        "mideast": "talk.politics.mideast",
+        "religion_misc": "talk.religion.misc",
     }
 
     # Get the actual newsgroup categories to download

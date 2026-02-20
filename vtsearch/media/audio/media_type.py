@@ -73,11 +73,48 @@ class AudioMediaType(MediaType):
     def demo_datasets(self) -> list:
         return [
             DemoDataset(
-                id="nature_sounds",
-                label="Animal & Nature Sounds",
+                id="sounds_s",
+                label="Sounds (S)",
                 description=(
-                    "Bird calls, frog croaks, insect buzzes, rain, wind, and other"
-                    " outdoor sounds from the ESC-50 collection."
+                    "200 clips of dogs, cats, roosters, church bells, and crackling"
+                    " fire from the ESC-50 collection."
+                ),
+                categories=[
+                    "dog",
+                    "cat",
+                    "rooster",
+                    "church_bells",
+                    "crackling_fire",
+                ],
+                required_folder=DATA_DIR / "ESC-50-master" / "audio",
+            ),
+            DemoDataset(
+                id="sounds_m",
+                label="Sounds (M)",
+                description=(
+                    "400 clips of babies, laughter, clapping, footsteps, chainsaws,"
+                    " airplanes, and more from the ESC-50 collection."
+                ),
+                categories=[
+                    "crying_baby",
+                    "laughing",
+                    "clapping",
+                    "footsteps",
+                    "sneezing",
+                    "chainsaw",
+                    "airplane",
+                    "fireworks",
+                    "pig",
+                    "cow",
+                ],
+                required_folder=DATA_DIR / "ESC-50-master" / "audio",
+            ),
+            DemoDataset(
+                id="sounds_l",
+                label="Sounds (L)",
+                description=(
+                    "800 clips spanning nature, animals, weather, traffic, and"
+                    " household sounds from the ESC-50 collection."
                 ),
                 categories=[
                     "chirping_birds",
@@ -90,17 +127,6 @@ class AudioMediaType(MediaType):
                     "wind",
                     "water_drops",
                     "crickets",
-                ],
-                required_folder=DATA_DIR / "ESC-50-master" / "audio",
-            ),
-            DemoDataset(
-                id="city_sounds",
-                label="City & Indoor Sounds",
-                description=(
-                    "Traffic, machinery, appliances, and the daily sounds of human"
-                    " environments from the ESC-50 collection."
-                ),
-                categories=[
                     "car_horn",
                     "siren",
                     "engine",

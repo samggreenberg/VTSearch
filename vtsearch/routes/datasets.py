@@ -7,13 +7,16 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, send_file
 
 from config import (
+    CALTECH101_DOWNLOAD_SIZE_MB,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CLIPS_PER_CATEGORY,
     CLIPS_PER_VIDEO_CATEGORY,
     EMBEDDINGS_DIR,
     ESC50_DOWNLOAD_SIZE_MB,
+    IMAGES_PER_CALTECH101_CATEGORY,
     IMAGES_PER_CIFAR10_CATEGORY,
     SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB,
+    TEXTS_PER_CATEGORY,
     VIDEO_DIR,
 )
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
@@ -203,13 +206,16 @@ def demo_dataset_list():
 
         # Calculate number of files
         num_categories = len(dataset_info["categories"])
+        image_source = dataset_info.get("source", "")
         if media_type == "video":
             num_files = num_categories * CLIPS_PER_VIDEO_CATEGORY
         elif media_type == "image":
-            num_files = num_categories * IMAGES_PER_CIFAR10_CATEGORY
+            if image_source == "caltech101":
+                num_files = num_categories * IMAGES_PER_CALTECH101_CATEGORY
+            else:
+                num_files = num_categories * IMAGES_PER_CIFAR10_CATEGORY
         elif media_type == "paragraph":
-            # 20 Newsgroups: up to 50 texts per category
-            num_files = num_categories * 50
+            num_files = num_categories * TEXTS_PER_CATEGORY
         else:
             # Audio datasets (ESC-50 has 40 clips per category)
             num_files = num_categories * CLIPS_PER_CATEGORY
@@ -235,8 +241,10 @@ def demo_dataset_list():
                 else:
                     download_size_mb = SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB
             elif media_type == "image":
-                # CIFAR-10 dataset
-                download_size_mb = CIFAR10_DOWNLOAD_SIZE_MB
+                if image_source == "caltech101":
+                    download_size_mb = CALTECH101_DOWNLOAD_SIZE_MB
+                else:
+                    download_size_mb = CIFAR10_DOWNLOAD_SIZE_MB
             elif media_type == "paragraph":
                 # 20 Newsgroups is small (scikit-learn downloads automatically)
                 download_size_mb = 15  # Approximate size
