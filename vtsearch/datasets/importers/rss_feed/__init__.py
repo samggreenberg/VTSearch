@@ -33,7 +33,7 @@ def _download_enclosure(url: str, dest: Path, timeout: int = 120) -> None:
             f.write(chunk)
 
 
-class RssFeedImporter(DatasetImporter):
+class RSSDatasetImporter(DatasetImporter):
     """Download audio episodes from an RSS or podcast feed and embed them.
 
     The importer parses the feed, downloads each audio enclosure, then
@@ -161,4 +161,4 @@ class RssFeedImporter(DatasetImporter):
         self.run(field_values, clips)
 
 
-IMPORTER = RssFeedImporter()
+IMPORTER = RSSDatasetImporter()

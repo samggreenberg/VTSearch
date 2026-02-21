@@ -1,8 +1,8 @@
-"""Results-exporter registry with auto-discovery.
+"""Labelset-exporter registry with auto-discovery.
 
 Any package placed directly under this directory is automatically registered
 if it exposes a module-level ``EXPORTER`` attribute that is a
-:class:`~vtsearch.exporters.base.ResultsExporter` instance.
+:class:`~vtsearch.exporters.base.LabelsetExporter` instance.
 
 Usage::
 
@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from vtsearch.exporters.base import ResultsExporter
+    from vtsearch.exporters.base import LabelsetExporter
 
-_registry: dict[str, ResultsExporter] = {}
+_registry: dict[str, LabelsetExporter] = {}
 
 
 def _discover() -> None:
@@ -40,7 +40,7 @@ def _discover() -> None:
                 _registry[exporter.name] = exporter
         except Exception as exc:  # pragma: no cover
             warnings.warn(
-                f"Failed to load results exporter '{module_name}': {exc}",
+                f"Failed to load labelset exporter '{module_name}': {exc}",
                 stacklevel=2,
             )
 
@@ -50,13 +50,13 @@ def _ensure_discovered() -> None:
         _discover()
 
 
-def get_exporter(name: str) -> ResultsExporter | None:
+def get_exporter(name: str) -> LabelsetExporter | None:
     """Return the registered exporter with *name*, or ``None`` if not found."""
     _ensure_discovered()
     return _registry.get(name)
 
 
-def list_exporters() -> list[ResultsExporter]:
+def list_exporters() -> list[LabelsetExporter]:
     """Return all registered exporters in discovery order."""
     _ensure_discovered()
     return list(_registry.values())

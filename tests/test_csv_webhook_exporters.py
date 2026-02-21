@@ -116,9 +116,9 @@ class TestCsvExporterCLI:
     """CLI argument parsing for the CSV exporter."""
 
     def test_adds_filepath_arg(self):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -126,9 +126,9 @@ class TestCsvExporterCLI:
         assert args.filepath == "/tmp/results.csv"
 
     def test_filepath_default(self):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -136,15 +136,15 @@ class TestCsvExporterCLI:
         assert args.filepath == "autodetect_results.csv"
 
     def test_validate_passes(self):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.csv"})
 
     def test_validate_missing_filepath(self):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --filepath"):
             exp.validate_cli_field_values({})
 
@@ -158,9 +158,9 @@ class TestCsvExporterExport:
     """Tests for the CSV export() method."""
 
     def test_creates_csv_file(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -170,9 +170,9 @@ class TestCsvExporterExport:
         assert "Saved" in result["message"]
 
     def test_csv_has_correct_header(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -183,9 +183,9 @@ class TestCsvExporterExport:
         assert header == ["detector", "threshold", "filename", "category", "score", "origin", "origin_name"]
 
     def test_csv_has_correct_row_count(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -197,9 +197,9 @@ class TestCsvExporterExport:
         assert len(rows) == 4
 
     def test_csv_row_values(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -214,9 +214,9 @@ class TestCsvExporterExport:
         assert first_row[4] == "0.95"
 
     def test_csv_empty_results(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = {"media_type": "audio", "detectors_run": 0, "results": {}}
         filepath = tmp_path / "empty.csv"
 
@@ -225,9 +225,9 @@ class TestCsvExporterExport:
         assert "0 hit(s)" in result["message"]
 
     def test_csv_creates_parent_dirs(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "sub" / "dir" / "output.csv"
 
@@ -235,16 +235,16 @@ class TestCsvExporterExport:
         assert filepath.exists()
 
     def test_csv_empty_filepath_raises(self):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         with pytest.raises(ValueError, match="file path is required"):
             exp.export({}, {"filepath": ""})
 
     def test_csv_multiple_detectors(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvExporter
+        from vtsearch.exporters.csv_file import CsvLabelsetExporter
 
-        exp = CsvExporter()
+        exp = CsvLabelsetExporter()
         results = {
             "media_type": "audio",
             "detectors_run": 2,
@@ -363,9 +363,9 @@ class TestWebhookExporterCLI:
     """CLI argument parsing for the Webhook exporter."""
 
     def test_adds_url_arg(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -373,23 +373,23 @@ class TestWebhookExporterCLI:
         assert args.url == "https://example.com/hook"
 
     def test_validate_passes_with_url(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         # auth_header is optional, so only url is needed
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
     def test_validate_missing_url(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_without_auth_header(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         # Should not raise
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
@@ -403,9 +403,9 @@ class TestWebhookExporterExport:
     """Tests for the Webhook export() method using mocked HTTP."""
 
     def test_posts_json_to_url(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -422,9 +422,9 @@ class TestWebhookExporterExport:
         assert "200" in result["message"]
 
     def test_sends_auth_header_when_provided(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -438,9 +438,9 @@ class TestWebhookExporterExport:
         assert call_kwargs.kwargs["headers"]["Authorization"] == "Bearer my-token"
 
     def test_no_auth_header_when_empty(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -454,16 +454,16 @@ class TestWebhookExporterExport:
         assert "Authorization" not in call_kwargs.kwargs["headers"]
 
     def test_empty_url_raises(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="webhook URL is required"):
             exp.export({}, {"url": ""})
 
     def test_http_error_propagates(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -474,9 +474,9 @@ class TestWebhookExporterExport:
                 exp.export(results, {"url": "https://example.com/hook"})
 
     def test_message_contains_hit_count(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -490,9 +490,9 @@ class TestWebhookExporterExport:
         assert "1 detector(s)" in result["message"]
 
     def test_result_includes_status_code_and_url(self):
-        from vtsearch.exporters.webhook import WebhookExporter
+        from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
-        exp = WebhookExporter()
+        exp = WebhookLabelsetExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()

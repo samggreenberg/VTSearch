@@ -10,10 +10,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from vtsearch.exporters.base import ExporterField, ResultsExporter
+from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
-class FileExporter(ResultsExporter):
+class FileLabelsetExporter(LabelsetExporter):
     """Save auto-detect results as a JSON file at a path chosen by the user.
 
     The user supplies the destination path (absolute or relative to the
@@ -58,4 +58,4 @@ class FileExporter(ResultsExporter):
         }
 
 
-EXPORTER = FileExporter()
+EXPORTER = FileLabelsetExporter()

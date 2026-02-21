@@ -281,9 +281,9 @@ class TestImporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values."""
 
     def test_folder_importer_adds_expected_args(self):
-        from vtsearch.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
-        imp = FolderImporter()
+        imp = FolderDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -292,9 +292,9 @@ class TestImporterCLIArguments:
         assert args.media_type == "images"
 
     def test_folder_importer_media_type_default(self):
-        from vtsearch.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
-        imp = FolderImporter()
+        imp = FolderDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -302,9 +302,9 @@ class TestImporterCLIArguments:
         assert args.media_type == "sounds"
 
     def test_folder_importer_rejects_invalid_media_type(self):
-        from vtsearch.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
-        imp = FolderImporter()
+        imp = FolderDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -312,9 +312,9 @@ class TestImporterCLIArguments:
             parser.parse_args(["--path", "/tmp/data", "--media-type", "invalid"])
 
     def test_pickle_importer_adds_file_arg(self):
-        from vtsearch.datasets.importers.pickle import PickleImporter
+        from vtsearch.datasets.importers.pickle import PickleDatasetImporter
 
-        imp = PickleImporter()
+        imp = PickleDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -322,9 +322,9 @@ class TestImporterCLIArguments:
         assert args.file == "/tmp/dataset.pkl"
 
     def test_http_archive_importer_adds_expected_args(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveImporter
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
 
-        imp = HttpArchiveImporter()
+        imp = HttpArchiveDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -333,16 +333,16 @@ class TestImporterCLIArguments:
         assert args.media_type == "images"
 
     def test_validate_catches_missing_required_field(self):
-        from vtsearch.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
-        imp = FolderImporter()
+        imp = FolderDatasetImporter()
         with pytest.raises(ValueError, match="Missing required argument: --path"):
             imp.validate_cli_field_values({"media_type": "sounds"})
 
     def test_validate_passes_with_all_fields(self):
-        from vtsearch.datasets.importers.folder import FolderImporter
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
-        imp = FolderImporter()
+        imp = FolderDatasetImporter()
         # Should not raise
         imp.validate_cli_field_values({"media_type": "sounds", "path": "/tmp/data"})
 
@@ -595,9 +595,9 @@ class TestExporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values on exporters."""
 
     def test_file_exporter_adds_filepath_arg(self):
-        from vtsearch.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileLabelsetExporter
 
-        exp = FileExporter()
+        exp = FileLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -605,9 +605,9 @@ class TestExporterCLIArguments:
         assert args.filepath == "/tmp/results.json"
 
     def test_file_exporter_filepath_default(self):
-        from vtsearch.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileLabelsetExporter
 
-        exp = FileExporter()
+        exp = FileLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -615,9 +615,9 @@ class TestExporterCLIArguments:
         assert args.filepath == "autodetect_results.json"
 
     def test_email_smtp_exporter_adds_expected_args(self):
-        from vtsearch.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailLabelsetExporter
 
-        exp = EmailSmtpExporter()
+        exp = EmailLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -638,9 +638,9 @@ class TestExporterCLIArguments:
         assert args.smtp_port == "587"
 
     def test_email_smtp_exporter_custom_host_and_port(self):
-        from vtsearch.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailLabelsetExporter
 
-        exp = EmailSmtpExporter()
+        exp = EmailLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -662,9 +662,9 @@ class TestExporterCLIArguments:
         assert args.smtp_port == "465"
 
     def test_gui_exporter_adds_no_args(self):
-        from vtsearch.exporters.gui import GuiExporter
+        from vtsearch.exporters.gui import DisplayLabelsetExporter
 
-        exp = GuiExporter()
+        exp = DisplayLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -673,16 +673,16 @@ class TestExporterCLIArguments:
         assert not hasattr(args, "filepath")
 
     def test_validate_catches_missing_required_field(self):
-        from vtsearch.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailLabelsetExporter
 
-        exp = EmailSmtpExporter()
+        exp = EmailLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --to"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_with_all_fields(self):
-        from vtsearch.exporters.email_smtp import EmailSmtpExporter
+        from vtsearch.exporters.email_smtp import EmailLabelsetExporter
 
-        exp = EmailSmtpExporter()
+        exp = EmailLabelsetExporter()
         # Should not raise
         exp.validate_cli_field_values(
             {
@@ -695,15 +695,15 @@ class TestExporterCLIArguments:
         )
 
     def test_file_exporter_validate_passes(self):
-        from vtsearch.exporters.file import FileExporter
+        from vtsearch.exporters.file import FileLabelsetExporter
 
-        exp = FileExporter()
+        exp = FileLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.json"})
 
     def test_gui_exporter_validate_passes_empty(self):
-        from vtsearch.exporters.gui import GuiExporter
+        from vtsearch.exporters.gui import DisplayLabelsetExporter
 
-        exp = GuiExporter()
+        exp = DisplayLabelsetExporter()
         # No required fields — empty dict is fine
         exp.validate_cli_field_values({})
 

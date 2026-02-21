@@ -61,7 +61,7 @@ VTSearch/
 │   │       └── youtube_playlist/   YouTube yt-dlp importer
 │   │
 │   ├── exporters/                  Plugin system for output destinations
-│   │   ├── base.py                 ResultsExporter ABC + ExporterField
+│   │   ├── base.py                 LabelsetExporter ABC + ExporterField
 │   │   ├── file/                   JSON file writer
 │   │   ├── csv_file/               CSV file writer
 │   │   ├── email_smtp/             SMTP email sender

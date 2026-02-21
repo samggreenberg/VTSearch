@@ -90,7 +90,7 @@ def _extract_archive(
         )
 
 
-class HttpArchiveImporter(DatasetImporter):
+class HttpArchiveDatasetImporter(DatasetImporter):
     """Download a publicly-accessible archive and load its media files.
 
     The archive is streamed to a temporary file in ``DATA_DIR``, extracted
@@ -154,4 +154,4 @@ class HttpArchiveImporter(DatasetImporter):
         self.run(field_values, clips)
 
 
-IMPORTER = HttpArchiveImporter()
+IMPORTER = HttpArchiveDatasetImporter()

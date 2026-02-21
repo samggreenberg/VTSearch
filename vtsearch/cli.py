@@ -207,7 +207,7 @@ def _build_results_dict(
 
     Returns:
         A dict matching the shape expected by
-        :meth:`~vtsearch.exporters.base.ResultsExporter.export`.
+        :meth:`~vtsearch.exporters.base.LabelsetExporter.export`.
     """
     detector_data = json.loads(Path(detector_path).read_text())
     detector_name = detector_data.get("name", Path(detector_path).stem)

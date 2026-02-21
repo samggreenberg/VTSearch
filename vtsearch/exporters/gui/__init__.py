@@ -1,27 +1,28 @@
-"""GUI exporter – returns results to the browser for display in a modal.
+"""Display labelset exporter – shows results in the browser (GUI) or prints to console (CLI).
 
-No additional pip packages are required; this exporter is handled entirely
-by the frontend JavaScript.
+No additional pip packages are required; in GUI mode this exporter is handled
+entirely by the frontend JavaScript, and in CLI mode it prints to stdout.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.exporters.base import ResultsExporter
+from vtsearch.exporters.base import LabelsetExporter
 
 
-class GuiExporter(ResultsExporter):
-    """Display auto-detect results in the browser's built-in results modal.
+class DisplayLabelsetExporter(LabelsetExporter):
+    """Display auto-detect results in the browser (GUI) or print to console (CLI).
 
-    This is the default exporter: it performs no server-side work and simply
-    passes the results back to the frontend, which renders them in the
-    Auto-Detect Results modal.  No configuration fields are needed.
+    This is the default exporter: in GUI mode it performs no server-side work
+    and simply passes the results back to the frontend, which renders them in
+    the Auto-Detect Results modal.  In CLI mode it prints a summary to stdout.
+    No configuration fields are needed.
     """
 
     name = "gui"
-    display_name = "Show in Browser"
-    description = "Display the results in a popup window in the browser."
+    display_name = "Display Results"
+    description = "Display the results in the browser (GUI) or print to console (CLI)."
     icon = "🖥️"
     fields = []  # no questions to ask
 
@@ -53,4 +54,4 @@ class GuiExporter(ResultsExporter):
         }
 
 
-EXPORTER = GuiExporter()
+EXPORTER = DisplayLabelsetExporter()

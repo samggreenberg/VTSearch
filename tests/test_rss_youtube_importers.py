@@ -60,9 +60,9 @@ class TestRssFeedImporterCLI:
     """CLI argument parsing for the RSS feed importer."""
 
     def test_adds_expected_args(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -71,9 +71,9 @@ class TestRssFeedImporterCLI:
         assert args.media_type == "sounds"
 
     def test_media_type_choices(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -81,9 +81,9 @@ class TestRssFeedImporterCLI:
         assert args.media_type == "images"
 
     def test_rejects_invalid_media_type(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -91,23 +91,23 @@ class TestRssFeedImporterCLI:
             parser.parse_args(["--url", "https://example.com/feed.xml", "--media-type", "invalid"])
 
     def test_validate_missing_url(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             imp.validate_cli_field_values({"media_type": "sounds"})
 
     def test_validate_passes_with_url(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         # Should not raise — max_episodes is not required
         imp.validate_cli_field_values({"url": "https://example.com/feed.xml", "media_type": "sounds"})
 
     def test_run_cli_rejects_invalid_url(self):
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         with pytest.raises(ValueError, match="Invalid URL"):
             imp.run_cli({"url": "not-a-url", "media_type": "sounds"}, {})
 
@@ -119,18 +119,18 @@ class TestRssFeedImporterRun:
         """Attempting import without feedparser installed raises RuntimeError."""
         import sys
 
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
         with mock.patch.dict(sys.modules, {"feedparser": None}):
             with pytest.raises((RuntimeError, ImportError)):
                 imp.run({"url": "https://example.com/feed.xml", "media_type": "sounds"}, {})
 
     def test_empty_feed_raises_value_error(self):
         """A feed with no enclosures raises ValueError."""
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
 
         fake_feed = mock.MagicMock()
         fake_feed.bozo = False
@@ -147,9 +147,9 @@ class TestRssFeedImporterRun:
 
     def test_bozo_feed_with_no_entries_raises(self):
         """A bozo (malformed) feed with no entries raises ValueError."""
-        from vtsearch.datasets.importers.rss_feed import RssFeedImporter
+        from vtsearch.datasets.importers.rss_feed import RSSDatasetImporter
 
-        imp = RssFeedImporter()
+        imp = RSSDatasetImporter()
 
         fake_feed = mock.MagicMock()
         fake_feed.bozo = True
@@ -227,9 +227,9 @@ class TestYouTubePlaylistImporterCLI:
     """CLI argument parsing for the YouTube playlist importer."""
 
     def test_adds_expected_args(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -238,9 +238,9 @@ class TestYouTubePlaylistImporterCLI:
         assert args.media_type == "videos"
 
     def test_media_type_choices(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -248,9 +248,9 @@ class TestYouTubePlaylistImporterCLI:
         assert args.media_type == "sounds"
 
     def test_rejects_invalid_media_type(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
@@ -258,23 +258,23 @@ class TestYouTubePlaylistImporterCLI:
             parser.parse_args(["--url", "https://youtube.com", "--media-type", "invalid"])
 
     def test_validate_missing_url(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             imp.validate_cli_field_values({"media_type": "videos"})
 
     def test_validate_passes_with_url(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         # Should not raise — max_videos is not required
         imp.validate_cli_field_values({"url": "https://www.youtube.com/playlist?list=PLtest", "media_type": "videos"})
 
     def test_run_cli_rejects_invalid_url(self):
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         with pytest.raises(ValueError, match="Invalid URL"):
             imp.run_cli({"url": "not-a-url", "media_type": "videos"}, {})
 
@@ -286,9 +286,9 @@ class TestYouTubePlaylistImporterRun:
         """Attempting import without yt-dlp installed raises RuntimeError."""
         import sys
 
-        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistImporter
+        from vtsearch.datasets.importers.youtube_playlist import YouTubePlaylistDatasetImporter
 
-        imp = YouTubePlaylistImporter()
+        imp = YouTubePlaylistDatasetImporter()
         with mock.patch.dict(sys.modules, {"yt_dlp": None}):
             with pytest.raises((RuntimeError, ImportError)):
                 imp.run({"url": "https://www.youtube.com/watch?v=test", "media_type": "videos"}, {})

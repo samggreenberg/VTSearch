@@ -1,7 +1,7 @@
-"""Tests for the Results Exporter abstraction.
+"""Tests for the Labelset Exporter abstraction.
 
 Covers:
-- ExporterField and ResultsExporter base classes
+- ExporterField and LabelsetExporter base classes
 - Auto-discovery registry
 - Built-in exporters: gui, file, email_smtp
 - Flask API routes: GET /api/exporters, POST /api/exporters/export
@@ -98,22 +98,22 @@ class TestExporterField:
 
 
 # ---------------------------------------------------------------------------
-# ResultsExporter base class
+# LabelsetExporter base class
 # ---------------------------------------------------------------------------
 
 
-class TestResultsExporterBase:
+class TestLabelsetExporterBase:
     def test_export_raises_not_implemented(self):
-        from vtsearch.exporters.base import ResultsExporter
+        from vtsearch.exporters.base import LabelsetExporter
 
-        exp = ResultsExporter()
+        exp = LabelsetExporter()
         with pytest.raises(NotImplementedError):
             exp.export({}, {})
 
     def test_to_dict_contains_standard_keys(self):
-        from vtsearch.exporters.base import ExporterField, ResultsExporter
+        from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
-        class Dummy(ResultsExporter):
+        class Dummy(LabelsetExporter):
             name = "dummy"
             display_name = "Dummy"
             description = "A test exporter."
@@ -184,7 +184,7 @@ class TestExporterRegistry:
 # ---------------------------------------------------------------------------
 
 
-class TestGuiExporter:
+class TestDisplayLabelsetExporter:
     def test_has_no_fields(self):
         from vtsearch.exporters import get_exporter
 
@@ -223,7 +223,7 @@ class TestGuiExporter:
 # ---------------------------------------------------------------------------
 
 
-class TestFileExporter:
+class TestFileLabelsetExporter:
     def test_has_filepath_field(self):
         from vtsearch.exporters import get_exporter
 
@@ -283,7 +283,7 @@ class TestFileExporter:
 # ---------------------------------------------------------------------------
 
 
-class TestEmailSmtpExporter:
+class TestEmailLabelsetExporter:
     def test_has_required_fields(self):
         from vtsearch.exporters import get_exporter
 

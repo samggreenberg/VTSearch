@@ -1,12 +1,12 @@
-"""Base classes for Results Exporters.
+"""Base classes for Labelset Exporters.
 
-To add a new exporter, subclass :class:`ResultsExporter`, define its class
-attributes and :meth:`~ResultsExporter.export`, then expose a module-level
+To add a new exporter, subclass :class:`LabelsetExporter`, define its class
+attributes and :meth:`~LabelsetExporter.export`, then expose a module-level
 ``EXPORTER`` instance from a package under this directory.  The registry will
 discover it automatically.
 
-Each exporter also supports CLI usage via :meth:`~ResultsExporter.add_cli_arguments`
-and :meth:`~ResultsExporter.export_cli`.  The base class provides default
+Each exporter also supports CLI usage via :meth:`~LabelsetExporter.add_cli_arguments`
+and :meth:`~LabelsetExporter.export_cli`.  The base class provides default
 implementations that derive CLI arguments from the :attr:`fields` list, so most
 exporters work on the command line without any extra code.  Exporters whose
 :meth:`export` expects non-string values should override :meth:`export_cli` to
@@ -15,9 +15,9 @@ handle the CLI-appropriate types.
 Example – a minimal SFTP exporter skeleton::
 
     # vtsearch/exporters/sftp/__init__.py
-    from vtsearch.exporters.base import ResultsExporter, ExporterField
+    from vtsearch.exporters.base import LabelsetExporter, ExporterField
 
-    class SftpExporter(ResultsExporter):
+    class SftpLabelsetExporter(LabelsetExporter):
         name         = "sftp"
         display_name = "SFTP Upload"
         description  = "Upload results JSON to a remote SFTP server."
@@ -35,7 +35,7 @@ Example – a minimal SFTP exporter skeleton::
             ...  # connect, write JSON, disconnect
             return {"message": f"Uploaded to {field_values['host']}:{field_values['path']}"}
 
-    EXPORTER = SftpExporter()
+    EXPORTER = SftpLabelsetExporter()
 
 Then create ``vtsearch/exporters/sftp/requirements.txt`` containing
 ``paramiko>=2.0.0`` and add::
@@ -53,7 +53,7 @@ from typing import Any, Literal
 
 FieldType = Literal["text", "password", "email", "file", "folder", "select"]
 
-__all__ = ["ExporterField", "FieldType", "ResultsExporter"]
+__all__ = ["ExporterField", "FieldType", "LabelsetExporter"]
 
 
 @dataclass
@@ -96,7 +96,7 @@ class ExporterField:
         }
 
 
-class ResultsExporter:
+class LabelsetExporter:
     """Abstract base class for results exporters.
 
     Subclass this, set the class-level attributes, implement :meth:`export`,

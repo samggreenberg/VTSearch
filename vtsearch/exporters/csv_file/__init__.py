@@ -10,10 +10,10 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from vtsearch.exporters.base import ExporterField, ResultsExporter
+from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
-class CsvExporter(ResultsExporter):
+class CsvLabelsetExporter(LabelsetExporter):
     """Save auto-detect results as a CSV file.
 
     Produces one row per hit across all detectors, with columns for the
@@ -85,4 +85,4 @@ class CsvExporter(ResultsExporter):
         }
 
 
-EXPORTER = CsvExporter()
+EXPORTER = CsvLabelsetExporter()

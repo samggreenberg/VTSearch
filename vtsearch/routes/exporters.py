@@ -1,4 +1,4 @@
-"""Flask routes for the Results Exporter API.
+"""Flask routes for the Labelset Exporter API.
 
 Endpoints
 ---------
@@ -36,7 +36,7 @@ exporters_bp = Blueprint("exporters", __name__)
 
 @exporters_bp.route("/api/exporters", methods=["GET"])
 def get_exporters():
-    """Return a list of all registered results exporters."""
+    """Return a list of all registered labelset exporters."""
     return jsonify([exp.to_dict() for exp in list_exporters()])
 
 

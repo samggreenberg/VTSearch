@@ -15,7 +15,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
-from vtsearch.exporters.base import ExporterField, ResultsExporter
+from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
 def _build_plain_text(results: dict[str, Any]) -> str:
@@ -68,7 +68,7 @@ def _build_html(results: dict[str, Any]) -> str:
     )
 
 
-class EmailSmtpExporter(ResultsExporter):
+class EmailLabelsetExporter(LabelsetExporter):
     """Send auto-detect results by e-mail via an SMTP server.
 
     Supports any STARTTLS-capable SMTP server (Gmail, Outlook, custom, etc.).
@@ -161,4 +161,4 @@ class EmailSmtpExporter(ResultsExporter):
         }
 
 
-EXPORTER = EmailSmtpExporter()
+EXPORTER = EmailLabelsetExporter()

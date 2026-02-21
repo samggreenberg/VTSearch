@@ -13,7 +13,7 @@ from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder
 
 
-class FolderImporter(DatasetImporter):
+class FolderDatasetImporter(DatasetImporter):
     """Embed all media files found in a local directory into a dataset.
 
     The user supplies an absolute filesystem path and selects the media type
@@ -55,4 +55,4 @@ class FolderImporter(DatasetImporter):
         self.run(field_values, clips)
 
 
-IMPORTER = FolderImporter()
+IMPORTER = FolderDatasetImporter()

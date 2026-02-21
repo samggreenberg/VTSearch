@@ -20,7 +20,7 @@ def _get_progress():
     return update_progress
 
 
-class PickleImporter(DatasetImporter):
+class PickleDatasetImporter(DatasetImporter):
     """Load a dataset from a ``.pkl`` file exported by VTSearch.
 
     The user picks the file via the browser's file-upload input.  The file
@@ -74,4 +74,4 @@ class PickleImporter(DatasetImporter):
             set_dataset_creation_info(creation_info)
 
 
-IMPORTER = PickleImporter()
+IMPORTER = PickleDatasetImporter()

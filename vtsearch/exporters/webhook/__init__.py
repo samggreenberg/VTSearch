@@ -9,10 +9,10 @@ from typing import Any
 
 import requests
 
-from vtsearch.exporters.base import ExporterField, ResultsExporter
+from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
-class WebhookExporter(ResultsExporter):
+class WebhookLabelsetExporter(LabelsetExporter):
     """POST the results JSON to a user-specified URL.
 
     Enables integration with automation platforms (Zapier, n8n, Make,
@@ -66,4 +66,4 @@ class WebhookExporter(ResultsExporter):
         }
 
 
-EXPORTER = WebhookExporter()
+EXPORTER = WebhookLabelsetExporter()

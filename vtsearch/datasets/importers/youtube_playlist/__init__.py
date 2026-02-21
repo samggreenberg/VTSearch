@@ -20,7 +20,7 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-class YouTubePlaylistImporter(DatasetImporter):
+class YouTubePlaylistDatasetImporter(DatasetImporter):
     """Download videos from a YouTube playlist or channel and embed them.
 
     Uses ``yt-dlp`` to download videos in mp4 format, then embeds them using
@@ -138,4 +138,4 @@ class YouTubePlaylistImporter(DatasetImporter):
         self.run(field_values, clips)
 
 
-IMPORTER = YouTubePlaylistImporter()
+IMPORTER = YouTubePlaylistDatasetImporter()
