@@ -381,6 +381,11 @@ def auto_detect():
     if not clips:
         return jsonify({"error": "No clips loaded"}), 400
 
+    # Import any favorite processors from settings that aren't already loaded
+    from vtsearch.settings import ensure_favorite_processors_imported
+
+    newly_imported = ensure_favorite_processors_imported()
+
     # Determine media type from current clips
     media_type = next(iter(clips.values())).get("type", "audio")
 
@@ -445,13 +450,15 @@ def auto_detect():
             "hits": positive_hits,
         }
 
-    return jsonify(
-        {
-            "media_type": media_type,
-            "detectors_run": len(detectors),
-            "results": results,
-        }
-    )
+    response: dict = {
+        "media_type": media_type,
+        "detectors_run": len(detectors),
+        "results": results,
+    }
+    if newly_imported:
+        response["newly_imported"] = newly_imported
+
+    return jsonify(response)
 
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ from vtsearch.routes import (
     label_importers_bp,
     main_bp,
     processor_importers_bp,
+    settings_bp,
     sorting_bp,
 )
 from vtsearch.media import set_progress_callback
@@ -146,6 +147,7 @@ app.register_blueprint(datasets_bp)
 app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
 app.register_blueprint(processor_importers_bp)
+app.register_blueprint(settings_bp)
 
 
 # ---------------------------------------------------------------------------
