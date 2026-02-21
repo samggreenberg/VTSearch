@@ -73,7 +73,7 @@ class AudioMediaType(MediaType):
         return [
             DemoDataset(
                 id="sounds_s",
-                label="Sounds (S)",
+                label="ESC-50 Animals & Fireside (S)",
                 description=(
                     "200 clips of dogs, cats, roosters, church bells, and crackling"
                     " fire from the ESC-50 collection."
@@ -89,7 +89,7 @@ class AudioMediaType(MediaType):
             ),
             DemoDataset(
                 id="sounds_m",
-                label="Sounds (M)",
+                label="ESC-50 Everyday Sounds (M)",
                 description=(
                     "400 clips of babies, laughter, clapping, footsteps, chainsaws,"
                     " airplanes, and more from the ESC-50 collection."
@@ -110,7 +110,7 @@ class AudioMediaType(MediaType):
             ),
             DemoDataset(
                 id="sounds_l",
-                label="Sounds (L)",
+                label="ESC-50 Environmental Mix (L)",
                 description=(
                     "800 clips spanning nature, animals, weather, traffic, and"
                     " household sounds from the ESC-50 collection."

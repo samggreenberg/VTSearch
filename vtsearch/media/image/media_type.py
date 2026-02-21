@@ -99,7 +99,7 @@ class ImageMediaType(MediaType):
         return [
             DemoDataset(
                 id="images_s",
-                label="Images (S)",
+                label="Caltech-101 Nature & Flight (S)",
                 description=(
                     "Photographs of butterflies, sunflowers, starfish, and"
                     " helicopters from the Caltech-101 dataset."
@@ -110,7 +110,7 @@ class ImageMediaType(MediaType):
             ),
             DemoDataset(
                 id="images_m",
-                label="Images (M)",
+                label="Caltech-101 Animals & Objects (M)",
                 description=(
                     "Photographs of dolphins, grand pianos, elephants, kangaroos,"
                     " laptops, lobsters, watches, and flamingos from Caltech-101."
@@ -130,7 +130,7 @@ class ImageMediaType(MediaType):
             ),
             DemoDataset(
                 id="images_l",
-                label="Images (L)",
+                label="Caltech-101 Diverse Objects (L)",
                 description=(
                     "Photographs across 15 diverse categories including animals,"
                     " instruments, vehicles, and objects from Caltech-101."

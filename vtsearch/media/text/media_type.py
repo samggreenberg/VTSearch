@@ -72,7 +72,7 @@ class TextMediaType(MediaType):
         return [
             DemoDataset(
                 id="paragraphs_s",
-                label="Paragraphs (S)",
+                label="Newsgroup Sports & Science (S)",
                 description=(
                     "Short articles about sports and space science from the"
                     " 20 Newsgroups collection."
@@ -82,7 +82,7 @@ class TextMediaType(MediaType):
             ),
             DemoDataset(
                 id="paragraphs_m",
-                label="Paragraphs (M)",
+                label="Newsgroup World News & Tech (M)",
                 description=(
                     "Articles spanning world affairs, business, computer graphics,"
                     " and medicine from the 20 Newsgroups collection."
@@ -92,7 +92,7 @@ class TextMediaType(MediaType):
             ),
             DemoDataset(
                 id="paragraphs_l",
-                label="Paragraphs (L)",
+                label="Newsgroup 8-Topic Mix (L)",
                 description=(
                     "Articles across eight topics including cars, hockey,"
                     " electronics, cryptography, and religion from 20 Newsgroups."
