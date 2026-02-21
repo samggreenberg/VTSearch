@@ -36,6 +36,19 @@ def favicon() -> tuple[str, int] | Response:
     return send_from_directory(str(root), "favicon.ico", mimetype="image/x-icon")
 
 
+@main_bp.route("/favicon-<variant>.ico")
+def favicon_variant(variant: str) -> tuple[str, int] | Response:
+    """Serve a favicon variant (smile, frown, surprised) from the project root."""
+    allowed = {"smile", "frown", "surprised"}
+    if variant not in allowed:
+        return "", 404
+    root = _project_root()
+    filename = f"favicon-{variant}.ico"
+    if not (root / filename).exists():
+        return "", 204
+    return send_from_directory(str(root), filename, mimetype="image/x-icon")
+
+
 @main_bp.route("/logo.svg")
 def logo() -> tuple[str, int] | Response:
     """Serve the site logo from the project root.
