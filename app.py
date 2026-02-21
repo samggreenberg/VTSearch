@@ -187,6 +187,15 @@ if __name__ == "__main__":
         help="Name of the label importer to use (e.g. json_file, csv_file). Used with --import-labels.",
     )
     parser.add_argument(
+        "--import-missing",
+        choices=["yes", "no", "ask"],
+        default="ask",
+        help=(
+            "When --import-labels finds elements not in the dataset: "
+            "'yes' to auto-import from origins, 'no' to skip, 'ask' to prompt (default: ask)."
+        ),
+    )
+    parser.add_argument(
         "--import-processor",
         action="store_true",
         help="Import a processor (detector) via a named processor importer from the command line.",
@@ -281,7 +290,9 @@ if __name__ == "__main__":
         from vtsearch.cli import import_labels_main
 
         field_values = {f.key: getattr(args, f.key, f.default or None) for f in label_importer.fields}
-        import_labels_main(args.dataset, args.label_importer, field_values)
+        import_missing_flag = getattr(args, "import_missing", "ask")
+        auto_import_missing = {"yes": True, "no": False, "ask": None}[import_missing_flag]
+        import_labels_main(args.dataset, args.label_importer, field_values, auto_import_missing=auto_import_missing)
 
     elif args.autodetect:
         # Collect exporter field values if an exporter was specified

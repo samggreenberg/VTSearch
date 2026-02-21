@@ -319,16 +319,25 @@ def import_labels_main(
     dataset_path: str,
     label_importer_name: str,
     field_values: dict[str, Any],
+    *,
+    auto_import_missing: bool | None = None,
 ) -> None:
     """CLI entry point: load a dataset and import labels via a named label importer.
 
     Prints a summary of applied and skipped labels to stdout.
     Exits with code 0 on success, 1 on error.
 
+    When label entries reference elements not present in the dataset (neither
+    by origin+name nor md5), the user is prompted whether to import the
+    missing clips from their origins.  Pass *auto_import_missing* to bypass
+    the prompt (``True`` to always import, ``False`` to always skip).
+
     Args:
         dataset_path: Path to the dataset pickle file.
         label_importer_name: Registered name of the label importer.
         field_values: Mapping of label importer field keys to their CLI values.
+        auto_import_missing: If ``True``/``False``, skip the interactive
+            prompt and automatically import/skip missing entries.
     """
     try:
         from vtsearch.labels.importers import get_label_importer
@@ -355,8 +364,8 @@ def import_labels_main(
         if not isinstance(label_entries, list):
             raise ValueError("Label importer did not return a list of label dicts.")
 
-        # Apply labels by origin+origin_name matching (MD5 fallback)
-        from vtsearch.utils import build_clip_lookup, resolve_clip_ids
+        # Apply labels by origin+origin_name and md5 matching (union)
+        from vtsearch.utils import build_clip_lookup, find_missing_entries, resolve_clip_ids
 
         origin_lookup, md5_lookup = build_clip_lookup(clips)
         applied = 0
@@ -372,7 +381,42 @@ def import_labels_main(
                 continue
             applied += 1
 
+        # Detect entries not matched by origin+name or md5
+        missing = find_missing_entries(label_entries, origin_lookup, md5_lookup)
+        skipped -= len(missing)
+
         print(f"Applied {applied} label(s), skipped {skipped}.")
+
+        if missing:
+            should_import = auto_import_missing
+            if should_import is None:
+                # Interactive prompt
+                answer = input(
+                    f"{len(missing)} element(s) not found in dataset. "
+                    "Import them from their origins? [y/N] "
+                ).strip().lower()
+                should_import = answer in ("y", "yes")
+
+            if should_import:
+                from vtsearch.datasets.ingest import ingest_missing_clips
+
+                def _cli_progress(status: str, message: str, current: int, total: int) -> None:
+                    if message:
+                        print(message)
+
+                ingested = ingest_missing_clips(missing, clips, on_progress=_cli_progress)
+
+                # Apply labels to the newly ingested clips
+                origin_lookup2, md5_lookup2 = build_clip_lookup(clips)
+                extra_applied = 0
+                for entry in missing:
+                    cids = resolve_clip_ids(entry, origin_lookup2, md5_lookup2)
+                    if cids:
+                        extra_applied += 1
+                print(f"Ingested {ingested} clip(s), applied {extra_applied} additional label(s).")
+            else:
+                print(f"Skipped {len(missing)} missing element(s).")
+
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

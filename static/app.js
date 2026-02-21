@@ -1843,6 +1843,73 @@
     labelImporterModal.classList.add("show");
   }
 
+  function _showMissingElementsPrompt(statusEl, result, formEl) {
+    const n = result.missing_count;
+    const promptDiv = document.createElement("div");
+    promptDiv.style.cssText = "margin-top:14px;padding:14px;background:#2a2d3a;border:1px solid #3a3d50;border-radius:6px;";
+    promptDiv.innerHTML = `
+      <div style="color:#e0e0e0;margin-bottom:10px;font-size:0.9rem;">
+        <strong>${n}</strong> element(s) from the labelset were not found in your dataset.
+        Import them from their origins?
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button id="missing-import-btn" style="flex:1;padding:8px;background:#7c8aff;border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.85rem;">Import clips</button>
+        <button id="missing-skip-btn" style="flex:1;padding:8px;background:#3a3d50;border:none;border-radius:4px;color:#ccc;cursor:pointer;font-size:0.85rem;">Skip</button>
+      </div>
+      <div id="missing-status" style="min-height:1.4em;font-size:0.85rem;color:#888;margin-top:8px;"></div>
+    `;
+    // Insert after the status element
+    statusEl.parentNode.appendChild(promptDiv);
+
+    promptDiv.querySelector("#missing-skip-btn").addEventListener("click", () => {
+      promptDiv.remove();
+      setTimeout(() => {
+        labelImporterModal.classList.remove("show");
+        menuLabelsStatus.textContent = `Applied ${result.applied} label(s)`;
+        setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
+      }, 300);
+    });
+
+    promptDiv.querySelector("#missing-import-btn").addEventListener("click", async () => {
+      const missingStatus = promptDiv.querySelector("#missing-status");
+      const importBtn = promptDiv.querySelector("#missing-import-btn");
+      importBtn.disabled = true;
+      importBtn.style.opacity = "0.5";
+      missingStatus.textContent = "Ingesting clips from origins\u2026";
+      missingStatus.style.color = "#888";
+
+      try {
+        const ingestRes = await fetch("/api/label-importers/ingest-missing", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({entries: result.missing}),
+        });
+        const ingestResult = await ingestRes.json();
+        if (ingestRes.ok) {
+          missingStatus.textContent = ingestResult.message;
+          missingStatus.style.color = "#4caf50";
+          await fetchVotes();
+          const totalApplied = result.applied + (ingestResult.applied || 0);
+          setTimeout(() => {
+            labelImporterModal.classList.remove("show");
+            menuLabelsStatus.textContent = `Applied ${totalApplied} label(s)`;
+            setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
+          }, 1500);
+        } else {
+          missingStatus.textContent = ingestResult.error || "Ingest failed";
+          missingStatus.style.color = "#f44336";
+          importBtn.disabled = false;
+          importBtn.style.opacity = "1";
+        }
+      } catch (err) {
+        missingStatus.textContent = `Error: ${err.message}`;
+        missingStatus.style.color = "#f44336";
+        importBtn.disabled = false;
+        importBtn.style.opacity = "1";
+      }
+    });
+  }
+
   function showLabelImporterForm(importer) {
     labelImporterList.style.display = "none";
     labelImporterBack.style.display = "inline-block";
@@ -1909,11 +1976,17 @@
           statusEl.textContent = `Applied ${result.applied}, skipped ${result.skipped}.`;
           statusEl.style.color = "#4caf50";
           await fetchVotes();
-          setTimeout(() => {
-            labelImporterModal.classList.remove("show");
-            menuLabelsStatus.textContent = `Applied ${result.applied} label(s)`;
-            setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
-          }, 1500);
+
+          if (result.missing_count > 0) {
+            // Show prompt for missing elements
+            _showMissingElementsPrompt(statusEl, result, formEl);
+          } else {
+            setTimeout(() => {
+              labelImporterModal.classList.remove("show");
+              menuLabelsStatus.textContent = `Applied ${result.applied} label(s)`;
+              setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
+            }, 1500);
+          }
         } else {
           statusEl.textContent = result.error || "Import failed";
           statusEl.style.color = "#f44336";

@@ -14,6 +14,7 @@ from vtsearch.utils.state import (
     dataset_creation_info,
     favorite_detectors,
     favorite_extractors,
+    find_missing_entries,
     get_dataset_creation_info,
     get_favorite_detectors,
     get_favorite_detectors_by_media,
@@ -23,6 +24,7 @@ from vtsearch.utils.state import (
     good_votes,
     inclusion,
     label_history,
+    next_clip_id,
     remove_favorite_detector,
     remove_favorite_extractor,
     rename_favorite_detector,
@@ -67,4 +69,6 @@ __all__ = [
     "get_favorite_extractors_by_media",
     "build_clip_lookup",
     "resolve_clip_ids",
+    "find_missing_entries",
+    "next_clip_id",
 ]

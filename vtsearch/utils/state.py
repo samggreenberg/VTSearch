@@ -284,7 +284,7 @@ def get_dataset_creation_info() -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Clip matching helpers (origin+origin_name preferred, MD5 fallback)
+# Clip matching helpers (origin+origin_name union with MD5)
 # ---------------------------------------------------------------------------
 
 
@@ -334,22 +334,54 @@ def resolve_clip_ids(
 ) -> list[int]:
     """Resolve a label entry to matching clip ID(s).
 
-    Prefers matching by ``origin`` + ``origin_name`` (exact provenance).
-    Falls back to matching by ``md5`` when origin info is absent or does not
-    match any loaded clip.  Returns **all** matching clip IDs so that
-    duplicate files (same MD5) are all labelled correctly.
+    Returns the **union** of clips matched by ``origin`` + ``origin_name``
+    and clips matched by ``md5``.  Both lookups are always attempted so that
+    a label is applied to every element in the dataset that corresponds to
+    the entry, regardless of whether it was matched by provenance or by
+    content hash.  Duplicate IDs are removed.
     """
+    matched: dict[int, None] = {}
+
     origin = entry.get("origin")
     origin_name = entry.get("origin_name", "")
 
     if origin is not None and origin_name:
         key = _origin_key(origin, origin_name)
-        ids = origin_lookup.get(key)
-        if ids:
-            return ids
+        for cid in origin_lookup.get(key, []):
+            matched[cid] = None
 
     md5 = entry.get("md5", "")
     if md5:
-        return md5_lookup.get(md5, [])
+        for cid in md5_lookup.get(md5, []):
+            matched[cid] = None
 
-    return []
+    return list(matched)
+
+
+def find_missing_entries(
+    label_entries: list[dict[str, Any]],
+    origin_lookup: dict[str, list[int]],
+    md5_lookup: dict[str, list[int]],
+) -> list[dict[str, Any]]:
+    """Return label entries that do not match any clip by origin+name or md5.
+
+    Only entries with a valid label (``"good"`` or ``"bad"``) are considered;
+    entries with invalid labels are silently excluded (they are already counted
+    as "skipped" by the caller).
+    """
+    missing: list[dict[str, Any]] = []
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            continue
+        cids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        if not cids:
+            missing.append(entry)
+    return missing
+
+
+def next_clip_id(clip_dict: dict[int, dict[str, Any]]) -> int:
+    """Return the next available clip ID (one past the current maximum)."""
+    if not clip_dict:
+        return 1
+    return max(clip_dict) + 1
