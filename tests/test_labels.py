@@ -1,5 +1,5 @@
 import app as app_module
-from vtsearch.utils import get_dataset_creation_info, set_dataset_creation_info
+from vtsearch.utils import set_dataset_creation_info
 
 
 class TestExportLabels:

@@ -5,17 +5,15 @@ arguments) so that exported references can describe how to reproduce the
 dataset.
 """
 
-import io
 import pickle
 
 import numpy as np
-import pytest
 
 import app as app_module
 from vtsearch.datasets.importers import get_importer
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import export_dataset_to_file, load_dataset_from_pickle
-from vtsearch.utils import clips, get_dataset_creation_info, set_dataset_creation_info
+from vtsearch.utils import get_dataset_creation_info, set_dataset_creation_info
 
 
 # ---------------------------------------------------------------------------

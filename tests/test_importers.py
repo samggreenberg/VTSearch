@@ -393,7 +393,7 @@ class TestLoadDatasetContentVectors:
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
         clips: dict = {}
-        _noop = lambda *a: None
+        def _noop(*a): None
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "sounds", clips, content_vectors={"a.wav": pre_vector}, on_progress=_noop)
 
@@ -416,7 +416,7 @@ class TestLoadDatasetContentVectors:
         mt = self._make_fake_media_type(embed_return=model_vector)
 
         clips: dict = {}
-        _noop = lambda *a: None
+        def _noop(*a): None
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "sounds", clips, content_vectors={}, on_progress=_noop)
 
@@ -442,7 +442,7 @@ class TestLoadDatasetContentVectors:
         mt = self._make_fake_media_type(embed_return=model_vector)
 
         clips: dict = {}
-        _noop = lambda *a: None
+        def _noop(*a): None
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "sounds", clips, content_vectors={"a.wav": pre_vector}, on_progress=_noop)
 
@@ -467,7 +467,7 @@ class TestLoadDatasetContentVectors:
         mt = self._make_fake_media_type(embed_return=model_vector)
 
         clips: dict = {}
-        _noop = lambda *a: None
+        def _noop(*a): None
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "sounds", clips, on_progress=_noop)
 
@@ -491,7 +491,7 @@ class TestLoadDatasetContentVectors:
         mt = self._make_fake_media_type(embed_return=None)
 
         clips: dict = {}
-        _noop = lambda *a: None
+        def _noop(*a): None
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "sounds", clips, content_vectors={"d.wav": pre_vector}, on_progress=_noop)
 

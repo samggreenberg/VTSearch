@@ -23,7 +23,6 @@ from vtsearch.media.base import (
     MediaType,
     Processor,
     ProgressCallback,
-    _noop_progress,
 )
 
 _registry: dict[str, "MediaType"] = {}

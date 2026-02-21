@@ -41,8 +41,6 @@ class TestInitClips:
 
     def test_deterministic_embeddings(self):
         """CLAP embeddings should be deterministic for the same input audio."""
-        from pathlib import Path
-
         from config import DATA_DIR
         from vtsearch.models import embed_audio_file
 
