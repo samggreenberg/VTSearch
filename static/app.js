@@ -1980,7 +1980,7 @@
     } else if (data.status === "yellow") {
       subtext.textContent = "Continue";
     } else if (data.status === "green") {
-      subtext.textContent = "ready to stop";
+      subtext.textContent = "Done";
     } else {
       subtext.textContent = "";
     }

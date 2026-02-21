@@ -179,7 +179,7 @@ video { max-width: 600px; max-height: 400px; }
 .labeling-indicator[data-status="yellow"] .indicator-label { color: #f0d070; }
 .labeling-indicator[data-status="yellow"] .indicator-subtext { color: #a08830; }
 
-/* Green – ready to stop */
+/* Green – done */
 .labeling-indicator[data-status="green"] { border-color: #27ae60; }
 .labeling-indicator[data-status="green"] .indicator-dot { background: #2ecc71; box-shadow: 0 0 5px #2ecc7188; }
 .labeling-indicator[data-status="green"] .indicator-label { color: #7deba0; }
