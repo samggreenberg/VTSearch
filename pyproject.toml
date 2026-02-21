@@ -12,3 +12,7 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
+]
+addopts = "-m 'not gpu'"

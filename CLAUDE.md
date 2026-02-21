@@ -3,7 +3,9 @@
 Media explorer web app for browsing/voting on audio, images, or text. Semantic sorting (LAION-CLAP, CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + vanilla JS + PyTorch.
 
 ## Commands
-- **Run tests**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -v`
+- **Run tests (CPU)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -v`
+- **Run GPU tests**: `python -m pytest tests/test_gpu.py -v -m gpu` (requires CUDA GPU; downloads models on first run)
+- **Run all tests (CPU + GPU)**: `python -m pytest tests/ -v -m ''`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --detector <file.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --detector <file.json> --exporter file --filepath results.json`
@@ -41,6 +43,7 @@ Media explorer web app for browsing/voting on audio, images, or text. Semantic s
   - `test_importers.py` — Importer base class, HTTP archive/folder importer metadata, archive extraction
   - `test_extractors.py` — Image class extractor
   - `test_processors.py` — Media processor tests
+  - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
 
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `clips`, `good_votes`, `bad_votes` are module-level dicts
