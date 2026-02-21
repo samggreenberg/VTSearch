@@ -256,6 +256,21 @@ def _run_exporter(
     print(result.get("message", "Export complete."))
 
 
+def _import_favorite_processors() -> None:
+    """Import favorite processors from settings (if any).
+
+    Errors are logged as warnings but do not halt the autodetect run.
+    """
+    try:
+        from vtsearch.settings import ensure_favorite_processors_imported
+
+        imported = ensure_favorite_processors_imported()
+        if imported:
+            print(f"Imported {len(imported)} favorite processor(s) from settings: {', '.join(imported)}")
+    except Exception as exc:
+        print(f"Warning: could not load favorite processors from settings: {exc}", file=sys.stderr)
+
+
 def autodetect_main(
     dataset_path: str,
     detector_path: str,
@@ -276,6 +291,8 @@ def autodetect_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
+        _import_favorite_processors()
+
         dataset_file = Path(dataset_path)
         if not dataset_file.exists():
             raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
@@ -378,6 +395,8 @@ def autodetect_importer_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
+        _import_favorite_processors()
+
         from vtsearch.datasets.importers import get_importer
 
         importer = get_importer(importer_name)

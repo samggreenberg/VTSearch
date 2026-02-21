@@ -12,6 +12,7 @@
   let loadedDetector = null; // Stores loaded detector model weights
   let datasetLoaded = false;
   let audioVolume = 1.0; // Persisted volume across clip loads
+  let volumeSaveTimer = null;
   let progressTimer = null;
   const clipList = document.getElementById("clip-list");
   const center = document.getElementById("center");
@@ -1564,6 +1565,7 @@
         audioEl.volume = audioVolume;
         audioEl.addEventListener("volumechange", () => {
           audioVolume = audioEl.volume;
+          saveVolume(audioVolume);
         });
       }
     }
@@ -2494,8 +2496,37 @@
       }
     }
   });
+  // ---- Settings persistence ----
+
+  function saveVolume(vol) {
+    if (volumeSaveTimer) clearTimeout(volumeSaveTimer);
+    volumeSaveTimer = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volume: vol }),
+      }).catch(() => {});
+    }, 500);
+  }
+
+  async function loadSettings() {
+    try {
+      const res = await fetch("/api/settings");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.volume === "number") {
+        audioVolume = data.volume;
+        const audioEl = document.getElementById("clip-audio");
+        if (audioEl) audioEl.volume = audioVolume;
+      }
+    } catch (_) {
+      // Settings not available yet; use defaults
+    }
+  }
+
   fetchInclusion();
   updateLabelCounts();
   loadFavoriteDetectors();
   fetchLabelingStatus();
+  loadSettings();
 })();
