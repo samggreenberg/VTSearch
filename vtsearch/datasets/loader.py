@@ -221,12 +221,21 @@ def load_paragraph_metadata_from_folders(text_dir: Path, categories: list[str]) 
     return metadata
 
 
-def load_dataset_from_folder(folder_path: Path, media_type: str, clips: dict[int, dict[str, Any]]) -> None:
+def load_dataset_from_folder(
+    folder_path: Path,
+    media_type: str,
+    clips: dict[int, dict[str, Any]],
+    content_vectors: dict[str, Any] | None = None,
+) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
     Scans ``folder_path`` for all files matching the extensions for ``media_type``,
     embeds each file using the appropriate model, and populates ``clips`` with
     the resulting clip dicts. Progress is reported via :func:`update_progress`.
+
+    Files whose basename appears in ``content_vectors`` will use the supplied
+    embedding instead of running the embedding model.  This allows importers
+    that already provide content vectors to avoid redundant computation.
 
     The ``clips`` dict is cleared before loading begins.
 
@@ -241,6 +250,10 @@ def load_dataset_from_folder(folder_path: Path, media_type: str, clips: dict[int
         media_type: Folder-import alias for the media type (e.g. ``"sounds"``).
         clips: Dict to populate in-place. Existing entries are removed before
             loading. Keys are sequential integer clip IDs starting from 1.
+        content_vectors: Optional mapping of filename (basename) to a
+            pre-computed embedding ``numpy.ndarray``.  When a file's name is
+            found in this dict the supplied vector is used directly and the
+            embedding model is not invoked for that file.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
@@ -275,9 +288,12 @@ def load_dataset_from_folder(folder_path: Path, media_type: str, clips: dict[int
             total_files,
         )
 
-        embedding = mt.embed_media(file_path)
-        if embedding is None:
-            continue
+        if content_vectors and file_path.name in content_vectors:
+            embedding = content_vectors[file_path.name]
+        else:
+            embedding = mt.embed_media(file_path)
+            if embedding is None:
+                continue
 
         with open(file_path, "rb") as f:
             file_bytes = f.read()

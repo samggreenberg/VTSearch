@@ -99,6 +99,16 @@ class DatasetImporter:
     and expose a module-level ``IMPORTER = YourImporter()`` \u2013 the registry
     picks it up automatically.
 
+    Content vectors
+    ---------------
+    Some importers provide pre-computed content vectors (embeddings) alongside
+    the media files.  To take advantage of this, populate
+    :attr:`content_vectors` with a mapping of ``filename`` to
+    ``numpy.ndarray`` during :meth:`run`.  When the dataset is later embedded
+    (e.g. via :func:`~vtsearch.datasets.loader.load_dataset_from_folder`),
+    files whose names appear in this mapping will reuse the supplied vector
+    instead of running the embedding model.
+
     CLI support
     -----------
     Every importer is automatically usable from the command line via
@@ -120,6 +130,14 @@ class DatasetImporter:
     icon: str = "\U0001f50c"
     #: Ordered list of fields the user must fill before importing.
     fields: list[ImporterField]
+
+    def __init__(self) -> None:
+        #: Mapping of filename to pre-computed embedding vector.  Importers
+        #: that supply content vectors alongside media should populate this
+        #: dict during :meth:`run` (keyed by the basename of each file).
+        #: :func:`~vtsearch.datasets.loader.load_dataset_from_folder` will
+        #: skip the embedding model for any file whose name appears here.
+        self.content_vectors: dict[str, Any] = {}
 
     def run(self, field_values: dict[str, Any], clips: dict) -> None:
         """Perform the import, populating *clips* in-place.
