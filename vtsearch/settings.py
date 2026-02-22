@@ -42,6 +42,7 @@ _DEFAULTS: dict[str, Any] = {
     "enrich_descriptions": False,
     "safe_thresholds": False,
     "calibrate_count": 2,
+    "calibration_fraction": 0.5,
     "favorite_processors": [],
 }
 
@@ -80,6 +81,11 @@ def _ensure_loaded() -> dict[str, Any]:
 # -------------------------------------------------------------------
 
 
+def get_defaults() -> dict[str, Any]:
+    """Return a copy of the default settings (excluding favorite_processors)."""
+    return {k: v for k, v in _DEFAULTS.items() if k != "favorite_processors"}
+
+
 def get_all() -> dict[str, Any]:
     """Return the full settings dict (with defaults filled in)."""
     s = _ensure_loaded()
@@ -112,14 +118,17 @@ def set_inclusion(value: int) -> None:
     _save(s)
 
 
+VALID_THEMES = ("dark", "light", "highviz")
+
+
 def get_theme() -> str:
-    """Return the persisted theme ('dark' or 'light')."""
+    """Return the persisted theme ('dark', 'light', or 'highviz')."""
     return str(_ensure_loaded().get("theme", _DEFAULTS["theme"]))
 
 
 def set_theme(value: str) -> None:
-    """Set and persist the theme.  Must be 'dark' or 'light'."""
-    if value not in ("dark", "light"):
+    """Set and persist the theme.  Must be 'dark', 'light', or 'highviz'."""
+    if value not in VALID_THEMES:
         raise ValueError(f"Invalid theme: {value!r}")
     s = _ensure_loaded()
     s["theme"] = value
@@ -147,6 +156,18 @@ def set_calibrate_count(value: int) -> None:
     """Set and persist the calibrate_count (clamped to 1–100)."""
     s = _ensure_loaded()
     s["calibrate_count"] = int(max(1, min(100, int(value))))
+    _save(s)
+
+
+def get_calibration_fraction() -> float:
+    """Return the calibration fraction (0.0–1.0) for Train/Calibrate splits."""
+    return float(_ensure_loaded().get("calibration_fraction", _DEFAULTS["calibration_fraction"]))
+
+
+def set_calibration_fraction(value: float) -> None:
+    """Set and persist the calibration_fraction (clamped to 0.0–1.0)."""
+    s = _ensure_loaded()
+    s["calibration_fraction"] = max(0.0, min(1.0, float(value)))
     _save(s)
 
 

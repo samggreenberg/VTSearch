@@ -223,6 +223,7 @@
   const inclusionValue = document.getElementById("inclusion-value");
   const enrichDescCheckbox = document.getElementById("enrich-descriptions-checkbox");
   const calibrateCountInput = document.getElementById("calibrate-count-input");
+  const calibrationFractionInput = document.getElementById("calibration-fraction-input");
 
   // Dataset management elements
   const datasetWelcome = document.getElementById("dataset-welcome");
@@ -282,6 +283,16 @@
   const autodetectProgressModal = document.getElementById("autodetect-progress-modal");
   const autodetectProgressText = document.getElementById("autodetect-progress-text");
   const autodetectProgressBar = document.getElementById("autodetect-progress-bar");
+
+  // Settings modal elements
+  const menuSettings = document.getElementById("menu-settings");
+  const settingsModal = document.getElementById("settings-modal");
+  const settingsModalClose = document.getElementById("settings-modal-close");
+  const safeThresholdsCheckbox = document.getElementById("safe-thresholds-checkbox");
+  const settingsDefaultBtn = document.getElementById("settings-default-btn");
+  const settingsImportBtn = document.getElementById("settings-import-btn");
+  const settingsImportFile = document.getElementById("settings-import-file");
+  const settingsExportBtn = document.getElementById("settings-export-btn");
 
   // ---- Dataset Management ----
 
@@ -1490,6 +1501,127 @@
     });
   }
 
+  // ---- Settings modal ----
+
+  function populateSettingsModal(data) {
+    applyTheme(data.theme || "dark");
+    if (calibrateCountInput) calibrateCountInput.value = data.calibrate_count;
+    if (calibrationFractionInput) calibrationFractionInput.value = data.calibration_fraction;
+    if (safeThresholdsCheckbox) safeThresholdsCheckbox.checked = !!data.safe_thresholds;
+  }
+
+  if (menuSettings && settingsModal && burgerDropdown) {
+    menuSettings.addEventListener("click", async () => {
+      burgerDropdown.classList.remove("show");
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) populateSettingsModal(await res.json());
+      } catch (_) {}
+      settingsModal.classList.add("show");
+    });
+  }
+
+  if (settingsModalClose) {
+    settingsModalClose.addEventListener("click", () => {
+      settingsModal.classList.remove("show");
+    });
+  }
+
+  // Safe thresholds toggle
+  if (safeThresholdsCheckbox) {
+    safeThresholdsCheckbox.addEventListener("change", () => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ safe_thresholds: safeThresholdsCheckbox.checked }),
+      }).catch(() => {});
+    });
+  }
+
+  // Default button — reset all settings to defaults
+  if (settingsDefaultBtn) {
+    settingsDefaultBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/settings/defaults");
+        if (!res.ok) return;
+        const defaults = await res.json();
+        // Apply defaults to server
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(defaults),
+        });
+        // Update modal controls
+        populateSettingsModal(defaults);
+        // Apply theme immediately
+        applyTheme(defaults.theme || "dark");
+        // Update main UI controls that live outside the modal
+        if (enrichDescCheckbox) enrichDescCheckbox.checked = !!defaults.enrich_descriptions;
+        if (inclusionSlider) { inclusionSlider.value = defaults.inclusion || 0; inclusionValue.textContent = defaults.inclusion || 0; inclusion = defaults.inclusion || 0; }
+        audioVolume = defaults.volume != null ? defaults.volume : 1.0;
+        const audioEl = document.getElementById("clip-audio");
+        if (audioEl) audioEl.volume = audioVolume;
+      } catch (_) {}
+    });
+  }
+
+  // Import settings from file
+  if (settingsImportBtn && settingsImportFile) {
+    settingsImportBtn.addEventListener("click", () => settingsImportFile.click());
+    settingsImportFile.addEventListener("change", async () => {
+      const file = settingsImportFile.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text);
+        // Send all importable fields to the server
+        const payload = {};
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction"];
+        for (const k of importableKeys) {
+          if (k in imported) payload[k] = imported[k];
+        }
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          populateSettingsModal(data);
+          applyTheme(data.theme || "dark");
+          if (enrichDescCheckbox) enrichDescCheckbox.checked = !!data.enrich_descriptions;
+          if (inclusionSlider) { inclusionSlider.value = data.inclusion || 0; inclusionValue.textContent = data.inclusion || 0; inclusion = data.inclusion || 0; }
+          audioVolume = typeof data.volume === "number" ? data.volume : 1.0;
+          const audioEl = document.getElementById("clip-audio");
+          if (audioEl) audioEl.volume = audioVolume;
+        }
+      } catch (_) {
+        vtAlert("Failed to import settings. Make sure the file is valid JSON.", "error");
+      }
+      settingsImportFile.value = "";
+    });
+  }
+
+  // Export settings to file
+  if (settingsExportBtn) {
+    settingsExportBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/settings");
+        if (!res.ok) return;
+        const data = await res.json();
+        // Exclude runtime-only fields
+        delete data.favorite_processors;
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "vtsearch-settings.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    });
+  }
+
   // ---- Sort mode switching ----
 
   function updateSortModeAvailability() {
@@ -1611,6 +1743,20 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ calibrate_count: val }),
+      }).catch(() => {});
+    });
+  }
+
+  // ---- Calibration Fraction ----
+
+  if (calibrationFractionInput) {
+    calibrationFractionInput.addEventListener("change", () => {
+      const val = Math.max(0, Math.min(1, parseFloat(calibrationFractionInput.value) || 0.5));
+      calibrationFractionInput.value = val;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calibration_fraction: val }),
       }).catch(() => {});
     });
   }
@@ -3262,19 +3408,17 @@
 
   // ---- Theme toggle ----
 
-  const themeToggleCheckbox = document.getElementById("theme-toggle-checkbox");
-  const themeLabel = document.getElementById("theme-label");
+  const themeBtns = document.querySelectorAll(".theme-btn");
 
   function applyTheme(theme) {
-    if (theme === "light") {
-      document.documentElement.setAttribute("data-theme", "light");
-      if (themeToggleCheckbox) themeToggleCheckbox.checked = true;
-      if (themeLabel) themeLabel.textContent = "Light Mode";
+    if (theme === "light" || theme === "highviz") {
+      document.documentElement.setAttribute("data-theme", theme);
     } else {
       document.documentElement.removeAttribute("data-theme");
-      if (themeToggleCheckbox) themeToggleCheckbox.checked = false;
-      if (themeLabel) themeLabel.textContent = "Dark Mode";
     }
+    themeBtns.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.theme === theme);
+    });
   }
 
   function saveTheme(theme) {
@@ -3285,14 +3429,14 @@
     }).catch(() => {});
   }
 
-  if (themeToggleCheckbox) {
-    themeToggleCheckbox.addEventListener("change", () => {
-      const theme = themeToggleCheckbox.checked ? "light" : "dark";
+  themeBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const theme = btn.dataset.theme;
       applyTheme(theme);
       saveTheme(theme);
       announce(`${theme === "light" ? "Light" : "Dark"} mode enabled`);
     });
-  }
+  });
 
   async function loadSettings() {
     try {
@@ -3317,6 +3461,12 @@
       }
       if (calibrateCountInput && typeof data.calibrate_count === "number") {
         calibrateCountInput.value = data.calibrate_count;
+      }
+      if (calibrationFractionInput && typeof data.calibration_fraction === "number") {
+        calibrationFractionInput.value = data.calibration_fraction;
+      }
+      if (safeThresholdsCheckbox) {
+        safeThresholdsCheckbox.checked = !!data.safe_thresholds;
       }
     } catch (_) {
       // Settings not available yet; use defaults

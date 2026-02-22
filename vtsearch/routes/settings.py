@@ -8,6 +8,9 @@ GET  /api/settings
 PUT  /api/settings
     Update one or more settings fields.  Only supplied keys are changed.
 
+GET  /api/settings/defaults
+    Return the default values for all settings (excluding favorite_processors).
+
 GET  /api/settings/favorite-processors
     List all favorite processor recipes.
 
@@ -54,7 +57,7 @@ def update_settings():
         try:
             settings.set_theme(str(body["theme"]))
         except ValueError:
-            return jsonify({"error": "theme must be 'dark' or 'light'"}), 400
+            return jsonify({"error": "theme must be 'dark', 'light', or 'highviz'"}), 400
 
     if "inclusion" in body:
         try:
@@ -72,6 +75,18 @@ def update_settings():
     if "enrich_descriptions" in body:
         settings.set_enrich_descriptions(bool(body["enrich_descriptions"]))
 
+    if "safe_thresholds" in body:
+        settings.set_safe_thresholds(bool(body["safe_thresholds"]))
+
+    if "calibration_fraction" in body:
+        try:
+            val = body["calibration_fraction"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "calibration_fraction must be a number"}), 400
+            settings.set_calibration_fraction(float(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "calibration_fraction must be a number"}), 400
+
     if "calibrate_count" in body:
         try:
             val = body["calibrate_count"]
@@ -82,6 +97,12 @@ def update_settings():
             return jsonify({"error": "calibrate_count must be a number"}), 400
 
     return jsonify(settings.get_all())
+
+
+@settings_bp.route("/api/settings/defaults", methods=["GET"])
+def get_defaults():
+    """Return the default values for all settings (excluding favorite_processors)."""
+    return jsonify(settings.get_defaults())
 
 
 @settings_bp.route("/api/settings/favorite-processors", methods=["GET"])
