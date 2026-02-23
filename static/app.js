@@ -17,6 +17,7 @@
   let progressTimer = null;
   let progressEtaState = null; // { startTime, lastCurrent, lastTime } for ETA calculation
   let learnedSortController = null; // AbortController for in-flight background training
+  let paragraphController = null;   // AbortController for in-flight paragraph content fetch
   let learnedSortDebounce = null;   // Debounce timer for background training
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   const clipList = document.getElementById("clip-list");
@@ -2278,15 +2279,20 @@
 
     // Load paragraph text content
     if (mediaType === "paragraph") {
-      fetch(`/api/clips/${c.id}/paragraph`)
+      if (paragraphController) paragraphController.abort();
+      paragraphController = new AbortController();
+      const expectedId = c.id;
+      fetch(`/api/clips/${c.id}/paragraph`, { signal: paragraphController.signal })
         .then(res => res.json())
         .then(data => {
+          if (selected !== expectedId) return; // selection changed, discard stale response
           const paragraphDiv = document.getElementById("clip-paragraph");
           if (paragraphDiv) {
             paragraphDiv.textContent = data.content;
           }
         })
         .catch(err => {
+          if (err.name === "AbortError") return; // expected when selection changes
           console.error("Error loading paragraph:", err);
         });
     }
