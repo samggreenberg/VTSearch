@@ -536,16 +536,22 @@ class TestCaltech101Download:
 class TestUCF101SubsetDownload:
     """Verify download_ucf101_subset downloads, extracts, and flattens splits."""
 
+    # Map split names to group-number offsets so every file across all
+    # three splits gets a unique filename (the real dataset does this too).
+    _SPLIT_OFFSETS = {"train": 0, "val": 10, "test": 20}
+
     def _make_ucf101_subset_tar(self, tar_path):
         """Create a mock UCF101_subset.tar.gz matching the real archive structure.
 
         The real archive has UCF101_subset/{train,val,test}/<Category>/*.avi.
+        Filenames are unique across splits (different group numbers).
         """
         with tarfile.open(tar_path, "w:gz") as tf:
-            for split in ("train", "val", "test"):
+            for split, offset in self._SPLIT_OFFSETS.items():
                 for cat in ("Archery", "BabyCrawling"):
                     for i in range(3):
-                        fname = f"UCF101_subset/{split}/{cat}/v_{cat}_g{i:02d}_c01.avi"
+                        g = offset + i
+                        fname = f"UCF101_subset/{split}/{cat}/v_{cat}_g{g:02d}_c01.avi"
                         # Minimal AVI-like data (just enough for a file)
                         data = b"RIFF" + b"\x00" * 20 + b"AVI "
                         info = tarfile.TarInfo(name=fname)

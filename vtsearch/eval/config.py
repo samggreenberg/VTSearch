@@ -81,17 +81,17 @@ _PARAGRAPHS_QUERIES = [
 _ACTIVITIES_VIDEO_QUERIES = [
     EvalQuery("someone applying eye makeup", "ApplyEyeMakeup"),
     EvalQuery("someone applying lipstick", "ApplyLipstick"),
-    EvalQuery("someone brushing their teeth", "BrushingTeeth"),
-    EvalQuery("a person playing drums", "Drumming"),
-    EvalQuery("a person doing yo-yo tricks", "YoYo"),
+    EvalQuery("a baby crawling on the floor", "BabyCrawling"),
+    EvalQuery("a marching band performing", "BandMarching"),
+    EvalQuery("a person doing bench presses", "BenchPress"),
 ]
 
 _SPORTS_VIDEO_QUERIES = [
-    EvalQuery("a person diving off a cliff", "CliffDiving"),
-    EvalQuery("someone walking on their hands", "HandstandWalking"),
-    EvalQuery("a person jumping rope", "JumpRope"),
-    EvalQuery("someone doing push-ups", "PushUps"),
-    EvalQuery("a person practicing tai chi", "TaiChi"),
+    EvalQuery("a person shooting a bow and arrow", "Archery"),
+    EvalQuery("a gymnast on the balance beam", "BalanceBeam"),
+    EvalQuery("a baseball pitcher throwing a pitch", "BaseballPitch"),
+    EvalQuery("people playing basketball", "Basketball"),
+    EvalQuery("a basketball dunk", "BasketballDunk"),
 ]
 
 # ------------------------------------------------------------------
