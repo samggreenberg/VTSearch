@@ -34,6 +34,30 @@ def _make_wav_file(tmp_dir: Path, name: str, frequency: float = 440.0) -> Path:
     return p
 
 
+def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float = 440.0) -> Path:
+    """Create a test pickle with distinct WAV bytes per clip (using base_freq)."""
+    clips_data: dict[int, dict[str, Any]] = {}
+    for i in range(1, num_clips + 1):
+        wav_bytes = _make_wav_bytes(frequency=base_freq + i * 10)
+        clip: dict[str, Any] = {
+            "id": i,
+            "type": "audio",
+            "duration": 0.1,
+            "file_size": len(wav_bytes),
+            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedding": np.random.randn(512).tolist(),
+            "filename": f"clip_{i}.wav",
+            "category": f"cat_{i % 3}",
+            "clip_bytes": wav_bytes,
+        }
+        clips_data[i] = clip
+
+    pkl_path = tmp_path / "test_chunked.pkl"
+    with open(pkl_path, "wb") as f:
+        pickle.dump({"clips": clips_data}, f)
+    return pkl_path
+
+
 def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> Path:
     """Create a test pickle with *num_clips* audio clips."""
     clips_data: dict[int, dict[str, Any]] = {}
@@ -230,10 +254,6 @@ class TestBaseImporterChunkedDefault:
     delegates to run/run_cli and yields one chunk."""
 
     def test_default_run_chunked_yields_one_chunk(self, tmp_path):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
-
-        # Use a non-chunked importer-like test: create a custom subclass
-        # that uses the default run_chunked.
         from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
         class DummyImporter(DatasetImporter):
@@ -341,12 +361,12 @@ class TestCombineDatasetsImporterChunked:
         assert CombineDatasetsImporter().supports_chunked is True
 
     def test_yields_one_chunk_per_source(self, tmp_path):
-        pkl1 = _make_pickle(tmp_path / "d1", 3)
-        pkl2 = _make_pickle(tmp_path / "d2", 2)
         (tmp_path / "d1").mkdir(exist_ok=True)
         (tmp_path / "d2").mkdir(exist_ok=True)
-        pkl1 = _make_pickle(tmp_path / "d1", 3)
-        pkl2 = _make_pickle(tmp_path / "d2", 2)
+        # Use different base frequencies so the WAV bytes (and MD5s) differ
+        # between pickles, avoiding cross-source dedup.
+        pkl1 = _make_pickle_with_base_freq(tmp_path / "d1", 3, base_freq=440.0)
+        pkl2 = _make_pickle_with_base_freq(tmp_path / "d2", 2, base_freq=880.0)
 
         from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
 
