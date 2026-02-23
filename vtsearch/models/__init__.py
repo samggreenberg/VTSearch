@@ -1,5 +1,6 @@
 """Model loading, embeddings, and training utilities."""
 
+from vtsearch.models.diversity_tree import DiversityTree
 from vtsearch.models.embeddings import (
     embed_audio_file,
     embed_image_file,
@@ -20,6 +21,8 @@ from vtsearch.models.training import (
 )
 
 __all__ = [
+    # Diversity Tree
+    "DiversityTree",
     # Embeddings
     "embed_audio_file",
     "embed_video_file",
