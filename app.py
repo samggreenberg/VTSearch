@@ -93,6 +93,17 @@ if __name__ == "__main__":
         type=str,
         help="Name of the results exporter to use (e.g. file, email_smtp, gui). Used with --autodetect.",
     )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=None,
+        dest="chunk_size",
+        help=(
+            "Process the dataset in chunks of N clips at a time to limit "
+            "memory usage. Used with --autodetect. When omitted the entire "
+            "dataset is loaded at once (original behaviour)."
+        ),
+    )
 
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
@@ -136,20 +147,37 @@ if __name__ == "__main__":
 
         settings_path = getattr(args, "settings", None)
 
+        chunk_size = getattr(args, "chunk_size", None)
+
         if args.importer:
             # Importer-based path
-            from vtsearch.cli import autodetect_importer_main
-
             field_values = {f.key: getattr(args, f.key, f.default or None) for f in importer.fields}
-            autodetect_importer_main(
-                args.importer, field_values, settings_path, args.exporter, exporter_field_values
-            )
+
+            if chunk_size:
+                from vtsearch.cli import autodetect_importer_main_chunked
+
+                autodetect_importer_main_chunked(
+                    args.importer, field_values, chunk_size, settings_path, args.exporter, exporter_field_values
+                )
+            else:
+                from vtsearch.cli import autodetect_importer_main
+
+                autodetect_importer_main(
+                    args.importer, field_values, settings_path, args.exporter, exporter_field_values
+                )
 
         elif args.dataset:
             # Pickle-file path
-            from vtsearch.cli import autodetect_main
+            if chunk_size:
+                from vtsearch.cli import autodetect_main_chunked
 
-            autodetect_main(args.dataset, settings_path, args.exporter, exporter_field_values)
+                autodetect_main_chunked(
+                    args.dataset, chunk_size, settings_path, args.exporter, exporter_field_values
+                )
+            else:
+                from vtsearch.cli import autodetect_main
+
+                autodetect_main(args.dataset, settings_path, args.exporter, exporter_field_values)
 
         else:
             parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")

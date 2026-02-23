@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import requests
 
@@ -159,6 +159,97 @@ class RSSDatasetImporter(DatasetImporter):
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         self.run(field_values, clips, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def _download_enclosures(self, field_values: dict[str, Any]) -> Path:
+        """Download RSS enclosures to a temp folder and return its path.
+
+        This separates the download phase (which must complete fully) from
+        the embed phase (which can be chunked).
+        """
+        try:
+            import feedparser
+        except ImportError as exc:
+            raise RuntimeError(
+                "RSS feed import requires the 'feedparser' package. Install it with: pip install feedparser"
+            ) from exc
+
+        from vtsearch.media import get_by_folder_name
+
+        progress = _default_progress()
+
+        url = field_values["url"]
+        media_type = field_values.get("media_type", "sounds")
+        max_episodes = int(field_values.get("max_episodes", "0") or "0")
+
+        progress("downloading", "Parsing feed...", 0, 0)
+        feed = feedparser.parse(url)
+
+        if feed.bozo and not feed.entries:
+            raise ValueError(f"Failed to parse feed: {feed.bozo_exception}")
+
+        mt = get_by_folder_name(media_type)
+        valid_exts = {ext.lstrip("*.").lower() for ext in mt.file_extensions}
+
+        enclosures: list[tuple[str, str]] = []
+        for entry in feed.entries:
+            for link in getattr(entry, "enclosures", []):
+                href = link.get("href", "")
+                if not href:
+                    continue
+                enclosures.append((entry.get("title", ""), href))
+            if max_episodes and len(enclosures) >= max_episodes:
+                enclosures = enclosures[:max_episodes]
+                break
+
+        if not enclosures:
+            raise ValueError("No media enclosures found in the feed.")
+
+        download_dir = DATA_DIR / "rss_feed_download"
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        total = len(enclosures)
+        for i, (title, href) in enumerate(enclosures, 1):
+            url_path = href.split("?")[0].rstrip("/")
+            url_filename = url_path.split("/")[-1] or f"episode_{i}"
+
+            suffix = Path(url_filename).suffix.lstrip(".").lower()
+            if suffix not in valid_exts:
+                default_ext = sorted(valid_exts)[0]
+                url_filename = f"{Path(url_filename).stem}.{default_ext}"
+
+            short_hash = hashlib.md5(href.encode()).hexdigest()[:8]
+            dest_name = f"{short_hash}_{url_filename}"
+            dest = download_dir / dest_name
+
+            progress("downloading", f"Downloading {url_filename} ({i}/{total})...", i, total)
+            try:
+                _download_enclosure(href, dest)
+            except Exception as exc:
+                progress("downloading", f"Skipped {url_filename}: {exc}", i, total)
+                continue
+
+        return download_dir
+
+    def run_chunked(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        download_dir = self._download_enclosures(field_values)
+        media_type = field_values.get("media_type", "sounds")
+        yield from load_dataset_from_folder_chunked(download_dir, media_type, chunk_size, thin=thin)
+
+    def run_chunked_cli(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        url = field_values.get("url", "")
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
+        yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
 
 IMPORTER = RSSDatasetImporter()

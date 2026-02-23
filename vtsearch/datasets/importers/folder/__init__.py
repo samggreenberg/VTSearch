@@ -7,10 +7,10 @@ already in the core requirements.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import load_dataset_from_folder
+from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 
 class FolderDatasetImporter(DatasetImporter):
@@ -53,6 +53,27 @@ class FolderDatasetImporter(DatasetImporter):
         if not folder.is_dir():
             raise NotADirectoryError(f"Not a directory: {folder}")
         self.run(field_values, clips, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def run_chunked(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        folder = Path(field_values["path"])
+        media_type = field_values.get("media_type", "sounds")
+        yield from load_dataset_from_folder_chunked(folder, media_type, chunk_size, thin=thin)
+
+    def run_chunked_cli(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        folder = Path(field_values["path"])
+        if not folder.exists():
+            raise FileNotFoundError(f"Folder not found: {folder}")
+        if not folder.is_dir():
+            raise NotADirectoryError(f"Not a directory: {folder}")
+        yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
 
 IMPORTER = FolderDatasetImporter()
