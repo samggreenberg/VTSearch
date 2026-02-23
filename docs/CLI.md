@@ -23,7 +23,7 @@ python app.py --autodetect --importer rss_feed --url https://example.com/feed.xm
 python app.py --autodetect --importer youtube_playlist --url https://youtube.com/playlist?list=... --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_zip`, `rss_feed`, `youtube_playlist`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them (e.g. `--max-episodes` for RSS, `--max-videos` for YouTube).
+Available importers: `folder`, `pickle`, `http_zip`, `rss_feed`, `youtube_playlist`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them (e.g. `--max-episodes` for RSS, `--max-videos` for YouTube).
 
 **Exporting results** — by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 

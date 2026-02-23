@@ -62,6 +62,12 @@ Then run:
 python -m pytest tests/ -v
 ```
 
+This runs fast CPU tests only. Additional test modes:
+
+- **Full CPU tests** (includes slow CLI subprocess tests): `python -m pytest tests/ -v -m 'not gpu'`
+- **GPU tests** (requires CUDA): `python -m pytest tests/test_gpu.py -v -m gpu`
+- **All tests**: `python -m pytest tests/ -v -m ''`
+
 ## Project structure
 
 ```
@@ -89,7 +95,8 @@ python -m pytest tests/ -v
 │   ├── EVAL.md                     # Evaluation framework guide
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
-│   └── SETUP.md                    # Setup instructions
+│   ├── SETUP.md                    # Setup instructions
+│   └── FEATURE_IDEAS.md            # Brainstorm of potential features
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
 

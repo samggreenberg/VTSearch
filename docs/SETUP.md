@@ -96,3 +96,36 @@ pip install -r requirements-gpu.txt
 ```
 
 This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies.
+
+**For development** (adds pytest and other dev tools):
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+## Running the app
+
+Start the server:
+
+```bash
+python app.py
+```
+
+You should see output like:
+
+```
+ * Running on http://127.0.0.1:5000
+```
+
+Open that URL in your browser. For faster startup during development, use `--local` mode (loads embedding models lazily instead of eagerly):
+
+```bash
+python app.py --local
+```
+
+## Next steps
+
+- **Load a dataset**: Click the hamburger menu in the top-left corner to browse demo datasets or import your own data.
+- **Run tests**: `python -m pytest tests/ -v`
+- **CLI workflows**: See [CLI.md](CLI.md) for running detectors and exporters from the command line.
+- **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media types, importers, or exporters.
