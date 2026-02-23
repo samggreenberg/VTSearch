@@ -531,3 +531,140 @@ class TestCaltech101Download:
 
         assert result.exists()
         assert (result / "butterfly" / "image_0001.jpg").exists()
+
+
+class TestUCF101SubsetDownload:
+    """Verify download_ucf101_subset downloads, extracts, and flattens splits."""
+
+    def _make_ucf101_subset_tar(self, tar_path):
+        """Create a mock UCF101_subset.tar.gz matching the real archive structure.
+
+        The real archive has UCF101_subset/{train,val,test}/<Category>/*.avi.
+        """
+        with tarfile.open(tar_path, "w:gz") as tf:
+            for split in ("train", "val", "test"):
+                for cat in ("Archery", "BabyCrawling"):
+                    for i in range(3):
+                        fname = f"UCF101_subset/{split}/{cat}/v_{cat}_g{i:02d}_c01.avi"
+                        # Minimal AVI-like data (just enough for a file)
+                        data = b"RIFF" + b"\x00" * 20 + b"AVI "
+                        info = tarfile.TarInfo(name=fname)
+                        info.size = len(data)
+                        tf.addfile(info, io.BytesIO(data))
+
+    def test_extracts_and_flattens_splits(self, tmp_path):
+        """download_ucf101_subset should flatten train/val/test into category dirs."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_ucf101_subset
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        video_dir = data_dir / "video"
+        tar_path = data_dir / "UCF101_subset.tar.gz"
+        self._make_ucf101_subset_tar(tar_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+        ):
+            result = download_ucf101_subset(on_progress=lambda *a: None)
+
+        assert result.exists(), f"Expected {result} to exist"
+        assert result.name == "ucf101"
+        assert (result / "Archery").is_dir()
+        assert (result / "BabyCrawling").is_dir()
+        # All splits merged: 3 files per split × 3 splits = 9 per category
+        assert len(list((result / "Archery").glob("*.avi"))) == 9
+        assert len(list((result / "BabyCrawling").glob("*.avi"))) == 9
+
+    def test_tar_cleaned_up(self, tmp_path):
+        """The UCF101_subset.tar.gz should be deleted after extraction."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_ucf101_subset
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        video_dir = data_dir / "video"
+        tar_path = data_dir / "UCF101_subset.tar.gz"
+        self._make_ucf101_subset_tar(tar_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+        ):
+            download_ucf101_subset(on_progress=lambda *a: None)
+
+        assert not tar_path.exists(), "tar.gz should be deleted after extraction"
+
+    def test_staging_dir_cleaned_up(self, tmp_path):
+        """The UCF101_subset staging directory should be removed after flattening."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_ucf101_subset
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        video_dir = data_dir / "video"
+        tar_path = data_dir / "UCF101_subset.tar.gz"
+        self._make_ucf101_subset_tar(tar_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+        ):
+            download_ucf101_subset(on_progress=lambda *a: None)
+
+        staging = data_dir / "UCF101_subset"
+        assert not staging.exists(), "Staging directory should be removed after flattening"
+
+    def test_skips_if_already_present(self, tmp_path):
+        """If ucf101/ already has videos, skip download entirely."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_ucf101_subset
+
+        data_dir = tmp_path / "data"
+        video_dir = data_dir / "video"
+        ucf_dir = video_dir / "ucf101" / "Archery"
+        ucf_dir.mkdir(parents=True)
+        (ucf_dir / "v_Archery_g01_c01.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+        ):
+            result = download_ucf101_subset(on_progress=lambda *a: None)
+
+        assert result.exists()
+        assert (result / "Archery" / "v_Archery_g01_c01.avi").exists()
+
+    def test_demo_list_shows_video_download_size(self, client):
+        """Video demo datasets should report a non-zero download size."""
+        from vtsearch.config import UCF101_SUBSET_DOWNLOAD_SIZE_MB
+
+        resp = client.get("/api/dataset/demo-list")
+        data = resp.get_json()
+        video_ds = [d for d in data["datasets"] if d["media_type"] == "video"]
+        assert len(video_ds) > 0, "Should have at least one video demo dataset"
+        for ds in video_ds:
+            if ds["status"] == "needs_download":
+                assert ds["download_size_mb"] == UCF101_SUBSET_DOWNLOAD_SIZE_MB
+
+    def test_video_demo_categories_match_subset(self, client):
+        """Video demo datasets should only use categories from the UCF-101 subset."""
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        subset_categories = {
+            "ApplyEyeMakeup", "ApplyLipstick", "Archery", "BabyCrawling",
+            "BalanceBeam", "BandMarching", "BaseballPitch", "Basketball",
+            "BasketballDunk", "BenchPress",
+        }
+        for name, info in DEMO_DATASETS.items():
+            if info.get("media_type") == "video":
+                for cat in info["categories"]:
+                    assert cat in subset_categories, (
+                        f"Video demo '{name}' uses category '{cat}' "
+                        f"not in UCF-101 subset"
+                    )

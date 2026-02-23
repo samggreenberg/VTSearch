@@ -23,6 +23,8 @@ from vtsearch.config import (
     ESC50_DOWNLOAD_SIZE_MB,
     ESC50_URL,
     IMAGE_DIR,
+    UCF101_SUBSET_DOWNLOAD_SIZE_MB,
+    UCF101_SUBSET_URL,
     VIDEO_DIR,
 )
 
@@ -220,42 +222,83 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     return categories_dir
 
 
-def download_ucf101_subset() -> Path:
-    """Return the path to the UCF-101 video dataset, raising if it is not present.
+def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract a UCF-101 subset for video demo datasets.
 
-    UCF-101 is distributed as a ~6.5 GB RAR file and cannot be downloaded
-    automatically. This function checks whether the dataset has already been
-    manually placed in the expected directory and returns its path, or raises a
-    descriptive error with setup instructions.
+    Downloads a 171 MB subset of UCF-101 (10 action classes, 405 clips) from
+    HuggingFace and extracts it into ``VIDEO_DIR / "ucf101"`` with one
+    subdirectory per action class.  Videos from all splits (train/val/test) are
+    merged into a single flat category structure so that
+    :func:`~vtsearch.datasets.loader.load_video_metadata_from_folders` can
+    scan them directly.
+
+    If the dataset is already present (at least one ``*.avi`` in a
+    subdirectory), the download is skipped and the existing path is returned.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
 
     Returns:
         Path to the ``ucf101/`` directory inside ``VIDEO_DIR`` (e.g.
-        ``data/video/ucf101``), guaranteed to contain at least one ``*.avi`` file
-        in a subdirectory.
-
-    Raises:
-        ValueError: If the UCF-101 directory does not exist or contains no
-            ``*.avi`` files. The error message includes manual download
-            instructions.
+        ``data/video/ucf101``), containing category subdirectories with
+        ``.avi`` files.
     """
-    # Try to download from a ZIP mirror or subset
+    if on_progress is None:
+        on_progress = _default_progress()
+
     video_dir = VIDEO_DIR / "ucf101"
     VIDEO_DIR.mkdir(exist_ok=True, parents=True)
 
-    # For now, check if videos already exist
+    # Already downloaded and extracted — nothing to do.
     if video_dir.exists() and any(video_dir.glob("*/*.avi")):
         return video_dir
 
-    # If not available, raise an error with instructions
-    raise ValueError(
-        "UCF-101 video dataset not found. To use video datasets:\n"
-        "1. Download UCF-101 from https://www.crcv.ucf.edu/data/UCF101.php\n"
-        "2. Extract to data/video/ucf101/ directory\n"
-        "3. Or use 'Load from Folder' to import your own video files\n\n"
-        "The UCF-101 dataset is ~6.5GB and distributed as a RAR file.\n"
-        "For automatic download support, we recommend using smaller datasets\n"
-        "or organizing your own video collection in folders by category."
-    )
+    tar_path = DATA_DIR / "UCF101_subset.tar.gz"
+    extract_dir = DATA_DIR / "UCF101_subset"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    # Download the tar.gz if we don't already have the extracted tree.
+    if not extract_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting UCF-101 subset download...", 0, 0)
+            download_file_with_progress(
+                UCF101_SUBSET_URL,
+                tar_path,
+                UCF101_SUBSET_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting UCF-101 subset...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(DATA_DIR, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    # Flatten the train/val/test splits into VIDEO_DIR/ucf101/<Category>/.
+    import shutil
+
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    for split in ("train", "val", "test"):
+        split_dir = extract_dir / split
+        if not split_dir.is_dir():
+            continue
+        for category_dir in split_dir.iterdir():
+            if not category_dir.is_dir():
+                continue
+            dest_cat = video_dir / category_dir.name
+            dest_cat.mkdir(exist_ok=True)
+            for video_file in category_dir.iterdir():
+                if video_file.is_file():
+                    dest = dest_cat / video_file.name
+                    if not dest.exists():
+                        shutil.move(str(video_file), str(dest))
+
+    # Clean up the extracted staging directory.
+    shutil.rmtree(extract_dir, ignore_errors=True)
+
+    return video_dir
 
 
 def download_20newsgroups(

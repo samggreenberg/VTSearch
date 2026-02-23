@@ -1305,12 +1305,7 @@ def load_demo_dataset(
 
             video_mt = media_get("video")
 
-            try:
-                video_dir = download_ucf101_subset()
-            except ValueError as e:
-                # If UCF-101 is not available, provide helpful error message
-                on_progress("idle", "")
-                raise e
+            video_dir = download_ucf101_subset(on_progress=on_progress)
 
             metadata = load_video_metadata_from_folders(video_dir, dataset_info["categories"])
             video_files = [(meta["path"], meta) for meta in metadata.values()]

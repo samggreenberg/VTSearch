@@ -104,34 +104,36 @@ class VideoMediaType(MediaType):
         return [
             DemoDataset(
                 id="activities_video",
-                label="Personal Activities",
+                label="Everyday Activities",
                 description=(
-                    "Short clips of everyday personal activities like grooming,"
-                    " playing instruments, and yo-yo from UCF-101."
+                    "Short clips of everyday activities — applying makeup,"
+                    " crawling babies, bench presses, and marching bands"
+                    " from a UCF-101 subset (auto-downloaded, ~171 MB)."
                 ),
                 categories=[
                     "ApplyEyeMakeup",
                     "ApplyLipstick",
-                    "BrushingTeeth",
-                    "Drumming",
-                    "YoYo",
+                    "BabyCrawling",
+                    "BandMarching",
+                    "BenchPress",
                 ],
                 source="ucf101",
                 required_folder=VIDEO_DIR / "ucf101",
             ),
             DemoDataset(
                 id="sports_video",
-                label="Sports & Exercise",
+                label="Sports & Athletics",
                 description=(
-                    "Short clips of physical activities including cliff diving,"
-                    " jump rope, push-ups, and tai chi from UCF-101."
+                    "Short clips of sports and athletics — archery, balance beam,"
+                    " baseball, basketball, and basketball dunks"
+                    " from a UCF-101 subset (auto-downloaded, ~171 MB)."
                 ),
                 categories=[
-                    "CliffDiving",
-                    "HandstandWalking",
-                    "JumpRope",
-                    "PushUps",
-                    "TaiChi",
+                    "Archery",
+                    "BalanceBeam",
+                    "BaseballPitch",
+                    "Basketball",
+                    "BasketballDunk",
                 ],
                 source="ucf101",
                 required_folder=VIDEO_DIR / "ucf101",
