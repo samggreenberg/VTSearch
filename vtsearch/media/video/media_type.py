@@ -11,7 +11,14 @@ from PIL import Image
 from transformers import XCLIPModel, XCLIPProcessor
 
 from vtsearch.config import MODELS_CACHE_DIR, VIDEO_DIR, XCLIP_MODEL_ID
-from vtsearch.media.base import DemoDataset, MediaResponse, MediaType, ProgressCallback, _noop_progress
+from vtsearch.media.base import (
+    DemoDataset,
+    MediaResponse,
+    MediaType,
+    ProgressCallback,
+    _noop_progress,
+    intercept_tqdm_progress,
+)
 
 
 def _extract_tensor(output: object) -> torch.Tensor:
@@ -152,9 +159,10 @@ class VideoMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading video embedder (X-CLIP model)...", 0, 0)
-        self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-        self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
+        self._on_progress("loading", "Loading video embedder (X-CLIP model)…", 0, 0)
+        with intercept_tqdm_progress(self._on_progress):
+            self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
+            self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

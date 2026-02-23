@@ -9,7 +9,14 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from vtsearch.config import E5_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import DemoDataset, MediaResponse, MediaType, ProgressCallback, _noop_progress
+from vtsearch.media.base import (
+    DemoDataset,
+    MediaResponse,
+    MediaType,
+    ProgressCallback,
+    _noop_progress,
+    intercept_tqdm_progress,
+)
 
 
 class TextMediaType(MediaType):
@@ -142,8 +149,9 @@ class TextMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading text embedder (E5 model)...", 0, 0)
-        self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)
+        self._on_progress("loading", "Loading text embedder (E5 model)…", 0, 0)
+        with intercept_tqdm_progress(self._on_progress):
+            self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

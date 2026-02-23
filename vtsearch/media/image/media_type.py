@@ -11,7 +11,14 @@ from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
 from vtsearch.config import CLIP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR
-from vtsearch.media.base import DemoDataset, MediaResponse, MediaType, ProgressCallback, _noop_progress
+from vtsearch.media.base import (
+    DemoDataset,
+    MediaResponse,
+    MediaType,
+    ProgressCallback,
+    _noop_progress,
+    intercept_tqdm_progress,
+)
 
 
 def _extract_tensor(output: object) -> torch.Tensor:
@@ -175,12 +182,13 @@ class ImageMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading image embedder (CLIP model)...", 0, 0)
+        self._on_progress("loading", "Loading image embedder (CLIP model)…", 0, 0)
         # Older CLIP checkpoints include position_ids buffers that newer transformers
         # versions compute on-the-fly.  Tell the loader to silently ignore them.
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-        self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
+        with intercept_tqdm_progress(self._on_progress):
+            self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
+            self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
