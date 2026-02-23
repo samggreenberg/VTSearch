@@ -221,7 +221,6 @@
   const stripeContainer = document.getElementById("stripe-container");
   const inclusionSlider = document.getElementById("inclusion-slider");
   const inclusionValue = document.getElementById("inclusion-value");
-  const enrichDescCheckbox = document.getElementById("enrich-descriptions-checkbox");
   const calibrateCountInput = document.getElementById("calibrate-count-input");
   const calibrationFractionInput = document.getElementById("calibration-fraction-input");
 
@@ -289,6 +288,7 @@
   const settingsModal = document.getElementById("settings-modal");
   const settingsModalClose = document.getElementById("settings-modal-close");
   const safeThresholdsCheckbox = document.getElementById("safe-thresholds-checkbox");
+  const enrichDescCheckbox = document.getElementById("enrich-descriptions-checkbox");
   const settingsDefaultBtn = document.getElementById("settings-default-btn");
   const settingsImportBtn = document.getElementById("settings-import-btn");
   const settingsImportFile = document.getElementById("settings-import-file");
@@ -1508,6 +1508,7 @@
     if (calibrateCountInput) calibrateCountInput.value = data.calibrate_count;
     if (calibrationFractionInput) calibrationFractionInput.value = data.calibration_fraction;
     if (safeThresholdsCheckbox) safeThresholdsCheckbox.checked = !!data.safe_thresholds;
+    if (enrichDescCheckbox) enrichDescCheckbox.checked = !!data.enrich_descriptions;
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -1538,6 +1539,21 @@
     });
   }
 
+  // Enrich Sort Descriptions toggle
+  if (enrichDescCheckbox) {
+    enrichDescCheckbox.addEventListener("change", () => {
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enrich_descriptions: enrichDescCheckbox.checked }),
+      }).catch(() => {});
+      // Re-trigger text sort if active
+      if (sortMode === "text") {
+        onTextSortInput();
+      }
+    });
+  }
+
   // Default button — reset all settings to defaults
   if (settingsDefaultBtn) {
     settingsDefaultBtn.addEventListener("click", async () => {
@@ -1556,7 +1572,6 @@
         // Apply theme immediately
         applyTheme(defaults.theme || "dark");
         // Update main UI controls that live outside the modal
-        if (enrichDescCheckbox) enrichDescCheckbox.checked = !!defaults.enrich_descriptions;
         if (inclusionSlider) { inclusionSlider.value = defaults.inclusion || 0; inclusionValue.textContent = defaults.inclusion || 0; inclusion = defaults.inclusion || 0; }
         audioVolume = defaults.volume != null ? defaults.volume : 1.0;
         const audioEl = document.getElementById("clip-audio");
@@ -1589,7 +1604,6 @@
           const data = await res.json();
           populateSettingsModal(data);
           applyTheme(data.theme || "dark");
-          if (enrichDescCheckbox) enrichDescCheckbox.checked = !!data.enrich_descriptions;
           if (inclusionSlider) { inclusionSlider.value = data.inclusion || 0; inclusionValue.textContent = data.inclusion || 0; inclusion = data.inclusion || 0; }
           audioVolume = typeof data.volume === "number" ? data.volume : 1.0;
           const audioEl = document.getElementById("clip-audio");
@@ -1717,21 +1731,7 @@
     });
   }
 
-  // ---- Enrich Sort Descriptions toggle ----
 
-  if (enrichDescCheckbox) {
-    enrichDescCheckbox.addEventListener("change", () => {
-      fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enrich_descriptions: enrichDescCheckbox.checked }),
-      }).catch(() => {});
-      // Re-trigger text sort if active
-      if (sortMode === "text") {
-        onTextSortInput();
-      }
-    });
-  }
 
   // ---- Calibrate Count ----
 
