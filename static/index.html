@@ -107,10 +107,18 @@
         <p>Load or generate a dataset to get started</p>
       </div>
       <div class="dataset-options" id="dataset-options">
-        <button class="dataset-option" id="load-file-btn">
-          <h3>📁 Load from File</h3>
-          <p>Load a previously saved dataset file (.pkl)</p>
-        </button>
+        <div class="dataset-columns" id="dataset-columns">
+          <div class="dataset-column" id="dataset-load-column">
+            <div class="dataset-column-header">Load</div>
+            <button class="dataset-option" id="load-file-btn">
+              <h3>📁 Load from File</h3>
+              <p>Load a previously saved dataset file (.pkl)</p>
+            </button>
+          </div>
+          <div class="dataset-column" id="dataset-generate-column">
+            <div class="dataset-column-header">Generate</div>
+          </div>
+        </div>
       </div>
       <div class="dataset-progress" id="dataset-progress" style="display:none" role="status" aria-live="polite">
         <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Dataset loading progress">
