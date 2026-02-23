@@ -283,11 +283,14 @@ video { max-width: 600px; max-height: 400px; }
 .label-io-status { font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 8px; }
 
 /* Dataset management */
-.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; max-width: 600px; margin: 0 auto; text-align: center; }
+.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; max-width: 800px; margin: 0 auto; text-align: center; }
 .dataset-welcome.wide { max-width: min(1040px, 95vw); }
 .dataset-welcome h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 8px; }
 .dataset-welcome p { font-size: 1rem; color: var(--text-secondary); margin-bottom: 16px; }
-.dataset-options { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.dataset-options { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+.dataset-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
+.dataset-column { display: flex; flex-direction: column; gap: 12px; }
+.dataset-column-header { font-size: 0.8rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .dataset-option { padding: 16px 20px; border: 2px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; transition: all 0.2s; text-align: left; }
 .dataset-option:hover { border-color: var(--accent); background: var(--bg-subtle); }
 .dataset-option h3 { font-size: 1.1rem; margin-bottom: 4px; color: var(--accent); }
