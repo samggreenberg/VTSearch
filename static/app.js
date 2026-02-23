@@ -20,6 +20,7 @@
   let paragraphController = null;   // AbortController for in-flight paragraph content fetch
   let learnedSortDebounce = null;   // Debounce timer for background training
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
+  let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   const clipList = document.getElementById("clip-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -296,6 +297,7 @@
   const settingsImportBtn = document.getElementById("settings-import-btn");
   const settingsImportFile = document.getElementById("settings-import-file");
   const settingsExportBtn = document.getElementById("settings-export-btn");
+  const swipeAnimationCheckbox = document.getElementById("swipe-animation-checkbox");
 
   // ---- Dataset Management ----
 
@@ -1509,6 +1511,11 @@
     if (calibrationFractionInput) calibrationFractionInput.value = data.calibration_fraction;
     if (safeThresholdsCheckbox) safeThresholdsCheckbox.checked = !!data.safe_thresholds;
     if (enrichDescCheckbox) enrichDescCheckbox.checked = !!data.enrich_descriptions;
+    if (swipeAnimationCheckbox) {
+      const val = data.swipe_animation !== undefined ? !!data.swipe_animation : true;
+      swipeAnimationCheckbox.checked = val;
+      swipeAnimation = val;
+    }
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -1535,6 +1542,18 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ safe_thresholds: safeThresholdsCheckbox.checked }),
+      }).catch(() => {});
+    });
+  }
+
+  // Swipe Animation toggle
+  if (swipeAnimationCheckbox) {
+    swipeAnimationCheckbox.addEventListener("change", () => {
+      swipeAnimation = swipeAnimationCheckbox.checked;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ swipe_animation: swipeAnimationCheckbox.checked }),
       }).catch(() => {});
     });
   }
@@ -1591,7 +1610,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -2321,10 +2340,16 @@
       }
     }
 
-    // Auto-advance to next clip IMMEDIATELY using the current sort order,
-    // so the user isn't blocked waiting for model training to finish.
+    // Auto-advance to next clip.  When swipe animation is enabled, play a
+    // fast swipe-out before switching; otherwise advance immediately.
     const nextClip = findNextClip();
     if (nextClip && nextClip.id !== selected) {
+      if (swipeAnimation) {
+        const dir = vote === "good" ? "swipe-right" : "swipe-left";
+        center.classList.add(dir);
+        await new Promise(r => setTimeout(r, 180));
+        center.classList.remove(dir);
+      }
       selectClip(nextClip.id);
     }
 
@@ -3472,6 +3497,10 @@
       }
       if (safeThresholdsCheckbox) {
         safeThresholdsCheckbox.checked = !!data.safe_thresholds;
+      }
+      if (data.swipe_animation !== undefined) {
+        swipeAnimation = !!data.swipe_animation;
+        if (swipeAnimationCheckbox) swipeAnimationCheckbox.checked = swipeAnimation;
       }
     } catch (_) {
       // Settings not available yet; use defaults
