@@ -149,8 +149,8 @@ class AudioMediaType(MediaType):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading audio embedder (CLAP model)...", 0, 0)
-        self._model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-        self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir)
+        self._model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+        self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

@@ -9,8 +9,10 @@ os.environ["MKL_NUM_THREADS"] = "1"
 # Suppress Werkzeug request logging (GET/POST lines) — only show errors
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
-# Suppress HF Hub "unauthenticated requests" warning — no token needed for
-# public model downloads; the warning is just noise.
+# All HF models we use are public — no token needed.  Each from_pretrained()
+# call passes token=False to signal this explicitly.  The env var + warnings
+# filter below are belt-and-suspenders in case any transitive HF code still
+# warns about missing tokens.
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 warnings.filterwarnings("ignore", message=".*unauthenticated requests.*HF Hub.*")
 
