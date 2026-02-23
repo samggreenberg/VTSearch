@@ -10,7 +10,7 @@ import torch
 from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
-from vtsearch.config import CLIP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR
+from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
 from vtsearch.media.base import DemoDataset, MediaResponse, MediaType, ProgressCallback, _noop_progress
 
 
@@ -111,7 +111,6 @@ class ImageMediaType(MediaType):
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
-        folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
         return [
             DemoDataset(
                 id="images_s",
@@ -122,7 +121,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=0,
                 slice_end=11,
             ),
@@ -135,7 +133,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=11,
                 slice_end=33,
             ),
@@ -148,7 +145,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=33,
                 slice_end=77,
             ),

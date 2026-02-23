@@ -320,18 +320,22 @@ def demo_dataset_list():
         # Calculate number of files
         num_categories = len(dataset_info["categories"])
         image_source = dataset_info.get("source", "")
+        slice_start = dataset_info.get("slice_start", 0)
+        slice_end = dataset_info.get("slice_end")
+
         if media_type == "video":
-            num_files = num_categories * CLIPS_PER_VIDEO_CATEGORY
+            per_cat = CLIPS_PER_VIDEO_CATEGORY
         elif media_type == "image":
-            if image_source == "caltech101":
-                num_files = num_categories * IMAGES_PER_CALTECH101_CATEGORY
-            else:
-                num_files = num_categories * IMAGES_PER_CIFAR10_CATEGORY
+            per_cat = IMAGES_PER_CALTECH101_CATEGORY if image_source == "caltech101" else IMAGES_PER_CIFAR10_CATEGORY
         elif media_type == "paragraph":
-            num_files = num_categories * TEXTS_PER_CATEGORY
+            per_cat = TEXTS_PER_CATEGORY
         else:
-            # Audio datasets (ESC-50 has 40 clips per category)
-            num_files = num_categories * CLIPS_PER_CATEGORY
+            per_cat = CLIPS_PER_CATEGORY
+
+        # Use slice parameters when set; otherwise fall back to the default per-category count.
+        if slice_end is not None:
+            per_cat = slice_end - slice_start
+        num_files = num_categories * per_cat
 
         # Calculate download size
         if status == "ready":
