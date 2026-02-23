@@ -5,6 +5,17 @@ selectively extract** components from VTSearch.  It maps the module
 structure, dependency graph, and public APIs so you can quickly identify
 which pieces you need and how to pull them out.
 
+## Table of Contents
+
+1. [What VTSearch does](#what-vtsearch-does)
+2. [Directory map](#directory-map)
+3. [Dependency graph](#dependency-graph)
+4. [Extractability matrix](#extractability-matrix)
+5. [How to extract specific components](#how-to-extract-specific-components)
+6. [Plugin architecture details](#plugin-architecture-details)
+7. [State management](#state-management)
+8. [Element-level origin tracking](#element-level-origin-tracking)
+
 ---
 
 ## What VTSearch does
@@ -63,7 +74,8 @@ VTSearch/
 │   │       ├── pickle/             .pkl file importer
 │   │       ├── http_zip/           HTTP archive importer
 │   │       ├── rss_feed/           RSS/Podcast feed importer
-│   │       └── youtube_playlist/   YouTube yt-dlp importer
+│   │       ├── youtube_playlist/   YouTube yt-dlp importer
+│   │       └── combine_datasets/   Merge multiple pickle datasets
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
@@ -327,15 +339,18 @@ dicts:
 | `clips` | `dict[int, dict]` | All loaded media clips with embeddings |
 | `good_votes` | `dict[int, None]` | Clip IDs voted "good" |
 | `bad_votes` | `dict[int, None]` | Clip IDs voted "bad" |
-| `label_history` | `list[tuple]` | Ordered labelling events `(clip_id, label, timestamp)` |
+| `label_history` | `list[tuple[int, str, float]]` | Ordered labelling events `(clip_id, label, timestamp)` |
+| `vote_click_times` | `dict[int, int]` | Clip ID → click order (1-indexed); tracks voting sequence |
+| `last_learned_scores` | `dict[int, float]` | Clip ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
 | `favorite_detectors` | `dict` | Saved detector configurations |
 | `favorite_extractors` | `dict` | Saved extractor configurations |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
-`safe_thresholds`, favorite processor recipes) live separately in
-`vtsearch/settings.py` and are auto-saved to `data/settings.json`.
+`safe_thresholds`, `calibrate_count`, `calibration_fraction`, favorite
+processor recipes) live separately in `vtsearch/settings.py` and are
+auto-saved to `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
 **Only Flask routes mutate this state.**  All ML and dataset functions
