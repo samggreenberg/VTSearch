@@ -149,7 +149,7 @@ class TextMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading text embedder (E5 model)…", 0, 0)
+        self._on_progress("loading", "Loading E5 model…", 0, 1)
         with intercept_tqdm_progress(self._on_progress):
             self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir, token=False)
 

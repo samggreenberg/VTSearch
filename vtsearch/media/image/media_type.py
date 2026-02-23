@@ -178,12 +178,14 @@ class ImageMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading image embedder (CLIP model)…", 0, 0)
+        self._on_progress("loading", "Loading CLIP model weights…", 0, 2)
         # Older CLIP checkpoints include position_ids buffers that newer transformers
         # versions compute on-the-fly.  Tell the loader to silently ignore them.
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress):
             self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+        self._on_progress("loading", "Loading CLIP processor…", 1, 2)
+        with intercept_tqdm_progress(self._on_progress):
             self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
