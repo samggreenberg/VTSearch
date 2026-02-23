@@ -202,7 +202,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                         i,
                         total,
                     )
-                zip_ref.extract(member, extract_dir)
+                zip_ref.extract(member, DATA_DIR)
 
         zip_path.unlink(missing_ok=True)
 
