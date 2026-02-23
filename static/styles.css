@@ -215,6 +215,17 @@ header h1 { margin-left: 48px; }
 .clip-threshold-line::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--accent); }
 .clip-threshold-line::after { content: ''; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: 6px solid var(--accent); }
 
+/* Thumbnail mode — clip list */
+.clip-item.clip-item-thumb { display: flex; align-items: center; gap: 10px; padding: 6px 16px; }
+.clip-item.clip-item-thumb .clip-thumbnail { width: 60px; height: 45px; object-fit: cover; border-radius: 3px; flex-shrink: 0; background: var(--bg-surface); }
+.clip-item.clip-item-thumb .clip-thumb-info { min-width: 0; flex: 1; overflow: hidden; }
+.clip-item.clip-item-thumb .sim { float: none; display: block; }
+
+/* Thumbnail mode — vote entries */
+.vote-entry.vote-entry-thumb { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.vote-entry.vote-entry-thumb .vote-thumbnail { width: 48px; height: 36px; object-fit: cover; border-radius: 3px; flex-shrink: 0; background: var(--bg-surface); }
+.vote-entry.vote-entry-thumb .vote-thumb-info { min-width: 0; flex: 1; overflow: hidden; }
+
 /* Stripe overview */
 .stripe-overview { position: absolute; right: 0; top: 0; bottom: 0; width: 20px; background: var(--bg-surface); border-left: 1px solid var(--border); cursor: pointer; }
 .stripe-container { position: relative; height: 100%; }
