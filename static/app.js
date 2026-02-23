@@ -368,12 +368,9 @@
     const progress = await res.json();
 
     if (progress.error) {
-      progressMessage.textContent = `Error: ${progress.error}`;
-      progressMessage.style.color = "var(--color-bad)";
       stopProgressPolling();
-      setTimeout(() => {
-        showWelcomeScreen();
-      }, 3000);
+      showWelcomeScreen();
+      vtAlert(progress.error, "warning");
       return;
     }
 
