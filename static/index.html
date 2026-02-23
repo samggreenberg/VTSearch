@@ -85,10 +85,6 @@
       <div style="text-align:center; font-size:0.75rem; color:var(--text-secondary); margin-top:2px">
         <span id="inclusion-value">0</span>
       </div>
-      <div style="display:flex; align-items:center; gap:6px; margin-top:8px">
-        <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
-        <label for="enrich-descriptions-checkbox" style="font-size:0.78rem; color:var(--text-secondary); cursor:pointer">Enrich Sort Descriptions</label>
-      </div>
       <div id="sort-status" class="sort-status" aria-live="polite"></div>
       <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
         <div class="sort-progress-bar">
@@ -380,6 +376,14 @@
         <div class="settings-row">
           <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
           <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
+        </div>
+      </div>
+      <!-- Sorting -->
+      <div class="settings-section">
+        <div class="settings-section-title">Sorting</div>
+        <div class="settings-row">
+          <label for="enrich-descriptions-checkbox" class="settings-label">Enrich Sort Descriptions</label>
+          <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
         </div>
       </div>
       <!-- Actions -->
