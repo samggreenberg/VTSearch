@@ -7,6 +7,7 @@ When omitted the functions fall back to the application-wide
 to use these functions outside the Flask app (scripts, notebooks, tests).
 """
 
+import tarfile
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -138,8 +139,6 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    import tarfile
-
     tar_path = DATA_DIR / "cifar-10-python.tar.gz"
     extract_dir = DATA_DIR / "cifar-10-batches-py"
     DATA_DIR.mkdir(exist_ok=True)
@@ -162,8 +161,11 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Caltech-101 image classification dataset.
 
     Downloads ``caltech-101.zip`` from the configured ``CALTECH101_URL``
-    into ``DATA_DIR`` if it is not already present, then extracts it and
-    deletes the archive to reclaim disk space.
+    into ``DATA_DIR`` if it is not already present, then extracts it.
+    The zip contains a nested ``101_ObjectCategories.tar.gz`` archive
+    which is extracted in a second pass to produce the final category
+    directories.  Both archives are deleted after extraction to reclaim
+    disk space.
 
     Args:
         on_progress: Optional progress callback. Falls back to the
@@ -190,7 +192,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                 CALTECH101_URL, zip_path, CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
             )
 
-        on_progress("downloading", "Extracting Caltech-101...", 0, 0)
+        on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
@@ -198,13 +200,22 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                 if i % 100 == 0 or i == total:
                     on_progress(
                         "downloading",
-                        f"Extracting Caltech-101 ({i}/{total})...",
+                        f"Extracting Caltech-101 zip ({i}/{total})...",
                         i,
                         total,
                     )
                 zip_ref.extract(member, DATA_DIR)
 
         zip_path.unlink(missing_ok=True)
+
+        # The zip contains 101_ObjectCategories.tar.gz (a nested archive).
+        # Extract it to produce the actual category directories.
+        inner_tar = extract_dir / "101_ObjectCategories.tar.gz"
+        if inner_tar.exists() and not categories_dir.exists():
+            on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
+            with tarfile.open(inner_tar, "r:gz") as tar_ref:
+                tar_ref.extractall(extract_dir, filter="data")
+            inner_tar.unlink(missing_ok=True)
 
     return categories_dir
 

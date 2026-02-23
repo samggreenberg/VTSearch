@@ -420,3 +420,114 @@ class TestExtractArchive:
         with mock.patch.dict(sys.modules, {"rarfile": None}):
             with pytest.raises((RuntimeError, ImportError, Exception)):
                 _extract_archive(rar_path, extract_dir)
+
+
+class TestCaltech101Download:
+    """Verify download_caltech101 handles the nested zip→tar.gz structure."""
+
+    def _make_caltech101_zip(self, zip_path):
+        """Create a mock caltech-101.zip matching the real archive structure.
+
+        The real archive contains ``caltech-101/101_ObjectCategories.tar.gz``
+        (a nested tar.gz) rather than bare category directories.
+        """
+        # Build the inner tar.gz with a few dummy category images
+        inner_tar_buf = io.BytesIO()
+        with tarfile.open(fileobj=inner_tar_buf, mode="w:gz") as tf:
+            for cat in ("butterfly", "dolphin"):
+                for i in range(3):
+                    fname = f"101_ObjectCategories/{cat}/image_{i:04d}.jpg"
+                    # Minimal JPEG: SOI + EOI markers
+                    data = b"\xff\xd8\xff\xe0" + b"\x00" * 20 + b"\xff\xd9"
+                    info = tarfile.TarInfo(name=fname)
+                    info.size = len(data)
+                    tf.addfile(info, io.BytesIO(data))
+        inner_tar_bytes = inner_tar_buf.getvalue()
+
+        # Build the outer zip
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("caltech-101/", "")
+            zf.writestr("caltech-101/101_ObjectCategories.tar.gz", inner_tar_bytes)
+            zf.writestr("caltech-101/show_annotation.m", "% annotation script\n")
+
+    def test_extracts_nested_tar_gz(self, tmp_path):
+        """download_caltech101 should extract the inner tar.gz to produce category dirs."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_caltech101
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        zip_path = data_dir / "caltech-101.zip"
+        self._make_caltech101_zip(zip_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+        ):
+            result = download_caltech101(on_progress=lambda *a: None)
+
+        assert result.exists(), f"Expected {result} to exist"
+        assert result.name == "101_ObjectCategories"
+        assert (result / "butterfly").is_dir()
+        assert (result / "dolphin").is_dir()
+        assert len(list((result / "butterfly").glob("*.jpg"))) == 3
+
+    def test_inner_tar_cleaned_up(self, tmp_path):
+        """The inner 101_ObjectCategories.tar.gz should be deleted after extraction."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_caltech101
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        zip_path = data_dir / "caltech-101.zip"
+        self._make_caltech101_zip(zip_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+        ):
+            download_caltech101(on_progress=lambda *a: None)
+
+        inner_tar = data_dir / "caltech-101" / "101_ObjectCategories.tar.gz"
+        assert not inner_tar.exists(), "Inner tar.gz should be deleted after extraction"
+
+    def test_outer_zip_cleaned_up(self, tmp_path):
+        """The outer caltech-101.zip should be deleted after extraction."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_caltech101
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        zip_path = data_dir / "caltech-101.zip"
+        self._make_caltech101_zip(zip_path)
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+        ):
+            download_caltech101(on_progress=lambda *a: None)
+
+        assert not zip_path.exists(), "Outer zip should be deleted after extraction"
+
+    def test_skips_if_already_extracted(self, tmp_path):
+        """If 101_ObjectCategories already exists, skip download and extraction."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets.downloader import download_caltech101
+
+        data_dir = tmp_path / "data"
+        categories_dir = data_dir / "caltech-101" / "101_ObjectCategories" / "butterfly"
+        categories_dir.mkdir(parents=True)
+        (categories_dir / "image_0001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+        with (
+            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+        ):
+            result = download_caltech101(on_progress=lambda *a: None)
+
+        assert result.exists()
+        assert (result / "butterfly" / "image_0001.jpg").exists()
