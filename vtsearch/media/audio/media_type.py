@@ -93,37 +93,37 @@ class AudioMediaType(MediaType):
                 id="sounds_s",
                 label="ESC-50 Sound Mix (S)",
                 description=(
-                    "80 clips across 10 sound categories — animals, nature, urban,"
+                    "50 clips across 10 sound categories — animals, nature, urban,"
                     " and household sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
                 slice_start=0,
-                slice_end=8,
+                slice_end=5,
             ),
             DemoDataset(
                 id="sounds_m",
                 label="ESC-50 Sound Mix (M)",
                 description=(
-                    "160 clips across 10 sound categories — animals, nature, urban,"
+                    "100 clips across 10 sound categories — animals, nature, urban,"
                     " and household sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
-                slice_start=8,
-                slice_end=24,
+                slice_start=5,
+                slice_end=15,
             ),
             DemoDataset(
                 id="sounds_l",
                 label="ESC-50 Sound Mix (L)",
                 description=(
-                    "160 clips across 10 sound categories — animals, nature, urban,"
+                    "200 clips across 10 sound categories — animals, nature, urban,"
                     " and household sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
-                slice_start=24,
-                slice_end=40,
+                slice_start=15,
+                slice_end=35,
             ),
         ]
 
