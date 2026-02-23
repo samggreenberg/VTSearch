@@ -117,40 +117,40 @@ class ImageMediaType(MediaType):
                 id="images_s",
                 label="Caltech-101 Object Mix (S)",
                 description=(
-                    "128 photographs across 8 categories — animals, instruments,"
+                    "88 photographs across 8 categories — animals, instruments,"
                     " vehicles, and objects from the Caltech-101 dataset."
                 ),
                 categories=cats,
                 source="caltech101",
                 required_folder=folder,
                 slice_start=0,
-                slice_end=16,
+                slice_end=11,
             ),
             DemoDataset(
                 id="images_m",
                 label="Caltech-101 Object Mix (M)",
                 description=(
-                    "256 photographs across 8 categories — animals, instruments,"
+                    "176 photographs across 8 categories — animals, instruments,"
                     " vehicles, and objects from the Caltech-101 dataset."
                 ),
                 categories=cats,
                 source="caltech101",
                 required_folder=folder,
-                slice_start=16,
-                slice_end=48,
+                slice_start=11,
+                slice_end=33,
             ),
             DemoDataset(
                 id="images_l",
                 label="Caltech-101 Object Mix (L)",
                 description=(
-                    "256 photographs across 8 categories — animals, instruments,"
+                    "352 photographs across 8 categories — animals, instruments,"
                     " vehicles, and objects from the Caltech-101 dataset."
                 ),
                 categories=cats,
                 source="caltech101",
                 required_folder=folder,
-                slice_start=48,
-                slice_end=80,
+                slice_start=33,
+                slice_end=77,
             ),
         ]
 

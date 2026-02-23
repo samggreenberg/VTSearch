@@ -87,37 +87,37 @@ class TextMediaType(MediaType):
                 id="paragraphs_s",
                 label="Newsgroup Topic Mix (S)",
                 description=(
-                    "60 articles across 6 topics — sports, science, cars, hockey,"
+                    "42 articles across 6 topics — sports, science, cars, hockey,"
                     " electronics, and religion from the 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
                 slice_start=0,
-                slice_end=10,
+                slice_end=7,
             ),
             DemoDataset(
                 id="paragraphs_m",
                 label="Newsgroup Topic Mix (M)",
                 description=(
-                    "120 articles across 6 topics — sports, science, cars, hockey,"
+                    "84 articles across 6 topics — sports, science, cars, hockey,"
                     " electronics, and religion from the 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
-                slice_start=10,
-                slice_end=30,
+                slice_start=7,
+                slice_end=21,
             ),
             DemoDataset(
                 id="paragraphs_l",
                 label="Newsgroup Topic Mix (L)",
                 description=(
-                    "120 articles across 6 topics — sports, science, cars, hockey,"
+                    "168 articles across 6 topics — sports, science, cars, hockey,"
                     " electronics, and religion from the 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
-                slice_start=30,
-                slice_end=50,
+                slice_start=21,
+                slice_end=49,
             ),
         ]
 
