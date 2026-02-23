@@ -384,6 +384,29 @@ def _import_favorite_processors(settings_path: str | None = None) -> None:
         print(f"Warning: could not load favorite processors from settings: {exc}", file=sys.stderr)
 
 
+def _merge_detector_results(
+    accumulated: dict[str, dict[str, Any]],
+    new_chunk: dict[str, dict[str, Any]],
+) -> None:
+    """Merge detector results from a new chunk into *accumulated* in-place.
+
+    For each detector, the hit lists are concatenated and re-sorted by
+    score descending, and ``total_hits`` is updated.
+
+    Args:
+        accumulated: The running results dict (mutated in-place).
+        new_chunk: Results from the latest chunk (same shape as
+            :func:`_score_clips_with_detectors` output).
+    """
+    for det_name, det_result in new_chunk.items():
+        if det_name not in accumulated:
+            accumulated[det_name] = det_result
+        else:
+            accumulated[det_name]["hits"].extend(det_result["hits"])
+            accumulated[det_name]["total_hits"] += det_result["total_hits"]
+            accumulated[det_name]["hits"].sort(key=lambda x: x["score"], reverse=True)
+
+
 def autodetect_main(
     dataset_path: str,
     settings_path: str | None = None,
@@ -499,6 +522,150 @@ def autodetect_importer_main(
 
         detector_results = _score_clips_with_detectors(clips, detectors)
         results = _build_multi_results_dict(detector_results, media_type)
+        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+    except (FileNotFoundError, ValueError, NotADirectoryError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def autodetect_main_chunked(
+    dataset_path: str,
+    chunk_size: int,
+    settings_path: str | None = None,
+    exporter_name: str | None = None,
+    exporter_field_values: dict[str, Any] | None = None,
+) -> None:
+    """CLI entry point: chunked autodetect on a pickle dataset.
+
+    Identical to :func:`autodetect_main` but processes the dataset in
+    chunks of *chunk_size* clips at a time, merging results across
+    chunks.  This bounds peak memory usage regardless of dataset size.
+
+    Args:
+        dataset_path: Path to the dataset pickle file.
+        chunk_size: Maximum number of clips to load at once.
+        settings_path: Optional path to a settings JSON file.
+        exporter_name: Optional registered exporter name.
+        exporter_field_values: Optional exporter field values.
+    """
+    try:
+        _import_favorite_processors(settings_path)
+
+        from vtsearch.datasets.loader import load_dataset_from_pickle_chunked
+
+        dataset_file = Path(dataset_path)
+        if not dataset_file.exists():
+            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+
+        merged_results: dict[str, dict[str, Any]] = {}
+        media_type: str | None = None
+        detectors: dict[str, dict[str, Any]] | None = None
+        total_clips = 0
+
+        for chunk_num, chunk_clips in enumerate(
+            load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True), 1
+        ):
+            if not chunk_clips:
+                continue
+
+            total_clips += len(chunk_clips)
+
+            if media_type is None:
+                media_type = _detect_media_type(chunk_clips)
+
+                from vtsearch.utils import get_favorite_detectors_by_media
+
+                detectors = get_favorite_detectors_by_media(media_type)
+                if not detectors:
+                    raise ValueError(
+                        f"No favorite processors found for media type: {media_type}. "
+                        "Add processors to the settings file or use --settings to specify one."
+                    )
+
+            print(f"Processing chunk {chunk_num} ({len(chunk_clips)} clips)...", flush=True)
+            chunk_results = _score_clips_with_detectors(chunk_clips, detectors)
+            _merge_detector_results(merged_results, chunk_results)
+
+        if not merged_results:
+            raise ValueError(f"No clips loaded from dataset: {dataset_path}")
+
+        print(f"Finished processing {total_clips} clips across {chunk_num} chunk(s).", flush=True)
+        results = _build_multi_results_dict(merged_results, media_type or "unknown")
+        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def autodetect_importer_main_chunked(
+    importer_name: str,
+    field_values: dict[str, Any],
+    chunk_size: int,
+    settings_path: str | None = None,
+    exporter_name: str | None = None,
+    exporter_field_values: dict[str, Any] | None = None,
+) -> None:
+    """CLI entry point: chunked autodetect with a named importer.
+
+    Identical to :func:`autodetect_importer_main` but uses the importer's
+    :meth:`~DatasetImporter.run_chunked_cli` to load the dataset in chunks
+    of *chunk_size* clips, processing each chunk independently and merging
+    results.  This bounds peak memory usage regardless of dataset size.
+
+    Args:
+        importer_name: Registered name of the importer.
+        field_values: Mapping of importer field keys to their CLI values.
+        chunk_size: Maximum number of clips to load at once.
+        settings_path: Optional path to a settings JSON file.
+        exporter_name: Optional registered exporter name.
+        exporter_field_values: Optional exporter field values.
+    """
+    try:
+        _import_favorite_processors(settings_path)
+
+        from vtsearch.datasets.importers import get_importer
+
+        importer = get_importer(importer_name)
+        if importer is None:
+            available = _list_importer_names()
+            raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+
+        importer.validate_cli_field_values(field_values)
+
+        merged_results: dict[str, dict[str, Any]] = {}
+        media_type: str | None = None
+        detectors: dict[str, dict[str, Any]] | None = None
+        total_clips = 0
+
+        for chunk_num, chunk_clips in enumerate(
+            importer.run_chunked_cli(field_values, chunk_size, thin=True), 1
+        ):
+            if not chunk_clips:
+                continue
+
+            total_clips += len(chunk_clips)
+
+            if media_type is None:
+                media_type = _detect_media_type(chunk_clips)
+
+                from vtsearch.utils import get_favorite_detectors_by_media
+
+                detectors = get_favorite_detectors_by_media(media_type)
+                if not detectors:
+                    raise ValueError(
+                        f"No favorite processors found for media type: {media_type}. "
+                        "Add processors to the settings file or use --settings to specify one."
+                    )
+
+            print(f"Processing chunk {chunk_num} ({len(chunk_clips)} clips)...", flush=True)
+            chunk_results = _score_clips_with_detectors(chunk_clips, detectors)
+            _merge_detector_results(merged_results, chunk_results)
+
+        if not merged_results:
+            raise ValueError(f"No clips loaded by importer '{importer_name}'")
+
+        print(f"Finished processing {total_clips} clips across {chunk_num} chunk(s).", flush=True)
+        results = _build_multi_results_dict(merged_results, media_type or "unknown")
         _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
     except (FileNotFoundError, ValueError, NotADirectoryError) as e:
         print(f"Error: {e}", file=sys.stderr)

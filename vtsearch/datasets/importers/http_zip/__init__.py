@@ -11,7 +11,7 @@ from __future__ import annotations
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
@@ -152,6 +152,49 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         self.run(field_values, clips, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def _download_and_extract(self, field_values: dict[str, Any]) -> Path:
+        """Download and extract the archive, returning the extraction dir."""
+        url = field_values["url"]
+
+        DATA_DIR.mkdir(exist_ok=True)
+        progress = _default_progress()
+
+        url_path = url.split("?")[0].rstrip("/")
+        url_filename = url_path.split("/")[-1] or "archive"
+        archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        extract_dir = DATA_DIR / "http_archive_extract"
+
+        progress("downloading", "Downloading archive...", 0, 0)
+        download_file_with_progress(url, archive_path, on_progress=progress)
+
+        progress("loading", "Extracting archive...", 0, 0)
+        extract_dir.mkdir(exist_ok=True)
+        _extract_archive(archive_path, extract_dir, on_progress=progress)
+        archive_path.unlink(missing_ok=True)
+
+        return extract_dir
+
+    def run_chunked(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        extract_dir = self._download_and_extract(field_values)
+        media_type = field_values.get("media_type", "sounds")
+        yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+
+    def run_chunked_cli(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        url = field_values.get("url", "")
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
+        yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
 
 IMPORTER = HttpArchiveDatasetImporter()
