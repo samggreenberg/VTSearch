@@ -147,9 +147,10 @@ def load_video_metadata_from_folders(video_dir: Path, categories: list[str]) -> 
             continue
 
         # Find all video files in this category
+        # Use category/filename as key to avoid collisions across categories.
         for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
             for video_path in category_folder.glob(ext):
-                metadata[video_path.name] = {
+                metadata[f"{category_name}/{video_path.name}"] = {
                     "category": category_name,
                     "path": video_path,
                 }
@@ -187,9 +188,11 @@ def load_image_metadata_from_folders(image_dir: Path, categories: list[str]) -> 
             continue
 
         # Find all image files in this category
+        # Use category/filename as key to avoid collisions across categories
+        # (e.g. Caltech-101 uses image_XXXX.jpg in every category folder).
         for ext in ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp"]:
             for image_path in category_folder.glob(ext):
-                metadata[image_path.name] = {
+                metadata[f"{category_name}/{image_path.name}"] = {
                     "category": category_name,
                     "path": image_path,
                 }
@@ -227,9 +230,10 @@ def load_paragraph_metadata_from_folders(text_dir: Path, categories: list[str]) 
             continue
 
         # Find all text files in this category
+        # Use category/filename as key to avoid collisions across categories.
         for ext in ["*.txt", "*.md"]:
             for text_path in category_folder.glob(ext):
-                metadata[text_path.name] = {
+                metadata[f"{category_name}/{text_path.name}"] = {
                     "category": category_name,
                     "path": text_path,
                 }
