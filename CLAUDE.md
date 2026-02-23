@@ -21,10 +21,10 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_CLIPS, paths, model IDs)
 - `vtsearch/clips.py` — Test clip generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, favorite processors); auto-saves to `data/settings.json`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, favorite_processors); auto-saves to `data/settings.json`
 - `vtsearch/routes/` — Flask blueprints: `main.py`, `clips.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking
-- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/rss_feed/youtube_playlist/combine_datasets)
+- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/rss_feed/youtube_playlist/combine_datasets); auto-discovered via `IMPORTER` sentinel
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
 - `vtsearch/exporters/` — Results exporters (file/gui/email_smtp/csv_file/webhook); auto-discovered via `EXPORTER` sentinel
 - `vtsearch/labels/importers/` — Label importers (json_file/csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
