@@ -10,7 +10,7 @@ import torch
 from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
-from vtsearch.config import CLIP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR
+from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -118,7 +118,6 @@ class ImageMediaType(MediaType):
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
-        folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
         return [
             DemoDataset(
                 id="images_s",
@@ -129,7 +128,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=0,
                 slice_end=11,
             ),
@@ -142,7 +140,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=11,
                 slice_end=33,
             ),
@@ -155,7 +152,6 @@ class ImageMediaType(MediaType):
                 ),
                 categories=cats,
                 source="caltech101",
-                required_folder=folder,
                 slice_start=33,
                 slice_end=77,
             ),
@@ -187,8 +183,8 @@ class ImageMediaType(MediaType):
         # versions compute on-the-fly.  Tell the loader to silently ignore them.
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress):
-            self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-            self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
+            self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+            self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

@@ -161,8 +161,8 @@ class VideoMediaType(MediaType):
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading video embedder (X-CLIP model)…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-            self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
+            self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+            self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

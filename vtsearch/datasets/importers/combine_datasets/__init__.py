@@ -7,7 +7,7 @@ All source datasets must share the same media type.  Duplicate entries
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
@@ -132,6 +132,79 @@ class CombineDatasetsImporter(DatasetImporter):
     def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
         """CLI entry point -- *datasets* is a comma-separated path string."""
         self.run(field_values, clips, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def run_chunked(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        """Yield one chunk per source pickle, deduplicating across chunks.
+
+        Each source pickle is loaded as its own chunk (with fresh IDs
+        starting at 1).  Cross-source deduplication by MD5 is maintained
+        across yields via a running ``seen_md5s`` set.
+        """
+        raw = field_values.get("datasets", "")
+        if isinstance(raw, list):
+            paths = [Path(p) for p in raw if p]
+        else:
+            paths = [Path(p.strip()) for p in raw.split(",") if p.strip()]
+
+        if len(paths) < 2:
+            raise ValueError("At least two datasets are required to combine.")
+
+        for p in paths:
+            if not p.exists():
+                raise FileNotFoundError(f"Dataset file not found: {p}")
+
+        progress = _get_progress()
+        media_type: str | None = None
+        seen_md5s: set[str] = set()
+
+        for i, pkl_path in enumerate(paths):
+            progress(
+                "loading",
+                f"Loading dataset {i + 1}/{len(paths)}: {pkl_path.name}...",
+                i + 1,
+                len(paths),
+            )
+            source_clips = _load_clips_from_pickle(pkl_path)
+
+            if not source_clips:
+                continue
+
+            first_clip = next(iter(source_clips.values()))
+            source_media_type = first_clip.get("type", "audio")
+
+            if media_type is None:
+                media_type = source_media_type
+            elif source_media_type != media_type:
+                raise ValueError(
+                    f"Media type mismatch: expected '{media_type}' but "
+                    f"'{pkl_path.name}' contains '{source_media_type}' clips."
+                )
+
+            chunk_clips: dict[int, dict[str, Any]] = {}
+            new_id = 1
+            for clip in source_clips.values():
+                md5 = clip.get("md5", "")
+                if md5 and md5 in seen_md5s:
+                    continue
+                if md5:
+                    seen_md5s.add(md5)
+                clip["id"] = new_id
+                chunk_clips[new_id] = clip
+                new_id += 1
+
+            if chunk_clips:
+                yield chunk_clips
+
+    def run_chunked_cli(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Build an origin dict listing the source dataset paths."""

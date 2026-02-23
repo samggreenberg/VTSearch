@@ -7,11 +7,11 @@ the core requirements.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.datasets.loader import load_dataset_from_pickle, load_dataset_from_pickle_chunked
 
 
 def _get_progress():
@@ -60,6 +60,19 @@ class PickleDatasetImporter(DatasetImporter):
         if not file_path.exists():
             raise FileNotFoundError(f"Dataset file not found: {file_path}")
         load_dataset_from_pickle(file_path, clips, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def run_chunked_cli(
+        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        """Yield chunks from a pickle file path (string)."""
+        file_path = Path(field_values["file"])
+        if not file_path.exists():
+            raise FileNotFoundError(f"Dataset file not found: {file_path}")
+        yield from load_dataset_from_pickle_chunked(file_path, chunk_size, thin=thin)
 
 
 IMPORTER = PickleDatasetImporter()

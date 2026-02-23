@@ -17,6 +17,7 @@
   let progressTimer = null;
   let progressEtaState = null; // { startTime, lastCurrent, lastTime } for ETA calculation
   let learnedSortController = null; // AbortController for in-flight background training
+  let paragraphController = null;   // AbortController for in-flight paragraph content fetch
   let learnedSortDebounce = null;   // Debounce timer for background training
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   const clipList = document.getElementById("clip-list");
@@ -237,6 +238,8 @@
   const backButton = document.getElementById("back-button");
   const loadFileBtn = document.getElementById("load-file-btn");
   const fileInput = document.getElementById("file-input");
+  const datasetLoadColumn = document.getElementById("dataset-load-column");
+  const datasetGenerateColumn = document.getElementById("dataset-generate-column");
   const datasetBar = document.getElementById("dataset-bar");
   const datasetInfo = document.getElementById("dataset-info");
   const leftPanel = document.getElementById("left-panel");
@@ -515,7 +518,7 @@
         btn.className = "dataset-option";
         btn.innerHTML = `<h3>${importer.icon || "🔌"} ${importer.display_name}</h3><p>${importer.description}</p>`;
         btn.addEventListener("click", () => showExtendedImporterForm(importer));
-        datasetOptions.appendChild(btn);
+        datasetGenerateColumn.appendChild(btn);
       }
     } catch (_) {
       // Extended importers are optional – silently ignore failures.
@@ -527,7 +530,7 @@
     combineBtnEl.id = "combine-datasets-btn";
     combineBtnEl.innerHTML = `<h3>\uD83D\uDD00 Combine Existing Datasets</h3><p>Merge multiple .pkl datasets into one, skipping duplicates</p>`;
     combineBtnEl.addEventListener("click", () => showCombineDatasetsForm());
-    datasetOptions.appendChild(combineBtnEl);
+    datasetLoadColumn.appendChild(combineBtnEl);
 
     // Append the Load Demo Dataset button after all dynamic importers
     const demoBtnEl = document.createElement("button");
@@ -611,12 +614,12 @@
         demoDatasetsDiv.innerHTML = `<div style="color:var(--color-bad); text-align:center;">Error loading demo datasets: ${e.message}</div>`;
       }
     });
-    datasetOptions.appendChild(demoBtnEl);
+    datasetLoadColumn.appendChild(demoBtnEl);
 
     // Always render the autodetect toggle last, after all import options
     const autodetectDiv = document.createElement("div");
     autodetectDiv.id = "autodetect-toggle";
-    autodetectDiv.style = "margin-top: 16px; padding: 12px; background: var(--border); border-radius: 4px;";
+    autodetectDiv.style = "width: 100%; margin-top: 16px; padding: 12px; background: var(--border); border-radius: 4px; box-sizing: border-box;";
     autodetectDiv.innerHTML = `
       <label style="display: flex; align-items: center; color: var(--text-primary); cursor: pointer;">
         <input type="checkbox" id="autodetect-mode-checkbox" style="margin-right: 8px;">
@@ -2276,15 +2279,20 @@
 
     // Load paragraph text content
     if (mediaType === "paragraph") {
-      fetch(`/api/clips/${c.id}/paragraph`)
+      if (paragraphController) paragraphController.abort();
+      paragraphController = new AbortController();
+      const expectedId = c.id;
+      fetch(`/api/clips/${c.id}/paragraph`, { signal: paragraphController.signal })
         .then(res => res.json())
         .then(data => {
+          if (selected !== expectedId) return; // selection changed, discard stale response
           const paragraphDiv = document.getElementById("clip-paragraph");
           if (paragraphDiv) {
             paragraphDiv.textContent = data.content;
           }
         })
         .catch(err => {
+          if (err.name === "AbortError") return; // expected when selection changes
           console.error("Error loading paragraph:", err);
         });
     }

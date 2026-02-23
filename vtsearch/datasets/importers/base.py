@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 FieldType = Literal["file", "folder", "url", "text", "select"]
 
@@ -176,6 +176,72 @@ class DatasetImporter:
                 stores it in the progress tracker as an error message.
         """
         raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
+
+    # ------------------------------------------------------------------
+    # Chunked / piecewise loading
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_chunked(self) -> bool:
+        """Whether this importer supports chunked (piecewise) loading.
+
+        Importers that override :meth:`run_chunked` should return ``True``
+        here so the CLI can advertise the capability.
+        """
+        return False
+
+    def run_chunked(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        """Yield chunks of clips for memory-efficient piecewise processing.
+
+        Each yielded dict is a self-contained clips dict with sequential
+        IDs starting at 1.  The caller processes each chunk independently
+        and discards it before consuming the next, bounding memory usage
+        to roughly *chunk_size* clips at a time.
+
+        The default implementation calls :meth:`run` once and yields the
+        result as a single chunk.  This means callers can always use the
+        chunked code path — importers that have not overridden this method
+        simply produce one chunk equal to the full dataset.
+
+        Importers that handle large data sources should override this
+        method (and set :attr:`supports_chunked` to ``True``) to yield
+        genuine incremental chunks.
+
+        Args:
+            field_values: Same mapping as :meth:`run`.
+            chunk_size: Maximum number of clips per yielded chunk.
+            thin: When ``True``, store file path references instead of
+                loading media bytes.
+
+        Yields:
+            A dict mapping int clip IDs to clip data dicts.  Each yielded
+            dict contains at most *chunk_size* clips.
+        """
+        clips: dict[int, dict[str, Any]] = {}
+        self.run(field_values, clips, thin=thin)
+        yield clips
+
+    def run_chunked_cli(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        """CLI variant of :meth:`run_chunked`.
+
+        The default implementation calls :meth:`run_cli` once and yields
+        the result as a single chunk.  Importers that override
+        :meth:`run_chunked` should also override this if their CLI path
+        differs (e.g. file-path strings instead of ``FileStorage`` objects).
+        """
+        clips: dict[int, dict[str, Any]] = {}
+        self.run_cli(field_values, clips, thin=thin)
+        yield clips
 
     # ------------------------------------------------------------------
     # CLI support

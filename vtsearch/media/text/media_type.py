@@ -151,7 +151,7 @@ class TextMediaType(MediaType):
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading text embedder (E5 model)…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir)
+            self._model = SentenceTransformer(E5_MODEL_ID, cache_folder=cache_dir, token=False)
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
