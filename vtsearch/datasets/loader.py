@@ -1313,7 +1313,18 @@ def load_demo_dataset(
                 raise e
 
             metadata = load_video_metadata_from_folders(video_dir, dataset_info["categories"])
-            video_files = [(meta["path"], meta) for meta in metadata.values()]
+
+            # Apply per-category slicing for disjoint S/M/L datasets
+            slice_start = dataset_info.get("slice_start", 0)
+            slice_end = dataset_info.get("slice_end")
+            by_cat: dict[str, list] = {}
+            for fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                by_cat.setdefault(cat, []).append((meta["path"], meta))
+
+            video_files: list[tuple] = []
+            for cat in dataset_info["categories"]:
+                video_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
 
             # Generate embeddings for videos
             clips.clear()

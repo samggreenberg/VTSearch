@@ -99,42 +99,65 @@ class VideoMediaType(MediaType):
     # Demo datasets
     # ------------------------------------------------------------------
 
+    # Shared categories for all S/M/L video demo datasets.
+    # All three sizes use the same 10 categories; only the underlying
+    # clips differ (disjoint slices within each category's UCF-101 videos).
+    _DEMO_CATEGORIES = [
+        "ApplyEyeMakeup",
+        "ApplyLipstick",
+        "BrushingTeeth",
+        "CliffDiving",
+        "Drumming",
+        "HandstandWalking",
+        "JumpRope",
+        "PushUps",
+        "TaiChi",
+        "YoYo",
+    ]
+
     @property
     def demo_datasets(self) -> list:
+        cats = self._DEMO_CATEGORIES
+        folder = VIDEO_DIR / "ucf101"
         return [
             DemoDataset(
-                id="activities_video",
-                label="Personal Activities",
+                id="videos_s",
+                label="UCF-101 Action Mix (S)",
                 description=(
-                    "Short clips of everyday personal activities like grooming,"
-                    " playing instruments, and yo-yo from UCF-101."
+                    "~150 clips across 10 action categories — personal"
+                    " activities and sports from the UCF-101 collection."
                 ),
-                categories=[
-                    "ApplyEyeMakeup",
-                    "ApplyLipstick",
-                    "BrushingTeeth",
-                    "Drumming",
-                    "YoYo",
-                ],
+                categories=cats,
                 source="ucf101",
-                required_folder=VIDEO_DIR / "ucf101",
+                required_folder=folder,
+                slice_start=0,
+                slice_end=15,
             ),
             DemoDataset(
-                id="sports_video",
-                label="Sports & Exercise",
+                id="videos_m",
+                label="UCF-101 Action Mix (M)",
                 description=(
-                    "Short clips of physical activities including cliff diving,"
-                    " jump rope, push-ups, and tai chi from UCF-101."
+                    "~250 clips across 10 action categories — personal"
+                    " activities and sports from the UCF-101 collection."
                 ),
-                categories=[
-                    "CliffDiving",
-                    "HandstandWalking",
-                    "JumpRope",
-                    "PushUps",
-                    "TaiChi",
-                ],
+                categories=cats,
                 source="ucf101",
-                required_folder=VIDEO_DIR / "ucf101",
+                required_folder=folder,
+                slice_start=15,
+                slice_end=40,
+            ),
+            DemoDataset(
+                id="videos_l",
+                label="UCF-101 Action Mix (L)",
+                description=(
+                    "~600 clips across 10 action categories — personal"
+                    " activities and sports from the UCF-101 collection."
+                ),
+                categories=cats,
+                source="ucf101",
+                required_folder=folder,
+                slice_start=40,
+                slice_end=150,
             ),
         ]
 

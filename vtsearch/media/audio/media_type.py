@@ -76,19 +76,64 @@ class AudioMediaType(MediaType):
     # ------------------------------------------------------------------
 
     # Shared categories for all S/M/L audio demo datasets.
-    # All three sizes use the same 10 categories; only the underlying
+    # All three sizes use all 50 ESC-50 categories; only the underlying
     # clips differ (disjoint slices of each category's 40 ESC-50 clips).
     _DEMO_CATEGORIES = [
+        # Animals
         "dog",
-        "cat",
         "rooster",
-        "chirping_birds",
+        "pig",
+        "cow",
+        "frog",
+        "cat",
+        "hen",
+        "insects",
+        "sheep",
+        "crow",
+        # Natural soundscapes
         "rain",
-        "thunderstorm",
-        "car_horn",
-        "chainsaw",
+        "sea_waves",
         "crackling_fire",
+        "crickets",
+        "chirping_birds",
+        "water_drops",
+        "wind",
+        "pouring_water",
+        "toilet_flush",
+        "thunderstorm",
+        # Human, non-speech
+        "crying_baby",
+        "sneezing",
+        "clapping",
+        "breathing",
+        "coughing",
+        "footsteps",
+        "laughing",
+        "brushing_teeth",
+        "snoring",
+        "drinking_sipping",
+        # Interior / domestic
+        "door_wood_knock",
+        "mouse_click",
+        "keyboard_typing",
+        "door_wood_creep",
+        "can_opening",
+        "washing_machine",
+        "vacuum_cleaner",
         "clock_alarm",
+        "clock_tick",
+        "glass_breaking",
+        # Exterior / urban
+        "helicopter",
+        "chainsaw",
+        "siren",
+        "car_horn",
+        "engine",
+        "train",
+        "church_bells",
+        "airplane",
+        "fireworks",
+        "hand_saw",
     ]
 
     @property
@@ -100,37 +145,37 @@ class AudioMediaType(MediaType):
                 id="sounds_s",
                 label="ESC-50 Sound Mix (S)",
                 description=(
-                    "50 clips across 10 sound categories — animals, nature, urban,"
-                    " and household sounds from the ESC-50 collection."
+                    "~350 clips across 50 sound categories — animals, nature,"
+                    " urban, domestic, and human sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
                 slice_start=0,
-                slice_end=5,
+                slice_end=7,
             ),
             DemoDataset(
                 id="sounds_m",
                 label="ESC-50 Sound Mix (M)",
                 description=(
-                    "100 clips across 10 sound categories — animals, nature, urban,"
-                    " and household sounds from the ESC-50 collection."
+                    "~650 clips across 50 sound categories — animals, nature,"
+                    " urban, domestic, and human sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
-                slice_start=5,
-                slice_end=15,
+                slice_start=7,
+                slice_end=20,
             ),
             DemoDataset(
                 id="sounds_l",
                 label="ESC-50 Sound Mix (L)",
                 description=(
-                    "200 clips across 10 sound categories — animals, nature, urban,"
-                    " and household sounds from the ESC-50 collection."
+                    "~1000 clips across 50 sound categories — animals, nature,"
+                    " urban, domestic, and human sounds from the ESC-50 collection."
                 ),
                 categories=cats,
                 required_folder=folder,
-                slice_start=15,
-                slice_end=35,
+                slice_start=20,
+                slice_end=40,
             ),
         ]
 

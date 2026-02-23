@@ -34,17 +34,18 @@ Available demos:
 
 | Demo | Media type | Description |
 |------|-----------|-------------|
-| **sounds_s** | Audio | Animals & fireside — dogs, cats, roosters, church bells, crackling fire (ESC-50, ~200 clips) |
-| **sounds_m** | Audio | Everyday sounds — babies, laughter, clapping, footsteps, chainsaws, airplanes, and more (ESC-50, ~400 clips) |
-| **sounds_l** | Audio | Environmental mix — nature, weather, traffic, and household sounds (ESC-50, ~800 clips) |
-| **images_s** | Image | Nature & flight — butterflies, sunflowers, starfish, helicopters (Caltech-101) |
-| **images_m** | Image | Animals & objects — dolphins, pianos, elephants, kangaroos, laptops, and more (Caltech-101) |
-| **images_l** | Image | Diverse objects — 15 categories including scorpions, vehicles, and instruments (Caltech-101) |
-| **paragraphs_s** | Text | Sports & science articles from 20 Newsgroups |
-| **paragraphs_m** | Text | World news, business, technology, and medicine articles from 20 Newsgroups |
-| **paragraphs_l** | Text | Eight-topic mix — cars, hockey, electronics, crypto, religion, and more (20 Newsgroups) |
-| **activities_video** | Video | Personal activities — grooming, drumming, yo-yo (UCF-101) |
-| **sports_video** | Video | Sports & exercise — cliff diving, jump rope, push-ups, tai chi (UCF-101) |
+| **sounds_s** | Audio | ~350 clips across all 50 ESC-50 sound categories — animals, nature, urban, domestic, and human sounds |
+| **sounds_m** | Audio | ~650 clips across all 50 ESC-50 sound categories |
+| **sounds_l** | Audio | ~1000 clips across all 50 ESC-50 sound categories |
+| **images_s** | Image | ~250 photographs across 25 Caltech-101 categories — animals, vehicles, household objects, and nature |
+| **images_m** | Image | ~500 photographs across 25 Caltech-101 categories |
+| **images_l** | Image | ~750 photographs across 25 Caltech-101 categories |
+| **paragraphs_s** | Text | ~375 articles across 15 topics from 20 Newsgroups — sports, science, politics, religion, and more |
+| **paragraphs_m** | Text | ~750 articles across 15 topics from 20 Newsgroups |
+| **paragraphs_l** | Text | ~1875 articles across 15 topics from 20 Newsgroups |
+| **videos_s** | Video | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
+| **videos_m** | Video | ~250 clips across 10 UCF-101 action categories (manual download) |
+| **videos_l** | Video | ~600 clips across 10 UCF-101 action categories (manual download) |
 
 You can also load your own data from pickle files or folders via the same menu.
 
