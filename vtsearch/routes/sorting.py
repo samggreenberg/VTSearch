@@ -89,8 +89,20 @@ def sort_clips():
         needs_loading = getattr(mt, "_model", None) is None
     except KeyError:
         needs_loading = False
+
     if needs_loading:
+        # Temporarily redirect the media type's progress callback to the
+        # sort progress system so the GUI's sort progress bar shows real
+        # download / weight-loading percentages instead of an indeterminate
+        # animation.
         update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+        original_cb = mt._on_progress
+        mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+        try:
+            mt.load_models()
+        finally:
+            mt._on_progress = original_cb
+        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
     else:
         update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
 

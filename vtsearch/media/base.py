@@ -17,6 +17,7 @@ the registry.
 
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,11 +38,81 @@ __all__ = [
     "MediaType",
     "Processor",
     "ProgressCallback",
+    "intercept_tqdm_progress",
 ]
 
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
+
+
+@contextlib.contextmanager
+def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
+    """Temporarily hook tqdm progress bars to forward updates to *callback*.
+
+    HuggingFace ``transformers`` and ``huggingface_hub`` use :mod:`tqdm` for
+    download and weight-loading progress bars.  Those bars write to stderr,
+    which the GUI never sees.  This context manager monkey-patches the base
+    ``tqdm.std.tqdm`` class so that every ``update()`` call also pushes
+    ``(status, message, current, total)`` to *callback*.
+
+    All tqdm subclasses (``tqdm.auto.tqdm``, ``huggingface_hub.utils.tqdm``,
+    etc.) resolve ``update`` through MRO to ``tqdm.std.tqdm.update``, so a
+    single patch covers the entire hierarchy.
+
+    Only bars with a known *total* are forwarded; indeterminate spinners are
+    silently ignored.
+    """
+    import tqdm.std
+
+    _orig_init = tqdm.std.tqdm.__init__
+    _orig_update = tqdm.std.tqdm.update
+    _orig_close = tqdm.std.tqdm.close
+
+    # Track all active bars.  We report progress from the bar with the
+    # largest ``total`` (typically the model weight file download).
+    _bars: list[tqdm.std.tqdm] = []
+
+    def _primary_bar() -> tqdm.std.tqdm | None:
+        if not _bars:
+            return None
+        return max(_bars, key=lambda b: getattr(b, "total", 0) or 0)
+
+    def _report(bar: tqdm.std.tqdm) -> None:
+        total = getattr(bar, "total", None)
+        if not total or total <= 0:
+            return
+        current = int(getattr(bar, "n", 0))
+        desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
+        callback("loading", desc, current, int(total))
+
+    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        _orig_init(self, *args, **kwargs)
+        total = getattr(self, "total", None)
+        if total and total > 0 and not getattr(self, "disable", False):
+            _bars.append(self)
+            if _primary_bar() is self:
+                _report(self)
+
+    def _patched_update(self: Any, n: int = 1) -> None:
+        _orig_update(self, n)
+        if _primary_bar() is self:
+            _report(self)
+
+    def _patched_close(self: Any) -> None:
+        _orig_close(self)
+        if self in _bars:
+            _bars.remove(self)
+
+    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
+    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
+    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
+        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
+        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
 
 
 @dataclass
