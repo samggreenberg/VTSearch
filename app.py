@@ -19,8 +19,6 @@ warnings.filterwarnings("ignore", message=".*unauthenticated requests.*HF Hub.*"
 # Visual feedback for startup
 print("⏳ Initializing VTSearch...", flush=True)
 
-print("⏳ Importing ML libraries (this may take a few seconds)...", flush=True)
-
 from flask import Flask
 
 # Import refactored modules

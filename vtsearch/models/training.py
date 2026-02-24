@@ -1,14 +1,17 @@
 """ML training utilities for learned sorting."""
 
+from __future__ import annotations
+
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
-import torch.nn as nn
-from sklearn.mixture import GaussianMixture
 
 from vtsearch.config import TRAIN_EPOCHS
+
+if TYPE_CHECKING:
+    import torch
+    import torch.nn as nn
 
 
 def calculate_gmm_threshold(scores: list[float]) -> float:
@@ -28,6 +31,8 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     """
     if len(scores) < 2:
         return 0.5
+
+    from sklearn.mixture import GaussianMixture  # noqa: PLC0415
 
     # Reshape for sklearn
     X = np.array(scores).reshape(-1, 1)
@@ -71,6 +76,8 @@ def build_model(input_dim: int, generator: torch.Generator | None = None) -> nn.
         An ``nn.Sequential`` model with layers:
         ``Linear(input_dim, 64) -> ReLU -> Linear(64, 1)``.
     """
+    import torch.nn as nn  # noqa: PLC0415
+
     model = nn.Sequential(
         nn.Linear(input_dim, 64),
         nn.ReLU(),
@@ -122,6 +129,9 @@ def train_model(
         ``Linear(input_dim, 64) -> ReLU -> Linear(64, 1)``.
         The model outputs raw logits — apply ``torch.sigmoid`` at inference.
     """
+    import torch  # noqa: PLC0415
+    import torch.nn as nn  # noqa: PLC0415
+
     g = torch.Generator()
     g.manual_seed(seed)
 
@@ -298,6 +308,8 @@ def calculate_cross_calibration_threshold(
     if n_train < 2 or n_cal < 1:
         return float("inf")
 
+    import torch  # noqa: PLC0415
+
     calibrate_count = max(1, calibrate_count)
     thresholds: list[float] = []
 
@@ -393,6 +405,8 @@ def train_and_score(
         - ``threshold`` is the decision boundary as a float (cross-calibrated,
           or blended with GMM when ``safe_thresholds`` is ``True``).
     """
+    import torch  # noqa: PLC0415
+
     X_list = []
     y_list = []
     for cid in good_votes:

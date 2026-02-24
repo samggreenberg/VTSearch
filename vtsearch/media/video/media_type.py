@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-import torch
-from PIL import Image
-from transformers import XCLIPModel, XCLIPProcessor
 
 from vtsearch.config import MODELS_CACHE_DIR, VIDEO_DIR, XCLIP_MODEL_ID
+
+if TYPE_CHECKING:
+    import torch
+    from transformers import XCLIPModel, XCLIPProcessor
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -28,6 +29,8 @@ def _extract_tensor(output: object) -> torch.Tensor:
     may return either a raw tensor or a BaseModelOutputWithPooling dataclass.
     This helper handles both cases.
     """
+    import torch  # noqa: PLC0415
+
     if isinstance(output, torch.Tensor):
         return output
     for attr in ("video_embeds", "text_embeds", "pooler_output"):
@@ -180,6 +183,8 @@ class VideoMediaType(MediaType):
             return
         import gc
 
+        from transformers import XCLIPModel, XCLIPProcessor  # noqa: PLC0415
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading X-CLIP model weights…", 0, 2)
@@ -196,6 +201,8 @@ class VideoMediaType(MediaType):
             return None
         try:
             import cv2  # noqa: PLC0415  (lazy import — cv2 is optional)
+            import torch  # noqa: PLC0415
+            from PIL import Image  # noqa: PLC0415
 
             cap = cv2.VideoCapture(str(file_path))
             if not cap.isOpened():
@@ -240,6 +247,8 @@ class VideoMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            import torch  # noqa: PLC0415
+
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]

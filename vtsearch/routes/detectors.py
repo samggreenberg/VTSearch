@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
-import torch
 from flask import Blueprint, jsonify, request
 
 from vtsearch.models import (
@@ -47,6 +46,8 @@ detectors_bp = Blueprint("detectors", __name__)
 @detectors_bp.route("/api/detector/export", methods=["POST"])
 def export_detector():
     """Train MLP on current votes and export the model weights."""
+    import torch  # noqa: PLC0415
+
     from vtsearch.utils import bad_votes, good_votes
 
     if not good_votes or not bad_votes:
@@ -103,6 +104,8 @@ def export_detector():
 @detectors_bp.route("/api/detector-sort", methods=["POST"])
 def detector_sort():
     """Score all clips using a loaded detector model."""
+    import torch  # noqa: PLC0415
+
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -365,6 +368,8 @@ def import_detector_labels():
                 400,
             )
 
+        import torch  # noqa: PLC0415
+
         X = torch.tensor(np.array(X_list), dtype=torch.float32)
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
         input_dim = X.shape[1]
@@ -496,6 +501,8 @@ def train_from_label_import(importer_name: str):
     if num_good == 0 or num_bad == 0:
         return jsonify({"error": "Need at least one good and one bad labeled example"}), 400
 
+    import torch  # noqa: PLC0415
+
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
@@ -543,6 +550,8 @@ def auto_detect():
         return jsonify({"error": f"No favorite detectors found for media type: {media_type}"}), 400
 
     # Prepare shared data for all detectors
+    import torch  # noqa: PLC0415
+
     all_ids = sorted(clips.keys())
     all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)

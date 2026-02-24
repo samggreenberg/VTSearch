@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-import torch
-from PIL import Image
-from transformers import CLIPModel, CLIPProcessor
 
 from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
+
+if TYPE_CHECKING:
+    import torch
+    from PIL import Image
+    from transformers import CLIPModel, CLIPProcessor
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -28,6 +30,8 @@ def _extract_tensor(output: object) -> torch.Tensor:
     may return either a raw tensor or a BaseModelOutputWithPooling dataclass.
     This helper handles both cases.
     """
+    import torch  # noqa: PLC0415
+
     if isinstance(output, torch.Tensor):
         return output
     for attr in ("image_embeds", "text_embeds", "pooler_output"):
@@ -194,6 +198,8 @@ class ImageMediaType(MediaType):
             return
         import gc
 
+        from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLIP model weights…", 0, 2)
@@ -212,6 +218,8 @@ class ImageMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            from PIL import Image  # noqa: PLC0415
+
             image = Image.open(file_path).convert("RGB")
             return self.embed_pil_image(image)
         except Exception as e:
@@ -225,6 +233,8 @@ class ImageMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            import torch  # noqa: PLC0415
+
             image = image.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
             with torch.no_grad():
@@ -241,6 +251,8 @@ class ImageMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            import torch  # noqa: PLC0415
+
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
@@ -260,6 +272,8 @@ class ImageMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_clip_data(self, file_path: Path) -> dict:
+        from PIL import Image  # noqa: PLC0415
+
         with open(file_path, "rb") as f:
             clip_bytes = f.read()
         try:
