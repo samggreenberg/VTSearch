@@ -3083,7 +3083,9 @@
 
   // ---- Progress tracking ----
 
-  const checkProgressBtn = document.getElementById("check-progress-btn");
+  const smartIndicator = document.getElementById("smart-indicator");
+  const stableIndicator = document.getElementById("stable-indicator");
+  const spanIndicator = document.getElementById("span-indicator");
   const progressModal = document.getElementById("progress-modal");
   const modalClose = document.getElementById("modal-close");
   const goodCountSpan = document.getElementById("good-count");
@@ -3092,6 +3094,9 @@
   const labelingAnalysisBar = document.getElementById("labeling-analysis-bar");
   const labelingAnalysisText = document.getElementById("labeling-analysis-text");
   const labelingAnalysisPct = document.getElementById("labeling-analysis-pct");
+
+  // Keep latest status data for span info display
+  let _lastStatusData = null;
 
   // Update label counts and schedule an indicator refresh
   function updateLabelCounts() {
@@ -3121,28 +3126,50 @@
     }
   }
 
-  function applyLabelingStatus(data) {
-    const btn = checkProgressBtn;
-    const subtext = document.getElementById("indicator-subtext");
-    btn.dataset.status = data.status;
-    if (data.status === "red") {
-      subtext.textContent = `${data.good_count}g / ${data.bad_count}b`;
-    } else if (data.status === "yellow") {
-      subtext.textContent = "Continue";
-    } else if (data.status === "green") {
-      subtext.textContent = "Done";
+  function _applyIndicator(btn, subtextEl, metric) {
+    btn.dataset.status = metric.status;
+    if (metric.status === "red") {
+      subtextEl.textContent = "";
+    } else if (metric.status === "yellow") {
+      subtextEl.textContent = "";
+    } else if (metric.status === "green") {
+      subtextEl.textContent = "";
     } else {
-      subtext.textContent = "";
+      subtextEl.textContent = "";
     }
   }
 
-  checkProgressBtn.addEventListener("click", async () => {
+  function applyLabelingStatus(data) {
+    _lastStatusData = data;
+    if (data.smart) {
+      _applyIndicator(smartIndicator, document.getElementById("smart-subtext"), data.smart);
+    }
+    if (data.stable) {
+      _applyIndicator(stableIndicator, document.getElementById("stable-subtext"), data.stable);
+    }
+    if (data.span) {
+      _applyIndicator(spanIndicator, document.getElementById("span-subtext"), data.span);
+      // Show compact level info as subtext for Span
+      const sp = data.span;
+      if (sp.status !== "red" && sp.level >= 0) {
+        document.getElementById("span-subtext").textContent = `L${sp.level}`;
+      }
+    }
+  }
+
+  // Generic handler: fetch full analysis, then show the relevant section
+  async function showMetricDetail(metric, triggerBtn) {
+    // Span doesn't need the full analysis — just show the text box from status data
+    if (metric === "span") {
+      showSpanPopup();
+      return;
+    }
+
     if (votes.good.length === 0 || votes.bad.length === 0) {
       await vtAlert("Need at least one good and one bad vote to check progress", "warning");
       return;
     }
 
-    // Pause any active audio or video playback
     pauseActiveMedia();
 
     // Show loading progress modal
@@ -3151,7 +3178,6 @@
     labelingAnalysisText.textContent = "Training models over label history…";
     labelingAnalysisModal.classList.add("show");
 
-    // Simulate progress while waiting for the backend
     let progress = 0;
     const progressInterval = setInterval(() => {
       progress += 3;
@@ -3160,8 +3186,9 @@
       labelingAnalysisPct.textContent = `${progress}%`;
     }, 250);
 
-    checkProgressBtn.disabled = true;
-    checkProgressBtn.querySelector(".indicator-label").textContent = "Analyzing…";
+    triggerBtn.disabled = true;
+    const origLabel = triggerBtn.querySelector(".indicator-label").textContent;
+    triggerBtn.querySelector(".indicator-label").textContent = "…";
 
     try {
       const res = await fetch("/api/labeling-progress", {
@@ -3184,22 +3211,58 @@
       }
 
       const data = await res.json();
-      displayProgressResults(data);
+      displayProgressResults(data, metric);
       progressModal.classList.add("show");
     } catch (e) {
       clearInterval(progressInterval);
       labelingAnalysisModal.classList.remove("show");
       await vtAlert("Error analyzing progress: " + e.message, "error");
     } finally {
-      checkProgressBtn.disabled = false;
-      checkProgressBtn.querySelector(".indicator-label").textContent = "Progress";
+      triggerBtn.disabled = false;
+      triggerBtn.querySelector(".indicator-label").textContent = origLabel;
       fetchLabelingStatus();
-      // If the progress modal didn't open (error path), resume media now
       if (!progressModal.classList.contains("show")) {
         resumeActiveMedia();
       }
     }
-  });
+  }
+
+  function showSpanPopup() {
+    // Show the progress modal with only the Span section visible
+    const sp = _lastStatusData && _lastStatusData.span ? _lastStatusData.span : null;
+    const infoText = document.getElementById("span-info-text");
+    if (!sp || sp.level < 0) {
+      infoText.textContent = "No diversity tree coverage yet. Keep labeling diverse examples.";
+    } else if (sp.level >= sp.depth) {
+      infoText.textContent = `All ${sp.depth + 1} tree levels fully covered. Excellent diversity!`;
+    } else {
+      let msg = `Deepest full level: ${sp.level} of ${sp.depth}.`;
+      if (sp.next_level_total > 0) {
+        msg += ` Next level (${sp.level + 1}): ${sp.next_level_seen} of ${sp.next_level_total} nodes seen.`;
+      }
+      infoText.textContent = msg;
+    }
+
+    // Update stats from cached status data
+    if (_lastStatusData) {
+      document.getElementById("stat-total-labels").textContent = _lastStatusData.total_count || 0;
+      document.getElementById("stat-total-clips").textContent = "—";
+    }
+
+    document.getElementById("smart-section").style.display = "none";
+    document.getElementById("stable-section").style.display = "none";
+    document.getElementById("span-section").style.display = "";
+    document.getElementById("recommendation-text").textContent =
+      sp && sp.reason ? sp.reason : "No span data available.";
+    document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+
+    pauseActiveMedia();
+    progressModal.classList.add("show");
+  }
+
+  smartIndicator.addEventListener("click", () => showMetricDetail("smart", smartIndicator));
+  stableIndicator.addEventListener("click", () => showMetricDetail("stable", stableIndicator));
+  spanIndicator.addEventListener("click", () => showMetricDetail("span", spanIndicator));
 
   modalClose.addEventListener("click", () => {
     progressModal.classList.remove("show");
@@ -3213,40 +3276,49 @@
     }
   });
 
-  function displayProgressResults(data) {
+  function displayProgressResults(data, metric) {
     // Update summary stats
     document.getElementById("stat-total-labels").textContent = data.total_labels;
     document.getElementById("stat-total-clips").textContent = data.total_clips;
 
-    // Add ARIA labels to chart canvases
     const ecChart = document.getElementById("error-cost-chart");
     if (ecChart) ecChart.setAttribute("role", "img");
     const stChart = document.getElementById("stability-chart");
     if (stChart) stChart.setAttribute("role", "img");
 
-    // Render error cost chart
-    renderErrorCostChart(data.error_cost_over_time);
+    // Show only the relevant section
+    const smartSec = document.getElementById("smart-section");
+    const stableSec = document.getElementById("stable-section");
+    const spanSec = document.getElementById("span-section");
+    smartSec.style.display = "none";
+    stableSec.style.display = "none";
+    spanSec.style.display = "none";
 
-    // Render stability chart
-    renderStabilityChart(data.stability_over_time);
+    if (metric === "smart") {
+      smartSec.style.display = "";
+      renderErrorCostChart(data.error_cost_over_time);
+      document.getElementById("progress-modal-title").textContent = "Smart: Error Cost Analysis";
+      if (ecChart) {
+        const lastCost = data.error_cost_over_time.length > 0
+          ? data.error_cost_over_time[data.error_cost_over_time.length - 1].error_cost.toFixed(2)
+          : "N/A";
+        ecChart.setAttribute("aria-label", `Error cost chart with ${data.error_cost_over_time.length} data points. Latest error cost: ${lastCost}`);
+      }
+    } else if (metric === "stable") {
+      stableSec.style.display = "";
+      renderStabilityChart(data.stability_over_time);
+      document.getElementById("progress-modal-title").textContent = "Stable: Prediction Flip Analysis";
+      if (stChart) {
+        const lastFlips = data.stability_over_time.length > 1
+          ? data.stability_over_time[data.stability_over_time.length - 1].num_flips
+          : "N/A";
+        stChart.setAttribute("aria-label", `Prediction stability chart with ${data.stability_over_time.length} data points. Latest prediction flips: ${lastFlips}`);
+      }
+    }
 
     // Generate recommendation
     const recommendation = generateRecommendation(data);
     document.getElementById("recommendation-text").textContent = recommendation;
-
-    // Set chart descriptions for screen readers based on data
-    if (ecChart) {
-      const lastCost = data.error_cost_over_time.length > 0
-        ? data.error_cost_over_time[data.error_cost_over_time.length - 1].error_cost.toFixed(2)
-        : "N/A";
-      ecChart.setAttribute("aria-label", `Error cost chart with ${data.error_cost_over_time.length} data points. Latest error cost: ${lastCost}`);
-    }
-    if (stChart) {
-      const lastFlips = data.stability_over_time.length > 1
-        ? data.stability_over_time[data.stability_over_time.length - 1].num_flips
-        : "N/A";
-      stChart.setAttribute("aria-label", `Prediction stability chart with ${data.stability_over_time.length} data points. Latest prediction flips: ${lastFlips}`);
-    }
   }
 
   function renderErrorCostChart(errorCostData) {

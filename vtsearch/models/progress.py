@@ -303,55 +303,35 @@ def calculate_prediction_stability_over_time(
     return [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
 
-def compute_labeling_status(
+def _compute_smart_status(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: int,
+    good: int,
+    bad: int,
+    total: int,
 ) -> dict[str, Any]:
-    """Compute a lightweight red/yellow/green labeling status.
-
-    Uses cached models for the last 10 steps — only forward passes, no training.
-    """
-    good = len(current_good_votes)
-    bad = len(current_bad_votes)
-    total = good + bad
-
-    base = {"good_count": good, "bad_count": bad, "total_count": total}
-
+    """Compute Smart (error-cost flatness) red/yellow/green status."""
     if total < 20 or good < 5 or bad < 5:
         return {
-            **base,
             "status": "red",
-            "reason": (
-                f"Need at least 20 labels with 5 good and 5 bad. Currently {total} total ({good} good, {bad} bad)."
-            ),
+            "reason": f"Need at least 20 labels with 5 good and 5 bad. Currently {total} total ({good}g, {bad}b).",
         }
-
-    _ensure_cache(clips_dict, label_history, inclusion_value)
 
     n = len(_cached_steps)
     if n < 3:
-        return {
-            **base,
-            "status": "yellow",
-            "reason": "Not enough label history steps to assess trend.",
-        }
+        return {"status": "yellow", "reason": "Not enough label history steps to assess trend."}
 
     start_idx = max(0, n - 10)
     recent_entries = _eval_cached_models(
         clips_dict, current_good_votes, current_bad_votes, inclusion_value, start_idx, n
     )
-
     recent_error_costs = [e["error_cost"] for e in recent_entries]
 
     if len(recent_error_costs) < 3:
-        return {
-            **base,
-            "status": "yellow",
-            "reason": "Not enough valid model steps in recent history to assess trend.",
-        }
+        return {"status": "yellow", "reason": "Not enough valid model steps in recent history to assess trend."}
 
     # Linear regression slope over the recent error-cost values
     n_pts = len(recent_error_costs)
@@ -362,25 +342,97 @@ def compute_labeling_status(
     numer = sum((x_vals[i] - x_mean) * (recent_error_costs[i] - y_mean) for i in range(n_pts))
     denom = sum((x_vals[i] - x_mean) ** 2 for i in range(n_pts))
     slope = numer / denom if denom != 0 else 0.0
-
     relative_slope = slope / y_mean if y_mean > 0 else slope
 
     FLAT_THRESHOLD = -0.015
-
     if relative_slope < FLAT_THRESHOLD:
         return {
-            **base,
             "status": "yellow",
-            "reason": ("Error cost is still declining over the last 10 labels. Keep labeling to improve the model."),
+            "reason": "Error cost is still declining. Keep labeling.",
             "slope": round(relative_slope, 4),
         }
-    else:
+    return {
+        "status": "green",
+        "reason": "Error cost has leveled off. You can likely stop labeling.",
+        "slope": round(relative_slope, 4),
+    }
+
+
+def _compute_stable_status(
+    good: int,
+    bad: int,
+    total: int,
+) -> dict[str, Any]:
+    """Compute Stable (prediction-flip) red/yellow/green status."""
+    if total < 20 or good < 5 or bad < 5:
         return {
-            **base,
-            "status": "green",
-            "reason": ("Error cost has leveled off over the last 10 labels. You can likely stop labeling."),
-            "slope": round(relative_slope, 4),
+            "status": "red",
+            "reason": f"Need at least 20 labels with 5 good and 5 bad. Currently {total} total ({good}g, {bad}b).",
         }
+
+    stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+    if len(stability) < 3:
+        return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
+
+    recent = stability[-10:]
+    recent_flips = [s["num_flips"] for s in recent]
+    avg_flips = sum(recent_flips) / len(recent_flips)
+
+    if avg_flips < 3:
+        return {"status": "green", "reason": "Predictions have stabilized."}
+    return {"status": "yellow", "reason": f"Average {avg_flips:.0f} prediction flips in recent steps."}
+
+
+def compute_labeling_status(
+    clips_dict: dict[int, dict[str, Any]],
+    label_history: list[tuple[int, str, float]],
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+    inclusion_value: int = 0,
+    span_info: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Compute per-metric red/yellow/green labeling statuses.
+
+    Returns a dict with ``good_count``, ``bad_count``, ``total_count``, and
+    three sub-dicts: ``smart``, ``stable``, and ``span``, each with a
+    ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
+    """
+    good = len(current_good_votes)
+    bad = len(current_bad_votes)
+    total = good + bad
+
+    _ensure_cache(clips_dict, label_history, inclusion_value)
+
+    smart = _compute_smart_status(
+        clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
+    )
+    stable = _compute_stable_status(good, bad, total)
+
+    # Span status from diversity tree info (passed in from the route)
+    if span_info is None:
+        span = {"status": "red", "reason": "Diversity tree not available.", "level": -1, "depth": -1,
+                "next_level_seen": 0, "next_level_total": 0}
+    else:
+        level = span_info["level"]
+        depth = span_info["depth"]
+        nls = span_info["next_level_seen"]
+        nlt = span_info["next_level_total"]
+        if level < 0:
+            span = {"status": "red", "reason": "No tree coverage yet.", **span_info}
+        elif level >= depth:
+            span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
+        else:
+            span = {"status": "yellow", "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                    **span_info}
+
+    return {
+        "good_count": good,
+        "bad_count": bad,
+        "total_count": total,
+        "smart": smart,
+        "stable": stable,
+        "span": span,
+    }
 
 
 def analyze_labeling_progress(
