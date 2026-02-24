@@ -90,8 +90,7 @@ _SOUNDS_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Image eval queries  (Caltech-101 — 25 categories)
-# All S/M/L share the same categories; queries are identical.
+# Image eval queries  (Caltech-101 — 25 categories for S/M)
 # ------------------------------------------------------------------
 
 _IMAGES_QUERIES = [
@@ -120,6 +119,38 @@ _IMAGES_QUERIES = [
     EvalQuery("a photograph of a sunflower", "sunflower"),
     EvalQuery("a photograph of a trilobite fossil", "trilobite"),
     EvalQuery("a photograph of a wristwatch", "watch"),
+]
+
+# ------------------------------------------------------------------
+# Image eval queries  (Caltech-256 — 25 categories for L)
+# ------------------------------------------------------------------
+
+_IMAGES_L_QUERIES = [
+    EvalQuery("a photograph of a backpack", "003.backpack"),
+    EvalQuery("a photograph of a butterfly", "024.butterfly"),
+    EvalQuery("a photograph of a camel", "028.camel"),
+    EvalQuery("a photograph of a cannon", "029.cannon"),
+    EvalQuery("a photograph of a chimpanzee", "038.chimp"),
+    EvalQuery("a photograph of a computer monitor", "046.computer-monitor"),
+    EvalQuery("a photograph of a fighter jet", "069.fighter-jet"),
+    EvalQuery("a photograph of a giraffe", "084.giraffe"),
+    EvalQuery("a photograph of a goat", "085.goat"),
+    EvalQuery("a photograph of the Golden Gate Bridge", "086.golden-gate-bridge"),
+    EvalQuery("a photograph of a hammock", "096.hammock"),
+    EvalQuery("a photograph of a hot air balloon", "107.hot-air-balloon"),
+    EvalQuery("a photograph of a kayak", "122.kayak"),
+    EvalQuery("a photograph of a leopard", "129.leopards-101"),
+    EvalQuery("a photograph of a lighthouse", "132.light-house"),
+    EvalQuery("a photograph of a motorbike", "145.motorbikes-101"),
+    EvalQuery("a photograph of a mushroom", "147.mushroom"),
+    EvalQuery("a photograph of an ostrich", "151.ostrich"),
+    EvalQuery("a photograph of a penguin", "158.penguin"),
+    EvalQuery("a photograph of a pyramid", "167.pyramid"),
+    EvalQuery("a photograph of a school bus", "178.school-bus"),
+    EvalQuery("a photograph of stained glass", "200.stained-glass"),
+    EvalQuery("a photograph of a swan", "207.swan"),
+    EvalQuery("a photograph of a windmill", "245.windmill"),
+    EvalQuery("a photograph of a wine bottle", "246.wine-bottle"),
 ]
 
 # ------------------------------------------------------------------
@@ -191,7 +222,7 @@ EVAL_DATASETS: dict[str, dict] = {
     },
     "images_l": {
         "demo_dataset": "images_l",
-        "queries": _IMAGES_QUERIES,
+        "queries": _IMAGES_L_QUERIES,
     },
     # Text
     "paragraphs_s": {

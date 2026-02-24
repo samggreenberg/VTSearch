@@ -8,12 +8,14 @@ from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import (
     CALTECH101_DOWNLOAD_SIZE_MB,
+    CALTECH256_DOWNLOAD_SIZE_MB,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CLIPS_PER_CATEGORY,
     CLIPS_PER_VIDEO_CATEGORY,
     EMBEDDINGS_DIR,
     ESC50_DOWNLOAD_SIZE_MB,
     IMAGES_PER_CALTECH101_CATEGORY,
+    IMAGES_PER_CALTECH256_CATEGORY,
     IMAGES_PER_CIFAR10_CATEGORY,
     TEXTS_PER_CATEGORY,
     UCF101_SUBSET_DOWNLOAD_SIZE_MB,
@@ -327,7 +329,12 @@ def demo_dataset_list():
         if media_type == "video":
             per_cat = CLIPS_PER_VIDEO_CATEGORY
         elif media_type == "image":
-            per_cat = IMAGES_PER_CALTECH101_CATEGORY if image_source == "caltech101" else IMAGES_PER_CIFAR10_CATEGORY
+            if image_source == "caltech101":
+                per_cat = IMAGES_PER_CALTECH101_CATEGORY
+            elif image_source == "caltech256":
+                per_cat = IMAGES_PER_CALTECH256_CATEGORY
+            else:
+                per_cat = IMAGES_PER_CIFAR10_CATEGORY
         elif media_type == "paragraph":
             per_cat = TEXTS_PER_CATEGORY
         else:
@@ -350,6 +357,8 @@ def demo_dataset_list():
             elif media_type == "image":
                 if image_source == "caltech101":
                     download_size_mb = CALTECH101_DOWNLOAD_SIZE_MB
+                elif image_source == "caltech256":
+                    download_size_mb = CALTECH256_DOWNLOAD_SIZE_MB
                 else:
                     download_size_mb = CIFAR10_DOWNLOAD_SIZE_MB
             elif media_type == "paragraph":

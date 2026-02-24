@@ -17,6 +17,8 @@ import requests
 from vtsearch.config import (
     CALTECH101_DOWNLOAD_SIZE_MB,
     CALTECH101_URL,
+    CALTECH256_DOWNLOAD_SIZE_MB,
+    CALTECH256_URL,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CIFAR10_URL,
     DATA_DIR,
@@ -218,6 +220,48 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
                 tar_ref.extractall(extract_dir, filter="data")
             inner_tar.unlink(missing_ok=True)
+
+    return categories_dir
+
+
+def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Caltech-256 image classification dataset.
+
+    Downloads ``256_ObjectCategories.tar`` from the configured
+    ``CALTECH256_URL`` into ``DATA_DIR`` if it is not already present, then
+    extracts it.  The archive is deleted after extraction to reclaim disk
+    space.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``256_ObjectCategories/`` directory containing category
+        subfolders of JPEG images (e.g.
+        ``data/caltech-256/256_ObjectCategories``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "256_ObjectCategories.tar"
+    extract_dir = DATA_DIR / "caltech-256"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    categories_dir = extract_dir / "256_ObjectCategories"
+    if not categories_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting Caltech-256 download...", 0, 0)
+            download_file_with_progress(
+                CALTECH256_URL, tar_path, CALTECH256_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            )
+
+        on_progress("downloading", "Extracting Caltech-256...", 0, 0)
+        with tarfile.open(tar_path, "r:") as tar_ref:
+            tar_ref.extractall(extract_dir, filter="data")
+
+        tar_path.unlink(missing_ok=True)
 
     return categories_dir
 

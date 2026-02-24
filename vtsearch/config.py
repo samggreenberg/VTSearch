@@ -21,6 +21,7 @@ ESC50_URL = "https://github.com/karolpiczak/ESC-50/archive/master.zip"
 SAMPLE_VIDEOS_URL = "https://github.com/sample-datasets/video-clips/archive/refs/heads/main.zip"
 CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"
+CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
 
 # Dataset size estimates
@@ -28,11 +29,13 @@ ESC50_DOWNLOAD_SIZE_MB = 600
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150
 CIFAR10_DOWNLOAD_SIZE_MB = 170
 CALTECH101_DOWNLOAD_SIZE_MB = 131
+CALTECH256_DOWNLOAD_SIZE_MB = 1200
 UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
 CLIPS_PER_CATEGORY = 40
 CLIPS_PER_VIDEO_CATEGORY = 150
 IMAGES_PER_CIFAR10_CATEGORY = 100
 IMAGES_PER_CALTECH101_CATEGORY = 80
+IMAGES_PER_CALTECH256_CATEGORY = 80
 TEXTS_PER_CATEGORY = 200
 
 # Training

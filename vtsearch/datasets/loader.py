@@ -18,11 +18,12 @@ from typing import Any, Callable, Iterator, Optional
 import numpy as np
 from PIL import Image
 
-from vtsearch.config import EMBEDDINGS_DIR, IMAGES_PER_CALTECH101_CATEGORY, IMAGES_PER_CIFAR10_CATEGORY, TEXTS_PER_CATEGORY
+from vtsearch.config import EMBEDDINGS_DIR, IMAGES_PER_CALTECH101_CATEGORY, IMAGES_PER_CALTECH256_CATEGORY, IMAGES_PER_CIFAR10_CATEGORY, TEXTS_PER_CATEGORY
 from vtsearch.datasets.config import DEMO_DATASETS
 from vtsearch.datasets.downloader import (
     download_20newsgroups,
     download_caltech101,
+    download_caltech256,
     download_cifar10,
     download_esc50,
     download_ucf101_subset,
@@ -1142,6 +1143,186 @@ def load_demo_dataset(
             # Group by category (sorted order within each), then slice
             slice_start = dataset_info.get("slice_start", 0)
             slice_end = dataset_info.get("slice_end", IMAGES_PER_CALTECH101_CATEGORY)
+            by_cat: dict[str, list[tuple[Path, str]]] = {}
+            for fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                by_cat.setdefault(cat, []).append((meta["path"], cat))
+
+            selected: list[tuple[Path, str]] = []
+            for cat in dataset_info["categories"]:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            from vtsearch.media import get as media_get
+
+            image_mt = media_get("image")
+
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            if getattr(image_mt, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                image_mt.load_models()
+
+            clips.clear()
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress(
+                    "embedding",
+                    f"Embedding {category}: {img_path.name} ({i + 1}/{total})",
+                    i + 1,
+                    total,
+                )
+
+                embedding = image_mt.embed_media(img_path)
+                if embedding is None:
+                    continue
+
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": "image",
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "clip_bytes": image_bytes,
+                    "clip_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+
+            # Save for future use
+            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(pkl_file, "wb") as f:
+                pickle.dump(
+                    {
+                        "name": dataset_name,
+                        "clips": {
+                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
+                            for cid, clip in clips.items()
+                        },
+                    },
+                    f,
+                )
+
+            on_progress("idle", f"Loaded {dataset_name} dataset")
+            return
+
+        elif image_source == "caltech256":
+            # Download Caltech-256 if needed
+            caltech_dir = download_caltech256()
+
+            # Scan category folders for images
+            metadata = load_image_metadata_from_folders(caltech_dir, dataset_info["categories"])
+
+            # Group by category (sorted order within each), then slice
+            slice_start = dataset_info.get("slice_start", 0)
+            slice_end = dataset_info.get("slice_end", IMAGES_PER_CALTECH256_CATEGORY)
+            by_cat: dict[str, list[tuple[Path, str]]] = {}
+            for fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                by_cat.setdefault(cat, []).append((meta["path"], cat))
+
+            selected: list[tuple[Path, str]] = []
+            for cat in dataset_info["categories"]:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            from vtsearch.media import get as media_get
+
+            image_mt = media_get("image")
+
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            if getattr(image_mt, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                image_mt.load_models()
+
+            clips.clear()
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress(
+                    "embedding",
+                    f"Embedding {category}: {img_path.name} ({i + 1}/{total})",
+                    i + 1,
+                    total,
+                )
+
+                embedding = image_mt.embed_media(img_path)
+                if embedding is None:
+                    continue
+
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": "image",
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "clip_bytes": image_bytes,
+                    "clip_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+
+            # Save for future use
+            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(pkl_file, "wb") as f:
+                pickle.dump(
+                    {
+                        "name": dataset_name,
+                        "clips": {
+                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
+                            for cid, clip in clips.items()
+                        },
+                    },
+                    f,
+                )
+
+            on_progress("idle", f"Loaded {dataset_name} dataset")
+            return
+
+        elif image_source == "caltech256":
+            # Download Caltech-256 if needed
+            caltech_dir = download_caltech256()
+
+            # Scan category folders for images
+            metadata = load_image_metadata_from_folders(caltech_dir, dataset_info["categories"])
+
+            # Group by category (sorted order within each), then slice
+            slice_start = dataset_info.get("slice_start", 0)
+            slice_end = dataset_info.get("slice_end", IMAGES_PER_CALTECH256_CATEGORY)
             by_cat: dict[str, list[tuple[Path, str]]] = {}
             for fname, meta in sorted(metadata.items()):
                 cat = meta["category"]
