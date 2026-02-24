@@ -58,7 +58,8 @@ VTSearch/
 │   │   ├── training.py             MLP training, GMM thresholds (pure PyTorch)
 │   │   ├── progress.py             Labelling-progress cache & analysis
 │   │   ├── embeddings.py           Thin wrappers around media-type embed()
-│   │   └── loader.py               Model initialisation (delegates to media)
+│   │   ├── loader.py               Model initialisation (delegates to media)
+│   │   └── diversity_tree.py       Hierarchical k-means tree for diverse sampling
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -348,9 +349,10 @@ dicts:
 | `favorite_extractors` | `dict` | Saved extractor configurations |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
-`safe_thresholds`, `calibrate_count`, `calibration_fraction`, favorite
-processor recipes) live separately in `vtsearch/settings.py` and are
-auto-saved to `data/settings.json`.
+`safe_thresholds`, `calibrate_count`, `calibration_fraction`,
+`swipe_animation`, `show_thumbnails`, favorite processor recipes) live
+separately in `vtsearch/settings.py` and are auto-saved to
+`data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
 **Only Flask routes mutate this state.**  All ML and dataset functions

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-You need **Python 3.9+** installed. Check by running:
+You need **Python 3.10+** installed. Check by running:
 
 ```bash
 python3 --version
