@@ -154,12 +154,12 @@ class TestDemoDatasetReadiness:
             pytest.skip("UCF-101 is present; cannot test stale-pkl scenario")
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "activities_video.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "activities_video", "clips": {}}))
+        pkl_file = EMBEDDINGS_DIR / "videos_s.pkl"
+        pkl_file.write_bytes(pickle.dumps({"name": "videos_s", "clips": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "activities_video"), None)
+            ds = next((d for d in data["datasets"] if d["name"] == "videos_s"), None)
             assert ds is not None
             assert ds["status"] == "needs_download", "Stale video pkl without UCF-101 dir must be needs_download"
             assert ds["ready"] is False
