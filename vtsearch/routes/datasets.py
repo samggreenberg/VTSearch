@@ -376,6 +376,7 @@ def demo_dataset_list():
                 "download_size_mb": round(download_size_mb, 1),
                 "description": dataset_info.get("description", ""),
                 "media_type": dataset_info.get("media_type", "audio"),
+                "num_categories": num_categories,
             }
         )
     return jsonify({"datasets": demos})
