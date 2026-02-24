@@ -517,9 +517,12 @@ def diversity_tree_next():
 
     Returns ``{"id": <clip_id>}`` or ``{"id": null}`` when the tree is
     exhausted or not yet built.  Also includes ``diversity_level`` so the
-    frontend can display how many tree levels have been fully covered.
+    frontend can display how many tree levels have been fully covered,
+    and ``exhausted`` (bool) which is true when the tree exists but every
+    node has already been seen.
     """
     tree = get_diversity_tree()
     next_id = diversity_tree_next_sample()
     level = tree.diversity_level() if tree is not None else -1
-    return jsonify({"id": next_id, "diversity_level": level})
+    exhausted = tree is not None and next_id is None
+    return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
