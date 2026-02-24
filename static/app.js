@@ -543,7 +543,7 @@
     demoBtnEl.innerHTML = `<h3>🏆 Load Demo Dataset</h3><p>Choose from a selection of pre-configured demo datasets</p>`;
     demoBtnEl.addEventListener("click", async () => {
       datasetOptions.style.display = "none";
-      demoDatasetsDiv.style.display = "grid";
+      demoDatasetsDiv.style.display = "flex";
       backButton.style.display = "block";
       datasetWelcome.classList.add("wide");
 
@@ -557,13 +557,13 @@
 
         demoDatasetsDiv.innerHTML = "";
 
-        // Group datasets by media type and display in fixed column order
+        // Group datasets by media type and display as sortable tables
         const mediaOrder = ["video", "image", "audio", "paragraph"];
         const mediaConfig = {
-          video:     { title: "Videos",  icon: "🎬", fileLabel: "video clips" },
-          image:     { title: "Images",  icon: "🖼",  fileLabel: "images" },
-          audio:     { title: "Sounds",  icon: "🔊", fileLabel: "sound files" },
-          paragraph: { title: "Texts",   icon: "📄", fileLabel: "text snippets" },
+          video:     { title: "Videos",  icon: "🎬" },
+          image:     { title: "Images",  icon: "🖼" },
+          audio:     { title: "Sounds",  icon: "🔊" },
+          paragraph: { title: "Texts",   icon: "📄" },
         };
 
         const grouped = {};
@@ -573,46 +573,104 @@
           grouped[mt].push(ds);
         });
 
+        // Status sort order: ready=0, needs_embedding=1, needs_download=2
+        const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
+
+        const sortColumns = [
+          { key: "label",          label: "Name" },
+          { key: "num_files",      label: "# Media" },
+          { key: "num_categories", label: "# Cat." },
+          { key: "description",    label: "Description" },
+          { key: "status",         label: "Readiness" },
+        ];
+
+        function buildStatusBadge(st) {
+          if (st === "ready") return '<span class="ready-badge">Ready</span>';
+          if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
+          return '<span class="download-badge">Download</span>';
+        }
+
+        function renderTable(items, section) {
+          const sortState = section._demoSort || { key: "label", asc: true };
+          const sorted = [...items].sort((a, b) => {
+            let va = a[sortState.key], vb = b[sortState.key];
+            if (sortState.key === "status") { va = statusOrder[va] ?? 3; vb = statusOrder[vb] ?? 3; }
+            if (typeof va === "number" && typeof vb === "number") return sortState.asc ? va - vb : vb - va;
+            va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+            return sortState.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+          });
+
+          const tbody = section.querySelector("tbody");
+          tbody.innerHTML = "";
+          sorted.forEach(ds => {
+            const st = ds.status || (ds.ready ? "ready" : "needs_download");
+            const tr = document.createElement("tr");
+            tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "");
+            tr.setAttribute("role", "button");
+            tr.setAttribute("tabindex", "0");
+            tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
+            tr.onclick = () => loadDemo(ds.name);
+            tr.addEventListener("keydown", (e) => {
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadDemo(ds.name); }
+            });
+            const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "…" : ds.description;
+            tr.innerHTML = `
+              <td class="col-name">${ds.label}</td>
+              <td class="col-num">${ds.num_files}</td>
+              <td class="col-num">${ds.num_categories}</td>
+              <td class="col-desc" title="${ds.description.replace(/"/g, '&quot;')}">${descShort}</td>
+              <td class="col-status">${buildStatusBadge(st)}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          // Update header sort indicators
+          section.querySelectorAll("th[data-sort]").forEach(th => {
+            const arrow = th.querySelector(".sort-arrow");
+            if (th.dataset.sort === sortState.key) {
+              arrow.textContent = sortState.asc ? " ▲" : " ▼";
+            } else {
+              arrow.textContent = "";
+            }
+          });
+        }
+
         mediaOrder.forEach(mt => {
           const items = grouped[mt] || [];
           if (!items.length) return;
           const cfg = mediaConfig[mt];
 
-          const col = document.createElement("div");
-          col.className = "demo-column";
-          col.innerHTML = `<div class="demo-column-header">${cfg.title}</div>`;
+          const section = document.createElement("div");
+          section.className = "demo-section";
+          section._demoSort = { key: "label", asc: true };
 
-          items.forEach(dataset => {
-            const div = document.createElement("div");
-            const st = dataset.status || (dataset.ready ? "ready" : "needs_download");
-            div.className = "demo-dataset" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "");
-            const sizeText = st === "ready"
-              ? `${dataset.download_size_mb} MB (cached)`
-              : st === "needs_embedding"
-              ? "Embedding required"
-              : `${dataset.download_size_mb} MB to download`;
-            const badgeHtml = st === "ready"
-              ? '<span class="ready-badge">Ready</span>'
-              : st === "needs_embedding"
-              ? '<span class="embedding-badge">Needs Embedding</span>'
-              : '<span style="font-size:0.7rem;color:var(--text-dim);display:inline-block;margin-top:6px;">Needs Download &amp; Embedding</span>';
-            div.innerHTML = `
-              <h4>${dataset.label}</h4>
-              <p style="margin: 4px 0 8px; font-size: 0.75rem; color: #999; line-height: 1.45;">${dataset.description}</p>
-              <p style="margin: 0; font-size: 0.72rem; color: #666;">${cfg.icon} ${dataset.num_files} ${cfg.fileLabel} &middot; ${sizeText}</p>
-              ${badgeHtml}
-            `;
-            div.setAttribute("role", "button");
-            div.setAttribute("tabindex", "0");
-            div.setAttribute("aria-label", `${dataset.label}: ${dataset.description}`);
-            div.onclick = () => loadDemo(dataset.name);
-            div.addEventListener("keydown", (e) => {
-              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadDemo(dataset.name); }
+          const headerRow = sortColumns.map(col =>
+            `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
+          ).join("");
+
+          section.innerHTML = `
+            <div class="demo-section-header">${cfg.icon} ${cfg.title}</div>
+            <table class="demo-table">
+              <thead><tr>${headerRow}</tr></thead>
+              <tbody></tbody>
+            </table>
+          `;
+
+          // Wire up column header click sorting
+          section.querySelectorAll("th[data-sort]").forEach(th => {
+            th.addEventListener("click", () => {
+              const key = th.dataset.sort;
+              if (section._demoSort.key === key) {
+                section._demoSort.asc = !section._demoSort.asc;
+              } else {
+                section._demoSort = { key, asc: true };
+              }
+              renderTable(items, section);
             });
-            col.appendChild(div);
           });
 
-          demoDatasetsDiv.appendChild(col);
+          renderTable(items, section);
+          demoDatasetsDiv.appendChild(section);
         });
       } catch (e) {
         demoDatasetsDiv.innerHTML = `<div style="color:var(--color-bad); text-align:center;">Error loading demo datasets: ${e.message}</div>`;
