@@ -501,3 +501,46 @@ class TestAutoDetect:
             threshold = result["threshold"]
             for hit in result["hits"]:
                 assert hit["score"] >= threshold - 1e-6  # float tolerance
+
+    # -- negative_hits --
+
+    def test_each_result_has_negative_hits(self, client):
+        self._add_audio_detector(client)
+        data = client.post("/api/auto-detect").get_json()
+        for result in data["results"].values():
+            assert "negative_hits" in result
+            assert isinstance(result["negative_hits"], list)
+
+    def test_negative_hits_score_below_threshold(self, client):
+        self._add_audio_detector(client)
+        data = client.post("/api/auto-detect").get_json()
+        for result in data["results"].values():
+            threshold = result["threshold"]
+            for hit in result["negative_hits"]:
+                assert hit["score"] < threshold + 1e-6
+
+    def test_negative_hits_do_not_contain_embeddings(self, client):
+        self._add_audio_detector(client)
+        data = client.post("/api/auto-detect").get_json()
+        for result in data["results"].values():
+            for hit in result["negative_hits"]:
+                assert "embedding" not in hit
+                assert "clip_bytes" not in hit
+
+    def test_hits_and_negative_hits_cover_all_clips(self, client):
+        """Positive + negative hits should cover every clip in the dataset."""
+        self._add_audio_detector(client)
+        data = client.post("/api/auto-detect").get_json()
+        from vtsearch.utils import clips
+
+        total_clips = len(clips)
+        for result in data["results"].values():
+            total_returned = len(result["hits"]) + len(result["negative_hits"])
+            assert total_returned == total_clips
+
+    def test_negative_hits_sorted_descending_by_score(self, client):
+        self._add_audio_detector(client)
+        data = client.post("/api/auto-detect").get_json()
+        for result in data["results"].values():
+            scores = [h["score"] for h in result["negative_hits"]]
+            assert scores == sorted(scores, reverse=True)
