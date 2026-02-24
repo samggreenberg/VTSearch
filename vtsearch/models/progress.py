@@ -5,13 +5,16 @@ repeated queries (the progress button, the auto-indicator) never retrain
 models that have already been computed.
 """
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
-import torch
-import torch.nn as nn
 
 from vtsearch.models.training import find_optimal_threshold, train_model
+
+if TYPE_CHECKING:
+    import torch.nn as nn
 
 # ---------------------------------------------------------------------------
 # Module-level cache
@@ -102,6 +105,8 @@ def _ensure_cache(
                     y_list.append(0.0)
 
             if len(X_list) >= 2:
+                import torch  # noqa: PLC0415
+
                 X = torch.tensor(np.array(X_list), dtype=torch.float32)
                 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
                 input_dim = X.shape[1]
@@ -205,6 +210,8 @@ def _eval_cached_models(
 
     if not eval_embs:
         return []
+
+    import torch  # noqa: PLC0415
 
     X_eval = torch.tensor(np.array(eval_embs), dtype=torch.float32)
     total_positives = sum(1 for lbl in eval_labels if lbl == 1)

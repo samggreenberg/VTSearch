@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from vtsearch.config import E5_MODEL_ID, MODELS_CACHE_DIR
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -158,6 +160,8 @@ class TextMediaType(MediaType):
         if self._model is not None:
             return
         import gc
+
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)

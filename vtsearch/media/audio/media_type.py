@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import librosa
 import numpy as np
-import torch
-from transformers import ClapModel, ClapProcessor
 
 from vtsearch.config import CLAP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR, SAMPLE_RATE
+
+if TYPE_CHECKING:
+    from transformers import ClapModel, ClapProcessor
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -198,6 +198,8 @@ class AudioMediaType(MediaType):
             return
         import gc
 
+        from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
+
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLAP model weights…", 0, 0)
@@ -213,6 +215,9 @@ class AudioMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            import librosa  # noqa: PLC0415
+            import torch  # noqa: PLC0415
+
             audio_data, _sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,
@@ -236,6 +241,8 @@ class AudioMediaType(MediaType):
         if self._model is None or self._processor is None:
             return None
         try:
+            import torch  # noqa: PLC0415
+
             inputs = self._processor(text=[text], return_tensors="pt")
             with torch.no_grad():
                 outputs = self._model.text_model(**inputs)
@@ -256,6 +263,8 @@ class AudioMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_clip_data(self, file_path: Path) -> dict:
+        import librosa  # noqa: PLC0415
+
         with open(file_path, "rb") as f:
             clip_bytes = f.read()
         try:

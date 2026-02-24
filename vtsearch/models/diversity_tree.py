@@ -17,7 +17,6 @@ from __future__ import annotations
 from collections import deque
 
 import numpy as np
-from sklearn.cluster import KMeans
 
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
@@ -108,6 +107,8 @@ class DiversityTree:
             return
 
         # Run k-means
+        from sklearn.cluster import KMeans  # noqa: PLC0415
+
         kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=10)
         labels = kmeans.fit_predict(vecs)
 

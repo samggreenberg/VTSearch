@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-import torch
 from flask import Blueprint, jsonify, request
 
 from vtsearch.config import DATA_DIR
@@ -585,6 +584,8 @@ def label_file_sort():
             )
 
         # Train MLP using the same approach as learned sort
+        import torch  # noqa: PLC0415
+
         X = torch.tensor(np.array(X_list), dtype=torch.float32)
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 

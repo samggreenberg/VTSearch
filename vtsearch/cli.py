@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 
 from vtsearch.datasets.loader import load_dataset_from_pickle
 
@@ -55,6 +54,8 @@ def _score_clips_with_detector(
     threshold = detector_data["threshold"]
 
     # Reconstruct the MLP model from weights
+    import torch  # noqa: PLC0415
+
     from vtsearch.models.training import build_model
 
     input_dim = len(weights["0.weight"][0])
@@ -255,6 +256,8 @@ def _score_clips_with_detectors(
         raise ValueError("No clips loaded from dataset")
     if not detectors:
         raise ValueError("No favorite processors found for the dataset's media type")
+
+    import torch  # noqa: PLC0415
 
     all_ids = sorted(clips.keys())
     all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
