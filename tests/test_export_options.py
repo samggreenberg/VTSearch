@@ -12,8 +12,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 import app as app_module
 
 SAMPLE_RESULTS = {
@@ -261,31 +259,18 @@ class TestFillFromSortConfirm:
 
 
 class TestCliScoringNegativeHits:
-    def test_score_clips_with_detectors_returns_negative_hits(self):
+    def test_score_clips_with_detectors_returns_negative_hits(self, client):
         """The multi-detector CLI scorer should include negative_hits."""
         from vtsearch.utils import clips
 
-        # Train a detector to get weights
+        # Train a detector via the API to get valid weights
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        from vtsearch.models import train_and_score
+        export_resp = client.post("/api/detector/export")
+        assert export_resp.status_code == 200
+        detector = export_resp.get_json()
 
-        results, threshold = train_and_score(clips, app_module.good_votes, app_module.bad_votes)
-
-        from vtsearch.models.training import build_model, train_model
-
-        all_ids = sorted(clips.keys())
-        import numpy as np
-        import torch
-
-        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
-        good_ids = list(app_module.good_votes.keys())
-        bad_ids = list(app_module.bad_votes.keys())
-        model = train_model(clips, good_ids, bad_ids)
-
-        weights = {k: v.tolist() for k, v in model.state_dict().items()}
-        detectors = {"test": {"weights": weights, "threshold": threshold}}
+        detectors = {"test": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 
         from vtsearch.cli import _score_clips_with_detectors
 
