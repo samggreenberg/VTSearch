@@ -7,7 +7,16 @@ from typing import Any
 from flask import Blueprint, Response, jsonify, request, send_file
 
 from vtsearch.media.base import MediaResponse
-from vtsearch.utils import add_label_to_history, assign_click_time, bad_votes, clips, good_votes, remove_click_time
+from vtsearch.utils import (
+    add_label_to_history,
+    assign_click_time,
+    bad_votes,
+    clips,
+    diversity_tree_label,
+    diversity_tree_unlabel,
+    good_votes,
+    remove_click_time,
+)
 
 clips_bp = Blueprint("clips", __name__)
 
@@ -300,20 +309,28 @@ def vote_clip(clip_id: int) -> tuple[Response, int] | Response:
             good_votes.pop(clip_id, None)
             remove_click_time(clip_id)
             add_label_to_history(clip_id, "unlabel")
+            # Unlabel in the diversity tree only if the clip has no remaining vote.
+            if clip_id not in bad_votes:
+                diversity_tree_unlabel(clip_id)
         else:
             bad_votes.pop(clip_id, None)
             good_votes[clip_id] = None
             assign_click_time(clip_id)
             add_label_to_history(clip_id, "good")
+            diversity_tree_label(clip_id)
     else:
         if clip_id in bad_votes:
             bad_votes.pop(clip_id, None)
             remove_click_time(clip_id)
             add_label_to_history(clip_id, "unlabel")
+            # Unlabel in the diversity tree only if the clip has no remaining vote.
+            if clip_id not in good_votes:
+                diversity_tree_unlabel(clip_id)
         else:
             good_votes.pop(clip_id, None)
             bad_votes[clip_id] = None
             assign_click_time(clip_id)
             add_label_to_history(clip_id, "bad")
+            diversity_tree_label(clip_id)
 
     return jsonify({"ok": True})

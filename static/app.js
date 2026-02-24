@@ -1710,12 +1710,15 @@
   // ---- Select mode switching ----
 
   document.querySelectorAll('input[name="select-mode"]').forEach(radio => {
-    radio.addEventListener("change", () => {
+    radio.addEventListener("change", async () => {
       if (!radio.checked) return;
       selectMode = radio.value;
-      const nextClip = findNextClip();
-      if (nextClip) {
-        selectClip(nextClip.id);
+      if (selectMode === "new") {
+        const nextId = await fetchDiversityTreeNext();
+        if (nextId != null) selectClip(nextId);
+      } else {
+        const nextClip = findNextClip();
+        if (nextClip) selectClip(nextClip.id);
       }
     });
   });
@@ -2010,7 +2013,20 @@
 
   // ---- Next Clip Selection ----
 
+  async function fetchDiversityTreeNext() {
+    try {
+      const res = await fetch("/api/diversity-tree/next");
+      const data = await res.json();
+      return data.id;  // int | null
+    } catch {
+      return null;
+    }
+  }
+
   function findNextClip() {
+    // "New" mode is handled asynchronously by callers via fetchDiversityTreeNext.
+    if (selectMode === "new") return null;
+
     // Determine the ordered list to walk and effective threshold
     let ordered = sortOrder;
     let effectiveThreshold = threshold;
@@ -2372,9 +2388,14 @@
 
     // Auto-advance to next clip IMMEDIATELY using the current sort order,
     // so the user isn't blocked waiting for model training to finish.
-    const nextClip = findNextClip();
-    if (nextClip && nextClip.id !== selected) {
-      selectClip(nextClip.id);
+    if (selectMode === "new") {
+      const nextId = await fetchDiversityTreeNext();
+      if (nextId != null && nextId !== selected) selectClip(nextId);
+    } else {
+      const nextClip = findNextClip();
+      if (nextClip && nextClip.id !== selected) {
+        selectClip(nextClip.id);
+      }
     }
 
     // Kick off learned sort in the background (non-blocking).

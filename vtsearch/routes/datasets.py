@@ -23,6 +23,7 @@ from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importe
 from vtsearch.models.progress import clear_progress_cache
 from vtsearch.utils import (
     bad_votes,
+    build_diversity_tree,
     clips,
     get_progress,
     good_votes,
@@ -104,6 +105,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
             importer.run(field_values, clips)
             _set_clip_origins(clips, importer.build_origin(field_values))
             _load_embedder_for_clips()
+            build_diversity_tree()
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
@@ -394,6 +396,7 @@ def load_demo_dataset_route():
             demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
             _set_clip_origins(clips, demo_origin)
             _load_embedder_for_clips()
+            build_diversity_tree()
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 

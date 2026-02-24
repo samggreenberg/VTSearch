@@ -26,8 +26,11 @@ from vtsearch.utils import (
     bad_votes,
     build_clip_lookup,
     clips,
+    diversity_tree_label,
+    diversity_tree_next_sample,
     get_calibrate_count,
     get_calibration_fraction,
+    get_diversity_tree,
     get_inclusion,
     get_learned_scores,
     get_safe_thresholds,
@@ -249,6 +252,7 @@ def import_labels():
                 good_votes.pop(cid, None)
                 bad_votes[cid] = None
                 add_label_to_history(cid, "bad")
+            diversity_tree_label(cid)
         applied += 1
 
     return jsonify({"applied": applied, "skipped": skipped})
@@ -505,3 +509,17 @@ def labeling_status_indicator():
         return jsonify(status)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@sorting_bp.route("/api/diversity-tree/next")
+def diversity_tree_next():
+    """Return the next diverse sample from the Diversity Tree.
+
+    Returns ``{"id": <clip_id>}`` or ``{"id": null}`` when the tree is
+    exhausted or not yet built.  Also includes ``diversity_level`` so the
+    frontend can display how many tree levels have been fully covered.
+    """
+    tree = get_diversity_tree()
+    next_id = diversity_tree_next_sample()
+    level = tree.diversity_level() if tree is not None else -1
+    return jsonify({"id": next_id, "diversity_level": level})
