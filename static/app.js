@@ -3830,18 +3830,21 @@
     const avgErrorCost = recentErrorCosts.reduce((a, b) => a + b, 0) / recentErrorCosts.length;
     const errorCostStability = errorCostRange / (avgErrorCost || 1);
 
-    // Check if prediction flips have decreased
+    // Check if prediction flip *rate* has decreased (scales with dataset size)
     const recentStability = stabilityData.slice(-last30PercentCount);
-    const recentFlips = recentStability.map(d => d.num_flips);
-    const avgRecentFlips = recentFlips.reduce((a, b) => a + b, 0) / (recentFlips.length || 1);
+    const recentFlipRates = recentStability.map(d => {
+      const nUnlabeled = d.num_unlabeled || 0;
+      return nUnlabeled > 0 ? d.num_flips / nUnlabeled : 0;
+    });
+    const avgFlipRate = recentFlipRates.reduce((a, b) => a + b, 0) / (recentFlipRates.length || 1);
 
     let recommendation = "";
 
-    if (errorCostStability < 0.1 && avgRecentFlips < 5) {
+    if (errorCostStability < 0.1 && avgFlipRate < 0.03) {
       recommendation = "🛑 STOP LABELING: Both error cost and predictions have stabilized. Additional labels are unlikely to improve the model significantly. You've reached a good stopping point!";
     } else if (errorCostStability < 0.15) {
       recommendation = "⚠️ CONSIDER STOPPING: Error cost has mostly plateaued. You may be approaching diminishing returns. Consider stopping or labeling a few more diverse examples.";
-    } else if (avgRecentFlips < 3) {
+    } else if (avgFlipRate < 0.02) {
       recommendation = "⚠️ PREDICTIONS STABLE: Predictions on unlabeled clips aren't changing much. The model's decisions are solidifying. Consider whether additional labels will help.";
     } else {
       recommendation = "✅ KEEP LABELING: The model is still learning! Both error cost and predictions are changing, indicating that new labels are improving the model.";
