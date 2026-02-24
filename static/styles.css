@@ -422,6 +422,10 @@ video { max-width: 600px; max-height: 400px; }
 /* Label count display */
 .label-count { font-size: 0.75rem; color: var(--text-muted); font-weight: normal; }
 
+/* Media swipe wrapper – must participate in panel-center flex layout so that
+   children (especially images with flex:1/min-height:0) are properly constrained. */
+.media-swipe-wrapper { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
 /* Swipe vote animation */
 @keyframes swipe-right {
   0%   { transform: translateX(0) rotate(0deg) scale(1); opacity: 1; }
@@ -431,5 +435,5 @@ video { max-width: 600px; max-height: 400px; }
   0%   { transform: translateX(0) rotate(0deg) scale(1); opacity: 1; }
   100% { transform: translateX(-60vw) rotate(-8deg) scale(0.9); opacity: 0; }
 }
-.panel-center.swipe-right { animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
-.panel-center.swipe-left  { animation: swipe-left  0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.media-swipe-wrapper.swipe-right { animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.media-swipe-wrapper.swipe-left  { animation: swipe-left  0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
