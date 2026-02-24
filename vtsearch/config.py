@@ -1,5 +1,6 @@
 """Configuration and constants for VTSearch."""
 
+import os
 from pathlib import Path
 
 # Audio settings
@@ -13,7 +14,7 @@ VIDEO_DIR = DATA_DIR / "video"
 IMAGE_DIR = DATA_DIR / "images"
 PARAGRAPH_DIR = DATA_DIR / "paragraphs"
 EMBEDDINGS_DIR = DATA_DIR / "embeddings"
-MODELS_CACHE_DIR = DATA_DIR / "models"
+MODELS_CACHE_DIR = Path(os.environ["VTSEARCH_MODELS_DIR"]) if "VTSEARCH_MODELS_DIR" in os.environ else DATA_DIR / "models"
 
 # Dataset URLs
 ESC50_URL = "https://github.com/karolpiczak/ESC-50/archive/master.zip"
