@@ -15,9 +15,8 @@ from vtsearch.config import (
     ESC50_DOWNLOAD_SIZE_MB,
     IMAGES_PER_CALTECH101_CATEGORY,
     IMAGES_PER_CIFAR10_CATEGORY,
-    SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB,
     TEXTS_PER_CATEGORY,
-    VIDEO_DIR,
+    UCF101_SUBSET_DOWNLOAD_SIZE_MB,
 )
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.models.progress import clear_progress_cache
@@ -345,11 +344,7 @@ def demo_dataset_list():
         else:
             # needs_download – estimate total download
             if media_type == "video":
-                video_source = dataset_info.get("source", "ucf101")
-                if video_source == "ucf101":
-                    download_size_mb = 0  # Manual download required
-                else:
-                    download_size_mb = SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB
+                download_size_mb = UCF101_SUBSET_DOWNLOAD_SIZE_MB
             elif media_type == "image":
                 if image_source == "caltech101":
                     download_size_mb = CALTECH101_DOWNLOAD_SIZE_MB

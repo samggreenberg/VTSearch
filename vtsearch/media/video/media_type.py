@@ -105,14 +105,14 @@ class VideoMediaType(MediaType):
     _DEMO_CATEGORIES = [
         "ApplyEyeMakeup",
         "ApplyLipstick",
-        "BrushingTeeth",
-        "CliffDiving",
-        "Drumming",
-        "HandstandWalking",
-        "JumpRope",
-        "PushUps",
-        "TaiChi",
-        "YoYo",
+        "Archery",
+        "BabyCrawling",
+        "BalanceBeam",
+        "BandMarching",
+        "BaseballPitch",
+        "Basketball",
+        "BasketballDunk",
+        "BenchPress",
     ]
 
     @property
