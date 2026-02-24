@@ -105,11 +105,10 @@ class ImageMediaType(MediaType):
     # Demo datasets
     # ------------------------------------------------------------------
 
-    # Shared categories for all S/M/L image demo datasets.
-    # All three sizes use the same 25 categories (each with 60+ images);
-    # only the underlying images differ (disjoint slices within each
-    # category's Caltech-101 images).
-    _DEMO_CATEGORIES = [
+    # Shared categories for S and M image demo datasets.
+    # Both sizes use the same 25 Caltech-101 categories; only the
+    # underlying images differ (disjoint slices within each category).
+    _DEMO_CATEGORIES_CALTECH101 = [
         "airplanes",
         "bonsai",
         "car_side",
@@ -137,45 +136,76 @@ class ImageMediaType(MediaType):
         "watch",
     ]
 
+    # Categories for the L dataset from Caltech-256 — a different source
+    # with its own numbered category naming scheme.
+    _DEMO_CATEGORIES_CALTECH256 = [
+        "003.backpack",
+        "024.butterfly",
+        "028.camel",
+        "029.cannon",
+        "038.chimp",
+        "046.computer-monitor",
+        "069.fighter-jet",
+        "084.giraffe",
+        "085.goat",
+        "086.golden-gate-bridge",
+        "096.hammock",
+        "107.hot-air-balloon",
+        "122.kayak",
+        "129.leopards-101",
+        "132.light-house",
+        "145.motorbikes-101",
+        "147.mushroom",
+        "151.ostrich",
+        "158.penguin",
+        "167.pyramid",
+        "178.school-bus",
+        "200.stained-glass",
+        "207.swan",
+        "245.windmill",
+        "246.wine-bottle",
+    ]
+
     @property
     def demo_datasets(self) -> list:
-        cats = self._DEMO_CATEGORIES
+        cats101 = self._DEMO_CATEGORIES_CALTECH101
+        cats256 = self._DEMO_CATEGORIES_CALTECH256
         return [
             DemoDataset(
                 id="images_s",
                 label="Caltech-101 Object Mix (S)",
                 description=(
-                    "~250 photographs across 25 categories — animals, vehicles,"
+                    "~500 photographs across 25 categories — animals, vehicles,"
                     " household objects, and nature from the Caltech-101 dataset."
                 ),
-                categories=cats,
+                categories=cats101,
                 source="caltech101",
                 slice_start=0,
-                slice_end=10,
+                slice_end=20,
             ),
             DemoDataset(
                 id="images_m",
                 label="Caltech-101 Object Mix (M)",
                 description=(
-                    "~500 photographs across 25 categories — animals, vehicles,"
+                    "~1,000 photographs across 25 categories — animals, vehicles,"
                     " household objects, and nature from the Caltech-101 dataset."
                 ),
-                categories=cats,
+                categories=cats101,
                 source="caltech101",
-                slice_start=10,
-                slice_end=30,
+                slice_start=20,
+                slice_end=60,
             ),
             DemoDataset(
                 id="images_l",
-                label="Caltech-101 Object Mix (L)",
+                label="Caltech-256 Object Mix (L)",
                 description=(
-                    "~750 photographs across 25 categories — animals, vehicles,"
-                    " household objects, and nature from the Caltech-101 dataset."
+                    "~2,000 photographs across 25 categories — animals, landmarks,"
+                    " vehicles, and everyday objects from the Caltech-256 dataset."
                 ),
-                categories=cats,
-                source="caltech101",
-                slice_start=30,
-                slice_end=60,
+                categories=cats256,
+                source="caltech256",
+                slice_start=0,
+                slice_end=80,
             ),
         ]
 
