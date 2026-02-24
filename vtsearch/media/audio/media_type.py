@@ -200,10 +200,10 @@ class AudioMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading CLAP model weights…", 0, 2)
+        self._on_progress("loading", "Loading CLAP model weights…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
-        self._on_progress("loading", "Loading CLAP processor…", 1, 2)
+        self._on_progress("loading", "Loading CLAP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
 
