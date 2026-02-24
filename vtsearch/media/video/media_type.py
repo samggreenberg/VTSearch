@@ -182,10 +182,10 @@ class VideoMediaType(MediaType):
 
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading X-CLIP model weights…", 0, 2)
+        self._on_progress("loading", "Loading X-CLIP model weights…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
-        self._on_progress("loading", "Loading X-CLIP processor…", 1, 2)
+        self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False)
 
