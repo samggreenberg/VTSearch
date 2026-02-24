@@ -40,6 +40,7 @@ from vtsearch.utils import (
     bad_votes,
     build_clip_lookup,
     clips,
+    diversity_tree_label,
     find_missing_entries,
     good_votes,
     resolve_clip_ids,
@@ -79,6 +80,7 @@ def _apply_labels(
                 good_votes.pop(cid, None)
                 bad_votes[cid] = None
                 add_label_to_history(cid, "bad")
+            diversity_tree_label(cid)
         applied += 1
 
     return applied, skipped
