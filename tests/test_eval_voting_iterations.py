@@ -177,7 +177,10 @@ class TestSimulateVotingIterations:
         rows2 = simulate_voting_iterations(clips, "alpha", seed=42)
         assert len(rows1) == len(rows2)
         for r1, r2 in zip(rows1, rows2):
-            assert r1 == r2
+            # Compare all fields except elapsed_seconds (wall-clock timing varies between runs)
+            r1_cmp = {k: v for k, v in r1.items() if k != "elapsed_seconds"}
+            r2_cmp = {k: v for k, v in r2.items() if k != "elapsed_seconds"}
+            assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
         clips = _make_separable_clips(n_per_cat=10)
