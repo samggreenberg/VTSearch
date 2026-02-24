@@ -408,14 +408,16 @@ class MediaType(ABC):
 
 
 class Processor(ABC):
-    """Abstract base class for all processors (detectors, extractors, etc.).
+    """Abstract base class for all processors (detectors, localizers, extractors, etc.).
 
     A *Processor* takes a single media clip and produces an answer.  The
     exact type of the answer depends on the subclass:
 
     * A :class:`Detector` returns ``bool`` — "does this clip match?"
+    * A :class:`Localizer` returns ``list[dict]`` — "where in this clip
+      is the item of interest?" (bounding boxes with confidence scores).
     * An :class:`Extractor` returns ``list[dict]`` — "what details are
-      inside this clip?"
+      inside this clip?" (bounding boxes, labels, and other metadata).
 
     Every processor knows its :attr:`name` (a unique human-readable
     identifier) and the :attr:`media_type` it operates on (e.g.
@@ -470,6 +472,7 @@ class Processor(ABC):
         The return type depends on the subclass:
 
         * :class:`Detector` → ``bool``
+        * :class:`Localizer` → ``list[dict[str, Any]]``
         * :class:`Extractor` → ``list[dict[str, Any]]``
         """
 
@@ -517,6 +520,77 @@ class Detector(Processor):
     def process(self, clip: dict[str, Any]) -> bool:
         """Run detection on *clip* (delegates to :meth:`detect`)."""
         return self.detect(clip)
+
+
+class Localizer(Processor):
+    """Abstract base class for localizers.
+
+    A *Localizer* sits between a :class:`Detector` and an :class:`Extractor`
+    in the processor hierarchy.  While a Detector answers "does this clip
+    match?" (bool) and an Extractor answers "what details are inside this
+    clip?" (bounding boxes, labels, metadata, etc.), a Localizer answers
+    "**where** in this clip is the item of interest?" by returning bounding
+    boxes with confidence scores — but no further classification or
+    extraction metadata.
+
+    For example an image localizer might return bounding boxes around
+    regions of interest without identifying what class each region belongs
+    to; a video localizer might return temporal intervals where something
+    noteworthy happens.
+
+    A Localizer can be composed with other processors: one could build a
+    Localizer by running a Detector and then a follow-up localization step,
+    or build an Extractor by running a Localizer followed by a
+    classification/extraction step.  However, none of these compositions
+    are required — each processor type can be implemented independently.
+
+    Each concrete ``Localizer`` operates on exactly **one** media type
+    (declared via :attr:`media_type`), just like Detectors and Extractors.
+
+    Subclasses must implement:
+
+    * :attr:`name` — unique identifier for this localizer.
+    * :attr:`media_type` — which media type it works on.
+    * :meth:`localize` — run localization on a single clip dict and return
+      a list of bounding-box dicts.
+
+    The generic :meth:`process` method delegates to :meth:`localize`.
+    """
+
+    # ------------------------------------------------------------------
+    # Localization
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def localize(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run localization on *clip* and return a list of bounding-box dicts.
+
+        Each dict in the returned list describes **one region** where the
+        item of interest was found.  Every dict **must** include:
+
+        * ``"confidence"`` — a float in ``[0, 1]``.
+        * ``"bbox"`` — the bounding box (format is media-specific, e.g.
+          ``[x1, y1, x2, y2]`` for images).
+
+        Returns an empty list when nothing is found.
+
+        Example return value for an image localizer::
+
+            [
+                {"confidence": 0.95, "bbox": [10, 20, 200, 300]},
+                {"confidence": 0.73, "bbox": [400, 50, 600, 250]},
+            ]
+
+        Example return value for a video temporal localizer::
+
+            [
+                {"confidence": 0.88, "bbox": [1.2, 3.4]},
+            ]
+        """
+
+    def process(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run localization on *clip* (delegates to :meth:`localize`)."""
+        return self.localize(clip)
 
 
 class Extractor(Processor):

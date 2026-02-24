@@ -1,8 +1,8 @@
-"""Tests for the Processor base class hierarchy (Processor, Detector, Extractor)."""
+"""Tests for the Processor base class hierarchy (Processor, Detector, Localizer, Extractor)."""
 
 import pytest
 
-from vtsearch.media.base import Detector, Extractor, Processor
+from vtsearch.media.base import Detector, Extractor, Localizer, Processor
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +28,26 @@ class StubDetector(Detector):
 
     def detect(self, clip):
         return self._result
+
+
+class StubLocalizer(Localizer):
+    """Trivial localizer that returns a fixed list of bounding boxes."""
+
+    def __init__(self, name="stub-loc", media_type="image", results=None):
+        self._name = name
+        self._media_type = media_type
+        self._results = results if results is not None else []
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def media_type(self):
+        return self._media_type
+
+    def localize(self, clip):
+        return self._results
 
 
 class StubExtractor(Extractor):
@@ -63,6 +83,10 @@ class TestProcessorABC:
     def test_detector_is_processor(self):
         det = StubDetector()
         assert isinstance(det, Processor)
+
+    def test_localizer_is_processor(self):
+        loc = StubLocalizer()
+        assert isinstance(loc, Processor)
 
     def test_extractor_is_processor(self):
         ext = StubExtractor()
@@ -112,6 +136,49 @@ class TestDetectorABC:
         d = det.to_dict()
         assert d["name"] == "test-det"
         assert d["media_type"] == "paragraph"
+
+
+# ---------------------------------------------------------------------------
+# Localizer ABC
+# ---------------------------------------------------------------------------
+
+
+class TestLocalizerABC:
+    def test_cannot_instantiate(self):
+        with pytest.raises(TypeError):
+            Localizer()
+
+    def test_localize_returns_bboxes(self):
+        boxes = [
+            {"confidence": 0.95, "bbox": [10, 20, 200, 300]},
+            {"confidence": 0.73, "bbox": [400, 50, 600, 250]},
+        ]
+        loc = StubLocalizer(results=boxes)
+        assert loc.localize({}) == boxes
+
+    def test_localize_returns_empty_list(self):
+        loc = StubLocalizer(results=[])
+        assert loc.localize({}) == []
+
+    def test_process_delegates_to_localize(self):
+        boxes = [{"confidence": 0.88, "bbox": [0, 0, 100, 100]}]
+        loc = StubLocalizer(results=boxes)
+        assert loc.process({}) == boxes
+
+    def test_process_returns_empty_list(self):
+        loc = StubLocalizer(results=[])
+        assert loc.process({}) == []
+
+    def test_name_and_media_type(self):
+        loc = StubLocalizer(name="face_regions", media_type="image")
+        assert loc.name == "face_regions"
+        assert loc.media_type == "image"
+
+    def test_to_dict(self):
+        loc = StubLocalizer(name="test-loc", media_type="video")
+        d = loc.to_dict()
+        assert d["name"] == "test-loc"
+        assert d["media_type"] == "video"
 
 
 # ---------------------------------------------------------------------------
