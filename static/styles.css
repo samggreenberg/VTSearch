@@ -332,12 +332,12 @@ video { max-width: 600px; max-height: 400px; }
 .dataset-bar button { padding: 6px 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-secondary); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
 .dataset-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-/* Progress indicator button */
-.progress-check-bar { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+/* Progress indicator buttons */
+.progress-check-bar { padding: 10px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; }
 .labeling-indicator {
-  width: 100%; padding: 7px 10px; border-radius: 4px; background: transparent;
-  font-size: 0.8rem; cursor: pointer; transition: border-color 0.4s, opacity 0.2s;
-  display: flex; align-items: center; gap: 6px; border: 1px solid var(--indicator-border); text-align: left;
+  flex: 1; padding: 5px 6px; border-radius: 4px; background: transparent;
+  font-size: 0.72rem; cursor: pointer; transition: border-color 0.4s, opacity 0.2s;
+  display: flex; align-items: center; gap: 4px; border: 1px solid var(--indicator-border); text-align: left;
 }
 .labeling-indicator:hover { opacity: 0.82; }
 .labeling-indicator:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -345,8 +345,8 @@ video { max-width: 600px; max-height: 400px; }
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
   background: var(--indicator-dot); transition: background 0.4s, box-shadow 0.4s;
 }
-.indicator-label { flex: 1; color: var(--text-secondary); font-size: 0.8rem; transition: color 0.4s; }
-.indicator-subtext { font-size: 0.68rem; color: var(--text-dim); transition: color 0.4s; text-align: right; }
+.indicator-label { flex: 1; color: var(--text-secondary); font-size: 0.72rem; transition: color 0.4s; }
+.indicator-subtext { font-size: 0.62rem; color: var(--text-dim); transition: color 0.4s; text-align: right; }
 
 /* Red – too few labels */
 .labeling-indicator[data-status="red"] { border-color: var(--status-red-border); }

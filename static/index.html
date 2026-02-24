@@ -140,10 +140,20 @@
   <aside class="panel-right" aria-label="Labels">
     <!-- import-file removed: label import now uses the label importer modal -->
     <div class="progress-check-bar">
-      <button id="check-progress-btn" class="labeling-indicator" data-status="" aria-label="Check labeling progress">
+      <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness">
         <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Progress</span>
-        <span class="indicator-subtext" id="indicator-subtext"></span>
+        <span class="indicator-label">Smart</span>
+        <span class="indicator-subtext" id="smart-subtext"></span>
+      </button>
+      <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability">
+        <span class="indicator-dot" aria-hidden="true"></span>
+        <span class="indicator-label">Stable</span>
+        <span class="indicator-subtext" id="stable-subtext"></span>
+      </button>
+      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Span level: diversity tree coverage">
+        <span class="indicator-dot" aria-hidden="true"></span>
+        <span class="indicator-label">Span</span>
+        <span class="indicator-subtext" id="span-subtext"></span>
       </button>
     </div>
     <div class="label-sort-bar">
@@ -170,7 +180,7 @@
   </aside>
 </div>
 
-<!-- Progress Modal -->
+<!-- Progress Modal — shown per-metric when clicking Smart, Stable, or Span -->
 <div id="progress-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="progress-modal-title">
   <div class="modal-content">
     <div class="modal-header">
@@ -188,19 +198,28 @@
           <div class="progress-stat-value" id="stat-total-clips">0</div>
         </div>
       </div>
-      <div class="progress-chart">
-        <h3>Error Cost Over Time</h3>
+      <!-- Smart: Error Cost chart -->
+      <div id="smart-section" class="progress-chart" style="display:none;">
+        <h3>Smart: Error Cost Over Time</h3>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-          Lower is better. When the line levels out, you're probably not making progress.
+          Lower is better. When the line levels out, the model has converged.
         </p>
         <canvas id="error-cost-chart" width="700" height="250"></canvas>
       </div>
-      <div class="progress-chart">
-        <h3>Prediction Stability</h3>
+      <!-- Stable: Prediction Stability chart -->
+      <div id="stable-section" class="progress-chart" style="display:none;">
+        <h3>Stable: Prediction Flips Over Time</h3>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-          Shows how many unlabeled clips change prediction at each step. When this stabilizes near zero, you're probably not making progress.
+          Shows how many unlabeled clips change prediction at each step. Near zero means stable.
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
+      </div>
+      <!-- Span: Diversity tree text info -->
+      <div id="span-section" class="progress-chart" style="display:none;">
+        <h3>Span: Diversity Tree Coverage</h3>
+        <div id="span-info-box" class="progress-recommendation" style="border-left-color: var(--accent);">
+          <p id="span-info-text" style="margin:0; font-size: 0.9rem; color: var(--text-secondary);">No diversity tree available.</p>
+        </div>
       </div>
       <div class="progress-recommendation">
         <h3>Recommendation</h3>

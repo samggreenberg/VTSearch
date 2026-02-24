@@ -498,14 +498,15 @@ def labeling_progress():
 
 @sorting_bp.route("/api/labeling-status", methods=["GET"])
 def labeling_status_indicator():
-    """Return a lightweight red/yellow/green labeling status based on the last 10 steps.
+    """Return per-metric red/yellow/green labeling statuses.
 
-    Red  – fewer than 20 labels, or fewer than 5 good or 5 bad.
-    Yellow – minimum counts met but error cost is still declining (keep labeling).
-    Green  – minimum counts met and error cost has leveled off (safe to stop).
+    Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a
+    ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
     """
     try:
-        status = compute_labeling_status(clips, label_history, good_votes, bad_votes, get_inclusion())
+        tree = get_diversity_tree()
+        span = tree.span_info() if tree is not None else None
+        status = compute_labeling_status(clips, label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
         return jsonify(status)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -212,3 +212,35 @@ class DiversityTree:
         if not self.nodes_by_depth:
             return -1
         return max(self.nodes_by_depth.keys())
+
+    def span_info(self) -> dict:
+        """Return span level details for the labeling progress indicator.
+
+        Returns a dict with:
+        - level: deepest fully-seen level (-1 if none)
+        - depth: max tree depth
+        - next_level_seen: how many nodes at the next incomplete level are seen
+        - next_level_total: total nodes at the next incomplete level
+        """
+        level = self.diversity_level()
+        d = self.depth()
+
+        next_level = level + 1
+        if next_level > d:
+            # All levels fully covered
+            return {
+                "level": level,
+                "depth": d,
+                "next_level_seen": 0,
+                "next_level_total": 0,
+            }
+
+        nodes_at_next = self.nodes_by_depth.get(next_level, [])
+        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
+
+        return {
+            "level": level,
+            "depth": d,
+            "next_level_seen": seen_count,
+            "next_level_total": len(nodes_at_next),
+        }
