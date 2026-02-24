@@ -167,7 +167,7 @@ class TestSimulateVotingIterations:
             seed=42,
             dataset_name="test_ds",
         )
-        expected_keys = {"seed", "dataset", "category", "t", "cost", "fpr", "fnr"}
+        expected_keys = {"seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"}
         for row in rows:
             assert set(row.keys()) == expected_keys
 
@@ -177,7 +177,10 @@ class TestSimulateVotingIterations:
         rows2 = simulate_voting_iterations(clips, "alpha", seed=42)
         assert len(rows1) == len(rows2)
         for r1, r2 in zip(rows1, rows2):
-            assert r1 == r2
+            # Compare all fields except elapsed_seconds (wall-clock timing varies between runs)
+            r1_cmp = {k: v for k, v in r1.items() if k != "elapsed_seconds"}
+            r2_cmp = {k: v for k, v in r2.items() if k != "elapsed_seconds"}
+            assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
         clips = _make_separable_clips(n_per_cat=10)
@@ -238,6 +241,15 @@ class TestSimulateVotingIterations:
         costs5 = [r["cost"] for r in rows_inc5]
         assert costs0 != costs5
 
+    def test_elapsed_seconds_non_negative_and_increasing(self):
+        """elapsed_seconds should be non-negative and non-decreasing over rows."""
+        clips = _make_separable_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(clips, "alpha", seed=42)
+        times = [r["elapsed_seconds"] for r in rows]
+        assert all(t >= 0.0 for t in times)
+        for i in range(1, len(times)):
+            assert times[i] >= times[i - 1]
+
 
 # ------------------------------------------------------------------
 # Integration test: run_voting_iterations_eval
@@ -253,7 +265,7 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
         )
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == ["seed", "dataset", "category", "t", "cost", "fpr", "fnr"]
+        assert list(df.columns) == ["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
 
     def test_multiple_seeds(self):
         clips = _make_separable_clips(n_per_cat=10)

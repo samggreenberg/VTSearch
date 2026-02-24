@@ -88,10 +88,22 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
             cost = max(0, 1.0 - t * 0.08 + rng.normal(0, 0.05))
             fpr = max(0, 0.5 - t * 0.04 + rng.normal(0, 0.03))
             fnr = max(0, 0.5 - t * 0.04 + rng.normal(0, 0.03))
+            elapsed = (t - 2) * 0.1 + seed * n_steps * 0.1
             rows.append(
-                {"seed": seed, "dataset": "ds1", "category": "alpha", "t": t, "cost": cost, "fpr": fpr, "fnr": fnr}
+                {
+                    "seed": seed,
+                    "dataset": "ds1",
+                    "category": "alpha",
+                    "t": t,
+                    "cost": cost,
+                    "fpr": fpr,
+                    "fnr": fnr,
+                    "elapsed_seconds": elapsed,
+                }
             )
-    return pd.DataFrame(rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr"])
+    return pd.DataFrame(
+        rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
+    )
 
 
 # ------------------------------------------------------------------
@@ -190,7 +202,7 @@ class TestPlotVotingIterations:
             assert p.stat().st_size > 0
 
     def test_empty_dataframe_generates_no_plots(self, tmp_dir):
-        df = pd.DataFrame(columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr"])
+        df = pd.DataFrame(columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
         paths = plot_voting_iterations(df, output_dir=tmp_dir)
         assert paths == []
 

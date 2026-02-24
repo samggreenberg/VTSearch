@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from typing import Any
 
 import numpy as np
@@ -67,6 +68,7 @@ def eval_text_sort(
     media_type: str,
     k_values: list[int] | None = None,
     enrich: bool = False,
+    start_time: float | None = None,
 ) -> list:
     """Run text-sort evaluation for a list of queries.
 
@@ -79,6 +81,8 @@ def eval_text_sort(
         media_type: The media type string for embedding dispatch.
         k_values: Optional k values for P@k/R@k.
         enrich: If ``True``, use enriched (wrapper-averaged) text embeddings.
+        start_time: Monotonic timestamp from the start of the eval run.
+            When provided, each result records ``elapsed_seconds``.
 
     Returns:
         List of :class:`~vtsearch.eval.metrics.QueryMetrics`.
@@ -92,6 +96,8 @@ def eval_text_sort(
         relevant_ids = {cid for cid, c in clips.items() if c.get("category") == query.target_category}
 
         qm = compute_metrics(ranked_ids, relevant_ids, query.text, query.target_category, k_values)
+        if start_time is not None:
+            qm.elapsed_seconds = time.monotonic() - start_time
         results.append(qm)
 
     return results
@@ -105,6 +111,7 @@ def eval_learned_sort(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    start_time: float | None = None,
 ) -> list[LearnedSortMetrics]:
     """Run learned-sort evaluation via simulated voting.
 
@@ -128,6 +135,8 @@ def eval_learned_sort(
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split (default 0.5).
+        start_time: Monotonic timestamp from the start of the eval run.
+            When provided, each result records ``elapsed_seconds``.
 
     Returns:
         List of :class:`LearnedSortMetrics`, one per query.
@@ -182,6 +191,7 @@ def eval_learned_sort(
 
         acc, prec, rec, f1 = compute_binary_classification_metrics(predictions, labels)
 
+        elapsed = (time.monotonic() - start_time) if start_time is not None else 0.0
         results.append(
             LearnedSortMetrics(
                 accuracy=acc,
@@ -191,6 +201,7 @@ def eval_learned_sort(
                 num_train=len(train_good) + len(train_bad),
                 num_test=len(test_ids),
                 target_category=query.target_category,
+                elapsed_seconds=elapsed,
             )
         )
 
@@ -239,6 +250,7 @@ def run_eval(
     if dataset_ids is None:
         dataset_ids = list(EVAL_DATASETS.keys())
 
+    start_time = time.monotonic()
     all_results: list[DatasetResult] = []
 
     for ds_id in dataset_ids:
@@ -278,7 +290,7 @@ def run_eval(
         # --- Text sort ---
         if mode in ("text", "both"):
             print(f"\n--- Text Sort Evaluation ({len(queries)} queries) ---")
-            text_results = eval_text_sort(clips, queries, media_type, k_values, enrich=enrich)
+            text_results = eval_text_sort(clips, queries, media_type, k_values, enrich=enrich, start_time=start_time)
             ds_result.text_sort = text_results
 
             for qm in text_results:
@@ -287,7 +299,8 @@ def run_eval(
                 print(
                     f"  [{qm.target_category:20s}] AP={qm.average_precision:.3f}  "
                     f"P@5={p5:.2f}  P@10={p10:.2f}  "
-                    f"({qm.num_relevant} relevant / {qm.num_total} total)"
+                    f"({qm.num_relevant} relevant / {qm.num_total} total)  "
+                    f"t={qm.elapsed_seconds:.1f}s"
                 )
             print(f"  mAP = {ds_result.mean_average_precision:.4f}")
 
@@ -302,6 +315,7 @@ def run_eval(
                 safe_thresholds=safe_thresholds,
                 calibrate_count=calibrate_count,
                 calibration_fraction=calibration_fraction,
+                start_time=start_time,
             )
             ds_result.learned_sort = learned_results
 
@@ -309,7 +323,8 @@ def run_eval(
                 print(
                     f"  [{lm.target_category:20s}] Acc={lm.accuracy:.3f}  "
                     f"P={lm.precision:.3f}  R={lm.recall:.3f}  F1={lm.f1:.3f}  "
-                    f"(train={lm.num_train}, test={lm.num_test})"
+                    f"(train={lm.num_train}, test={lm.num_test})  "
+                    f"t={lm.elapsed_seconds:.1f}s"
                 )
             print(f"  Mean F1 = {ds_result.mean_learned_f1:.4f}")
 
