@@ -18,6 +18,7 @@ The result is a :class:`pandas.DataFrame` with columns
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -142,10 +143,11 @@ def simulate_voting_iterations(
 
     Returns:
         List of row dicts with keys
-        ``seed, dataset, category, t, cost, fpr, fnr``.
+        ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
     """
     rng = np.random.RandomState(seed)
     torch.manual_seed(seed)
+    start_time = time.monotonic()
 
     sim_ids, test_ids = _split_clip_ids(clips_dict, sim_fraction, rng)
 
@@ -220,6 +222,7 @@ def simulate_voting_iterations(
                 "category": target_category,
                 "t": t,
                 **metrics,
+                "elapsed_seconds": round(time.monotonic() - start_time, 3),
             }
         )
 
@@ -262,7 +265,7 @@ def run_voting_iterations_eval(
 
     Returns:
         A :class:`~pandas.DataFrame` with columns
-        ``seed, dataset, category, t, cost, fpr, fnr``.
+        ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
     """
     all_rows: list[dict[str, Any]] = []
 
@@ -288,7 +291,7 @@ def run_voting_iterations_eval(
                 )
                 all_rows.extend(rows)
 
-    return pd.DataFrame(all_rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr"])
+    return pd.DataFrame(all_rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
 
 
 def run_voting_iterations_eval_from_pickles(
@@ -316,7 +319,8 @@ def run_voting_iterations_eval_from_pickles(
             calibration in each split (default 0.5).
 
     Returns:
-        A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`.
+        A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
+        (columns: ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``).
     """
     from vtsearch.datasets.loader import load_dataset_from_pickle
 

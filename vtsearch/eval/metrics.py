@@ -19,6 +19,7 @@ class QueryMetrics:
     recall_at_k: dict[int, float] = field(default_factory=dict)
     num_relevant: int = 0
     num_total: int = 0
+    elapsed_seconds: float = 0.0
 
 
 @dataclass
@@ -32,6 +33,7 @@ class LearnedSortMetrics:
     num_train: int
     num_test: int
     target_category: str = ""
+    elapsed_seconds: float = 0.0
 
 
 @dataclass
@@ -75,6 +77,7 @@ class DatasetResult:
                         "num_relevant": q.num_relevant,
                         "precision_at_k": {str(k): round(v, 4) for k, v in sorted(q.precision_at_k.items())},
                         "recall_at_k": {str(k): round(v, 4) for k, v in sorted(q.recall_at_k.items())},
+                        "elapsed_seconds": round(q.elapsed_seconds, 3),
                     }
                     for q in self.text_sort
                 ],
@@ -92,6 +95,7 @@ class DatasetResult:
                         "f1": round(f.f1, 4),
                         "num_train": f.num_train,
                         "num_test": f.num_test,
+                        "elapsed_seconds": round(f.elapsed_seconds, 3),
                     }
                     for f in self.learned_sort
                 ],

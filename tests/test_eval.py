@@ -211,6 +211,7 @@ class TestDatasetResult:
         assert "text_sort" in d
         assert d["text_sort"]["mAP"] == 0.8
         assert len(d["text_sort"]["per_query"]) == 1
+        assert "elapsed_seconds" in d["text_sort"]["per_query"][0]
 
     def test_to_dict_learned(self):
         dr = DatasetResult(dataset_id="test", media_type="image")
@@ -222,6 +223,7 @@ class TestDatasetResult:
         d = dr.to_dict()
         assert "learned_sort" in d
         assert d["learned_sort"]["mean_f1"] == 0.75
+        assert "elapsed_seconds" in d["learned_sort"]["per_category"][0]
 
 
 # =====================================================================
@@ -353,6 +355,32 @@ class TestEvalTextSort:
         assert 5 in qm.recall_at_k
         assert qm.num_total == 20
 
+    def test_text_sort_elapsed_seconds_without_start_time(self):
+        """Without start_time, elapsed_seconds defaults to 0."""
+        clips, cat_dir, _ = self._make_synthetic_clips()
+        queries = [EvalQuery("a cat", "cat")]
+        with patch("vtsearch.models.embeddings.embed_text_query", return_value=cat_dir.copy()):
+            results = eval_text_sort(clips, queries, "image", k_values=[5])
+        assert results[0].elapsed_seconds == 0.0
+
+    def test_text_sort_elapsed_seconds_with_start_time(self):
+        """With start_time, elapsed_seconds is populated and non-negative."""
+        import time
+
+        clips, cat_dir, _ = self._make_synthetic_clips()
+        queries = [EvalQuery("a cat", "cat"), EvalQuery("a dog", "dog")]
+
+        def mock_embed(text, media_type, enrich=False):
+            return cat_dir.copy()
+
+        start = time.monotonic()
+        with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
+            results = eval_text_sort(clips, queries, "image", k_values=[5], start_time=start)
+        for qm in results:
+            assert qm.elapsed_seconds >= 0.0
+        # Second query should have equal or later timestamp
+        assert results[1].elapsed_seconds >= results[0].elapsed_seconds
+
 
 # =====================================================================
 # Runner: eval_learned_sort with synthetic clips
@@ -403,6 +431,17 @@ class TestEvalLearnedSort:
         queries = [EvalQuery("rare stuff", "rare")]
         results = eval_learned_sort(clips, queries, train_fraction=0.5)
         assert len(results) == 0  # skipped due to too few clips
+
+    def test_learned_sort_elapsed_seconds(self):
+        """With start_time, elapsed_seconds is populated on results."""
+        import time
+
+        clips = self._make_synthetic_clips()
+        queries = [EvalQuery("category a stuff", "cat_a")]
+        start = time.monotonic()
+        results = eval_learned_sort(clips, queries, train_fraction=0.5, seed=42, start_time=start)
+        assert len(results) == 1
+        assert results[0].elapsed_seconds > 0.0
 
 
 # =====================================================================
