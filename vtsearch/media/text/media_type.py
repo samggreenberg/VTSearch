@@ -75,7 +75,7 @@ class TextMediaType(MediaType):
     # ------------------------------------------------------------------
 
     # Shared categories for all S/M/L text demo datasets.
-    # All three sizes use the same 6 categories; only the underlying
+    # All three sizes use the same 15 categories; only the underlying
     # articles differ (disjoint slices of each category's texts).
     _DEMO_CATEGORIES = [
         "sports",
@@ -84,6 +84,15 @@ class TextMediaType(MediaType):
         "hockey",
         "electronics",
         "religion",
+        "world",
+        "business",
+        "technology",
+        "medicine",
+        "crypto",
+        "atheism",
+        "motorcycles",
+        "mideast",
+        "guns",
     ]
 
     @property
@@ -94,37 +103,40 @@ class TextMediaType(MediaType):
                 id="paragraphs_s",
                 label="Newsgroup Topic Mix (S)",
                 description=(
-                    "42 articles across 6 topics — sports, science, cars, hockey,"
-                    " electronics, and religion from the 20 Newsgroups collection."
+                    "~375 articles across 15 topics — sports, science, cars,"
+                    " medicine, religion, politics, and more from the"
+                    " 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
                 slice_start=0,
-                slice_end=7,
+                slice_end=25,
             ),
             DemoDataset(
                 id="paragraphs_m",
                 label="Newsgroup Topic Mix (M)",
                 description=(
-                    "84 articles across 6 topics — sports, science, cars, hockey,"
-                    " electronics, and religion from the 20 Newsgroups collection."
+                    "~750 articles across 15 topics — sports, science, cars,"
+                    " medicine, religion, politics, and more from the"
+                    " 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
-                slice_start=7,
-                slice_end=21,
+                slice_start=25,
+                slice_end=75,
             ),
             DemoDataset(
                 id="paragraphs_l",
                 label="Newsgroup Topic Mix (L)",
                 description=(
-                    "168 articles across 6 topics — sports, science, cars, hockey,"
-                    " electronics, and religion from the 20 Newsgroups collection."
+                    "~1875 articles across 15 topics — sports, science, cars,"
+                    " medicine, religion, politics, and more from the"
+                    " 20 Newsgroups collection."
                 ),
                 categories=cats,
                 source="ag_news_sample",
-                slice_start=21,
-                slice_end=49,
+                slice_start=75,
+                slice_end=200,
             ),
         ]
 

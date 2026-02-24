@@ -27,42 +27,104 @@ class EvalQuery:
 
 
 # ------------------------------------------------------------------
-# Audio eval queries  (ESC-50)
-# All S/M/L share the same 10 categories; queries are identical.
+# Audio eval queries  (ESC-50 — all 50 categories)
+# All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
 
 _SOUNDS_QUERIES = [
+    # Animals
     EvalQuery("a dog barking", "dog"),
-    EvalQuery("a cat meowing", "cat"),
     EvalQuery("a rooster crowing at dawn", "rooster"),
-    EvalQuery("birds singing and chirping", "chirping_birds"),
+    EvalQuery("a pig oinking", "pig"),
+    EvalQuery("a cow mooing", "cow"),
+    EvalQuery("frogs croaking", "frog"),
+    EvalQuery("a cat meowing", "cat"),
+    EvalQuery("a hen clucking", "hen"),
+    EvalQuery("buzzing insects", "insects"),
+    EvalQuery("sheep bleating", "sheep"),
+    EvalQuery("a crow cawing", "crow"),
+    # Natural soundscapes
     EvalQuery("rain falling", "rain"),
-    EvalQuery("thunderstorm with loud thunder", "thunderstorm"),
-    EvalQuery("a car horn honking", "car_horn"),
-    EvalQuery("a chainsaw cutting wood", "chainsaw"),
+    EvalQuery("ocean waves crashing on the shore", "sea_waves"),
     EvalQuery("crackling fire in a fireplace", "crackling_fire"),
+    EvalQuery("crickets chirping at night", "crickets"),
+    EvalQuery("birds singing and chirping", "chirping_birds"),
+    EvalQuery("dripping water drops", "water_drops"),
+    EvalQuery("wind howling", "wind"),
+    EvalQuery("pouring water from a container", "pouring_water"),
+    EvalQuery("a toilet flushing", "toilet_flush"),
+    EvalQuery("thunderstorm with loud thunder", "thunderstorm"),
+    # Human, non-speech
+    EvalQuery("a baby crying", "crying_baby"),
+    EvalQuery("someone sneezing", "sneezing"),
+    EvalQuery("people clapping and applauding", "clapping"),
+    EvalQuery("heavy breathing", "breathing"),
+    EvalQuery("someone coughing", "coughing"),
+    EvalQuery("footsteps walking", "footsteps"),
+    EvalQuery("people laughing", "laughing"),
+    EvalQuery("brushing teeth", "brushing_teeth"),
+    EvalQuery("someone snoring loudly", "snoring"),
+    EvalQuery("drinking and sipping", "drinking_sipping"),
+    # Interior / domestic
+    EvalQuery("knocking on a wooden door", "door_wood_knock"),
+    EvalQuery("mouse clicking", "mouse_click"),
+    EvalQuery("keyboard typing", "keyboard_typing"),
+    EvalQuery("a creaking wooden door", "door_wood_creep"),
+    EvalQuery("opening a can", "can_opening"),
+    EvalQuery("a washing machine running", "washing_machine"),
+    EvalQuery("a vacuum cleaner", "vacuum_cleaner"),
     EvalQuery("an alarm clock ringing", "clock_alarm"),
+    EvalQuery("a clock ticking", "clock_tick"),
+    EvalQuery("glass shattering", "glass_breaking"),
+    # Exterior / urban
+    EvalQuery("a helicopter flying", "helicopter"),
+    EvalQuery("a chainsaw cutting wood", "chainsaw"),
+    EvalQuery("an emergency siren", "siren"),
+    EvalQuery("a car horn honking", "car_horn"),
+    EvalQuery("an engine revving", "engine"),
+    EvalQuery("a train passing by", "train"),
+    EvalQuery("church bells ringing", "church_bells"),
+    EvalQuery("an airplane flying overhead", "airplane"),
+    EvalQuery("fireworks exploding", "fireworks"),
+    EvalQuery("hand-sawing wood", "hand_saw"),
 ]
 
 # ------------------------------------------------------------------
-# Image eval queries  (Caltech-101)
-# All S/M/L share the same 8 categories; queries are identical.
+# Image eval queries  (Caltech-101 — 25 categories)
+# All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
 
 _IMAGES_QUERIES = [
-    EvalQuery("a photograph of a butterfly", "butterfly"),
+    EvalQuery("a photograph of an airplane", "airplanes"),
+    EvalQuery("a photograph of a bonsai tree", "bonsai"),
+    EvalQuery("a photograph of a car from the side", "car_side"),
+    EvalQuery("a photograph of a chandelier", "chandelier"),
+    EvalQuery("a photograph of a cougar face", "cougar_face"),
+    EvalQuery("a photograph of a crab", "crab"),
+    EvalQuery("a photograph of a dalmatian dog", "dalmatian"),
     EvalQuery("a photograph of a dolphin", "dolphin"),
     EvalQuery("a photograph of an elephant", "elephant"),
+    EvalQuery("a photograph of a ferry boat", "ferry"),
+    EvalQuery("a photograph of a flamingo", "flamingo"),
     EvalQuery("a photograph of a grand piano", "grand_piano"),
+    EvalQuery("a photograph of a hawksbill turtle", "hawksbill"),
     EvalQuery("a photograph of a helicopter", "helicopter"),
-    EvalQuery("a photograph of a lobster", "lobster"),
+    EvalQuery("a photograph of an ibis bird", "ibis"),
+    EvalQuery("a photograph of a kangaroo", "kangaroo"),
+    EvalQuery("a photograph of a ketch sailing boat", "ketch"),
+    EvalQuery("a photograph of a lamp", "lamp"),
+    EvalQuery("a photograph of a laptop computer", "laptop"),
+    EvalQuery("a photograph of a nautilus shell", "nautilus"),
     EvalQuery("a photograph of a starfish", "starfish"),
     EvalQuery("a photograph of a stop sign", "stop_sign"),
+    EvalQuery("a photograph of a sunflower", "sunflower"),
+    EvalQuery("a photograph of a trilobite fossil", "trilobite"),
+    EvalQuery("a photograph of a wristwatch", "watch"),
 ]
 
 # ------------------------------------------------------------------
-# Text / paragraph eval queries  (20 Newsgroups)
-# All S/M/L share the same 6 categories; queries are identical.
+# Text / paragraph eval queries  (20 Newsgroups — 15 categories)
+# All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
 
 _PARAGRAPHS_QUERIES = [
@@ -72,26 +134,32 @@ _PARAGRAPHS_QUERIES = [
     EvalQuery("ice hockey games and NHL scores", "hockey"),
     EvalQuery("electronic circuits and components", "electronics"),
     EvalQuery("christian faith and religious practice", "religion"),
+    EvalQuery("world politics and government affairs", "world"),
+    EvalQuery("buying and selling merchandise", "business"),
+    EvalQuery("computer graphics and image rendering", "technology"),
+    EvalQuery("medical diseases and health treatments", "medicine"),
+    EvalQuery("cryptography and data encryption", "crypto"),
+    EvalQuery("atheism and arguments against religion", "atheism"),
+    EvalQuery("motorcycle riding and maintenance", "motorcycles"),
+    EvalQuery("middle east politics and conflict", "mideast"),
+    EvalQuery("firearms and gun legislation", "guns"),
 ]
 
 # ------------------------------------------------------------------
-# Video eval datasets  (UCF-101)
+# Video eval queries  (UCF-101 — 10 shared categories for S/M/L)
 # ------------------------------------------------------------------
 
-_ACTIVITIES_VIDEO_QUERIES = [
+_VIDEO_QUERIES = [
     EvalQuery("someone applying eye makeup", "ApplyEyeMakeup"),
     EvalQuery("someone applying lipstick", "ApplyLipstick"),
     EvalQuery("someone brushing their teeth", "BrushingTeeth"),
-    EvalQuery("a person playing drums", "Drumming"),
-    EvalQuery("a person doing yo-yo tricks", "YoYo"),
-]
-
-_SPORTS_VIDEO_QUERIES = [
     EvalQuery("a person diving off a cliff", "CliffDiving"),
+    EvalQuery("a person playing drums", "Drumming"),
     EvalQuery("someone walking on their hands", "HandstandWalking"),
     EvalQuery("a person jumping rope", "JumpRope"),
     EvalQuery("someone doing push-ups", "PushUps"),
     EvalQuery("a person practicing tai chi", "TaiChi"),
+    EvalQuery("a person doing yo-yo tricks", "YoYo"),
 ]
 
 # ------------------------------------------------------------------
@@ -139,12 +207,16 @@ EVAL_DATASETS: dict[str, dict] = {
         "queries": _PARAGRAPHS_QUERIES,
     },
     # Video
-    "activities_video": {
-        "demo_dataset": "activities_video",
-        "queries": _ACTIVITIES_VIDEO_QUERIES,
+    "videos_s": {
+        "demo_dataset": "videos_s",
+        "queries": _VIDEO_QUERIES,
     },
-    "sports_video": {
-        "demo_dataset": "sports_video",
-        "queries": _SPORTS_VIDEO_QUERIES,
+    "videos_m": {
+        "demo_dataset": "videos_m",
+        "queries": _VIDEO_QUERIES,
+    },
+    "videos_l": {
+        "demo_dataset": "videos_l",
+        "queries": _VIDEO_QUERIES,
     },
 }

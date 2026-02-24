@@ -298,6 +298,8 @@
   const settingsImportFile = document.getElementById("settings-import-file");
   const settingsExportBtn = document.getElementById("settings-export-btn");
   const swipeAnimationCheckbox = document.getElementById("swipe-animation-checkbox");
+  const showThumbnailsCheckbox = document.getElementById("show-thumbnails-checkbox");
+  let showThumbnails = false;
 
   // ---- Dataset Management ----
 
@@ -1516,6 +1518,10 @@
       swipeAnimationCheckbox.checked = val;
       swipeAnimation = val;
     }
+    if (showThumbnailsCheckbox) {
+      showThumbnailsCheckbox.checked = !!data.show_thumbnails;
+      showThumbnails = !!data.show_thumbnails;
+    }
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -1573,6 +1579,20 @@
     });
   }
 
+  // Show Thumbnails toggle
+  if (showThumbnailsCheckbox) {
+    showThumbnailsCheckbox.addEventListener("change", () => {
+      showThumbnails = showThumbnailsCheckbox.checked;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_thumbnails: showThumbnails }),
+      }).catch(() => {});
+      renderClipList();
+      renderVotes();
+    });
+  }
+
   // Default button — reset all settings to defaults
   if (settingsDefaultBtn) {
     settingsDefaultBtn.addEventListener("click", async () => {
@@ -1595,6 +1615,8 @@
         audioVolume = defaults.volume != null ? defaults.volume : 1.0;
         const audioEl = document.getElementById("clip-audio");
         if (audioEl) audioEl.volume = audioVolume;
+        renderClipList();
+        renderVotes();
       } catch (_) {}
     });
   }
@@ -1610,7 +1632,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -1627,6 +1649,8 @@
           audioVolume = typeof data.volume === "number" ? data.volume : 1.0;
           const audioEl = document.getElementById("clip-audio");
           if (audioEl) audioEl.volume = audioVolume;
+          renderClipList();
+          renderVotes();
         }
       } catch (_) {
         vtAlert("Failed to import settings. Make sure the file is valid JSON.", "error");
@@ -2092,6 +2116,16 @@
     inclusionValue.textContent = inclusion;
   }
 
+  function clipSupportsThumbnail(clip) {
+    return clip && (clip.type === "image" || clip.type === "video");
+  }
+
+  function thumbnailUrl(clip) {
+    if (clip.type === "image") return `/api/clips/${clip.id}/image`;
+    if (clip.type === "video") return `/api/clips/${clip.id}/video`;
+    return "";
+  }
+
   function renderClipList() {
     clipList.innerHTML = "";
     const scoreMap = {};
@@ -2133,7 +2167,19 @@
       if (isBad) labelParts.push("labeled bad");
       if (scoreMap[c.id] !== undefined) labelParts.push(`score ${(scoreMap[c.id] * 100).toFixed(1)}%`);
       div.setAttribute("aria-label", labelParts.join(", "));
-      let html = `<div style="font-weight: 500;">${clipLabel}</div>`;
+      let html = "";
+      const useThumbnail = showThumbnails && clipSupportsThumbnail(c);
+      if (useThumbnail) {
+        div.className += " clip-item-thumb";
+        const poster = c.type === "video" ? ` poster="/api/clips/${c.id}/image"` : "";
+        if (c.type === "video") {
+          html += `<video class="clip-thumbnail" src="${thumbnailUrl(c)}" muted preload="metadata"${poster}></video>`;
+        } else {
+          html += `<img class="clip-thumbnail" src="${thumbnailUrl(c)}" alt="${clipLabel}" loading="lazy">`;
+        }
+        html += `<div class="clip-thumb-info">`;
+      }
+      html += `<div style="font-weight: 500;">${clipLabel}</div>`;
       if (scoreMap[c.id] !== undefined) {
         html += `<span class="sim">${(scoreMap[c.id] * 100).toFixed(1)}%</span>`;
       }
@@ -2152,6 +2198,9 @@
         subInfo.push(`${c.word_count} words`);
       }
       html += `<div class="sub">${subInfo.join(' &middot; ')}</div>`;
+      if (useThumbnail) {
+        html += `</div>`;
+      }
       div.innerHTML = html;
       div.onclick = () => selectClip(c.id);
       div.addEventListener("keydown", (e) => {
@@ -2477,49 +2526,50 @@
     return entries;
   }
 
+  function renderVoteEntry(entry, label, parentEl) {
+    const clip = clips.find(c => c.id === entry.id);
+    const div = document.createElement("div");
+    div.className = "vote-entry";
+    div.setAttribute("role", "button");
+    div.setAttribute("tabindex", "0");
+    div.setAttribute("aria-label", `${label}: ${entry.name}`);
+    const metaParts = [];
+    if (entry.time >= 0) metaParts.push(`#${entry.time}`);
+    else metaParts.push("imported");
+    if (entry.confidence >= 0) metaParts.push(`${(entry.confidence * 100).toFixed(0)}%`);
+
+    const useThumbnail = showThumbnails && clipSupportsThumbnail(clip);
+    let html = "";
+    if (useThumbnail) {
+      div.className += " vote-entry-thumb";
+      if (clip.type === "video") {
+        html += `<video class="vote-thumbnail" src="${thumbnailUrl(clip)}" muted preload="metadata"></video>`;
+      } else {
+        html += `<img class="vote-thumbnail" src="${thumbnailUrl(clip)}" alt="${entry.name}" loading="lazy">`;
+      }
+      html += `<div class="vote-thumb-info">`;
+    }
+    html += `<span class="vote-name">${entry.name}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
+    if (useThumbnail) {
+      html += `</div>`;
+    }
+    div.innerHTML = html;
+    div.onclick = () => selectClip(entry.id);
+    div.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectClip(entry.id); }
+    });
+    parentEl.appendChild(div);
+  }
+
   function renderVotes() {
     goodList.innerHTML = "";
     badList.innerHTML = "";
 
     const sortedGood = sortLabelEntries(votes.good, "good");
-
-    sortedGood.forEach(entry => {
-      const div = document.createElement("div");
-      div.className = "vote-entry";
-      div.setAttribute("role", "button");
-      div.setAttribute("tabindex", "0");
-      div.setAttribute("aria-label", `Good: ${entry.name}`);
-      const metaParts = [];
-      if (entry.time >= 0) metaParts.push(`#${entry.time}`);
-      else metaParts.push("imported");
-      if (entry.confidence >= 0) metaParts.push(`${(entry.confidence * 100).toFixed(0)}%`);
-      div.innerHTML = `<span class="vote-name">${entry.name}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
-      div.onclick = () => selectClip(entry.id);
-      div.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectClip(entry.id); }
-      });
-      goodList.appendChild(div);
-    });
+    sortedGood.forEach(entry => renderVoteEntry(entry, "Good", goodList));
 
     const sortedBad = sortLabelEntries(votes.bad, "bad");
-
-    sortedBad.forEach(entry => {
-      const div = document.createElement("div");
-      div.className = "vote-entry";
-      div.setAttribute("role", "button");
-      div.setAttribute("tabindex", "0");
-      div.setAttribute("aria-label", `Bad: ${entry.name}`);
-      const metaParts = [];
-      if (entry.time >= 0) metaParts.push(`#${entry.time}`);
-      else metaParts.push("imported");
-      if (entry.confidence >= 0) metaParts.push(`${(entry.confidence * 100).toFixed(0)}%`);
-      div.innerHTML = `<span class="vote-name">${entry.name}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
-      div.onclick = () => selectClip(entry.id);
-      div.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectClip(entry.id); }
-      });
-      badList.appendChild(div);
-    });
+    sortedBad.forEach(entry => renderVoteEntry(entry, "Bad", badList));
   }
 
   function renderStripe() {
@@ -3501,6 +3551,10 @@
       if (data.swipe_animation !== undefined) {
         swipeAnimation = !!data.swipe_animation;
         if (swipeAnimationCheckbox) swipeAnimationCheckbox.checked = swipeAnimation;
+      }
+      if (showThumbnailsCheckbox) {
+        showThumbnailsCheckbox.checked = !!data.show_thumbnails;
+        showThumbnails = !!data.show_thumbnails;
       }
     } catch (_) {
       // Settings not available yet; use defaults

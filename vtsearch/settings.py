@@ -44,6 +44,7 @@ _DEFAULTS: dict[str, Any] = {
     "calibrate_count": 2,
     "calibration_fraction": 0.5,
     "swipe_animation": True,
+    "show_thumbnails": False,
     "favorite_processors": [],
 }
 
@@ -193,6 +194,18 @@ def set_swipe_animation(value: bool) -> None:
     """Set and persist the swipe_animation flag."""
     s = _ensure_loaded()
     s["swipe_animation"] = bool(value)
+    _save(s)
+
+
+def get_show_thumbnails() -> bool:
+    """Return whether thumbnail display is enabled."""
+    return bool(_ensure_loaded().get("show_thumbnails", _DEFAULTS["show_thumbnails"]))
+
+
+def set_show_thumbnails(value: bool) -> None:
+    """Set and persist the show_thumbnails flag."""
+    s = _ensure_loaded()
+    s["show_thumbnails"] = bool(value)
     _save(s)
 
 

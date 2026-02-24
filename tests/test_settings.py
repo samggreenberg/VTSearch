@@ -181,6 +181,21 @@ class TestSettingsModule:
     def test_safe_thresholds_default(self):
         assert settings_mod.get_safe_thresholds() is False
 
+    def test_get_set_show_thumbnails(self, isolated_settings):
+        settings_mod.set_show_thumbnails(True)
+        assert settings_mod.get_show_thumbnails() is True
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["show_thumbnails"] is True
+
+    def test_show_thumbnails_default(self):
+        assert settings_mod.get_show_thumbnails() is False
+
+    def test_show_thumbnails_persists_across_reset(self, isolated_settings):
+        settings_mod.set_show_thumbnails(True)
+        settings_mod.reset()
+        assert settings_mod.get_show_thumbnails() is True
+
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
@@ -188,6 +203,7 @@ class TestSettingsModule:
         assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
+        assert defaults["show_thumbnails"] is False
         assert "favorite_processors" not in defaults
 
     def test_corrupt_settings_file(self, isolated_settings):
@@ -458,3 +474,24 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"safe_thresholds": False})
         assert res.status_code == 200
         assert res.get_json()["safe_thresholds"] is False
+
+    def test_update_show_thumbnails(self, client):
+        res = client.put("/api/settings", json={"show_thumbnails": True})
+        assert res.status_code == 200
+        assert res.get_json()["show_thumbnails"] is True
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["show_thumbnails"] is True
+
+    def test_update_show_thumbnails_false(self, client):
+        client.put("/api/settings", json={"show_thumbnails": True})
+        res = client.put("/api/settings", json={"show_thumbnails": False})
+        assert res.status_code == 200
+        assert res.get_json()["show_thumbnails"] is False
+
+    def test_get_settings_includes_show_thumbnails(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "show_thumbnails" in data

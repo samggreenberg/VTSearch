@@ -99,6 +99,9 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "calibrate_count must be a number"}), 400
 
+    if "show_thumbnails" in body:
+        settings.set_show_thumbnails(bool(body["show_thumbnails"]))
+
     return jsonify(settings.get_all())
 
 

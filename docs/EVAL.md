@@ -64,14 +64,18 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|
-| `nature_sounds` | Audio | nature_sounds | chirping_birds, crow, frog, insects, rain, sea_waves, thunderstorm, wind, water_drops, crickets |
-| `city_sounds` | Audio | city_sounds | car_horn, siren, engine, train, helicopter, vacuum_cleaner, washing_machine, clock_alarm, keyboard_typing, door_wood_knock |
-| `animals_images` | Image | animals_images | bird, cat, deer, dog, frog, horse |
-| `vehicles_images` | Image | vehicles_images | airplane, automobile, ship, truck |
-| `world_news` | Text | world_news | world, business |
-| `sports_science_news` | Text | sports_science_news | sports, science |
-| `activities_video` | Video | activities_video | ApplyEyeMakeup, ApplyLipstick, BrushingTeeth, Drumming, YoYo |
-| `sports_video` | Video | sports_video | CliffDiving, HandstandWalking, JumpRope, PushUps, TaiChi |
+| `sounds_s` | Audio | sounds_s | All 50 ESC-50 categories (animals, nature, urban, domestic, human) |
+| `sounds_m` | Audio | sounds_m | All 50 ESC-50 categories |
+| `sounds_l` | Audio | sounds_l | All 50 ESC-50 categories |
+| `images_s` | Image | images_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
+| `images_m` | Image | images_m | 25 Caltech-101 categories |
+| `images_l` | Image | images_l | 25 Caltech-101 categories |
+| `paragraphs_s` | Text | paragraphs_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
+| `paragraphs_m` | Text | paragraphs_m | 15 topics |
+| `paragraphs_l` | Text | paragraphs_l | 15 topics |
+| `videos_s` | Video | videos_s | 10 UCF-101 actions (ApplyEyeMakeup, CliffDiving, Drumming, JumpRope, etc.) |
+| `videos_m` | Video | videos_m | 10 UCF-101 actions |
+| `videos_l` | Video | videos_l | 10 UCF-101 actions |
 
 ## Understanding the metrics
 
