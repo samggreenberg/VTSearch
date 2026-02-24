@@ -281,30 +281,35 @@ def _score_clips_with_detectors(
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
         positive_hits: list[dict[str, Any]] = []
+        negative_hits: list[dict[str, Any]] = []
         for cid, score in zip(all_ids, scores):
+            clip = clips[cid]
+            hit: dict[str, Any] = {
+                "id": cid,
+                "filename": clip.get("filename", f"clip_{cid}"),
+                "category": clip.get("category", "unknown"),
+                "score": round(score, 4),
+            }
+            if clip.get("origin") is not None:
+                hit["origin"] = clip["origin"]
+            if clip.get("origin_name"):
+                hit["origin_name"] = clip["origin_name"]
+            if clip.get("md5"):
+                hit["md5"] = clip["md5"]
             if score >= threshold:
-                clip = clips[cid]
-                hit: dict[str, Any] = {
-                    "id": cid,
-                    "filename": clip.get("filename", f"clip_{cid}"),
-                    "category": clip.get("category", "unknown"),
-                    "score": round(score, 4),
-                }
-                if clip.get("origin") is not None:
-                    hit["origin"] = clip["origin"]
-                if clip.get("origin_name"):
-                    hit["origin_name"] = clip["origin_name"]
-                if clip.get("md5"):
-                    hit["md5"] = clip["md5"]
                 positive_hits.append(hit)
+            else:
+                negative_hits.append(hit)
 
         positive_hits.sort(key=lambda x: x["score"], reverse=True)
+        negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
         results[detector_name] = {
             "detector_name": detector_name,
             "threshold": round(threshold, 4),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
+            "negative_hits": negative_hits,
         }
 
     return results

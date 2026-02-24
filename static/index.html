@@ -290,6 +290,41 @@
         </label>
         <button id="copy-results-btn" style="padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer;">Copy To Clipboard</button>
       </div>
+      <!-- Export Section -->
+      <div id="autodetect-export-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px;">Export</div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+          <!-- Left column: options -->
+          <div style="flex: 1; min-width: 200px;">
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 6px;">Include:</label>
+              <div style="display: flex; gap: 12px; font-size: 0.85rem;">
+                <label style="color: var(--text-primary); cursor: pointer;"><input type="radio" name="export-sides" value="good" checked style="accent-color: var(--accent);"> Good</label>
+                <label style="color: var(--text-primary); cursor: pointer;"><input type="radio" name="export-sides" value="bad" style="accent-color: var(--accent);"> Bad</label>
+                <label style="color: var(--text-primary); cursor: pointer;"><input type="radio" name="export-sides" value="both" style="accent-color: var(--accent);"> Both</label>
+              </div>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label style="color: var(--text-primary); font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <input type="checkbox" id="fill-from-sort-checkbox" style="accent-color: var(--accent);">
+                Fill from Sort
+              </label>
+              <div id="fill-from-sort-info" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; min-height: 1.2em;"></div>
+            </div>
+          </div>
+          <!-- Right column: exporter picker + fields -->
+          <div style="flex: 2; min-width: 280px;">
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 4px;">Exporter:</label>
+              <select id="export-exporter-select" style="width: 100%; padding: 6px 8px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem;">
+              </select>
+            </div>
+            <div id="export-exporter-fields" style="margin-bottom: 10px;"></div>
+            <div id="export-status" style="font-size: 0.78rem; color: var(--text-muted); min-height: 1.2em; margin-bottom: 8px;"></div>
+            <button id="export-run-btn" style="padding: 8px 20px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Export</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

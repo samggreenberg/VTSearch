@@ -1453,6 +1453,16 @@
     window.autodetectResultsData = data;
     window.autodetectAllHits = allHits;
 
+    // Reset export controls
+    const goodRadio = document.querySelector('input[name="export-sides"][value="good"]');
+    if (goodRadio) goodRadio.checked = true;
+    if (fillFromSortCheckbox) fillFromSortCheckbox.checked = false;
+    if (fillFromSortInfo) fillFromSortInfo.textContent = "";
+    setExportStatus("", "var(--text-muted)");
+
+    // Load exporters if not already loaded
+    if (exportersList.length === 0) loadExportersList();
+
     // Show modal
     autodetectModal.classList.add("show");
   }
@@ -1503,6 +1513,287 @@
         }, 2000);
       });
     });
+  }
+
+  // ---- Export section in auto-detect modal ----
+
+  const exportExporterSelect = document.getElementById("export-exporter-select");
+  const exportExporterFields = document.getElementById("export-exporter-fields");
+  const exportRunBtn = document.getElementById("export-run-btn");
+  const exportStatus = document.getElementById("export-status");
+  const fillFromSortCheckbox = document.getElementById("fill-from-sort-checkbox");
+  const fillFromSortInfo = document.getElementById("fill-from-sort-info");
+  let exportersList = [];
+
+  function getSelectedExportSides() {
+    const checked = document.querySelector('input[name="export-sides"]:checked');
+    return checked ? checked.value : "good";
+  }
+
+  async function loadExportersList() {
+    try {
+      const res = await fetch("/api/exporters");
+      if (res.ok) {
+        exportersList = await res.json();
+        renderExporterDropdown();
+      }
+    } catch (_) {}
+  }
+
+  function renderExporterDropdown() {
+    if (!exportExporterSelect) return;
+    exportExporterSelect.innerHTML = "";
+    for (const exp of exportersList) {
+      const opt = document.createElement("option");
+      opt.value = exp.name;
+      opt.textContent = `${exp.icon} ${exp.display_name}`;
+      exportExporterSelect.appendChild(opt);
+    }
+    renderExporterFields();
+  }
+
+  function renderExporterFields() {
+    if (!exportExporterFields || !exportExporterSelect) return;
+    const name = exportExporterSelect.value;
+    const exp = exportersList.find(e => e.name === name);
+    if (!exp || exp.fields.length === 0) {
+      exportExporterFields.innerHTML = "";
+      return;
+    }
+    const inputStyle = "width:100%;padding:6px 8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;font-size:0.85rem;";
+    let html = "";
+    for (const field of exp.fields) {
+      html += `<div style="margin-bottom:8px;">`;
+      html += `<label style="display:block;margin-bottom:3px;color:var(--text-secondary);font-size:0.8rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" data-export-field style="${inputStyle}">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        const itype = field.field_type === "password" ? "password" : (field.field_type === "email" ? "email" : "text");
+        const placeholder = escapeHtml(field.placeholder || field.description || "");
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" data-export-field style="${inputStyle}" ${field.required ? "required" : ""}>`;
+      }
+      html += `</div>`;
+    }
+    exportExporterFields.innerHTML = html;
+  }
+
+  if (exportExporterSelect) {
+    exportExporterSelect.addEventListener("change", renderExporterFields);
+  }
+
+  function buildFilteredResults(sides) {
+    const data = window.autodetectResultsData;
+    if (!data || !data.results) return data || {};
+    const filtered = {};
+    for (const [detName, detResult] of Object.entries(data.results)) {
+      const entry = { ...detResult };
+      if (sides === "good") {
+        entry.hits = detResult.hits || [];
+        delete entry.negative_hits;
+      } else if (sides === "bad") {
+        entry.hits = detResult.negative_hits || [];
+        entry.total_hits = entry.hits.length;
+        delete entry.negative_hits;
+      } else {
+        // both
+        const good = (detResult.hits || []).map(h => ({ ...h, label: "good" }));
+        const bad = (detResult.negative_hits || []).map(h => ({ ...h, label: "bad" }));
+        entry.hits = [...good, ...bad];
+        entry.total_hits = entry.hits.length;
+        delete entry.negative_hits;
+      }
+      filtered[detName] = entry;
+    }
+    return { ...data, results: filtered };
+  }
+
+  function updateFillFromSortInfo() {
+    if (!fillFromSortInfo) return;
+    if (!fillFromSortCheckbox || !fillFromSortCheckbox.checked) {
+      fillFromSortInfo.textContent = "";
+      return;
+    }
+    if (!sortOrder || threshold === null) {
+      fillFromSortInfo.textContent = "No sort results available. Run a sort first.";
+      fillFromSortInfo.style.color = "var(--text-muted)";
+      return;
+    }
+    const sides = getSelectedExportSides();
+    const votedIds = new Set([...votes.good, ...votes.bad]);
+    let goodCount = 0;
+    let badCount = 0;
+    for (const entry of sortOrder) {
+      if (votedIds.has(entry.id)) continue;
+      if (entry.score >= threshold) goodCount++;
+      else badCount++;
+    }
+    let msg = "";
+    if (sides === "good") msg = `${goodCount} unlabeled element${goodCount !== 1 ? "s" : ""} above threshold will be labeled Good.`;
+    else if (sides === "bad") msg = `${badCount} unlabeled element${badCount !== 1 ? "s" : ""} below threshold will be labeled Bad.`;
+    else msg = `${goodCount} Good + ${badCount} Bad unlabeled element${goodCount + badCount !== 1 ? "s" : ""} will be labeled.`;
+    fillFromSortInfo.textContent = msg;
+    fillFromSortInfo.style.color = "var(--accent)";
+  }
+
+  if (fillFromSortCheckbox) {
+    fillFromSortCheckbox.addEventListener("change", updateFillFromSortInfo);
+  }
+  document.querySelectorAll('input[name="export-sides"]').forEach(radio => {
+    radio.addEventListener("change", () => {
+      updateFillFromSortInfo();
+      updateAutodetectSummary();
+    });
+  });
+
+  function updateAutodetectSummary() {
+    const data = window.autodetectResultsData;
+    if (!data || !autodetectSummary) return;
+    const sides = getSelectedExportSides();
+    let goodTotal = 0;
+    let badTotal = 0;
+    for (const result of Object.values(data.results)) {
+      goodTotal += (result.hits || []).length;
+      badTotal += (result.negative_hits || []).length;
+    }
+    let countText;
+    if (sides === "good") countText = `<strong>Good Results:</strong> ${goodTotal}`;
+    else if (sides === "bad") countText = `<strong>Bad Results:</strong> ${badTotal}`;
+    else countText = `<strong>Good:</strong> ${goodTotal} &nbsp; <strong>Bad:</strong> ${badTotal}`;
+    autodetectSummary.innerHTML = `
+      <p style="color: var(--text-primary);">
+        <strong>Media Type:</strong> ${data.media_type} &nbsp;|&nbsp;
+        <strong>Detectors Run:</strong> ${data.detectors_run} &nbsp;|&nbsp;
+        ${countText}
+      </p>
+    `;
+  }
+
+  function setExportStatus(msg, color) {
+    if (exportStatus) {
+      exportStatus.textContent = msg;
+      exportStatus.style.color = color || "var(--text-muted)";
+    }
+  }
+
+  if (exportRunBtn) {
+    exportRunBtn.addEventListener("click", async () => {
+      const sides = getSelectedExportSides();
+      const useFill = fillFromSortCheckbox && fillFromSortCheckbox.checked;
+
+      if (useFill) {
+        // Fill from Sort mode
+        if (!sortOrder || threshold === null) {
+          await vtAlert("No sort results available. Run a sort first.", "warning");
+          return;
+        }
+
+        // Dry run to get counts
+        const dryRes = await fetch("/api/labels/fill-from-sort", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sort_results: sortOrder,
+            threshold: threshold,
+            sides: sides,
+            confirm: false,
+          }),
+        });
+        if (!dryRes.ok) {
+          setExportStatus("Failed to compute fill counts.", "#f44336");
+          return;
+        }
+        const counts = await dryRes.json();
+        const total = (counts.good_count || 0) + (counts.bad_count || 0);
+        if (total === 0) {
+          await vtAlert("No unlabeled elements to fill. All elements in the sort results are already labeled.", "info");
+          return;
+        }
+
+        let desc;
+        if (sides === "good") desc = `${counts.good_count} Good label${counts.good_count !== 1 ? "s" : ""}`;
+        else if (sides === "bad") desc = `${counts.bad_count} Bad label${counts.bad_count !== 1 ? "s" : ""}`;
+        else desc = `${counts.good_count} Good + ${counts.bad_count} Bad label${total !== 1 ? "s" : ""}`;
+
+        const confirmed = await vtConfirm(`This will add ${desc} to the LabelSet and export. Continue?`);
+        if (!confirmed) return;
+
+        setExportStatus("Filling labels\u2026", "var(--text-muted)");
+        const fillRes = await fetch("/api/labels/fill-from-sort", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sort_results: sortOrder,
+            threshold: threshold,
+            sides: sides,
+            confirm: true,
+          }),
+        });
+        if (!fillRes.ok) {
+          setExportStatus("Failed to fill labels.", "#f44336");
+          return;
+        }
+        const fillData = await fillRes.json();
+        const resultsForExport = fillData.results;
+
+        // Now export using selected exporter
+        await runExporterWithResults(resultsForExport);
+
+        // Refresh votes
+        try {
+          const vRes = await fetch("/api/votes");
+          if (vRes.ok) {
+            const vData = await vRes.json();
+            votes = vData;
+            renderVotes();
+          }
+        } catch (_) {}
+      } else {
+        // Standard auto-detect export
+        const filteredResults = buildFilteredResults(sides);
+        await runExporterWithResults(filteredResults);
+      }
+    });
+  }
+
+  async function runExporterWithResults(results) {
+    if (!exportExporterSelect) return;
+    const exporterName = exportExporterSelect.value;
+    if (!exporterName) {
+      setExportStatus("Select an exporter.", "var(--text-muted)");
+      return;
+    }
+
+    // Gather field values
+    const fieldEls = exportExporterFields.querySelectorAll("[data-export-field]");
+    const fieldValues = {};
+    for (const el of fieldEls) {
+      fieldValues[el.name] = el.value;
+    }
+
+    setExportStatus("Exporting\u2026", "var(--text-muted)");
+    try {
+      const res = await fetch("/api/exporters/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exporter_name: exporterName,
+          field_values: fieldValues,
+          results: results,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setExportStatus(data.message || "Export complete.", "#4caf50");
+      } else {
+        setExportStatus(data.error || "Export failed.", "#f44336");
+      }
+    } catch (err) {
+      setExportStatus(`Export error: ${err.message}`, "#f44336");
+    }
   }
 
   // ---- Settings modal ----

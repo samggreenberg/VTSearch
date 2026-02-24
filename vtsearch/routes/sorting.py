@@ -258,6 +258,157 @@ def import_labels():
     return jsonify({"applied": applied, "skipped": skipped})
 
 
+@sorting_bp.route("/api/labels/fill-from-sort", methods=["POST"])
+def fill_labels_from_sort():
+    """Fill labels from the current sort results.
+
+    Assigns Good/Bad labels to currently-unlabeled clips based on their
+    position relative to the sort threshold.
+
+    Request body (JSON)::
+
+        {
+            "sort_results": [{"id": 1, "score": 0.8}, ...],
+            "threshold": 0.5,
+            "sides": "good" | "bad" | "both",
+            "confirm": false
+        }
+
+    When ``confirm`` is false (dry run), returns the counts of unlabeled
+    clips that would be labeled.  When ``confirm`` is true, applies the
+    labels and returns the resulting data as a results dict suitable for
+    any exporter.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+
+    sort_results = data.get("sort_results")
+    if not isinstance(sort_results, list):
+        return jsonify({"error": "sort_results must be a list"}), 400
+
+    thresh = data.get("threshold")
+    if thresh is None:
+        return jsonify({"error": "threshold is required"}), 400
+    thresh = float(thresh)
+
+    sides = data.get("sides", "good")
+    if sides not in ("good", "bad", "both"):
+        return jsonify({"error": "sides must be 'good', 'bad', or 'both'"}), 400
+
+    confirm = bool(data.get("confirm", False))
+
+    # Find unlabeled clips above/below threshold
+    good_candidates = []
+    bad_candidates = []
+    for entry in sort_results:
+        cid = entry.get("id")
+        score = entry.get("score", entry.get("similarity"))
+        if cid is None or score is None:
+            continue
+        if cid in good_votes or cid in bad_votes:
+            continue
+        if cid not in clips:
+            continue
+        if score >= thresh:
+            good_candidates.append({"id": cid, "score": float(score)})
+        else:
+            bad_candidates.append({"id": cid, "score": float(score)})
+
+    if sides == "good":
+        bad_candidates = []
+    elif sides == "bad":
+        good_candidates = []
+    # "both" keeps both lists
+
+    if not confirm:
+        return jsonify({
+            "good_count": len(good_candidates),
+            "bad_count": len(bad_candidates),
+        })
+
+    # Apply labels
+    from vtsearch.utils import assign_click_time
+
+    for entry in good_candidates:
+        cid = entry["id"]
+        bad_votes.pop(cid, None)
+        good_votes[cid] = None
+        add_label_to_history(cid, "good")
+        assign_click_time(cid)
+        diversity_tree_label(cid)
+
+    for entry in bad_candidates:
+        cid = entry["id"]
+        good_votes.pop(cid, None)
+        bad_votes[cid] = None
+        add_label_to_history(cid, "bad")
+        assign_click_time(cid)
+        diversity_tree_label(cid)
+
+    # Build a results dict compatible with exporters
+    good_hits = []
+    for entry in good_candidates:
+        cid = entry["id"]
+        clip = clips.get(cid, {})
+        hit = {
+            "id": cid,
+            "filename": clip.get("filename", f"clip_{cid}"),
+            "category": clip.get("category", "unknown"),
+            "score": round(entry["score"], 4),
+            "label": "good",
+        }
+        if clip.get("origin") is not None:
+            hit["origin"] = clip["origin"]
+        if clip.get("origin_name"):
+            hit["origin_name"] = clip["origin_name"]
+        if clip.get("md5"):
+            hit["md5"] = clip["md5"]
+        good_hits.append(hit)
+
+    bad_hits = []
+    for entry in bad_candidates:
+        cid = entry["id"]
+        clip = clips.get(cid, {})
+        hit = {
+            "id": cid,
+            "filename": clip.get("filename", f"clip_{cid}"),
+            "category": clip.get("category", "unknown"),
+            "score": round(entry["score"], 4),
+            "label": "bad",
+        }
+        if clip.get("origin") is not None:
+            hit["origin"] = clip["origin"]
+        if clip.get("origin_name"):
+            hit["origin_name"] = clip["origin_name"]
+        if clip.get("md5"):
+            hit["md5"] = clip["md5"]
+        bad_hits.append(hit)
+
+    media_type = "unknown"
+    for clip in clips.values():
+        media_type = clip.get("type", "unknown")
+        break
+
+    results_dict = {
+        "media_type": media_type,
+        "detectors_run": 1,
+        "results": {
+            "fill_from_sort": {
+                "detector_name": "fill_from_sort",
+                "threshold": round(thresh, 4),
+                "total_hits": len(good_hits),
+                "hits": good_hits,
+                "negative_hits": bad_hits,
+            },
+        },
+    }
+
+    return jsonify({
+        "good_applied": len(good_candidates),
+        "bad_applied": len(bad_candidates),
+        "results": results_dict,
+    })
+
+
 @sorting_bp.route("/api/inclusion")
 def get_inclusion_route():
     """Get the current Inclusion setting."""

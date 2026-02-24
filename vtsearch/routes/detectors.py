@@ -566,22 +566,27 @@ def auto_detect():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
         positive_hits = []
+        negative_hits = []
         for cid, score in zip(all_ids, scores):
+            clip_info = clips[cid].copy()
+            clip_info.pop("embedding", None)
+            clip_info.pop("clip_bytes", None)
+            clip_info.pop("clip_string", None)
+            clip_info["score"] = round(score, 4)
             if score >= threshold:
-                clip_info = clips[cid].copy()
-                clip_info.pop("embedding", None)
-                clip_info.pop("clip_bytes", None)
-                clip_info.pop("clip_string", None)
-                clip_info["score"] = round(score, 4)
                 positive_hits.append(clip_info)
+            else:
+                negative_hits.append(clip_info)
 
         positive_hits.sort(key=lambda x: x["score"], reverse=True)
+        negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
         return detector_name, {
             "detector_name": detector_name,
             "threshold": round(threshold, 4),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
+            "negative_hits": negative_hits,
         }
 
     # Run all detectors in parallel (PyTorch releases GIL during tensor ops)
