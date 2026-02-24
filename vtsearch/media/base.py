@@ -274,15 +274,20 @@ class MediaType(ABC):
         corrupt file, etc.).
         """
 
-    @abstractmethod
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
 
         This is used for text-query sorting: the resulting vector is compared
         against media embeddings via cosine similarity.
 
-        Returns ``None`` if the model is not loaded or encoding fails.
+        The default implementation returns ``None`` (null embedder), which
+        means text-query sorting is unavailable for this media type.  Media
+        types that support text sorting should override this method.
+
+        Returns ``None`` if the model is not loaded, encoding fails, or the
+        media type does not support text embedding.
         """
+        return None
 
     @property
     def description_wrappers(self) -> list[str]:
