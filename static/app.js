@@ -3445,11 +3445,6 @@
     }
     if (data.span) {
       _applyIndicator(spanIndicator, document.getElementById("span-subtext"), data.span);
-      // Show compact level info as subtext for Span
-      const sp = data.span;
-      if (sp.status !== "red" && sp.level >= 0) {
-        document.getElementById("span-subtext").textContent = `L${sp.level}`;
-      }
     }
   }
 
