@@ -217,3 +217,99 @@ class TestLabelImportUpdatesTree:
         )
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
+
+
+# ---------------------------------------------------------------------------
+# Span level progression
+# ---------------------------------------------------------------------------
+
+
+class TestSpanLevelProgression:
+    def test_span_advances_with_next_sample_labeling(self):
+        """Following next_sample suggestions should advance the diversity level."""
+        tree = _build_tree()
+        assert tree.diversity_level() == -1
+
+        # Label clips guided by next_sample until the tree is exhausted or
+        # we've done enough iterations to cover the full tree.
+        max_iters = len(clips) + 1
+        for _ in range(max_iters):
+            sample = diversity_tree_next_sample()
+            if sample is None:
+                break
+            diversity_tree_label(sample)
+
+        # After labeling all suggested clips the tree must be fully covered
+        final_level = tree.diversity_level()
+        assert final_level == tree.depth(), (
+            f"Expected diversity_level {tree.depth()} (fully covered) but got {final_level}"
+        )
+
+    def test_span_advances_beyond_zero_via_votes(self, client):
+        """Voting on clips from different subtrees advances the span level past 0."""
+        tree = _build_tree()
+        depth = tree.depth()
+        if depth < 1:
+            # Tree too shallow to test progression beyond 0
+            return
+
+        # Use next_sample to find clips from each depth-1 subtree and vote on them
+        for _ in range(len(clips)):
+            sample = diversity_tree_next_sample()
+            if sample is None:
+                break
+            resp = client.post(f"/api/clips/{sample}/vote", json={"vote": "good"})
+            assert resp.status_code == 200
+
+        # After voting on diverse clips, the level should have advanced past 0
+        assert tree.diversity_level() >= 1, (
+            f"Expected diversity_level >= 1 but got {tree.diversity_level()}"
+        )
+
+    def test_labeling_status_reflects_span_progression(self, client):
+        """The /api/labeling-status endpoint should reflect advancing span level."""
+        tree = _build_tree()
+
+        # Before any labels, span should be red with level -1
+        resp = client.get("/api/labeling-status")
+        data = resp.get_json()
+        assert data["span"]["level"] == -1
+        assert data["span"]["status"] == "red"
+
+        # Label all clips to fully cover the tree
+        for vid in tree.vector_to_leaf:
+            diversity_tree_label(vid)
+            good_votes[vid] = None
+
+        resp = client.get("/api/labeling-status")
+        data = resp.get_json()
+        assert data["span"]["level"] == tree.depth()
+        assert data["span"]["status"] == "green"
+
+
+# ---------------------------------------------------------------------------
+# Label importer updates diversity tree
+# ---------------------------------------------------------------------------
+
+
+class TestLabelImporterUpdatesTree:
+    def test_label_importer_updates_tree(self, client):
+        """Labels imported via /api/label-importers/import should update the tree."""
+        import io
+        import json
+
+        tree = _build_tree()
+        cid = 1
+        md5 = clips[cid]["md5"]
+
+        # Import a label via the json_file label importer
+        labels_data = {"labels": [{"md5": md5, "label": "good"}]}
+        file_content = json.dumps(labels_data).encode()
+
+        resp = client.post(
+            "/api/label-importers/import/json_file",
+            data={"file": (io.BytesIO(file_content), "labels.json")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert cid in tree.labeled_ids
