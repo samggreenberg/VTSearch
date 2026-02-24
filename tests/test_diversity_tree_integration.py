@@ -1,8 +1,5 @@
 """Integration tests for diversity tree wiring: build, label, unlabel, API."""
 
-import numpy as np
-import pytest
-
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
