@@ -382,12 +382,28 @@ def _compute_stable_status(
         return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
 
     recent = stability[-10:]
-    recent_flips = [s["num_flips"] for s in recent]
-    avg_flips = sum(recent_flips) / len(recent_flips)
 
-    if avg_flips < 3:
-        return {"status": "green", "reason": "Predictions have stabilized."}
-    return {"status": "yellow", "reason": f"Average {avg_flips:.0f} prediction flips in recent steps."}
+    # Use flip *rate* (fraction of unlabeled predictions that changed) so the
+    # threshold scales with dataset size instead of using a fixed absolute count.
+    flip_rates: list[float] = []
+    for s in recent:
+        n_unlabeled = s.get("num_unlabeled", 0)
+        if n_unlabeled > 0:
+            flip_rates.append(s["num_flips"] / n_unlabeled)
+        else:
+            flip_rates.append(0.0)
+
+    avg_flip_rate = sum(flip_rates) / len(flip_rates)
+
+    STABLE_RATE_THRESHOLD = 0.02  # less than 2% of predictions flipping
+
+    if avg_flip_rate < STABLE_RATE_THRESHOLD:
+        return {"status": "green", "reason": "Predictions have stabilized.", "avg_flip_rate": round(avg_flip_rate, 4)}
+    return {
+        "status": "yellow",
+        "reason": f"Average {avg_flip_rate:.1%} of predictions flipping in recent steps.",
+        "avg_flip_rate": round(avg_flip_rate, 4),
+    }
 
 
 def compute_labeling_status(
