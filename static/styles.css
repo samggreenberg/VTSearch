@@ -227,12 +227,12 @@ header h1 { margin-left: 48px; }
 .vote-entry.vote-entry-thumb .vote-thumb-info { min-width: 0; flex: 1; overflow: hidden; }
 
 /* Stripe overview */
-.stripe-overview { position: absolute; right: 0; top: 0; bottom: 0; width: 20px; background: var(--bg-surface); border-left: 1px solid var(--border); cursor: pointer; }
+.stripe-overview { position: absolute; right: 0; top: 0; bottom: 0; width: 20px; background: var(--bg-surface); border-left: 1px solid var(--border); cursor: pointer; overflow: hidden; }
 .stripe-container { position: relative; height: 100%; }
 .stripe-dot { position: absolute; left: 50%; width: 6px; height: 6px; border-radius: 50%; }
-.stripe-dot.good { background: var(--color-good); transform: translateX(-25%); }
-.stripe-dot.bad { background: var(--color-bad); transform: translateX(-75%); }
-.stripe-dot.selected { background: var(--text-primary); transform: translateX(-50%); z-index: 5; width: 8px; height: 8px; border: 1px solid var(--bg-surface); }
+.stripe-dot.good { background: var(--color-good); transform: translate(-25%, -50%); }
+.stripe-dot.bad { background: var(--color-bad); transform: translate(-75%, -50%); }
+.stripe-dot.selected { background: var(--text-primary); transform: translate(-50%, -50%); z-index: 5; width: 8px; height: 8px; border: 1px solid var(--bg-surface); }
 .stripe-threshold { position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); }
 .stripe-threshold::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--accent); }
 .stripe-threshold::after { content: ''; position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: 6px solid var(--accent); }
