@@ -417,10 +417,12 @@ def compute_labeling_status(
         depth = span_info["depth"]
         nls = span_info["next_level_seen"]
         nlt = span_info["next_level_total"]
-        if level < 0:
-            span = {"status": "red", "reason": "No tree coverage yet.", **span_info}
-        elif level >= depth:
-            span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
+        if level <= 1:
+            span = {"status": "red", "reason": "No tree coverage yet." if level < 0
+                    else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
+        elif level >= 4 or level >= depth:
+            span = {"status": "green", "reason": "All tree levels fully covered." if level >= depth
+                    else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
         else:
             span = {"status": "yellow", "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
                     **span_info}
