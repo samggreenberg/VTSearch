@@ -43,6 +43,7 @@ _DEFAULTS: dict[str, Any] = {
     "safe_thresholds": False,
     "calibrate_count": 2,
     "calibration_fraction": 0.5,
+    "swipe_animation": True,
     "show_thumbnails": False,
     "favorite_processors": [],
 }
@@ -181,6 +182,18 @@ def set_safe_thresholds(value: bool) -> None:
     """Set and persist the safe_thresholds flag."""
     s = _ensure_loaded()
     s["safe_thresholds"] = bool(value)
+    _save(s)
+
+
+def get_swipe_animation() -> bool:
+    """Return whether swipe animation on vote is enabled."""
+    return bool(_ensure_loaded().get("swipe_animation", _DEFAULTS["swipe_animation"]))
+
+
+def set_swipe_animation(value: bool) -> None:
+    """Set and persist the swipe_animation flag."""
+    s = _ensure_loaded()
+    s["swipe_animation"] = bool(value)
     _save(s)
 
 
