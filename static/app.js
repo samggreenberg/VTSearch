@@ -2293,7 +2293,9 @@
         <h2>${c.filename || 'Clip #' + c.id}</h2>
         <p>${metaInfo.join(' &middot; ')}</p>
       </div>
-      ${playerHTML}
+      <div class="media-swipe-wrapper" id="media-swipe-wrapper">
+        ${playerHTML}
+      </div>
       <div class="metadata-grid">
         ${c.frequency ? `
         <div class="metadata-item">
@@ -2414,9 +2416,12 @@
     if (nextId != null && nextId !== selected) {
       if (swipeAnimation) {
         const dir = vote === "good" ? "swipe-right" : "swipe-left";
-        center.classList.add(dir);
-        await new Promise(r => setTimeout(r, 180));
-        center.classList.remove(dir);
+        const wrapper = document.getElementById("media-swipe-wrapper");
+        if (wrapper) {
+          wrapper.classList.add(dir);
+          await new Promise(r => setTimeout(r, 180));
+          wrapper.classList.remove(dir);
+        }
       }
       selectClip(nextId);
     }
