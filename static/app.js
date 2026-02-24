@@ -1729,12 +1729,15 @@
   // ---- Select mode switching ----
 
   document.querySelectorAll('input[name="select-mode"]').forEach(radio => {
-    radio.addEventListener("change", () => {
+    radio.addEventListener("change", async () => {
       if (!radio.checked) return;
       selectMode = radio.value;
-      const nextClip = findNextClip();
-      if (nextClip) {
-        selectClip(nextClip.id);
+      if (selectMode === "new") {
+        const nextId = await fetchDiversityTreeNext();
+        if (nextId != null) selectClip(nextId);
+      } else {
+        const nextClip = findNextClip();
+        if (nextClip) selectClip(nextClip.id);
       }
     });
   });
@@ -2029,7 +2032,20 @@
 
   // ---- Next Clip Selection ----
 
+  async function fetchDiversityTreeNext() {
+    try {
+      const res = await fetch("/api/diversity-tree/next");
+      const data = await res.json();
+      return data.id;  // int | null
+    } catch {
+      return null;
+    }
+  }
+
   function findNextClip() {
+    // "New" mode is handled asynchronously by callers via fetchDiversityTreeNext.
+    if (selectMode === "new") return null;
+
     // Determine the ordered list to walk and effective threshold
     let ordered = sortOrder;
     let effectiveThreshold = threshold;
@@ -2391,15 +2407,18 @@
 
     // Auto-advance to next clip.  When swipe animation is enabled, play a
     // fast swipe-out before switching; otherwise advance immediately.
-    const nextClip = findNextClip();
-    if (nextClip && nextClip.id !== selected) {
+    // In "new" select mode, use the diversity tree for the next clip.
+    const nextId = selectMode === "new"
+      ? await fetchDiversityTreeNext()
+      : (() => { const c = findNextClip(); return c ? c.id : null; })();
+    if (nextId != null && nextId !== selected) {
       if (swipeAnimation) {
         const dir = vote === "good" ? "swipe-right" : "swipe-left";
         center.classList.add(dir);
         await new Promise(r => setTimeout(r, 180));
         center.classList.remove(dir);
       }
-      selectClip(nextClip.id);
+      selectClip(nextId);
     }
 
     // Kick off learned sort in the background (non-blocking).

@@ -1,10 +1,16 @@
 """Global state management for clips and votes."""
 
+from __future__ import annotations
+
 import json
 from typing import Any
 
 # Clips storage: id -> {id, type, duration, file_size, embedding, clip_bytes, clip_string, ...}
 clips: dict[int, dict[str, Any]] = {}
+
+# Diversity tree: built from clip embeddings after a dataset loads.
+# ``None`` until a dataset is loaded and the tree is constructed.
+_diversity_tree: Any = None  # DiversityTree | None
 
 # Voting storage (OrderedDict behavior via dict in Python 3.7+)
 good_votes: dict[int, None] = {}
@@ -64,11 +70,13 @@ def clear_clips() -> None:
 
     Removes all entries from the ``clips`` dict in place. Does not affect
     votes or label history. Also clears the progress model cache since
-    cached models reference clip embeddings.
+    cached models reference clip embeddings.  Also clears the diversity tree.
     """
+    global _diversity_tree
     from vtsearch.models.progress import clear_progress_cache
 
     clips.clear()
+    _diversity_tree = None
     clear_progress_cache()
 
 
@@ -391,6 +399,69 @@ def get_favorite_extractors() -> dict[str, dict[str, Any]]:
 def get_favorite_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all favorite extractors matching a given media type."""
     return {name: ext for name, ext in favorite_extractors.items() if ext["media_type"] == media_type}
+
+
+# ---------------------------------------------------------------------------
+# Diversity Tree
+# ---------------------------------------------------------------------------
+
+
+def build_diversity_tree(clip_dict: dict[int, dict[str, Any]] | None = None) -> None:
+    """Build a 3-Diversity Tree from clip embeddings.
+
+    Uses the global ``clips`` dict by default, or an explicit *clip_dict*
+    if provided.  Existing labels in ``good_votes`` and ``bad_votes`` are
+    replayed into the new tree so the seen state stays accurate.
+    """
+    global _diversity_tree
+    import numpy as np
+
+    from vtsearch.models.diversity_tree import DiversityTree
+
+    source = clip_dict if clip_dict is not None else clips
+    vectors: dict[int, np.ndarray] = {}
+    for cid, clip in source.items():
+        emb = clip.get("embedding")
+        if emb is not None:
+            vectors[cid] = np.asarray(emb, dtype=np.float32)
+
+    if not vectors:
+        _diversity_tree = None
+        return
+
+    _diversity_tree = DiversityTree(vectors, k=3)
+
+    # Replay existing labels so the tree reflects the current vote state.
+    for cid in good_votes:
+        if cid in _diversity_tree.vector_to_leaf:
+            _diversity_tree.label(cid)
+    for cid in bad_votes:
+        if cid in _diversity_tree.vector_to_leaf:
+            _diversity_tree.label(cid)
+
+
+def get_diversity_tree():
+    """Return the current DiversityTree instance, or ``None``."""
+    return _diversity_tree
+
+
+def diversity_tree_next_sample() -> int | None:
+    """Return the next diverse sample ID, or ``None`` if unavailable."""
+    if _diversity_tree is None:
+        return None
+    return _diversity_tree.next_sample()
+
+
+def diversity_tree_label(clip_id: int) -> None:
+    """Mark *clip_id* as labeled in the diversity tree."""
+    if _diversity_tree is not None and clip_id in _diversity_tree.vector_to_leaf:
+        _diversity_tree.label(clip_id)
+
+
+def diversity_tree_unlabel(clip_id: int) -> None:
+    """Remove *clip_id*'s label from the diversity tree."""
+    if _diversity_tree is not None and clip_id in _diversity_tree.vector_to_leaf:
+        _diversity_tree.unlabel(clip_id)
 
 
 # ---------------------------------------------------------------------------
