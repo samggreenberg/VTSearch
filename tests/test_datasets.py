@@ -172,7 +172,6 @@ class TestDemoDatasetReadiness:
 
     def test_no_pkl_with_source_folder_shows_needs_embedding(self, client):
         """No pkl but required_folder exists with content → needs_embedding."""
-        import pickle
         import struct
         import wave
 
