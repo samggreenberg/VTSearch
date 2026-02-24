@@ -8,6 +8,9 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 # Suppress Werkzeug request logging (GET/POST lines) — only show errors
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
+# Suppress huggingface_hub "unauthenticated requests" console warning —
+# all models we use are public, so no token is needed.
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 # All HF models we use are public — no token needed.  Each from_pretrained()
 # call passes token=False to signal this explicitly.  The env var + warnings
