@@ -321,10 +321,10 @@ def _compute_smart_status(
     total: int,
 ) -> dict[str, Any]:
     """Compute Smart (error-cost flatness) red/yellow/green status."""
-    if total < 20 or good < 5 or bad < 5:
+    if good < 5 or bad < 5:
         return {
             "status": "red",
-            "reason": f"Need at least 20 labels with 5 good and 5 bad. Currently {total} total ({good}g, {bad}b).",
+            "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
         }
 
     n = len(_cached_steps)
@@ -371,10 +371,10 @@ def _compute_stable_status(
     total: int,
 ) -> dict[str, Any]:
     """Compute Stable (prediction-flip) red/yellow/green status."""
-    if total < 20 or good < 5 or bad < 5:
+    if good < 5 or bad < 5:
         return {
             "status": "red",
-            "reason": f"Need at least 20 labels with 5 good and 5 bad. Currently {total} total ({good}g, {bad}b).",
+            "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
         }
 
     stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
