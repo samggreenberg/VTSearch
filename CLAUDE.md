@@ -21,9 +21,9 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_CLIPS, paths, model IDs)
 - `vtsearch/clips.py` — Test clip generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, favorite_processors); auto-saves to `data/settings.json`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_processors); auto-saves to `data/settings.json`
 - `vtsearch/routes/` — Flask blueprints: `main.py`, `clips.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`
-- `vtsearch/models/` — Embeddings, training, model loading, progress tracking
+- `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/rss_feed/youtube_playlist/combine_datasets); auto-discovered via `IMPORTER` sentinel
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
 - `vtsearch/exporters/` — Results exporters (file/gui/email_smtp/csv_file/webhook); auto-discovered via `EXPORTER` sentinel
@@ -61,11 +61,14 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_eval_visualize.py` — Evaluation visualisation chart generation
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
-  - `test_settings.py` — Settings persistence (volume, inclusion, theme, favorites)
+  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails, favorites)
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
   - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
   - `test_integration.py` — End-to-end user workflow simulations: chained API calls, state interactions, response format consistency
   - `test_label_sorting.py` — Label sorting features: click-time tracking, learned-sort score storage, enriched /api/votes response
+  - `test_diversity_tree.py` — DiversityTree: hierarchical k-means clustering, seen tracking, diversity level, next sample
+  - `test_diversity_tree_integration.py` — DiversityTree integration with Flask app: build, rebuild, voting, diversity-level endpoint
+  - `test_tqdm_progress.py` — tqdm-based progress bar tracking
   - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
 
 ## Test Markers
@@ -88,7 +91,7 @@ This ensures work is recoverable if the session crashes during a test run.
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `clips`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors` are module-level dicts/lists
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, favorite_processors
+- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_processors
 - Each clip has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)
