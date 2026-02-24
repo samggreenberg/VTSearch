@@ -303,7 +303,7 @@ class TestLabelImporterUpdatesTree:
         md5 = clips[cid]["md5"]
 
         # Import a label via the json_file label importer
-        labels_data = [{"md5": md5, "label": "good"}]
+        labels_data = {"labels": [{"md5": md5, "label": "good"}]}
         file_content = json.dumps(labels_data).encode()
 
         resp = client.post(
