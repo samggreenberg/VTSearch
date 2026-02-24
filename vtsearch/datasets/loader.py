@@ -312,12 +312,17 @@ def load_dataset_from_folder(
     if on_progress is None:
         on_progress = _default_progress()
 
-    on_progress("embedding", "Scanning media files...", 0, 0)
+    on_progress("loading", "Scanning media files...", 0, 0)
 
     try:
         mt = get_by_folder_name(media_type)
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
+
+    # Eagerly load models before starting the embedding timer so that
+    # download / weight-loading time does not pollute the progress bar.
+    if getattr(mt, "_model", None) is None:
+        mt.load_models()
 
     # Find all files of the specified media type
     media_files = []
@@ -444,12 +449,17 @@ def load_dataset_from_folder_chunked(
     if on_progress is None:
         on_progress = _default_progress()
 
-    on_progress("embedding", "Scanning media files...", 0, 0)
+    on_progress("loading", "Scanning media files...", 0, 0)
 
     try:
         mt = get_by_folder_name(media_type)
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
+
+    # Eagerly load models before starting the embedding timer so that
+    # download / weight-loading time does not pollute the progress bar.
+    if getattr(mt, "_model", None) is None:
+        mt.load_models()
 
     # Find all files of the specified media type
     media_files: list[Path] = []
@@ -1053,6 +1063,16 @@ def load_demo_dataset(
             clips.clear()
             clip_id = 1
             total = len(selected_images)
+
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            from vtsearch.media import get as media_get
+
+            image_mt = media_get("image")
+            if getattr(image_mt, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                image_mt.load_models()
+
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
@@ -1134,6 +1154,12 @@ def load_demo_dataset(
             from vtsearch.media import get as media_get
 
             image_mt = media_get("image")
+
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            if getattr(image_mt, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                image_mt.load_models()
 
             clips.clear()
             clip_id = 1
@@ -1221,6 +1247,12 @@ def load_demo_dataset(
                     for text in cat_texts[slice_start:slice_end]:
                         selected_texts.append(text)
                         selected_categories.append(cat_name)
+
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            if getattr(text_mt, "_model", None) is None:
+                on_progress("loading", "Loading text embedding model…", 0, 0)
+                text_mt.load_models()
 
             # Generate embeddings for paragraphs
             clips.clear()
@@ -1321,6 +1353,12 @@ def load_demo_dataset(
             for cat in dataset_info["categories"]:
                 video_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
 
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            if getattr(video_mt, "_model", None) is None:
+                on_progress("loading", "Loading video embedding model…", 0, 0)
+                video_mt.load_models()
+
             # Generate embeddings for videos
             clips.clear()
             clip_id = 1
@@ -1406,6 +1444,12 @@ def load_demo_dataset(
     audio_files = []
     for cat in categories:
         audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+    # Eagerly load models before starting the embedding timer so that
+    # download / weight-loading time does not pollute the progress bar.
+    if getattr(audio_mt, "_model", None) is None:
+        on_progress("loading", "Loading audio embedding model…", 0, 0)
+        audio_mt.load_models()
 
     # Generate embeddings
     clips.clear()
