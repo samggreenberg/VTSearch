@@ -1382,6 +1382,10 @@ def load_demo_dataset(
 
                 media_fields = video_mt.load_clip_data(video_path)
 
+                # Use the category-relative path (e.g. "Archery/v_Archery_g01_c01.avi")
+                # so that load_dataset_from_pickle can find the file under video_dir.
+                rel_filename = str(video_path.relative_to(video_dir))
+
                 clips[clip_id] = {
                     "id": clip_id,
                     "type": "video",
@@ -1390,7 +1394,7 @@ def load_demo_dataset(
                     "md5": hashlib.md5(video_bytes).hexdigest(),
                     "embedding": embedding,
                     "clip_bytes": video_bytes,
-                    "filename": video_path.name,
+                    "filename": rel_filename,
                     "category": meta["category"],
                     "origin": demo_origin,
                     "origin_name": video_path.name,
