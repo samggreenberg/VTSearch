@@ -126,9 +126,11 @@ class TestDiversityTreeNextEndpoint:
         data = resp.get_json()
         assert "id" in data
         assert "diversity_level" in data
+        assert "exhausted" in data
         assert data["id"] is not None
         assert data["id"] in clips
         assert data["diversity_level"] == -1  # nothing labeled yet
+        assert data["exhausted"] is False
 
     def test_returns_null_when_no_tree(self, client):
         resp = client.get("/api/diversity-tree/next")
@@ -136,6 +138,7 @@ class TestDiversityTreeNextEndpoint:
         data = resp.get_json()
         assert data["id"] is None
         assert data["diversity_level"] == -1
+        assert data["exhausted"] is False  # no tree != exhausted
 
     def test_diversity_level_after_labeling(self, client):
         tree = _build_tree()
@@ -144,6 +147,17 @@ class TestDiversityTreeNextEndpoint:
         resp = client.get("/api/diversity-tree/next")
         data = resp.get_json()
         assert data["diversity_level"] >= 0
+
+    def test_exhausted_when_all_nodes_seen(self, client):
+        """When every node in the tree has been seen, exhausted should be True."""
+        tree = _build_tree()
+        # Label every vector so all leaves (and ancestors) become seen
+        for vid in tree.vector_to_leaf:
+            diversity_tree_label(vid)
+        resp = client.get("/api/diversity-tree/next")
+        data = resp.get_json()
+        assert data["id"] is None
+        assert data["exhausted"] is True
 
 
 # ---------------------------------------------------------------------------

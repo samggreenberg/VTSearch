@@ -1733,8 +1733,12 @@
       if (!radio.checked) return;
       selectMode = radio.value;
       if (selectMode === "new") {
-        const nextId = await fetchDiversityTreeNext();
-        if (nextId != null) selectClip(nextId);
+        const data = await fetchDiversityTreeNext();
+        if (data.id != null) {
+          selectClip(data.id);
+        } else if (data.exhausted) {
+          vtAlert("You have seen every branch of the diversity tree. Switch to Top or Hard mode, or add more data.", "warning");
+        }
       } else {
         const nextClip = findNextClip();
         if (nextClip) selectClip(nextClip.id);
@@ -2036,9 +2040,9 @@
     try {
       const res = await fetch("/api/diversity-tree/next");
       const data = await res.json();
-      return data.id;  // int | null
+      return data;  // { id: int|null, diversity_level: int, exhausted: bool }
     } catch {
-      return null;
+      return { id: null, diversity_level: -1, exhausted: false };
     }
   }
 
@@ -2408,9 +2412,17 @@
     // Auto-advance to next clip.  When swipe animation is enabled, play a
     // fast swipe-out before switching; otherwise advance immediately.
     // In "new" select mode, use the diversity tree for the next clip.
-    const nextId = selectMode === "new"
-      ? await fetchDiversityTreeNext()
-      : (() => { const c = findNextClip(); return c ? c.id : null; })();
+    let nextId;
+    if (selectMode === "new") {
+      const data = await fetchDiversityTreeNext();
+      nextId = data.id;
+      if (nextId == null && data.exhausted) {
+        vtAlert("You have seen every branch of the diversity tree. Switch to Top or Hard mode, or add more data.", "warning");
+      }
+    } else {
+      const c = findNextClip();
+      nextId = c ? c.id : null;
+    }
     if (nextId != null && nextId !== selected) {
       if (swipeAnimation) {
         const dir = vote === "good" ? "swipe-right" : "swipe-left";
