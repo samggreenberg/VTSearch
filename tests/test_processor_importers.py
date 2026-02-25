@@ -460,8 +460,7 @@ class TestServerFileDetectorImporter:
 
         res = client.post(
             "/api/processor-importers/import/server_detector_file",
-            data={"filepath": str(p), "name": "server_test_det"},
-            content_type="multipart/form-data",
+            json={"filepath": str(p), "name": "server_test_det"},
         )
         assert res.status_code == 200
         result = res.get_json()
