@@ -37,12 +37,12 @@ class TestDetectorExport:
         resp = client.post("/api/detector/export")
         data = resp.get_json()
         weights = data["weights"]
-        # MLP has 3 layers: Linear(input_dim, 64), ReLU, Linear(64, 1)
-        # So we expect 4 keys: 0.weight, 0.bias, 2.weight, 2.bias
+        # MLP has 4 layers: Linear, ReLU, Dropout, Linear
+        # So we expect 4 keys: 0.weight, 0.bias, 3.weight, 3.bias
         assert "0.weight" in weights
         assert "0.bias" in weights
-        assert "2.weight" in weights
-        assert "2.bias" in weights
+        assert "3.weight" in weights
+        assert "3.bias" in weights
 
 
 class TestDetectorSort:

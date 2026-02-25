@@ -1,0 +1,18 @@
+# CPU deployment
+#
+#   docker compose up              — build & run
+#   docker compose up -d           — detached
+#   docker compose down            — stop & remove
+#   docker compose build --no-cache — force rebuild
+
+services:
+  vtsearch:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - vtsearch-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  vtsearch-data:

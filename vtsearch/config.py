@@ -40,6 +40,9 @@ TEXTS_PER_CATEGORY = 200
 
 # Training
 TRAIN_EPOCHS = 200
+MLP_HIDDEN_MIN = 4
+MLP_HIDDEN_MAX = 32
+MLP_DROPOUT = 0.5
 
 # Model IDs
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"

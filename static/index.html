@@ -214,9 +214,13 @@
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
       </div>
-      <!-- Span: Diversity tree text info -->
+      <!-- Span: Diversity tree text info + chart -->
       <div id="span-section" class="progress-chart" style="display:none;">
         <h3>Span: Diversity Tree Coverage</h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+          Shows how diversity level grows as you label. Higher means broader coverage.
+        </p>
+        <canvas id="diversity-chart" width="700" height="250"></canvas>
         <div id="span-info-box" class="progress-recommendation" style="border-left-color: var(--accent);">
           <p id="span-info-text" style="margin:0; font-size: 0.9rem; color: var(--text-secondary);">No diversity tree available.</p>
         </div>
@@ -451,6 +455,26 @@
         <div class="settings-row">
           <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
           <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
+        </div>
+      </div>
+      <!-- Favorite Media Types -->
+      <div class="settings-section">
+        <div class="settings-section-title">Favorite Media Types</div>
+        <div class="settings-row">
+          <label for="fav-mt-audio" class="settings-label">Audio</label>
+          <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
+        </div>
+        <div class="settings-row">
+          <label for="fav-mt-image" class="settings-label">Image</label>
+          <input type="checkbox" id="fav-mt-image" data-media-type="image" style="accent-color:var(--accent)">
+        </div>
+        <div class="settings-row">
+          <label for="fav-mt-paragraph" class="settings-label">Text</label>
+          <input type="checkbox" id="fav-mt-paragraph" data-media-type="paragraph" style="accent-color:var(--accent)">
+        </div>
+        <div class="settings-row">
+          <label for="fav-mt-video" class="settings-label">Video</label>
+          <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
         </div>
       </div>
       <!-- Sorting -->

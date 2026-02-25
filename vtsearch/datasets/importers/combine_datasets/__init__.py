@@ -6,6 +6,7 @@ All source datasets must share the same media type.  Duplicate entries
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -80,40 +81,53 @@ class CombineDatasetsImporter(DatasetImporter):
         seen_md5s: set[str] = set()
         total_dupes = 0
 
-        for i, pkl_path in enumerate(paths):
-            progress(
-                "loading",
-                f"Loading dataset {i + 1}/{len(paths)}: {pkl_path.name}...",
-                i + 1,
-                len(paths),
-            )
-            source_clips = _load_clips_from_pickle(pkl_path)
-
-            if not source_clips:
-                progress("loading", f"Skipping empty dataset: {pkl_path.name}", i + 1, len(paths))
-                continue
-
-            # Check media type consistency
-            first_clip = next(iter(source_clips.values()))
-            source_media_type = first_clip.get("type", "audio")
-
-            if media_type is None:
-                media_type = source_media_type
-            elif source_media_type != media_type:
-                raise ValueError(
-                    f"Media type mismatch: expected '{media_type}' but "
-                    f"'{pkl_path.name}' contains '{source_media_type}' clips."
+        try:
+            for i, pkl_path in enumerate(paths):
+                progress(
+                    "loading",
+                    f"Loading dataset {i + 1}/{len(paths)}: {pkl_path.name}...",
+                    i + 1,
+                    len(paths),
                 )
+                source_clips = _load_clips_from_pickle(pkl_path)
 
-            # Collect clips, deduplicating by MD5
-            for clip in source_clips.values():
-                md5 = clip.get("md5", "")
-                if md5 and md5 in seen_md5s:
-                    total_dupes += 1
+                if not source_clips:
+                    progress("loading", f"Skipping empty dataset: {pkl_path.name}", i + 1, len(paths))
                     continue
-                if md5:
-                    seen_md5s.add(md5)
-                all_clips.append(clip)
+
+                # Check media type consistency
+                first_clip = next(iter(source_clips.values()))
+                source_media_type = first_clip.get("type", "audio")
+
+                if media_type is None:
+                    media_type = source_media_type
+                elif source_media_type != media_type:
+                    raise ValueError(
+                        f"Media type mismatch: expected '{media_type}' but "
+                        f"'{pkl_path.name}' contains '{source_media_type}' clips."
+                    )
+
+                # Collect clips, deduplicating by MD5
+                for clip in source_clips.values():
+                    md5 = clip.get("md5", "")
+                    if md5 and md5 in seen_md5s:
+                        total_dupes += 1
+                        continue
+                    if md5:
+                        seen_md5s.add(md5)
+                    all_clips.append(clip)
+
+                # Free the temp dict before loading the next source
+                del source_clips
+                gc.collect()
+        except MemoryError:
+            all_clips.clear()
+            clips.clear()
+            gc.collect()
+            raise MemoryError(
+                "Out of memory while combining datasets. "
+                "Try combining fewer or smaller datasets, or free up system RAM."
+            )
 
         if not all_clips:
             raise ValueError("No clips found in any of the selected datasets.")

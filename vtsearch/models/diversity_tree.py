@@ -185,6 +185,39 @@ class DiversityTree:
                 break
         return result
 
+    def fractional_diversity_level(self) -> float:
+        """Return the diversity level as a float with fractional progress.
+
+        The integer part is the deepest fully-covered level.  The fractional
+        part represents progress toward the next level: ``seen / total`` at
+        that level.  Returns -1.0 when nothing is seen.  When the tree is
+        fully covered, returns ``depth`` (as a float).
+        """
+        level = self.diversity_level()
+        d = self.depth()
+
+        if level < 0:
+            # Nothing seen yet — check if any nodes at level 0 are seen
+            nodes_at_zero = self.nodes_by_depth.get(0, [])
+            if not nodes_at_zero:
+                return -1.0
+            seen_count = sum(1 for name in nodes_at_zero if name in self.seen)
+            if seen_count == 0:
+                return -1.0
+            # Partial progress toward level 0
+            return -1.0 + seen_count / len(nodes_at_zero)
+
+        if level >= d:
+            return float(d)
+
+        next_level = level + 1
+        nodes_at_next = self.nodes_by_depth.get(next_level, [])
+        if not nodes_at_next:
+            return float(level)
+
+        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
+        return level + seen_count / len(nodes_at_next)
+
     def next_sample(self) -> int | None:
         """Return the representative of the first unseen node in BFS order.
 
@@ -219,11 +252,13 @@ class DiversityTree:
 
         Returns a dict with:
         - level: deepest fully-seen level (-1 if none)
+        - fractional_level: float diversity level with partial progress
         - depth: max tree depth
         - next_level_seen: how many nodes at the next incomplete level are seen
         - next_level_total: total nodes at the next incomplete level
         """
         level = self.diversity_level()
+        frac = self.fractional_diversity_level()
         d = self.depth()
 
         next_level = level + 1
@@ -231,6 +266,7 @@ class DiversityTree:
             # All levels fully covered
             return {
                 "level": level,
+                "fractional_level": round(frac, 4),
                 "depth": d,
                 "next_level_seen": 0,
                 "next_level_total": 0,
@@ -241,6 +277,7 @@ class DiversityTree:
 
         return {
             "level": level,
+            "fractional_level": round(frac, 4),
             "depth": d,
             "next_level_seen": seen_count,
             "next_level_total": len(nodes_at_next),

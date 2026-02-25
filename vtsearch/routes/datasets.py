@@ -1,5 +1,6 @@
 """Blueprint for dataset management routes."""
 
+import gc
 import io
 import threading
 from pathlib import Path
@@ -115,10 +116,19 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     def load_task():
         try:
             clear_dataset()
+            gc.collect()
             importer.run(field_values, clips)
             _set_clip_origins(clips, importer.build_origin(field_values))
             _load_embedder_for_clips()
             build_diversity_tree()
+        except MemoryError:
+            clips.clear()
+            gc.collect()
+            update_progress(
+                "idle", "", 0, 0,
+                "Out of memory — this dataset is too large. "
+                "Try a smaller dataset or free up system RAM.",
+            )
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
@@ -392,11 +402,20 @@ def load_demo_dataset_route():
     def load_task():
         try:
             clear_dataset()
+            gc.collect()
             load_demo_dataset(dataset_name, clips)
             demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
             _set_clip_origins(clips, demo_origin)
             _load_embedder_for_clips()
             build_diversity_tree()
+        except MemoryError:
+            clips.clear()
+            gc.collect()
+            update_progress(
+                "idle", "", 0, 0,
+                "Out of memory — this dataset is too large. "
+                "Try a smaller dataset or free up system RAM.",
+            )
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 

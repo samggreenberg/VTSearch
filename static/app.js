@@ -307,6 +307,7 @@
   const showThumbnailsRightCheckbox = document.getElementById("show-thumbnails-right-checkbox");
   let showThumbnailsLeft = false;
   let showThumbnailsRight = true;
+  const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
 
   // ---- Dataset Management ----
 
@@ -332,6 +333,7 @@
     center.innerHTML = "";
     center.appendChild(datasetWelcome);
     datasetWelcome.classList.remove("wide");
+    datasetWelcome.classList.remove("demo-mode");
     datasetWelcome.style.display = "flex";
     center.className = "panel-center";
     datasetOptions.style.display = "flex";
@@ -556,6 +558,7 @@
       demoDatasetsDiv.style.display = "flex";
       backButton.style.display = "block";
       datasetWelcome.classList.add("wide");
+      datasetWelcome.classList.add("demo-mode");
 
       // Fetch demo datasets
       try {
@@ -643,15 +646,16 @@
         // Build tab bar and content sections
         const availableTypes = mediaOrder;
 
-        // Fetch the user's favorite media type to pick the initial tab
+        // Fetch the user's favorite media types to pick the initial tab
         let initialTab = availableTypes[0] || Object.keys(mediaTypesMap)[0] || "audio";
         try {
           const settingsRes = await fetch("/api/settings");
           if (settingsRes.ok) {
             const settingsData = await settingsRes.json();
-            const fav = settingsData.favorite_media_type;
-            if (fav && availableTypes.includes(fav)) {
-              initialTab = fav;
+            const favs = settingsData.favorite_media_types || [];
+            const firstFav = favs.find(f => availableTypes.includes(f));
+            if (firstFav) {
+              initialTab = firstFav;
             }
           }
         } catch (_) { /* ignore – just use first available tab */ }
@@ -659,6 +663,10 @@
         const tabBar = document.createElement("div");
         tabBar.className = "demo-tab-bar";
         demoDatasetsDiv.appendChild(tabBar);
+
+        const demoContentArea = document.createElement("div");
+        demoContentArea.className = "demo-content-area";
+        demoDatasetsDiv.appendChild(demoContentArea);
 
         const sections = {};
 
@@ -678,12 +686,6 @@
             Object.keys(sections).forEach(k => {
               sections[k].style.display = k === mt ? "" : "none";
             });
-            // Persist favorite media type
-            fetch("/api/settings", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ favorite_media_type: mt }),
-            }).catch(() => {});
           });
           tabBar.appendChild(tab);
 
@@ -719,7 +721,7 @@
 
           renderTable(items, section);
           sections[mt] = section;
-          demoDatasetsDiv.appendChild(section);
+          demoContentArea.appendChild(section);
         });
 
         // Activate the initial tab
@@ -1934,6 +1936,10 @@
       showThumbnailsRightCheckbox.checked = val;
       showThumbnailsRight = val;
     }
+    const favList = data.favorite_media_types || [];
+    favMtCheckboxes.forEach(cb => {
+      cb.checked = favList.includes(cb.dataset.mediaType);
+    });
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -2016,6 +2022,19 @@
       renderVotes();
     });
   }
+
+  // Favorite media type toggles
+  favMtCheckboxes.forEach(cb => {
+    cb.addEventListener("change", () => {
+      const selected = [];
+      favMtCheckboxes.forEach(c => { if (c.checked) selected.push(c.dataset.mediaType); });
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorite_media_types: selected }),
+      }).catch(() => {});
+    });
+  });
 
   // Default button — reset all settings to defaults
   if (settingsDefaultBtn) {
@@ -3610,8 +3629,8 @@
 
   // Generic handler: fetch full analysis, then show the relevant section
   async function showMetricDetail(metric, triggerBtn) {
-    // Span doesn't need the full analysis — just show the text box from status data
-    if (metric === "span") {
+    // Span with no good+bad votes: just show the text popup from cached status
+    if (metric === "span" && (votes.good.length === 0 || votes.bad.length === 0)) {
       showSpanPopup();
       return;
     }
@@ -3764,6 +3783,32 @@
           ? data.stability_over_time[data.stability_over_time.length - 1].num_flips
           : "N/A";
         stChart.setAttribute("aria-label", `Prediction stability chart with ${data.stability_over_time.length} data points. Latest prediction flips: ${lastFlips}`);
+      }
+    } else if (metric === "span") {
+      spanSec.style.display = "";
+      renderDiversityChart(data.diversity_level_over_time);
+      document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+      const dvChart = document.getElementById("diversity-chart");
+      if (dvChart) {
+        dvChart.setAttribute("role", "img");
+        const lastLevel = data.diversity_level_over_time && data.diversity_level_over_time.length > 0
+          ? data.diversity_level_over_time[data.diversity_level_over_time.length - 1].diversity_level.toFixed(2)
+          : "N/A";
+        dvChart.setAttribute("aria-label", `Diversity level chart with ${(data.diversity_level_over_time || []).length} data points. Latest level: ${lastLevel}`);
+      }
+      // Update span info text from cached status
+      const sp = _lastStatusData && _lastStatusData.span ? _lastStatusData.span : null;
+      const infoText = document.getElementById("span-info-text");
+      if (!sp || sp.level < 0) {
+        infoText.textContent = "No diversity tree coverage yet. Keep labeling diverse examples.";
+      } else if (sp.level >= sp.depth) {
+        infoText.textContent = `All ${sp.depth + 1} tree levels fully covered. Excellent diversity!`;
+      } else {
+        let msg = `Deepest full level: ${sp.level} of ${sp.depth}.`;
+        if (sp.next_level_total > 0) {
+          msg += ` Next level (${sp.level + 1}): ${sp.next_level_seen} of ${sp.next_level_total} nodes seen.`;
+        }
+        infoText.textContent = msg;
       }
     }
 
@@ -3973,6 +4018,118 @@
     ctx.textAlign = "right";
     ctx.fillText(maxFlips.toString(), padding.left - 5, padding.top + 5);
     ctx.fillText("0", padding.left - 5, padding.top + chartHeight + 5);
+  }
+
+  function renderDiversityChart(diversityData) {
+    const canvas = document.getElementById("diversity-chart");
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!diversityData || diversityData.length === 0) {
+      ctx.fillStyle = themeColor("--text-muted");
+      ctx.font = "14px sans-serif";
+      ctx.fillText("No data available", 20, canvas.height / 2);
+      return;
+    }
+
+    const numLabels = diversityData.map(d => d.num_labels);
+    const levels = diversityData.map(d => d.diversity_level);
+    const treeDepth = diversityData[0].depth;
+
+    const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = canvas.width - padding.left - padding.right;
+    const chartHeight = canvas.height - padding.top - padding.bottom;
+
+    const maxLabels = Math.max(...numLabels);
+    const maxLevel = Math.max(treeDepth, Math.max(...levels), 1);
+    const minLevel = Math.min(0, Math.min(...levels));
+
+    const xScale = (val) => padding.left + (val / maxLabels) * chartWidth;
+    const yScale = (val) => padding.top + chartHeight - ((val - minLevel) / (maxLevel - minLevel || 1)) * chartHeight;
+
+    // Draw axes
+    ctx.strokeStyle = themeColor("--border");
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = themeColor("--border-subtle");
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 5; i++) {
+      const y = padding.top + (chartHeight * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw tree depth target line
+    ctx.strokeStyle = themeColor("--color-good");
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    const depthY = yScale(treeDepth);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, depthY);
+    ctx.lineTo(padding.left + chartWidth, depthY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label the target line
+    ctx.fillStyle = themeColor("--color-good");
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`depth ${treeDepth}`, padding.left + chartWidth - 55, depthY - 5);
+
+    // Draw line
+    ctx.strokeStyle = themeColor("--accent");
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < diversityData.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(levels[i]);
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // Draw points
+    ctx.fillStyle = themeColor("--accent");
+    for (let i = 0; i < diversityData.length; i++) {
+      const x = xScale(numLabels[i]);
+      const y = yScale(levels[i]);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Labels
+    ctx.fillStyle = themeColor("--text-secondary");
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Number of Labels", canvas.width / 2, canvas.height - 10);
+
+    ctx.save();
+    ctx.translate(15, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Diversity Level", 0, 0);
+    ctx.restore();
+
+    // Axis labels
+    ctx.textAlign = "center";
+    ctx.fillText("0", padding.left, canvas.height - padding.bottom + 15);
+    ctx.fillText(maxLabels.toString(), padding.left + chartWidth, canvas.height - padding.bottom + 15);
+
+    ctx.textAlign = "right";
+    ctx.fillText(maxLevel.toFixed(1), padding.left - 5, padding.top + 5);
+    ctx.fillText(minLevel.toFixed(1), padding.left - 5, padding.top + chartHeight + 5);
   }
 
   function generateRecommendation(data) {

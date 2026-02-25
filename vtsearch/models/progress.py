@@ -443,22 +443,41 @@ def compute_labeling_status(
 
     # Span status from diversity tree info (passed in from the route)
     if span_info is None:
-        span = {"status": "red", "reason": "Diversity tree not available.", "level": -1, "depth": -1,
-                "next_level_seen": 0, "next_level_total": 0}
+        span = {
+            "status": "red",
+            "reason": "Diversity tree not available.",
+            "level": -1,
+            "depth": -1,
+            "next_level_seen": 0,
+            "next_level_total": 0,
+        }
     else:
         level = span_info["level"]
         depth = span_info["depth"]
         nls = span_info["next_level_seen"]
         nlt = span_info["next_level_total"]
-        if level <= 1:
-            span = {"status": "red", "reason": "No tree coverage yet." if level < 0
-                    else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
-        elif level >= 4 or level >= depth:
-            span = {"status": "green", "reason": "All tree levels fully covered." if level >= depth
-                    else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
+        if level >= depth and level >= 0:
+            span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
+        elif level >= 4:
+            span = {
+                "status": "green",
+                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
+        elif level <= 1:
+            span = {
+                "status": "red",
+                "reason": "No tree coverage yet."
+                if level < 0
+                else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
         else:
-            span = {"status": "yellow", "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
-                    **span_info}
+            span = {
+                "status": "yellow",
+                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
 
     return {
         "good_count": good,
@@ -468,6 +487,64 @@ def compute_labeling_status(
         "stable": stable,
         "span": span,
     }
+
+
+def calculate_diversity_level_over_time(
+    clips_dict: dict[int, dict[str, Any]],
+    label_history: list[tuple[int, str, float]],
+) -> list[dict[str, Any]]:
+    """Replay label history against a fresh diversity tree to compute level at each step.
+
+    Returns a list of dicts with ``num_labels``, ``diversity_level`` (fractional),
+    and ``depth`` at each label step where the label count changes.
+    """
+    from vtsearch.models.diversity_tree import DiversityTree
+
+    vectors: dict[int, np.ndarray] = {}
+    for cid, clip in clips_dict.items():
+        emb = clip.get("embedding")
+        if emb is not None:
+            vectors[cid] = np.asarray(emb, dtype=np.float32)
+
+    if not vectors:
+        return []
+
+    tree = DiversityTree(vectors, k=3)
+    d = tree.depth()
+
+    good_ids: set[int] = set()
+    bad_ids: set[int] = set()
+    results: list[dict[str, Any]] = []
+
+    for clip_id, label, _ in label_history:
+        if clip_id not in tree.vector_to_leaf:
+            continue
+
+        if label == "unlabel":
+            was_labeled = clip_id in good_ids or clip_id in bad_ids
+            good_ids.discard(clip_id)
+            bad_ids.discard(clip_id)
+            if was_labeled and clip_id not in good_ids and clip_id not in bad_ids:
+                tree.unlabel(clip_id)
+        elif label == "good":
+            bad_ids.discard(clip_id)
+            good_ids.add(clip_id)
+            tree.label(clip_id)
+        else:  # bad
+            good_ids.discard(clip_id)
+            bad_ids.add(clip_id)
+            tree.label(clip_id)
+
+        num_labels = len(good_ids) + len(bad_ids)
+        results.append(
+            {
+                "num_labels": num_labels,
+                "diversity_level": round(tree.fractional_diversity_level(), 4),
+                "depth": d,
+            }
+        )
+
+    return results
 
 
 def analyze_labeling_progress(
@@ -488,9 +565,12 @@ def analyze_labeling_progress(
 
     stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
+    diversity = calculate_diversity_level_over_time(clips_dict, label_history)
+
     return {
         "error_cost_over_time": error_cost,
         "stability_over_time": stability,
+        "diversity_level_over_time": diversity,
         "total_labels": len(current_good_votes) + len(current_bad_votes),
         "total_clips": len(clips_dict),
     }

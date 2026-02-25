@@ -1,0 +1,56 @@
+# -----------------------------------------------------------------
+# VTSearch — GPU (CUDA) Docker image
+#
+# Build:  docker build -f Dockerfile.gpu -t vtsearch:gpu .
+# Run:    docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
+#
+# Requires the NVIDIA Container Toolkit on the host:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
+# -----------------------------------------------------------------
+
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+# Avoid interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Python 3.10 + native libs for opencv, librosa, etc.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3-pip \
+        libsndfile1 \
+        ffmpeg \
+        libgl1 \
+        libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python
+
+WORKDIR /app
+
+# ---------- dependency layer ----------
+COPY requirements-gpu.txt requirements-importers.txt requirements-exporters.txt ./
+COPY vtsearch/datasets/importers/pickle/requirements.txt  vtsearch/datasets/importers/pickle/requirements.txt
+COPY vtsearch/datasets/importers/folder/requirements.txt  vtsearch/datasets/importers/folder/requirements.txt
+COPY vtsearch/datasets/importers/http_zip/requirements.txt vtsearch/datasets/importers/http_zip/requirements.txt
+COPY vtsearch/exporters/gui/requirements.txt  vtsearch/exporters/gui/requirements.txt
+COPY vtsearch/exporters/file/requirements.txt vtsearch/exporters/file/requirements.txt
+COPY vtsearch/exporters/email_smtp/requirements.txt vtsearch/exporters/email_smtp/requirements.txt
+
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir -r requirements-gpu.txt
+
+# ---------- application layer ----------
+COPY . .
+
+VOLUME /app/data
+
+EXPOSE 5000
+
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+CMD ["python", "app.py"]

@@ -42,6 +42,8 @@
   --status-green-dot: #2ecc71;
   --status-green-label: #7deba0;
   --status-green-sub: #3a8a55;
+  --scrollbar-thumb: #3a3d52;
+  --scrollbar-thumb-hover: #7c8aff;
 }
 
 [data-theme="light"] {
@@ -86,6 +88,8 @@
   --status-green-dot: #43a047;
   --status-green-label: #2e7d32;
   --status-green-sub: #66bb6a;
+  --scrollbar-thumb: #c0c3cc;
+  --scrollbar-thumb-hover: #5a68d8;
 }
 
 [data-theme="highviz"] {
@@ -130,7 +134,16 @@
   --status-green-dot: #33ff33;
   --status-green-label: #00ff00;
   --status-green-sub: #00cc00;
+  --scrollbar-thumb: #888888;
+  --scrollbar-thumb-hover: #ffff00;
 }
+
+/* ---- Scrollbars ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--bg-panel); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-panel); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ---- Accessibility ---- */
 .sr-only {
@@ -294,7 +307,7 @@ video { max-width: 600px; max-height: 400px; }
 .label-io-status { font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 8px; }
 
 /* Dataset management */
-.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; max-width: 800px; margin: 0 auto; text-align: center; }
+.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; width: 100%; max-width: 800px; margin: 0 auto; text-align: center; }
 .dataset-welcome.wide { max-width: min(1040px, 95vw); }
 .dataset-welcome h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 8px; }
 .dataset-welcome p { font-size: 1rem; color: var(--text-secondary); margin-bottom: 16px; }
@@ -314,7 +327,10 @@ video { max-width: 600px; max-height: 400px; }
 .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 0.75rem; color: #fff; font-weight: bold; }
 .progress-message { font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; text-align: center; width: 100%; max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .progress-eta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; text-align: center; min-height: 1.1em; }
-.demo-datasets { display: flex; flex-direction: column; gap: 20px; width: 100%; margin-top: 16px; overflow-y: auto; max-height: calc(100vh - 250px); }
+.demo-datasets { display: flex; flex-direction: column; width: 100%; margin-top: 16px; overflow: hidden; }
+.dataset-welcome.demo-mode { flex: 1; min-height: 0; justify-content: flex-start; }
+.dataset-welcome.demo-mode .demo-datasets { flex: 1; min-height: 0; }
+.demo-content-area { flex: 1; overflow-y: auto; min-height: 0; width: 100%; }
 .demo-tab-bar { display: flex; gap: 4px; width: 100%; border-bottom: 2px solid var(--border); padding-bottom: 0; margin-bottom: 12px; }
 .demo-tab { padding: 8px 16px; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; transition: all 0.15s; margin-bottom: -2px; white-space: nowrap; }
 .demo-tab:hover { color: var(--text-primary); background: var(--bg-subtle); }

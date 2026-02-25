@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 from typing import Any
 
@@ -78,6 +79,7 @@ def clear_clips() -> None:
     clips.clear()
     _diversity_tree = None
     clear_progress_cache()
+    gc.collect()
 
 
 def clear_all() -> None:

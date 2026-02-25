@@ -1,0 +1,37 @@
+# Version control
+.git/
+.gitignore
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Runtime data (mount as a volume instead)
+data/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker files (no need to copy into the image)
+Dockerfile
+Dockerfile.gpu
+docker-compose*.yml
+
+# Docs (not needed at runtime)
+docs/
+
+# Claude config
+.claude/
+CLAUDE.md
