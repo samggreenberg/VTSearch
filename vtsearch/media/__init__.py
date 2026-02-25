@@ -61,6 +61,30 @@ def all_types() -> list["MediaType"]:
     return list(_registry.values())
 
 
+def get_by_extension(ext: str) -> "MediaType | None":
+    """Return the :class:`MediaType` that handles files with extension *ext*.
+
+    *ext* should include the leading dot (e.g. ``".wav"``).
+    Returns ``None`` if no registered type handles that extension.
+    """
+    ext = ext.lower()
+    for mt in _registry.values():
+        for pattern in mt.file_extensions:
+            # pattern looks like "*.wav" — extract the extension part
+            if ext == pattern.lstrip("*"):
+                return mt
+    return None
+
+
+def all_types_dict() -> list[dict]:
+    """Return a list of JSON-serialisable dicts describing all registered types.
+
+    Used by the ``/api/media-types`` endpoint so the frontend can render UI
+    elements dynamically.
+    """
+    return [mt.to_dict() for mt in _registry.values()]
+
+
 def all_demo_datasets() -> dict:
     """Return a flat ``{dataset_id: info_dict}`` mapping built from every
     registered media type's :attr:`~MediaType.demo_datasets` list.
@@ -79,6 +103,7 @@ def all_demo_datasets() -> dict:
                 "media_type": mt.type_id,
                 "slice_start": ds.slice_start,
                 "slice_end": ds.slice_end,
+                "download_size_mb": ds.download_size_mb,
             }
             if ds.source:
                 entry["source"] = ds.source
@@ -129,7 +154,9 @@ __all__ = [
     "register",
     "get",
     "get_by_folder_name",
+    "get_by_extension",
     "all_types",
+    "all_types_dict",
     "all_demo_datasets",
     "set_progress_callback",
 ]

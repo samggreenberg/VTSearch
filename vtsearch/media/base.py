@@ -175,6 +175,13 @@ class DemoDataset:
 
     ``None`` means take all remaining elements after ``slice_start``."""
 
+    download_size_mb: float = 0
+    """Estimated download size in megabytes for this demo dataset's raw data.
+
+    Used by the frontend to display the expected download size before the
+    user starts loading.  Set to ``0`` for datasets that don't require a
+    network download (e.g. scikit-learn datasets that download automatically)."""
+
 
 class MediaType(ABC):
     """Abstract base class that every media type must implement.
@@ -234,6 +241,41 @@ class MediaType(ABC):
         plural name (e.g. ``"sounds"``, ``"videos"``).
         """
         return self.type_id
+
+    @property
+    def tab_title(self) -> str:
+        """Plural display name used for UI tabs (e.g. ``"Videos"``, ``"Sounds"``).
+
+        Defaults to :attr:`name` + ``"s"``.  Override for irregular plurals
+        or custom labels.
+        """
+        return self.name + "s"
+
+    @property
+    def dir_key(self) -> str:
+        """Key used in pickle files to store the external media directory path.
+
+        For example ``"audio_dir"``, ``"video_dir"``.  When a pickle file
+        contains this key, its value is a path to a directory where media
+        files for this type are stored externally.
+
+        Defaults to ``type_id + "_dir"``.  Override for legacy naming
+        (e.g. ``"text_dir"`` for the paragraph type).
+        """
+        return self.type_id + "_dir"
+
+    @property
+    def legacy_bytes_keys(self) -> list[str]:
+        """Legacy key names for inline bytes in old pickle files.
+
+        Old pickle formats stored media bytes under type-specific keys
+        (e.g. ``"wav_bytes"``, ``"video_bytes"``).  New pickles use the
+        generic ``"clip_bytes"`` / ``"clip_string"`` keys.  When loading
+        old pickles, these keys are tried in order as fallbacks.
+
+        Defaults to an empty list (no legacy keys).
+        """
+        return []
 
     # ------------------------------------------------------------------
     # Viewer behaviour
@@ -332,6 +374,45 @@ class MediaType(ABC):
         return avg
 
     # ------------------------------------------------------------------
+    # Demo dataset loading
+    # ------------------------------------------------------------------
+
+    def load_demo_source(
+        self,
+        source: str,
+        categories: list,
+        slice_start: int,
+        slice_end: int | None,
+        clips: dict[int, dict],
+        on_progress: "ProgressCallback | None" = None,
+    ) -> str | None:
+        """Download and embed a demo dataset source, populating *clips* in-place.
+
+        Each media type overrides this to handle its own demo sources (e.g.
+        the audio type handles ESC-50, the image type handles CIFAR-10 /
+        Caltech-101/256, etc.).
+
+        Args:
+            source: The ``source`` identifier from the :class:`DemoDataset`.
+            categories: List of category names to include.
+            slice_start: Per-category start index for element slicing.
+            slice_end: Per-category end index for element slicing (``None``
+                means take all remaining).
+            clips: Dict to populate in-place.  The caller has already cleared
+                it.  Keys should be sequential integer clip IDs starting at 1.
+            on_progress: Optional progress callback.
+
+        Returns:
+            An optional external media directory path (absolute string) to
+            embed in the pickle cache (e.g. ``"audio_dir"`` value).  Return
+            ``None`` when all media bytes are stored inline in the clips.
+
+        Raises:
+            ValueError: If *source* is not recognised by this media type.
+        """
+        raise ValueError(f"Media type {self.type_id!r} does not support demo source {source!r}")
+
+    # ------------------------------------------------------------------
     # Clip data
     # ------------------------------------------------------------------
 
@@ -392,6 +473,26 @@ class MediaType(ABC):
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read().strip()
         return ""
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serialisable summary of this media type's metadata.
+
+        Used by the ``/api/media-types`` endpoint to let the frontend render
+        media type UI dynamically without hardcoding.
+        """
+        return {
+            "type_id": self.type_id,
+            "name": self.name,
+            "icon": self.icon,
+            "tab_title": self.tab_title,
+            "folder_import_name": self.folder_import_name,
+            "loops": self.loops,
+            "file_extensions": self.file_extensions,
+        }
 
     @abstractmethod
     def clip_response(self, clip: dict) -> MediaResponse:

@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
+from vtsearch.config import (
+    CALTECH101_DOWNLOAD_SIZE_MB,
+    CALTECH256_DOWNLOAD_SIZE_MB,
+    CIFAR10_DOWNLOAD_SIZE_MB,
+    CLIP_MODEL_ID,
+    MODELS_CACHE_DIR,
+)
 
 if TYPE_CHECKING:
     import torch
@@ -93,6 +99,18 @@ class ImageMediaType(MediaType):
     def folder_import_name(self) -> str:
         return "images"
 
+    @property
+    def tab_title(self) -> str:
+        return "Images"
+
+    @property
+    def dir_key(self) -> str:
+        return "image_dir"
+
+    @property
+    def legacy_bytes_keys(self) -> list[str]:
+        return ["image_bytes"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
@@ -168,58 +186,213 @@ class ImageMediaType(MediaType):
 
     # Categories for Oxford Flowers 102 (102 flower species).
     _OXFORD_FLOWERS_CATEGORIES = [
-        "pink primrose", "hard-leaved pocket orchid", "canterbury bells",
-        "sweet pea", "english marigold", "tiger lily", "moon orchid",
-        "bird of paradise", "monkshood", "globe thistle", "snapdragon",
-        "colt's foot", "king protea", "spear thistle", "yellow iris",
-        "globe-flower", "purple coneflower", "peruvian lily", "balloon flower",
-        "giant white arum lily", "fire lily", "pincushion flower", "fritillary",
-        "red ginger", "grape hyacinth", "corn poppy", "prince of wales feathers",
-        "stemless gentian", "artichoke", "sweet william", "carnation",
-        "garden phlox", "love in the mist", "mexican aster", "alpine sea holly",
-        "ruby-lipped cattleya", "cape flower", "great masterwort", "siam tulip",
-        "lenten rose", "barbeton daisy", "daffodil", "sword lily", "poinsettia",
-        "bolero deep blue", "wallflower", "marigold", "buttercup", "oxeye daisy",
-        "common dandelion", "petunia", "wild pansy", "primula", "sunflower",
-        "pelargonium", "bishop of llandaff", "gaura", "geranium", "orange dahlia",
-        "pink-yellow dahlia", "cautleya spicata", "japanese anemone",
-        "black-eyed susan", "silverbush", "californian poppy", "osteospermum",
-        "spring crocus", "bearded iris", "windflower", "tree poppy", "gazania",
-        "azalea", "water lily", "rose", "thorn apple", "morning glory",
-        "passion flower", "lotus", "toad lily", "anthurium", "frangipani",
-        "clematis", "hibiscus", "columbine", "desert-rose", "tree mallow",
-        "magnolia", "cyclamen", "watercress", "canna lily", "hippeastrum",
-        "bee balm", "ball moss", "foxglove", "bougainvillea", "camellia",
-        "mallow", "mexican petunia", "bromelia", "blanket flower",
-        "trumpet creeper", "blackberry lily",
+        "pink primrose",
+        "hard-leaved pocket orchid",
+        "canterbury bells",
+        "sweet pea",
+        "english marigold",
+        "tiger lily",
+        "moon orchid",
+        "bird of paradise",
+        "monkshood",
+        "globe thistle",
+        "snapdragon",
+        "colt's foot",
+        "king protea",
+        "spear thistle",
+        "yellow iris",
+        "globe-flower",
+        "purple coneflower",
+        "peruvian lily",
+        "balloon flower",
+        "giant white arum lily",
+        "fire lily",
+        "pincushion flower",
+        "fritillary",
+        "red ginger",
+        "grape hyacinth",
+        "corn poppy",
+        "prince of wales feathers",
+        "stemless gentian",
+        "artichoke",
+        "sweet william",
+        "carnation",
+        "garden phlox",
+        "love in the mist",
+        "mexican aster",
+        "alpine sea holly",
+        "ruby-lipped cattleya",
+        "cape flower",
+        "great masterwort",
+        "siam tulip",
+        "lenten rose",
+        "barbeton daisy",
+        "daffodil",
+        "sword lily",
+        "poinsettia",
+        "bolero deep blue",
+        "wallflower",
+        "marigold",
+        "buttercup",
+        "oxeye daisy",
+        "common dandelion",
+        "petunia",
+        "wild pansy",
+        "primula",
+        "sunflower",
+        "pelargonium",
+        "bishop of llandaff",
+        "gaura",
+        "geranium",
+        "orange dahlia",
+        "pink-yellow dahlia",
+        "cautleya spicata",
+        "japanese anemone",
+        "black-eyed susan",
+        "silverbush",
+        "californian poppy",
+        "osteospermum",
+        "spring crocus",
+        "bearded iris",
+        "windflower",
+        "tree poppy",
+        "gazania",
+        "azalea",
+        "water lily",
+        "rose",
+        "thorn apple",
+        "morning glory",
+        "passion flower",
+        "lotus",
+        "toad lily",
+        "anthurium",
+        "frangipani",
+        "clematis",
+        "hibiscus",
+        "columbine",
+        "desert-rose",
+        "tree mallow",
+        "magnolia",
+        "cyclamen",
+        "watercress",
+        "canna lily",
+        "hippeastrum",
+        "bee balm",
+        "ball moss",
+        "foxglove",
+        "bougainvillea",
+        "camellia",
+        "mallow",
+        "mexican petunia",
+        "bromelia",
+        "blanket flower",
+        "trumpet creeper",
+        "blackberry lily",
     ]
 
     # Categories for Food-101 (101 food categories).
     _FOOD101_CATEGORIES = [
-        "apple_pie", "baby_back_ribs", "baklava", "beef_carpaccio",
-        "beef_tartare", "beet_salad", "beignets", "bibimbap", "bread_pudding",
-        "breakfast_burrito", "bruschetta", "caesar_salad", "cannoli",
-        "caprese_salad", "carrot_cake", "ceviche", "cheesecake",
-        "cheese_plate", "chicken_curry", "chicken_quesadilla", "chicken_wings",
-        "chocolate_cake", "chocolate_mousse", "churros", "clam_chowder",
-        "club_sandwich", "crab_cakes", "creme_brulee", "croque_madame",
-        "cup_cakes", "deviled_eggs", "donuts", "dumplings", "edamame",
-        "eggs_benedict", "escargots", "falafel", "filet_mignon",
-        "fish_and_chips", "foie_gras", "french_fries", "french_onion_soup",
-        "french_toast", "fried_calamari", "fried_rice", "frozen_yogurt",
-        "garlic_bread", "gnocchi", "greek_salad", "grilled_cheese_sandwich",
-        "grilled_salmon", "guacamole", "gyoza", "hamburger", "hot_and_sour_soup",
-        "hot_dog", "huevos_rancheros", "hummus", "ice_cream", "lasagna",
-        "lobster_bisque", "lobster_roll_sandwich", "macaroni_and_cheese",
-        "macarons", "miso_soup", "mussels", "nachos", "omelette",
-        "onion_rings", "oysters", "pad_thai", "paella", "pancakes",
-        "panna_cotta", "peking_duck", "pho", "pizza", "pork_chop",
-        "poutine", "prime_rib", "pulled_pork_sandwich", "ramen",
-        "ravioli", "red_velvet_cake", "risotto", "samosa",
-        "sashimi", "scallops", "seaweed_salad", "shrimp_and_grits",
-        "spaghetti_bolognese", "spaghetti_carbonara", "spring_rolls",
-        "steak", "strawberry_shortcake", "sushi", "tacos", "takoyaki",
-        "tiramisu", "tuna_tartare", "waffles",
+        "apple_pie",
+        "baby_back_ribs",
+        "baklava",
+        "beef_carpaccio",
+        "beef_tartare",
+        "beet_salad",
+        "beignets",
+        "bibimbap",
+        "bread_pudding",
+        "breakfast_burrito",
+        "bruschetta",
+        "caesar_salad",
+        "cannoli",
+        "caprese_salad",
+        "carrot_cake",
+        "ceviche",
+        "cheesecake",
+        "cheese_plate",
+        "chicken_curry",
+        "chicken_quesadilla",
+        "chicken_wings",
+        "chocolate_cake",
+        "chocolate_mousse",
+        "churros",
+        "clam_chowder",
+        "club_sandwich",
+        "crab_cakes",
+        "creme_brulee",
+        "croque_madame",
+        "cup_cakes",
+        "deviled_eggs",
+        "donuts",
+        "dumplings",
+        "edamame",
+        "eggs_benedict",
+        "escargots",
+        "falafel",
+        "filet_mignon",
+        "fish_and_chips",
+        "foie_gras",
+        "french_fries",
+        "french_onion_soup",
+        "french_toast",
+        "fried_calamari",
+        "fried_rice",
+        "frozen_yogurt",
+        "garlic_bread",
+        "gnocchi",
+        "greek_salad",
+        "grilled_cheese_sandwich",
+        "grilled_salmon",
+        "guacamole",
+        "gyoza",
+        "hamburger",
+        "hot_and_sour_soup",
+        "hot_dog",
+        "huevos_rancheros",
+        "hummus",
+        "ice_cream",
+        "lasagna",
+        "lobster_bisque",
+        "lobster_roll_sandwich",
+        "macaroni_and_cheese",
+        "macarons",
+        "miso_soup",
+        "mussels",
+        "nachos",
+        "omelette",
+        "onion_rings",
+        "oysters",
+        "pad_thai",
+        "paella",
+        "pancakes",
+        "panna_cotta",
+        "peking_duck",
+        "pho",
+        "pizza",
+        "pork_chop",
+        "poutine",
+        "prime_rib",
+        "pulled_pork_sandwich",
+        "ramen",
+        "ravioli",
+        "red_velvet_cake",
+        "risotto",
+        "samosa",
+        "sashimi",
+        "scallops",
+        "seaweed_salad",
+        "shrimp_and_grits",
+        "spaghetti_bolognese",
+        "spaghetti_carbonara",
+        "spring_rolls",
+        "steak",
+        "strawberry_shortcake",
+        "sushi",
+        "tacos",
+        "takoyaki",
+        "tiramisu",
+        "tuna_tartare",
+        "waffles",
     ]
 
     # Categories for EuroSAT (10 land use classes).
@@ -238,39 +411,126 @@ class ImageMediaType(MediaType):
 
     # Categories for Stanford Dogs (120 breeds).
     _STANFORD_DOGS_CATEGORIES = [
-        "Chihuahua", "Japanese_spaniel", "Maltese_dog", "Pekinese", "Shih-Tzu",
-        "Blenheim_spaniel", "papillon", "toy_terrier", "Rhodesian_ridgeback",
-        "Afghan_hound", "basset", "beagle", "bloodhound", "bluetick",
-        "black-and-tan_coonhound", "Walker_hound", "English_foxhound",
-        "redbone", "borzoi", "Irish_wolfhound", "Italian_greyhound",
-        "whippet", "Ibizan_hound", "Norwegian_elkhound", "otterhound",
-        "Saluki", "Scottish_deerhound", "Weimaraner", "Staffordshire_bullterrier",
-        "American_Staffordshire_terrier", "Bedlington_terrier", "Border_terrier",
-        "Kerry_blue_terrier", "Irish_terrier", "Norfolk_terrier",
-        "Norwich_terrier", "Yorkshire_terrier", "wire-haired_fox_terrier",
-        "Lakeland_terrier", "Sealyham_terrier", "Airedale", "cairn",
-        "Australian_terrier", "Dandie_Dinmont", "Boston_bull", "miniature_schnauzer",
-        "giant_schnauzer", "standard_schnauzer", "Scotch_terrier",
-        "Tibetan_terrier", "silky_terrier", "soft-coated_wheaten_terrier",
-        "West_Highland_white_terrier", "Lhasa", "flat-coated_retriever",
-        "curly-coated_retriever", "golden_retriever", "Labrador_retriever",
-        "Chesapeake_Bay_retriever", "German_short-haired_pointer", "vizsla",
-        "English_setter", "Irish_setter", "Gordon_setter", "Brittany_spaniel",
-        "clumber", "English_springer", "Welsh_springer_spaniel",
-        "cocker_spaniel", "Sussex_spaniel", "Irish_water_spaniel", "kuvasz",
-        "schipperke", "groenendael", "malinois", "briard", "kelpie",
-        "komondor", "Old_English_sheepdog", "Shetland_sheepdog", "collie",
-        "Border_collie", "Bouvier_des_Flandres", "Rottweiler",
-        "German_shepherd", "Doberman", "miniature_pinscher",
-        "Greater_Swiss_Mountain_dog", "Bernese_mountain_dog",
-        "Appenzeller", "EntleBucher", "boxer", "bull_mastiff",
-        "Tibetan_mastiff", "French_bulldog", "Great_Dane",
-        "Saint_Bernard", "Eskimo_dog", "malamute", "Siberian_husky",
-        "affenpinscher", "basenji", "pug", "Leonberg", "Newfoundland",
-        "Great_Pyrenees", "Samoyed", "Pomeranian", "chow",
-        "keeshond", "Brabancon_griffon", "Pembroke", "Cardigan",
-        "toy_poodle", "miniature_poodle", "standard_poodle",
-        "Mexican_hairless", "dingo", "dhole", "African_hunting_dog",
+        "Chihuahua",
+        "Japanese_spaniel",
+        "Maltese_dog",
+        "Pekinese",
+        "Shih-Tzu",
+        "Blenheim_spaniel",
+        "papillon",
+        "toy_terrier",
+        "Rhodesian_ridgeback",
+        "Afghan_hound",
+        "basset",
+        "beagle",
+        "bloodhound",
+        "bluetick",
+        "black-and-tan_coonhound",
+        "Walker_hound",
+        "English_foxhound",
+        "redbone",
+        "borzoi",
+        "Irish_wolfhound",
+        "Italian_greyhound",
+        "whippet",
+        "Ibizan_hound",
+        "Norwegian_elkhound",
+        "otterhound",
+        "Saluki",
+        "Scottish_deerhound",
+        "Weimaraner",
+        "Staffordshire_bullterrier",
+        "American_Staffordshire_terrier",
+        "Bedlington_terrier",
+        "Border_terrier",
+        "Kerry_blue_terrier",
+        "Irish_terrier",
+        "Norfolk_terrier",
+        "Norwich_terrier",
+        "Yorkshire_terrier",
+        "wire-haired_fox_terrier",
+        "Lakeland_terrier",
+        "Sealyham_terrier",
+        "Airedale",
+        "cairn",
+        "Australian_terrier",
+        "Dandie_Dinmont",
+        "Boston_bull",
+        "miniature_schnauzer",
+        "giant_schnauzer",
+        "standard_schnauzer",
+        "Scotch_terrier",
+        "Tibetan_terrier",
+        "silky_terrier",
+        "soft-coated_wheaten_terrier",
+        "West_Highland_white_terrier",
+        "Lhasa",
+        "flat-coated_retriever",
+        "curly-coated_retriever",
+        "golden_retriever",
+        "Labrador_retriever",
+        "Chesapeake_Bay_retriever",
+        "German_short-haired_pointer",
+        "vizsla",
+        "English_setter",
+        "Irish_setter",
+        "Gordon_setter",
+        "Brittany_spaniel",
+        "clumber",
+        "English_springer",
+        "Welsh_springer_spaniel",
+        "cocker_spaniel",
+        "Sussex_spaniel",
+        "Irish_water_spaniel",
+        "kuvasz",
+        "schipperke",
+        "groenendael",
+        "malinois",
+        "briard",
+        "kelpie",
+        "komondor",
+        "Old_English_sheepdog",
+        "Shetland_sheepdog",
+        "collie",
+        "Border_collie",
+        "Bouvier_des_Flandres",
+        "Rottweiler",
+        "German_shepherd",
+        "Doberman",
+        "miniature_pinscher",
+        "Greater_Swiss_Mountain_dog",
+        "Bernese_mountain_dog",
+        "Appenzeller",
+        "EntleBucher",
+        "boxer",
+        "bull_mastiff",
+        "Tibetan_mastiff",
+        "French_bulldog",
+        "Great_Dane",
+        "Saint_Bernard",
+        "Eskimo_dog",
+        "malamute",
+        "Siberian_husky",
+        "affenpinscher",
+        "basenji",
+        "pug",
+        "Leonberg",
+        "Newfoundland",
+        "Great_Pyrenees",
+        "Samoyed",
+        "Pomeranian",
+        "chow",
+        "keeshond",
+        "Brabancon_griffon",
+        "Pembroke",
+        "Cardigan",
+        "toy_poodle",
+        "miniature_poodle",
+        "standard_poodle",
+        "Mexican_hairless",
+        "dingo",
+        "dhole",
+        "African_hunting_dog",
     ]
 
     @property
@@ -286,6 +546,7 @@ class ImageMediaType(MediaType):
                 source="caltech101",
                 slice_start=0,
                 slice_end=20,
+                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech101_m",
@@ -295,6 +556,7 @@ class ImageMediaType(MediaType):
                 source="caltech101",
                 slice_start=20,
                 slice_end=60,
+                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech256_l",
@@ -304,6 +566,7 @@ class ImageMediaType(MediaType):
                 source="caltech256",
                 slice_start=0,
                 slice_end=80,
+                download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="oxford_flowers_102_a",
@@ -313,6 +576,7 @@ class ImageMediaType(MediaType):
                 source="oxford_flowers_102",
                 slice_start=0,
                 slice_end=80,
+                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a",
@@ -322,6 +586,7 @@ class ImageMediaType(MediaType):
                 source="food101",
                 slice_start=0,
                 slice_end=1000,
+                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a",
@@ -331,6 +596,7 @@ class ImageMediaType(MediaType):
                 source="eurosat",
                 slice_start=0,
                 slice_end=2700,
+                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a",
@@ -340,8 +606,148 @@ class ImageMediaType(MediaType):
                 source="stanford_dogs",
                 slice_start=0,
                 slice_end=171,
+                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
         ]
+
+    # ------------------------------------------------------------------
+    # Demo dataset loading
+    # ------------------------------------------------------------------
+
+    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None):
+        import hashlib  # noqa: PLC0415
+        import io as _io  # noqa: PLC0415
+
+        from PIL import Image  # noqa: PLC0415
+
+        if on_progress is None:
+            from vtsearch.utils import update_progress
+
+            on_progress = update_progress
+
+        from vtsearch.datasets.loader import load_image_metadata_from_folders  # noqa: PLC0415
+
+        demo_origin: dict = {"importer": "demo", "params": {}}
+
+        if source in ("caltech101", "caltech256"):
+            if source == "caltech101":
+                from vtsearch.datasets.downloader import download_caltech101  # noqa: PLC0415
+
+                img_dir = download_caltech101(on_progress=on_progress)
+            else:
+                from vtsearch.datasets.downloader import download_caltech256  # noqa: PLC0415
+
+                img_dir = download_caltech256(on_progress=on_progress)
+
+            metadata = load_image_metadata_from_folders(img_dir, categories)
+            by_cat: dict[str, list[tuple[Path, str]]] = {}
+            for fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                by_cat.setdefault(cat, []).append((meta["path"], cat))
+
+            selected: list[tuple[Path, str]] = []
+            for cat in categories:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                embedding = self.embed_media(img_path)
+                if embedding is None:
+                    continue
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "clip_bytes": image_bytes,
+                    "clip_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
+        elif source == "cifar10_sample" or not source:
+            from vtsearch.datasets.downloader import download_cifar10  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_cifar10_batch  # noqa: PLC0415
+
+            cifar_dir = download_cifar10(on_progress=on_progress)
+            batch_file = cifar_dir / "data_batch_1"
+            images, labels, label_names = load_cifar10_batch(batch_file)
+            category_indices = {label_names[i]: i for i in range(len(label_names))}
+
+            selected_images = []
+            selected_labels = []
+            for cat in categories:
+                if cat in category_indices:
+                    cat_idx = category_indices[cat]
+                    cat_mask = [i for i, lbl in enumerate(labels) if lbl == cat_idx]
+                    for idx in cat_mask[slice_start : (slice_end or len(cat_mask))]:
+                        selected_images.append(images[idx])
+                        selected_labels.append(cat)
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected_images)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            from vtsearch.datasets.loader import embed_image_file_from_pil  # noqa: PLC0415
+
+            for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
+                on_progress("embedding", f"Embedding {category}: image {i + 1}/{total}", i + 1, total)
+                img = Image.fromarray(image_array.astype("uint8"), "RGB")
+                img_buffer = _io.BytesIO()
+                img.save(img_buffer, format="PNG")
+                image_bytes = img_buffer.getvalue()
+                embedding = embed_image_file_from_pil(img)
+                if embedding is None:
+                    continue
+                fname = f"{category}_{clip_id}.png"
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "clip_bytes": image_bytes,
+                    "clip_string": None,
+                    "filename": fname,
+                    "category": category,
+                    "width": img.width,
+                    "height": img.height,
+                    "origin": demo_origin,
+                    "origin_name": fname,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
+        else:
+            raise ValueError(f"Unsupported image source: {source!r}")
 
     # ------------------------------------------------------------------
     # Embeddings
@@ -374,10 +780,14 @@ class ImageMediaType(MediaType):
         # versions compute on-the-fly.  Tell the loader to silently ignore them.
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress):
-            self._model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+            self._model = CLIPModel.from_pretrained(
+                CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            )
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False)
+            self._processor = CLIPProcessor.from_pretrained(
+                CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False
+            )
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

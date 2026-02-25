@@ -18,16 +18,8 @@ from typing import Any, Callable, Iterator, Optional
 import numpy as np
 from PIL import Image
 
-from vtsearch.config import EMBEDDINGS_DIR, IMAGES_PER_CALTECH101_CATEGORY, IMAGES_PER_CALTECH256_CATEGORY, IMAGES_PER_CIFAR10_CATEGORY, TEXTS_PER_CATEGORY
+from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets.config import DEMO_DATASETS
-from vtsearch.datasets.downloader import (
-    download_20newsgroups,
-    download_caltech101,
-    download_caltech256,
-    download_cifar10,
-    download_esc50,
-    download_ucf101_subset,
-)
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -608,13 +600,15 @@ def load_dataset_from_pickle(
             "params": creation_info.get("field_values", {}),
         }
 
-    # Map media type to the pickle key that holds the external directory.
-    _dir_keys = {
-        "audio": "audio_dir",
-        "video": "video_dir",
-        "image": "image_dir",
-        "paragraph": "text_dir",
-    }
+    # Build the dir_key mapping dynamically from the media type registry.
+    # Also build the legacy-bytes-key mapping for backward compat with old pickles.
+    from vtsearch.media import all_types
+
+    _dir_keys: dict[str, str] = {}
+    _legacy_bytes: dict[str, list[str]] = {}
+    for mt in all_types():
+        _dir_keys[mt.type_id] = mt.dir_key
+        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
 
     # Convert to the app's clip format
     missing_media = 0
@@ -655,12 +649,10 @@ def load_dataset_from_pickle(
                 "origin": clip_info.get("origin", fallback_origin),
                 "origin_name": clip_info.get("origin_name", fname),
             }
-            if media_type == "image":
-                clip_data["width"] = clip_info.get("width")
-                clip_data["height"] = clip_info.get("height")
-            elif media_type == "paragraph":
-                clip_data["word_count"] = clip_info.get("word_count")
-                clip_data["character_count"] = clip_info.get("character_count")
+            # Preserve any extra metadata fields from the pickle
+            for extra_key in ("width", "height", "word_count", "character_count"):
+                if extra_key in clip_info:
+                    clip_data[extra_key] = clip_info[extra_key]
 
             clips[clip_id] = clip_data
             continue
@@ -668,66 +660,48 @@ def load_dataset_from_pickle(
         # ── Full mode (original behaviour) ──
         # Load the actual media content.
         # Support both new key names (clip_bytes/clip_string) and legacy
-        # per-media-type key names (wav_bytes/video_bytes/image_bytes/
-        # text_content) for backward compatibility with old pickles.
+        # per-media-type key names for backward compatibility with old pickles.
         clip_bytes = None
         clip_string = None
         media_bytes = None
         media_path = None
 
-        if media_type == "audio":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("wav_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "audio_dir" in data:
-                audio_path = Path(data["audio_dir"]) / clip_info["filename"]
-                if audio_path.exists():
-                    with open(audio_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(audio_path.resolve())
-                else:
-                    missing_media += 1
+        # Try clip_bytes first (binary media), then legacy keys
+        clip_bytes = clip_info.get("clip_bytes")
+        if clip_bytes is None:
+            for legacy_key in _legacy_bytes.get(media_type, []):
+                clip_bytes = clip_info.get(legacy_key)
+                if clip_bytes is not None:
+                    break
 
-        elif media_type == "video":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("video_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "video_dir" in data:
-                video_path = Path(data["video_dir"]) / clip_info["filename"]
-                if video_path.exists():
-                    with open(video_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(video_path.resolve())
-                else:
-                    missing_media += 1
+        # Try clip_string (text media), then legacy keys
+        clip_string = clip_info.get("clip_string")
+        if clip_string is None:
+            for legacy_key in _legacy_bytes.get(media_type, []):
+                val = clip_info.get(legacy_key)
+                if isinstance(val, str):
+                    clip_string = val
+                    break
 
-        elif media_type == "image":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("image_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "image_dir" in data:
-                image_path = Path(data["image_dir"]) / clip_info["filename"]
-                if image_path.exists():
-                    with open(image_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(image_path.resolve())
-                else:
-                    missing_media += 1
-
-        elif media_type == "paragraph":
-            clip_string = clip_info.get("clip_string") or clip_info.get("text_content")
-            if clip_string is not None:
-                media_bytes = clip_string.encode("utf-8")  # For MD5 hash
-            elif "filename" in clip_info and "text_dir" in data:
-                text_path = Path(data["text_dir"]) / clip_info["filename"]
-                if text_path.exists():
-                    with open(text_path, "r", encoding="utf-8") as f:
-                        clip_string = f.read()
-                        media_bytes = clip_string.encode("utf-8")
-                    media_path = str(text_path.resolve())
+        if clip_bytes is not None:
+            media_bytes = clip_bytes
+        elif clip_string is not None:
+            media_bytes = clip_string.encode("utf-8")
+        else:
+            # Try loading from the external directory
+            dir_key = _dir_keys.get(media_type)
+            if dir_key and dir_key in data and "filename" in clip_info:
+                ext_path = Path(data[dir_key]) / clip_info["filename"]
+                if ext_path.exists():
+                    if clip_string is None and ext_path.suffix in (".txt", ".md"):
+                        with open(ext_path, "r", encoding="utf-8") as f:
+                            clip_string = f.read()
+                            media_bytes = clip_string.encode("utf-8")
+                    else:
+                        with open(ext_path, "rb") as f:
+                            clip_bytes = f.read()
+                            media_bytes = clip_bytes
+                    media_path = str(ext_path.resolve())
                 else:
                     missing_media += 1
 
@@ -748,13 +722,10 @@ def load_dataset_from_pickle(
                 "origin": clip_info.get("origin", fallback_origin),
                 "origin_name": clip_info.get("origin_name", fname),
             }
-            # Add media-specific metadata
-            if media_type == "image":
-                clip_data["width"] = clip_info.get("width")
-                clip_data["height"] = clip_info.get("height")
-            elif media_type == "paragraph":
-                clip_data["word_count"] = clip_info.get("word_count")
-                clip_data["character_count"] = clip_info.get("character_count")
+            # Preserve any extra metadata fields from the pickle
+            for extra_key in ("width", "height", "word_count", "character_count"):
+                if extra_key in clip_info:
+                    clip_data[extra_key] = clip_info[extra_key]
 
             clips[clip_id] = clip_data
 
@@ -978,16 +949,10 @@ def load_demo_dataset(
     from that file. If the cache is missing or the media bytes it references can
     no longer be found on disk, the raw data is re-downloaded and re-embedded.
 
-    Supported datasets and their sources:
-
-    - Audio datasets (ESC-50 subsets): downloaded from ``ESC50_URL``, embedded
-      with CLAP.
-    - Image datasets (CIFAR-10 subsets): downloaded from ``CIFAR10_URL``,
-      embedded with CLIP.
-    - Paragraph datasets (20 Newsgroups subsets): downloaded via
-      ``sklearn.datasets.fetch_20newsgroups``, embedded with E5-base-v2.
-    - Video datasets (UCF-101): must be manually placed at
-      ``VIDEO_DIR/ucf101/``; embedded with X-CLIP.
+    Each media type implements its own
+    :meth:`~vtsearch.media.base.MediaType.load_demo_source` method that
+    handles downloading, embedding, and populating clips for its demo sources.
+    This function simply orchestrates pickle caching around that delegation.
 
     Progress throughout the operation is reported via :func:`update_progress`.
 
@@ -1002,7 +967,7 @@ def load_demo_dataset(
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
-            UCF-101 dataset is requested but not yet downloaded.
+            media type does not support the requested demo source.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -1011,8 +976,7 @@ def load_demo_dataset(
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
     dataset_info = DEMO_DATASETS[dataset_name]
-    media_type = dataset_info.get("media_type", "audio")
-    demo_origin: dict[str, Any] = {"importer": "demo", "params": {"name": dataset_name}}
+    media_type_id = dataset_info.get("media_type", "audio")
 
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{dataset_name}.pkl"
@@ -1029,589 +993,55 @@ def load_demo_dataset(
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
-    # Process based on media type
-    if media_type == "image":
-        # Handle image datasets
-        image_source = dataset_info.get("source", "cifar10_sample")
-
-        if image_source == "cifar10_sample":
-            # Download CIFAR-10 if needed
-            cifar_dir = download_cifar10()
-
-            # Load CIFAR-10 training batch
-            batch_file = cifar_dir / "data_batch_1"
-            images, labels, label_names = load_cifar10_batch(batch_file)
-
-            # Filter to requested categories
-            category_indices = {label_names[i]: i for i in range(len(label_names))}
-            requested_categories = dataset_info["categories"]
-
-            # Collect images for requested categories, applying per-category slicing
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end", IMAGES_PER_CIFAR10_CATEGORY)
-            selected_images = []
-            selected_labels = []
-
-            for cat in requested_categories:
-                if cat in category_indices:
-                    cat_idx = category_indices[cat]
-                    cat_mask = [i for i, lbl in enumerate(labels) if lbl == cat_idx]
-                    for idx in cat_mask[slice_start:slice_end]:
-                        selected_images.append(images[idx])
-                        selected_labels.append(cat)
-
-            # Generate embeddings for images
-            clips.clear()
-            clip_id = 1
-            total = len(selected_images)
-
-            # Eagerly load models before starting the embedding timer so that
-            # download / weight-loading time does not pollute the progress bar.
-            from vtsearch.media import get as media_get
-
-            image_mt = media_get("image")
-            if getattr(image_mt, "_model", None) is None:
-                on_progress("loading", "Loading image embedding model…", 0, 0)
-                image_mt.load_models()
-
-            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
-
-            for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
-                on_progress(
-                    "embedding",
-                    f"Embedding {category}: image {i + 1}/{total}",
-                    i + 1,
-                    total,
-                )
-
-                # Convert numpy array to PIL Image
-                img = Image.fromarray(image_array.astype("uint8"), "RGB")
-
-                # Convert to bytes
-                img_buffer = io.BytesIO()
-                img.save(img_buffer, format="PNG")
-                image_bytes = img_buffer.getvalue()
-
-                # Get embedding via registry
-                embedding = embed_image_file_from_pil(img)
-                if embedding is None:
-                    continue
-
-                fname = f"{category}_{clip_id}.png"
-                clips[clip_id] = {
-                    "id": clip_id,
-                    "type": "image",
-                    "duration": 0,  # Images don't have duration
-                    "file_size": len(image_bytes),
-                    "md5": hashlib.md5(image_bytes).hexdigest(),
-                    "embedding": embedding,
-                    "clip_bytes": image_bytes,
-                    "clip_string": None,
-                    "filename": fname,
-                    "category": category,
-                    "width": img.width,
-                    "height": img.height,
-                    "origin": demo_origin,
-                    "origin_name": fname,
-                }
-                clip_id += 1
-
-            # Save for future use
-            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(pkl_file, "wb") as f:
-                pickle.dump(
-                    {
-                        "name": dataset_name,
-                        "clips": {
-                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-                            for cid, clip in clips.items()
-                        },
-                    },
-                    f,
-                )
-
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
-
-        elif image_source == "caltech101":
-            # Download Caltech-101 if needed
-            caltech_dir = download_caltech101()
-
-            # Scan category folders for images
-            metadata = load_image_metadata_from_folders(caltech_dir, dataset_info["categories"])
-
-            # Group by category (sorted order within each), then slice
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end", IMAGES_PER_CALTECH101_CATEGORY)
-            by_cat: dict[str, list[tuple[Path, str]]] = {}
-            for fname, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                by_cat.setdefault(cat, []).append((meta["path"], cat))
-
-            selected: list[tuple[Path, str]] = []
-            for cat in dataset_info["categories"]:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
-
-            from vtsearch.media import get as media_get
-
-            image_mt = media_get("image")
-
-            # Eagerly load models before starting the embedding timer so that
-            # download / weight-loading time does not pollute the progress bar.
-            if getattr(image_mt, "_model", None) is None:
-                on_progress("loading", "Loading image embedding model…", 0, 0)
-                image_mt.load_models()
-
-            clips.clear()
-            clip_id = 1
-            total = len(selected)
-            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
-
-            for i, (img_path, category) in enumerate(selected):
-                on_progress(
-                    "embedding",
-                    f"Embedding {category}: {img_path.name} ({i + 1}/{total})",
-                    i + 1,
-                    total,
-                )
-
-                embedding = image_mt.embed_media(img_path)
-                if embedding is None:
-                    continue
-
-                with open(img_path, "rb") as f:
-                    image_bytes = f.read()
-
-                try:
-                    img = Image.open(img_path)
-                    width, height = img.width, img.height
-                except Exception:
-                    width, height = None, None
-
-                clips[clip_id] = {
-                    "id": clip_id,
-                    "type": "image",
-                    "duration": 0,
-                    "file_size": len(image_bytes),
-                    "md5": hashlib.md5(image_bytes).hexdigest(),
-                    "embedding": embedding,
-                    "clip_bytes": image_bytes,
-                    "clip_string": None,
-                    "filename": img_path.name,
-                    "category": category,
-                    "width": width,
-                    "height": height,
-                    "origin": demo_origin,
-                    "origin_name": img_path.name,
-                }
-                clip_id += 1
-
-            # Save for future use
-            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(pkl_file, "wb") as f:
-                pickle.dump(
-                    {
-                        "name": dataset_name,
-                        "clips": {
-                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-                            for cid, clip in clips.items()
-                        },
-                    },
-                    f,
-                )
-
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
-
-        elif image_source == "caltech256":
-            # Download Caltech-256 if needed
-            caltech_dir = download_caltech256()
-
-            # Scan category folders for images
-            metadata = load_image_metadata_from_folders(caltech_dir, dataset_info["categories"])
-
-            # Group by category (sorted order within each), then slice
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end", IMAGES_PER_CALTECH256_CATEGORY)
-            by_cat: dict[str, list[tuple[Path, str]]] = {}
-            for fname, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                by_cat.setdefault(cat, []).append((meta["path"], cat))
-
-            selected: list[tuple[Path, str]] = []
-            for cat in dataset_info["categories"]:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
-
-            from vtsearch.media import get as media_get
-
-            image_mt = media_get("image")
-
-            # Eagerly load models before starting the embedding timer so that
-            # download / weight-loading time does not pollute the progress bar.
-            if getattr(image_mt, "_model", None) is None:
-                on_progress("loading", "Loading image embedding model…", 0, 0)
-                image_mt.load_models()
-
-            clips.clear()
-            clip_id = 1
-            total = len(selected)
-            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
-
-            for i, (img_path, category) in enumerate(selected):
-                on_progress(
-                    "embedding",
-                    f"Embedding {category}: {img_path.name} ({i + 1}/{total})",
-                    i + 1,
-                    total,
-                )
-
-                embedding = image_mt.embed_media(img_path)
-                if embedding is None:
-                    continue
-
-                with open(img_path, "rb") as f:
-                    image_bytes = f.read()
-
-                try:
-                    img = Image.open(img_path)
-                    width, height = img.width, img.height
-                except Exception:
-                    width, height = None, None
-
-                clips[clip_id] = {
-                    "id": clip_id,
-                    "type": "image",
-                    "duration": 0,
-                    "file_size": len(image_bytes),
-                    "md5": hashlib.md5(image_bytes).hexdigest(),
-                    "embedding": embedding,
-                    "clip_bytes": image_bytes,
-                    "clip_string": None,
-                    "filename": img_path.name,
-                    "category": category,
-                    "width": width,
-                    "height": height,
-                    "origin": demo_origin,
-                    "origin_name": img_path.name,
-                }
-                clip_id += 1
-
-            # Save for future use
-            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(pkl_file, "wb") as f:
-                pickle.dump(
-                    {
-                        "name": dataset_name,
-                        "clips": {
-                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-                            for cid, clip in clips.items()
-                        },
-                    },
-                    f,
-                )
-
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
-
-        else:
-            raise ValueError(f"Unsupported image source: {image_source!r} for dataset {dataset_name!r}")
-
-    elif media_type == "paragraph":
-        # Handle paragraph datasets — use text media type from registry
-        from vtsearch.media import get as media_get
-
-        text_mt = media_get("paragraph")
-
-        paragraph_source = dataset_info.get("source", "ag_news_sample")
-
-        if paragraph_source == "ag_news_sample":
-            # Use 20 Newsgroups dataset from scikit-learn
-            texts, labels, category_names = download_20newsgroups(dataset_info["categories"])
-
-            # Slice per category for disjoint S/M/L demo datasets
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end", TEXTS_PER_CATEGORY)
-            selected_texts = []
-            selected_categories = []
-
-            for cat_name in dataset_info["categories"]:
-                if cat_name in category_names:
-                    cat_idx = category_names.index(cat_name)
-                    cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
-                    for text in cat_texts[slice_start:slice_end]:
-                        selected_texts.append(text)
-                        selected_categories.append(cat_name)
-
-            # Eagerly load models before starting the embedding timer so that
-            # download / weight-loading time does not pollute the progress bar.
-            if getattr(text_mt, "_model", None) is None:
-                on_progress("loading", "Loading text embedding model…", 0, 0)
-                text_mt.load_models()
-
-            # Generate embeddings for paragraphs
-            clips.clear()
-            clip_id = 1
-            total = len(selected_texts)
-            on_progress(
-                "embedding",
-                f"Starting embedding for {total} paragraphs...",
-                0,
-                total,
-            )
-
-            for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
-                on_progress(
-                    "embedding",
-                    f"Embedding {category}: paragraph {i + 1}/{total}",
-                    i + 1,
-                    total,
-                )
-
-                # Truncate very long texts (keep first 1000 chars for demo)
-                text_content = text_content[:1000].strip()
-                if not text_content:
-                    continue
-
-                # Embed via text media type
-                try:
-                    embedding = text_mt.embed_text_passage(text_content)
-                except Exception as e:
-                    print(f"Error embedding paragraph: {e}")
-                    continue
-
-                if embedding is None:
-                    continue
-
-                word_count = len(text_content.split())
-                character_count = len(text_content)
-                text_bytes = text_content.encode("utf-8")
-
-                fname = f"{category}_{clip_id}.txt"
-                clips[clip_id] = {
-                    "id": clip_id,
-                    "type": "paragraph",
-                    "duration": 0,  # Paragraphs don't have duration
-                    "file_size": len(text_bytes),
-                    "md5": hashlib.md5(text_bytes).hexdigest(),
-                    "embedding": embedding,
-                    "clip_bytes": None,
-                    "clip_string": text_content,
-                    "filename": fname,
-                    "category": category,
-                    "word_count": word_count,
-                    "character_count": character_count,
-                    "origin": demo_origin,
-                    "origin_name": fname,
-                }
-                clip_id += 1
-
-            # Save for future use
-            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(pkl_file, "wb") as f:
-                pickle.dump(
-                    {
-                        "name": dataset_name,
-                        "clips": {
-                            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-                            for cid, clip in clips.items()
-                        },
-                    },
-                    f,
-                )
-
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
-
-        else:
-            raise ValueError(f"Unsupported text source: {paragraph_source!r} for dataset {dataset_name!r}")
-
-    elif media_type == "video":
-        # Handle video datasets
-        video_source = dataset_info.get("source", "ucf101")
-
-        if video_source == "ucf101":
-            from vtsearch.media import get as media_get
-
-            video_mt = media_get("video")
-
-            video_dir = download_ucf101_subset(on_progress=on_progress)
-
-            metadata = load_video_metadata_from_folders(video_dir, dataset_info["categories"])
-
-            # Apply per-category slicing for disjoint S/M/L datasets
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end")
-            by_cat: dict[str, list] = {}
-            for fname, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                by_cat.setdefault(cat, []).append((meta["path"], meta))
-
-            video_files: list[tuple] = []
-            for cat in dataset_info["categories"]:
-                video_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
-
-            # Eagerly load models before starting the embedding timer so that
-            # download / weight-loading time does not pollute the progress bar.
-            if getattr(video_mt, "_model", None) is None:
-                on_progress("loading", "Loading video embedding model…", 0, 0)
-                video_mt.load_models()
-
-            # Generate embeddings for videos
-            clips.clear()
-            clip_id = 1
-            total = len(video_files)
-            on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
-
-            for i, (video_path, meta) in enumerate(video_files):
-                on_progress(
-                    "embedding",
-                    f"Embedding {meta['category']}: {video_path.name} ({i + 1}/{total})",
-                    i + 1,
-                    total,
-                )
-
-                embedding = video_mt.embed_media(video_path)
-                if embedding is None:
-                    continue
-
-                with open(video_path, "rb") as f:
-                    video_bytes = f.read()
-
-                media_fields = video_mt.load_clip_data(video_path)
-
-                # Use the category-relative path (e.g. "Archery/v_Archery_g01_c01.avi")
-                # so that load_dataset_from_pickle can find the file under video_dir.
-                rel_filename = str(video_path.relative_to(video_dir))
-
-                clips[clip_id] = {
-                    "id": clip_id,
-                    "type": "video",
-                    "duration": media_fields["duration"],
-                    "file_size": len(video_bytes),
-                    "md5": hashlib.md5(video_bytes).hexdigest(),
-                    "embedding": embedding,
-                    "clip_bytes": video_bytes,
-                    "filename": rel_filename,
-                    "category": meta["category"],
-                    "origin": demo_origin,
-                    "origin_name": video_path.name,
-                }
-                clip_id += 1
-
-            # Save for future use
-            EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(pkl_file, "wb") as f:
-                pickle.dump(
-                    {
-                        "name": dataset_name,
-                        "clips": {
-                            cid: {
-                                k: v.tolist() if isinstance(v, np.ndarray) else v
-                                for k, v in clip.items()
-                                if k != "clip_bytes"
-                            }
-                            for cid, clip in clips.items()
-                        },
-                        "video_dir": str(video_dir.absolute()),
-                    },
-                    f,
-                )
-
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
-
-        else:
-            raise ValueError(f"Unsupported video source: {video_source!r} for dataset {dataset_name!r}")
-
-    # Handle audio datasets (ESC-50 logic)
-    audio_source = dataset_info.get("source", "")
-    if audio_source and audio_source != "esc50":
-        raise ValueError(f"Unsupported audio source: {audio_source!r} for dataset {dataset_name!r}")
+    # Delegate to the media type's load_demo_source() method
     from vtsearch.media import get as media_get
 
-    audio_mt = media_get("audio")
+    mt = media_get(media_type_id)
 
-    audio_dir = download_esc50()
-    metadata = load_esc50_metadata(audio_dir.parent)
-
-    # Filter files for this dataset, applying per-category slicing
-    categories = DEMO_DATASETS[dataset_name]["categories"]
+    source = dataset_info.get("source", "")
+    categories = dataset_info["categories"]
     slice_start = dataset_info.get("slice_start", 0)
     slice_end = dataset_info.get("slice_end")
 
-    # Group files by category (sorted order within each)
-    by_cat: dict[str, list] = {}
-    for audio_path in sorted(audio_dir.glob("*.wav")):
-        if audio_path.name in metadata:
-            cat = metadata[audio_path.name]["category"]
-            if cat in categories:
-                by_cat.setdefault(cat, []).append((audio_path, metadata[audio_path.name]))
-
-    # Slice each category and flatten
-    audio_files = []
-    for cat in categories:
-        audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
-
-    # Eagerly load models before starting the embedding timer so that
-    # download / weight-loading time does not pollute the progress bar.
-    if getattr(audio_mt, "_model", None) is None:
-        on_progress("loading", "Loading audio embedding model…", 0, 0)
-        audio_mt.load_models()
-
-    # Generate embeddings
     clips.clear()
-    clip_id = 1
-    total = len(audio_files)
-    on_progress("embedding", f"Starting embedding for {total} audio files...", 0, total)
+    external_dir = mt.load_demo_source(
+        source=source,
+        categories=categories,
+        slice_start=slice_start,
+        slice_end=slice_end,
+        clips=clips,
+        on_progress=on_progress,
+    )
 
-    for i, (audio_path, meta) in enumerate(audio_files):
-        on_progress(
-            "embedding",
-            f"Embedding {meta['category']}: {audio_path.name} ({i + 1}/{total})",
-            i + 1,
-            total,
-        )
+    # Stamp the demo origin on all clips
+    demo_origin: dict[str, Any] = {"importer": "demo", "params": {"name": dataset_name}}
+    for clip in clips.values():
+        clip["origin"] = demo_origin
 
-        embedding = audio_mt.embed_media(audio_path)
-        if embedding is None:
-            continue
-
-        with open(audio_path, "rb") as f:
-            wav_bytes = f.read()
-
-        media_fields = audio_mt.load_clip_data(audio_path)
-
-        clips[clip_id] = {
-            "id": clip_id,
-            "type": "audio",
-            "duration": media_fields["duration"],
-            "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
-            "embedding": embedding,
-            "clip_bytes": wav_bytes,
-            "filename": audio_path.name,
-            "category": meta["category"],
-            "origin": demo_origin,
-            "origin_name": audio_path.name,
+    # Build the pickle cache payload
+    # For types with external media dirs (audio, video), exclude clip_bytes
+    # from the pickle and store the dir path so reloading can find the files.
+    if external_dir is not None:
+        pkl_data: dict[str, Any] = {
+            "name": dataset_name,
+            "clips": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items() if k != "clip_bytes"}
+                for cid, clip in clips.items()
+            },
+            mt.dir_key: external_dir,
         }
-        clip_id += 1
+    else:
+        pkl_data = {
+            "name": dataset_name,
+            "clips": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
+                for cid, clip in clips.items()
+            },
+        }
 
-    # Save for future use
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
     with open(pkl_file, "wb") as f:
-        pickle.dump(
-            {
-                "name": dataset_name,
-                "clips": {
-                    cid: {
-                        k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items() if k != "clip_bytes"
-                    }
-                    for cid, clip in clips.items()
-                },
-                "audio_dir": str(audio_dir.absolute()),
-            },
-            f,
-        )
+        pickle.dump(pkl_data, f)
 
     on_progress("idle", f"Loaded {dataset_name} dataset")
 

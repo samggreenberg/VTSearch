@@ -6,20 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.config import (
-    CALTECH101_DOWNLOAD_SIZE_MB,
-    CALTECH256_DOWNLOAD_SIZE_MB,
-    CIFAR10_DOWNLOAD_SIZE_MB,
-    CLIPS_PER_CATEGORY,
-    CLIPS_PER_VIDEO_CATEGORY,
-    EMBEDDINGS_DIR,
-    ESC50_DOWNLOAD_SIZE_MB,
-    IMAGES_PER_CALTECH101_CATEGORY,
-    IMAGES_PER_CALTECH256_CATEGORY,
-    IMAGES_PER_CIFAR10_CATEGORY,
-    TEXTS_PER_CATEGORY,
-    UCF101_SUBSET_DOWNLOAD_SIZE_MB,
-)
+from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.utils import (
     bad_votes,
@@ -28,7 +15,6 @@ from vtsearch.utils import (
     clips,
     get_progress,
     good_votes,
-    label_history,
     update_progress,
 )
 
@@ -38,6 +24,36 @@ datasets_bp = Blueprint("datasets", __name__)
 # frontend.  They are excluded from the generic /api/dataset/importers list
 # so the frontend doesn't render a duplicate panel for them.
 _BUILTIN_IMPORTER_NAMES = {"pickle", "combine_datasets"}
+
+
+@datasets_bp.route("/api/media-types")
+def media_types_list():
+    """Return all registered media types with their metadata.
+
+    The frontend uses this endpoint to render media type UI dynamically
+    (icons, tab titles, clip rendering modes, etc.) instead of hardcoding
+    the available media types.
+
+    Returns a JSON object::
+
+        {
+          "media_types": [
+            {
+              "type_id": "audio",
+              "name": "Audio",
+              "icon": "🔊",
+              "tab_title": "Sounds",
+              "folder_import_name": "sounds",
+              "loops": true,
+              "file_extensions": ["*.wav", "*.mp3", ...]
+            },
+            ...
+          ]
+        }
+    """
+    from vtsearch.media import all_types_dict
+
+    return jsonify({"media_types": all_types_dict()})
 
 
 def _load_embedder_for_clips() -> None:
@@ -294,12 +310,22 @@ def demo_dataset_list():
     * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
+    # Only include demo datasets whose media type is currently registered.
+    from vtsearch.media import get as media_get
+
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
+        media_type = dataset_info.get("media_type", "audio")
+
+        # Skip datasets whose media type is not loaded into VTSearch.
+        try:
+            media_get(media_type)
+        except KeyError:
+            continue
+
         pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
         has_pkl = pkl_file.exists()
 
-        media_type = dataset_info.get("media_type", "audio")
         required_folder = dataset_info.get("required_folder")
         has_source = _folder_has_content(required_folder)
 
@@ -316,51 +342,24 @@ def demo_dataset_list():
             else:
                 status = "needs_download"
 
-        # Calculate number of files
+        # Calculate number of files from slice parameters
         num_categories = len(dataset_info["categories"])
-        image_source = dataset_info.get("source", "")
         slice_start = dataset_info.get("slice_start", 0)
         slice_end = dataset_info.get("slice_end")
-
-        if media_type == "video":
-            per_cat = CLIPS_PER_VIDEO_CATEGORY
-        elif media_type == "image":
-            if image_source == "caltech101":
-                per_cat = IMAGES_PER_CALTECH101_CATEGORY
-            elif image_source == "caltech256":
-                per_cat = IMAGES_PER_CALTECH256_CATEGORY
-            else:
-                per_cat = IMAGES_PER_CIFAR10_CATEGORY
-        elif media_type == "paragraph":
-            per_cat = TEXTS_PER_CATEGORY
-        else:
-            per_cat = CLIPS_PER_CATEGORY
-
-        # Use slice parameters when set; otherwise fall back to the default per-category count.
         if slice_end is not None:
             per_cat = slice_end - slice_start
+        else:
+            per_cat = 40  # generic fallback
         num_files = num_categories * per_cat
 
-        # Calculate download size
+        # Calculate download size from the DemoDataset metadata
         if status == "ready":
             download_size_mb = pkl_file.stat().st_size / (1024 * 1024)
         elif status == "needs_embedding":
             download_size_mb = 0
         else:
-            # needs_download – estimate total download
-            if media_type == "video":
-                download_size_mb = UCF101_SUBSET_DOWNLOAD_SIZE_MB
-            elif media_type == "image":
-                if image_source == "caltech101":
-                    download_size_mb = CALTECH101_DOWNLOAD_SIZE_MB
-                elif image_source == "caltech256":
-                    download_size_mb = CALTECH256_DOWNLOAD_SIZE_MB
-                else:
-                    download_size_mb = CIFAR10_DOWNLOAD_SIZE_MB
-            elif media_type == "paragraph":
-                download_size_mb = 15  # scikit-learn downloads automatically
-            else:
-                download_size_mb = ESC50_DOWNLOAD_SIZE_MB
+            # Use the download_size_mb from DemoDataset metadata
+            download_size_mb = dataset_info.get("download_size_mb", 0)
 
         demos.append(
             {
@@ -371,7 +370,7 @@ def demo_dataset_list():
                 "num_files": num_files,
                 "download_size_mb": round(download_size_mb, 1),
                 "description": dataset_info.get("description", ""),
-                "media_type": dataset_info.get("media_type", "audio"),
+                "media_type": media_type,
                 "num_categories": num_categories,
             }
         )

@@ -22,6 +22,9 @@
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
+  // Media type metadata fetched from /api/media-types at startup.
+  // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
+  let mediaTypesMap = {};
   const clipList = document.getElementById("clip-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -314,15 +317,9 @@
 
     if (datasetLoaded) {
       showMainUI();
-      const mediaHeaderConfig = {
-        "audio":     { icon: "🔊", label: "audio" },
-        "video":     { icon: "🎬", label: "video" },
-        "image":     { icon: "🖼️", label: "image" },
-        "paragraph": { icon: "📄", label: "text" },
-      };
-      const mhc = mediaHeaderConfig[status.media_type];
-      datasetInfo.textContent = mhc
-        ? `${mhc.icon} ${status.num_clips} ${mhc.label} clips loaded`
+      const mtInfo = mediaTypesMap[status.media_type];
+      datasetInfo.textContent = mtInfo
+        ? `${mtInfo.icon} ${status.num_clips} ${mtInfo.name.toLowerCase()} clips loaded`
         : `${status.num_clips} clips loaded`;
     } else {
       showWelcomeScreen();
@@ -570,21 +567,16 @@
 
         demoDatasetsDiv.innerHTML = "";
 
-        // Group datasets by media type and display as sortable tables
-        const mediaOrder = ["video", "image", "audio", "paragraph"];
-        const mediaConfig = {
-          video:     { title: "Videos",  icon: "🎬" },
-          image:     { title: "Images",  icon: "🖼" },
-          audio:     { title: "Sounds",  icon: "🔊" },
-          paragraph: { title: "Texts",   icon: "📄" },
-        };
-
+        // Group datasets by media type and display as sortable tables.
+        // Media type metadata comes from the registry-driven mediaTypesMap.
         const grouped = {};
         data.datasets.forEach(ds => {
           const mt = ds.media_type || "audio";
           if (!grouped[mt]) grouped[mt] = [];
           grouped[mt].push(ds);
         });
+        // Use the registration order from the registry (fetched at startup)
+        const mediaOrder = Object.keys(mediaTypesMap).filter(mt => (grouped[mt] || []).length > 0);
 
         // Status sort order: ready=0, needs_embedding=1, needs_download=2
         const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
@@ -649,10 +641,10 @@
         }
 
         // Build tab bar and content sections
-        const availableTypes = mediaOrder.filter(mt => (grouped[mt] || []).length > 0);
+        const availableTypes = mediaOrder;
 
         // Fetch the user's favorite media type to pick the initial tab
-        let initialTab = availableTypes[0] || "audio";
+        let initialTab = availableTypes[0] || Object.keys(mediaTypesMap)[0] || "audio";
         try {
           const settingsRes = await fetch("/api/settings");
           if (settingsRes.ok) {
@@ -672,13 +664,13 @@
 
         availableTypes.forEach(mt => {
           const items = grouped[mt];
-          const cfg = mediaConfig[mt];
+          const mtInfo = mediaTypesMap[mt] || { icon: "📁", tab_title: mt };
 
           // Create tab button
           const tab = document.createElement("button");
           tab.className = "demo-tab";
           tab.dataset.mediaType = mt;
-          tab.textContent = `${cfg.icon} ${cfg.title}`;
+          tab.textContent = `${mtInfo.icon} ${mtInfo.tab_title}`;
           tab.addEventListener("click", () => {
             // Activate this tab, deactivate others
             tabBar.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
@@ -1190,7 +1182,7 @@
       return;
     }
 
-    const mediaIcons = { audio: "🔊", image: "🖼️", video: "🎬", paragraph: "📄" };
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
     favoritesList.innerHTML = favoriteDetectors.map(detector => {
       const icon = mediaIcons[detector.media_type] || "🔍";
       const created = detector.created_at
@@ -2573,8 +2565,9 @@
   }
 
   function thumbnailUrl(clip) {
-    if (clip.type === "image") return `/api/clips/${clip.id}/image`;
-    if (clip.type === "video") return `/api/clips/${clip.id}/video`;
+    if (clip.type === "image" || clip.type === "video") {
+      return `/api/clips/${clip.id}/media`;
+    }
     return "";
   }
 
@@ -2623,7 +2616,7 @@
       const useThumbnail = showThumbnailsLeft && clipSupportsThumbnail(c);
       if (useThumbnail) {
         div.className += " clip-item-thumb";
-        const poster = c.type === "video" ? ` poster="/api/clips/${c.id}/image"` : "";
+        const poster = c.type === "video" ? ` poster="/api/clips/${c.id}/media"` : "";
         if (c.type === "video") {
           html += `<video class="clip-thumbnail" src="${thumbnailUrl(c)}" muted preload="metadata"${poster}></video>`;
         } else {
@@ -2642,11 +2635,13 @@
       if (c.category && c.category !== "unknown") {
         subInfo.push(c.category);
       }
-      if (c.type === "audio" || c.type === "video") {
+      if (c.duration && c.duration > 0) {
         subInfo.push(`${c.duration.toFixed(1)}s`);
-      } else if (c.type === "image" && c.width && c.height) {
+      }
+      if (c.width && c.height) {
         subInfo.push(`${c.width}×${c.height}`);
-      } else if (c.type === "paragraph" && c.word_count) {
+      }
+      if (c.word_count) {
         subInfo.push(`${c.word_count} words`);
       }
       html += `<div class="sub">${subInfo.join(' &middot; ')}</div>`;
@@ -2695,33 +2690,46 @@
     if (c.category && c.category !== "unknown") {
       metaInfo.push(c.category);
     }
-    if (mediaType === "audio" || mediaType === "video") {
+    // Use media type metadata from the registry for duration/details display
+    const mtInfo = mediaTypesMap[mediaType];
+    if (c.duration && c.duration > 0) {
       metaInfo.push(`${c.duration.toFixed(1)}s`);
     }
-    if (mediaType === "image" && c.width && c.height) {
+    if (c.width && c.height) {
       metaInfo.push(`${c.width}×${c.height}`);
     }
-    if (mediaType === "paragraph" && c.word_count) {
+    if (c.word_count) {
       metaInfo.push(`${c.word_count} words`);
     }
     metaInfo.push(`${(c.file_size / 1024).toFixed(1)} KB`);
 
-    // Render media player based on media type
+    // Render media player based on media type.
+    // Known types get specialised players; new/unknown types fall back to
+    // the generic /api/clips/{id}/media endpoint.
     let playerHTML = '';
     if (mediaType === "video") {
-      playerHTML = `<video controls loop autoplay src="/api/clips/${c.id}/video" id="clip-video" aria-label="${escapeHtml(c.filename || 'Video clip')}" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+      playerHTML = `<video controls loop autoplay src="/api/clips/${c.id}/media" id="clip-video" aria-label="${escapeHtml(c.filename || 'Video clip')}" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
     } else if (mediaType === "image") {
-      playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><img src="/api/clips/${c.id}/image" id="clip-image" alt="${escapeHtml(c.filename || 'Image clip')}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></div>`;
+      playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><img src="/api/clips/${c.id}/media" id="clip-image" alt="${escapeHtml(c.filename || 'Image clip')}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></div>`;
     } else if (mediaType === "paragraph") {
       playerHTML = `
         <div id="clip-paragraph" style="max-width: 600px; max-height: 400px; overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); white-space: pre-wrap; line-height: 1.6; text-align: left;">
           Loading...
         </div>`;
-    } else {
+    } else if (mediaType === "audio") {
       // Audio/Sound
       playerHTML = `
         <canvas id="waveform-canvas" width="600" height="120" role="img" aria-label="Audio waveform visualization"></canvas>
-        <audio controls controlslist="nodownload" loop autoplay src="/api/clips/${c.id}/audio" id="clip-audio" aria-label="${escapeHtml(c.filename || 'Audio clip')}"></audio>`;
+        <audio controls controlslist="nodownload" loop autoplay src="/api/clips/${c.id}/media" id="clip-audio" aria-label="${escapeHtml(c.filename || 'Audio clip')}"></audio>`;
+    } else {
+      // Unknown/new media type: try to render via generic endpoint.
+      // If it loops, use a video element; otherwise use a generic embed.
+      const loops = mtInfo && mtInfo.loops;
+      if (loops) {
+        playerHTML = `<video controls loop autoplay src="/api/clips/${c.id}/media" id="clip-video" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+      } else {
+        playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><object data="/api/clips/${c.id}/media" style="max-width: 100%; max-height: 100%; border: 1px solid var(--border); border-radius: 8px;">${escapeHtml(c.filename || 'Media clip')}</object></div>`;
+      }
     }
 
     center.innerHTML = `
@@ -2745,19 +2753,19 @@
         </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">Media Type</span>
-          <span class="metadata-value">${mediaType}</span>
+          <span class="metadata-value">${mtInfo ? mtInfo.name : mediaType}</span>
         </div>
-        ${(mediaType === 'audio' || mediaType === 'video') ? `
+        ${(c.duration && c.duration > 0) ? `
         <div class="metadata-item">
           <span class="metadata-label">Duration</span>
           <span class="metadata-value">${c.duration.toFixed(1)}s</span>
         </div>` : ''}
-        ${(mediaType === 'image' && c.width && c.height) ? `
+        ${(c.width && c.height) ? `
         <div class="metadata-item">
           <span class="metadata-label">Dimensions</span>
           <span class="metadata-value">${c.width}×${c.height}</span>
         </div>` : ''}
-        ${(mediaType === 'paragraph' && c.word_count) ? `
+        ${(c.word_count) ? `
         <div class="metadata-item">
           <span class="metadata-label">Word Count</span>
           <span class="metadata-value">${c.word_count}</span>
@@ -2804,7 +2812,7 @@
       if (paragraphController) paragraphController.abort();
       paragraphController = new AbortController();
       const expectedId = c.id;
-      fetch(`/api/clips/${c.id}/paragraph`, { signal: paragraphController.signal })
+      fetch(`/api/clips/${c.id}/media`, { signal: paragraphController.signal })
         .then(res => res.json())
         .then(data => {
           if (selected !== expectedId) return; // selection changed, discard stale response
@@ -2903,7 +2911,7 @@
 
     try {
       // Fetch audio data
-      const response = await fetch(`/api/clips/${clipId}/audio`);
+      const response = await fetch(`/api/clips/${clipId}/media`);
       const arrayBuffer = await response.arrayBuffer();
 
       // Decode audio data (reuse a single AudioContext to avoid leaks)
@@ -4012,8 +4020,20 @@
     updateLabelCounts();
   };
 
+  // Fetch media type metadata from the registry so the UI is data-driven.
+  async function fetchMediaTypes() {
+    try {
+      const res = await fetch("/api/media-types");
+      const data = await res.json();
+      mediaTypesMap = {};
+      (data.media_types || []).forEach(mt => { mediaTypesMap[mt.type_id] = mt; });
+    } catch (_) {
+      // Fallback: leave empty, the UI will degrade gracefully.
+    }
+  }
+
   // Initialize
-  checkDatasetStatus().then(async () => {
+  fetchMediaTypes().then(() => checkDatasetStatus()).then(async () => {
     if (datasetLoaded) {
       await fetchClips();
       await fetchVotes();
