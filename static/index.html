@@ -140,17 +140,17 @@
   <aside class="panel-right" aria-label="Labels">
     <!-- import-file removed: label import now uses the label importer modal -->
     <div class="progress-check-bar">
-      <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness">
+      <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness" title="Has the model stopped learning over time?">
         <span class="indicator-dot" aria-hidden="true"></span>
         <span class="indicator-label">Smart</span>
         <span class="indicator-subtext" id="smart-subtext"></span>
       </button>
-      <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability">
+      <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability" title="Has the model stopped changing predicted labels?">
         <span class="indicator-dot" aria-hidden="true"></span>
         <span class="indicator-label">Stable</span>
         <span class="indicator-subtext" id="stable-subtext"></span>
       </button>
-      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Span level: diversity tree coverage">
+      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Span level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
         <span class="indicator-dot" aria-hidden="true"></span>
         <span class="indicator-label">Span</span>
         <span class="indicator-subtext" id="span-subtext"></span>
