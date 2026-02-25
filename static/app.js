@@ -694,7 +694,7 @@
           // Create section (table)
           const section = document.createElement("div");
           section.className = "demo-section";
-          section._demoSort = { key: "label", asc: true };
+          section._demoSort = { key: "num_files", asc: true };
           section.style.display = "none";
 
           const headerRow = sortColumns.map(col =>
