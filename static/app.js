@@ -648,21 +648,64 @@
           });
         }
 
-        mediaOrder.forEach(mt => {
-          const items = grouped[mt] || [];
-          if (!items.length) return;
+        // Build tab bar and content sections
+        const availableTypes = mediaOrder.filter(mt => (grouped[mt] || []).length > 0);
+
+        // Fetch the user's favorite media type to pick the initial tab
+        let initialTab = availableTypes[0] || "audio";
+        try {
+          const settingsRes = await fetch("/api/settings");
+          if (settingsRes.ok) {
+            const settingsData = await settingsRes.json();
+            const fav = settingsData.favorite_media_type;
+            if (fav && availableTypes.includes(fav)) {
+              initialTab = fav;
+            }
+          }
+        } catch (_) { /* ignore – just use first available tab */ }
+
+        const tabBar = document.createElement("div");
+        tabBar.className = "demo-tab-bar";
+        demoDatasetsDiv.appendChild(tabBar);
+
+        const sections = {};
+
+        availableTypes.forEach(mt => {
+          const items = grouped[mt];
           const cfg = mediaConfig[mt];
 
+          // Create tab button
+          const tab = document.createElement("button");
+          tab.className = "demo-tab";
+          tab.dataset.mediaType = mt;
+          tab.textContent = `${cfg.icon} ${cfg.title}`;
+          tab.addEventListener("click", () => {
+            // Activate this tab, deactivate others
+            tabBar.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
+            Object.keys(sections).forEach(k => {
+              sections[k].style.display = k === mt ? "" : "none";
+            });
+            // Persist favorite media type
+            fetch("/api/settings", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ favorite_media_type: mt }),
+            }).catch(() => {});
+          });
+          tabBar.appendChild(tab);
+
+          // Create section (table)
           const section = document.createElement("div");
           section.className = "demo-section";
           section._demoSort = { key: "label", asc: true };
+          section.style.display = "none";
 
           const headerRow = sortColumns.map(col =>
             `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
           ).join("");
 
           section.innerHTML = `
-            <div class="demo-section-header">${cfg.icon} ${cfg.title}</div>
             <table class="demo-table">
               <thead><tr>${headerRow}</tr></thead>
               <tbody></tbody>
@@ -683,8 +726,16 @@
           });
 
           renderTable(items, section);
+          sections[mt] = section;
           demoDatasetsDiv.appendChild(section);
         });
+
+        // Activate the initial tab
+        const initialTabBtn = tabBar.querySelector(`.demo-tab[data-media-type="${initialTab}"]`);
+        if (initialTabBtn) {
+          initialTabBtn.classList.add("active");
+          sections[initialTab].style.display = "";
+        }
       } catch (e) {
         demoDatasetsDiv.innerHTML = `<div style="color:var(--color-bad); text-align:center;">Error loading demo datasets: ${e.message}</div>`;
       }

@@ -220,7 +220,37 @@ class TestSettingsModule:
         assert defaults["safe_thresholds"] is False
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
+        assert defaults["favorite_media_type"] == ""
         assert "favorite_processors" not in defaults
+
+    def test_get_set_favorite_media_type(self, isolated_settings):
+        settings_mod.set_favorite_media_type("audio")
+        assert settings_mod.get_favorite_media_type() == "audio"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["favorite_media_type"] == "audio"
+
+    def test_favorite_media_type_default(self):
+        assert settings_mod.get_favorite_media_type() == ""
+
+    def test_favorite_media_type_invalid(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_favorite_media_type("invalid_type")
+
+    def test_favorite_media_type_clear(self):
+        settings_mod.set_favorite_media_type("video")
+        settings_mod.set_favorite_media_type("")
+        assert settings_mod.get_favorite_media_type() == ""
+
+    def test_favorite_media_type_persists_across_reset(self, isolated_settings):
+        settings_mod.set_favorite_media_type("image")
+        settings_mod.reset()
+        assert settings_mod.get_favorite_media_type() == "image"
+
+    def test_favorite_media_type_all_valid_types(self):
+        for mt in ("audio", "image", "paragraph", "video"):
+            settings_mod.set_favorite_media_type(mt)
+            assert settings_mod.get_favorite_media_type() == mt
 
     def test_corrupt_settings_file(self, isolated_settings):
         isolated_settings.write_text("not json!!!")
@@ -474,6 +504,7 @@ class TestSettingsAPI:
         assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
+        assert data["favorite_media_type"] == ""
         assert "favorite_processors" not in data
 
     def test_update_safe_thresholds(self, client):
@@ -527,3 +558,33 @@ class TestSettingsAPI:
         data = res.get_json()
         assert "show_thumbnails_left" in data
         assert "show_thumbnails_right" in data
+
+    def test_update_favorite_media_type(self, client):
+        res = client.put("/api/settings", json={"favorite_media_type": "audio"})
+        assert res.status_code == 200
+        assert res.get_json()["favorite_media_type"] == "audio"
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["favorite_media_type"] == "audio"
+
+    def test_update_favorite_media_type_all_types(self, client):
+        for mt in ("audio", "image", "paragraph", "video"):
+            res = client.put("/api/settings", json={"favorite_media_type": mt})
+            assert res.status_code == 200
+            assert res.get_json()["favorite_media_type"] == mt
+
+    def test_update_favorite_media_type_clear(self, client):
+        client.put("/api/settings", json={"favorite_media_type": "video"})
+        res = client.put("/api/settings", json={"favorite_media_type": ""})
+        assert res.status_code == 200
+        assert res.get_json()["favorite_media_type"] == ""
+
+    def test_update_favorite_media_type_invalid(self, client):
+        res = client.put("/api/settings", json={"favorite_media_type": "invalid"})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_favorite_media_type(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert "favorite_media_type" in res.get_json()
