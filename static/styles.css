@@ -414,7 +414,6 @@ video { max-width: 600px; max-height: 400px; }
 .progress-stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
 .progress-stat-value { font-size: 1.2rem; color: var(--accent); font-weight: bold; }
 .progress-recommendation { background: var(--bg-hover); padding: 12px; border-radius: 4px; border-left: 3px solid var(--accent); margin-top: 16px; }
-.progress-recommendation h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 4px; }
 .progress-recommendation p { font-size: 0.85rem; color: var(--text-secondary); margin: 0; }
 
 /* Custom VTSearch dialog */

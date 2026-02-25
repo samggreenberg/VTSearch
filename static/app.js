@@ -3722,8 +3722,6 @@
     document.getElementById("smart-section").style.display = "none";
     document.getElementById("stable-section").style.display = "none";
     document.getElementById("span-section").style.display = "";
-    document.getElementById("recommendation-text").textContent =
-      sp && sp.reason ? sp.reason : "No span data available.";
     document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
 
     pauseActiveMedia();
@@ -3812,9 +3810,6 @@
       }
     }
 
-    // Generate recommendation
-    const recommendation = generateRecommendation(data);
-    document.getElementById("recommendation-text").textContent = recommendation;
   }
 
   function renderErrorCostChart(errorCostData) {
@@ -4130,44 +4125,6 @@
     ctx.textAlign = "right";
     ctx.fillText(maxLevel.toFixed(1), padding.left - 5, padding.top + 5);
     ctx.fillText(minLevel.toFixed(1), padding.left - 5, padding.top + chartHeight + 5);
-  }
-
-  function generateRecommendation(data) {
-    const errorCostData = data.error_cost_over_time;
-    const stabilityData = data.stability_over_time;
-
-    if (errorCostData.length < 5) {
-      return "Keep labeling! You need more labels to assess progress (at least 5 training steps).";
-    }
-
-    // Check if error cost has plateaued (last 30% of data)
-    const last30PercentCount = Math.max(3, Math.floor(errorCostData.length * 0.3));
-    const recentErrorCosts = errorCostData.slice(-last30PercentCount).map(d => d.error_cost);
-    const errorCostRange = Math.max(...recentErrorCosts) - Math.min(...recentErrorCosts);
-    const avgErrorCost = recentErrorCosts.reduce((a, b) => a + b, 0) / recentErrorCosts.length;
-    const errorCostStability = errorCostRange / (avgErrorCost || 1);
-
-    // Check if prediction flip *rate* has decreased (scales with dataset size)
-    const recentStability = stabilityData.slice(-last30PercentCount);
-    const recentFlipRates = recentStability.map(d => {
-      const nUnlabeled = d.num_unlabeled || 0;
-      return nUnlabeled > 0 ? d.num_flips / nUnlabeled : 0;
-    });
-    const avgFlipRate = recentFlipRates.reduce((a, b) => a + b, 0) / (recentFlipRates.length || 1);
-
-    let recommendation = "";
-
-    if (errorCostStability < 0.1 && avgFlipRate < 0.03) {
-      recommendation = "🛑 STOP LABELING: Both error cost and predictions have stabilized. Additional labels are unlikely to improve the model significantly. You've reached a good stopping point!";
-    } else if (errorCostStability < 0.15) {
-      recommendation = "⚠️ CONSIDER STOPPING: Error cost has mostly plateaued. You may be approaching diminishing returns. Consider stopping or labeling a few more diverse examples.";
-    } else if (avgFlipRate < 0.02) {
-      recommendation = "⚠️ PREDICTIONS STABLE: Predictions on unlabeled clips aren't changing much. The model's decisions are solidifying. Consider whether additional labels will help.";
-    } else {
-      recommendation = "✅ KEEP LABELING: The model is still learning! Both error cost and predictions are changing, indicating that new labels are improving the model.";
-    }
-
-    return recommendation;
   }
 
   // Modify fetchVotes to update label counts
