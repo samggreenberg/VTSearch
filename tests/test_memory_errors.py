@@ -1,0 +1,253 @@
+"""Tests for graceful MemoryError handling during dataset loading."""
+
+import gc
+import pickle
+import threading
+import time
+from pathlib import Path
+from unittest import mock
+
+import numpy as np
+import pytest
+
+import app as app_module
+from vtsearch.utils import clips, clear_all, get_progress, update_progress
+from vtsearch.utils.state import clear_clips
+
+
+class TestClearClipsGarbageCollection:
+    """clear_clips() should call gc.collect() to free old dataset memory."""
+
+    def test_clear_clips_calls_gc_collect(self):
+        with mock.patch("vtsearch.utils.state.gc.collect") as mock_gc:
+            clear_clips()
+            mock_gc.assert_called_once()
+
+    def test_clear_clips_empties_dict(self):
+        clips[999] = {"id": 999, "type": "audio", "embedding": np.zeros(10)}
+        clear_clips()
+        assert len(clips) == 0
+        # Restore test clips
+        app_module.init_clips()
+
+
+class TestPickleMemoryError:
+    """load_dataset_from_pickle should handle MemoryError gracefully."""
+
+    def test_pickle_load_oom_raises_with_message(self, tmp_path):
+        """If pickle.load itself OOMs, a clear MemoryError is raised."""
+        from vtsearch.datasets.loader import load_dataset_from_pickle
+
+        pkl = tmp_path / "big.pkl"
+        pkl.write_bytes(pickle.dumps({"clips": {}}))
+
+        target: dict = {}
+        with mock.patch("vtsearch.datasets.loader.pickle.load", side_effect=MemoryError):
+            with pytest.raises(MemoryError, match="too large for available RAM"):
+                load_dataset_from_pickle(pkl, target)
+
+        assert len(target) == 0
+
+    def test_pickle_clip_loop_oom_clears_clips(self, tmp_path):
+        """If MemoryError occurs during clip processing, clips are cleared."""
+        from vtsearch.datasets.loader import load_dataset_from_pickle
+
+        # Create a pickle with several clips
+        clips_data = {}
+        for i in range(1, 6):
+            clips_data[i] = {
+                "type": "audio",
+                "embedding": [0.0] * 10,
+                "clip_bytes": b"\x00" * 100,
+                "filename": f"clip_{i}.wav",
+                "md5": f"md5_{i}",
+            }
+        pkl = tmp_path / "medium.pkl"
+        pkl.write_bytes(pickle.dumps({"clips": clips_data}))
+
+        target: dict = {}
+
+        # Make np.array raise MemoryError on the 3rd call
+        call_count = 0
+        original_np_array = np.array
+
+        def oom_on_third_call(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 3:
+                raise MemoryError("simulated OOM")
+            return original_np_array(*args, **kwargs)
+
+        with mock.patch("vtsearch.datasets.loader.np.array", side_effect=oom_on_third_call):
+            with pytest.raises(MemoryError, match="Out of memory after loading"):
+                load_dataset_from_pickle(pkl, target)
+
+        # Clips should have been cleared on error
+        assert len(target) == 0
+
+    def test_pickle_data_freed_after_successful_load(self, tmp_path):
+        """After a successful pickle load, the raw data is released via gc."""
+        from vtsearch.datasets.loader import load_dataset_from_pickle
+
+        clips_data = {
+            1: {
+                "type": "paragraph",
+                "embedding": [0.0] * 10,
+                "clip_string": "hello",
+                "filename": "t.txt",
+                "md5": "abc",
+            }
+        }
+        pkl = tmp_path / "small.pkl"
+        pkl.write_bytes(pickle.dumps({"clips": clips_data}))
+
+        target: dict = {}
+        with mock.patch("vtsearch.datasets.loader.gc.collect") as mock_gc:
+            load_dataset_from_pickle(pkl, target)
+            # gc.collect() should be called after building clips
+            assert mock_gc.call_count >= 1
+
+        assert len(target) == 1
+
+
+class TestFolderMemoryError:
+    """load_dataset_from_folder should handle MemoryError gracefully."""
+
+    def test_folder_oom_clears_clips_and_raises(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        # Create some dummy files
+        for i in range(3):
+            (tmp_path / f"clip_{i}.wav").write_bytes(b"\x00" * 100)
+
+        target: dict = {}
+        progress_calls = []
+
+        def mock_progress(status, msg="", current=0, total=0, error=None):
+            progress_calls.append((status, msg))
+
+        mock_mt = mock.MagicMock()
+        mock_mt.file_extensions = ["*.wav"]
+        mock_mt.type_id = "audio"
+        mock_mt._model = True
+
+        call_count = 0
+
+        def embed_then_oom(path):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise MemoryError("simulated OOM")
+            return np.zeros(10)
+
+        mock_mt.embed_media.side_effect = embed_then_oom
+        mock_mt.load_clip_data.return_value = {"clip_bytes": b"\x00", "duration": 1}
+
+        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mock_mt):
+            with pytest.raises(MemoryError, match="Out of memory after loading"):
+                load_dataset_from_folder(
+                    tmp_path, "sounds", target, on_progress=mock_progress,
+                )
+
+        assert len(target) == 0
+
+
+class TestCombineMemoryError:
+    """CombineDatasetsImporter.run should handle MemoryError gracefully."""
+
+    def test_combine_oom_clears_and_raises(self, tmp_path):
+        from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
+
+        # Create two small pickles
+        for name in ("a.pkl", "b.pkl"):
+            clips_data = {
+                1: {
+                    "type": "audio",
+                    "embedding": [0.0] * 10,
+                    "clip_bytes": b"\x00" * 100,
+                    "filename": f"{name}_clip.wav",
+                    "md5": f"md5_{name}",
+                }
+            }
+            (tmp_path / name).write_bytes(pickle.dumps({"clips": clips_data}))
+
+        importer = CombineDatasetsImporter()
+        target: dict = {}
+
+        # Make the second _load_clips_from_pickle call OOM
+        call_count = 0
+        real_load = None
+
+        def oom_second_load(path):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise MemoryError("simulated OOM")
+            from vtsearch.datasets.loader import load_dataset_from_pickle
+
+            temp: dict = {}
+            load_dataset_from_pickle(path, temp)
+            return temp
+
+        with mock.patch(
+            "vtsearch.datasets.importers.combine_datasets._load_clips_from_pickle",
+            side_effect=oom_second_load,
+        ):
+            with pytest.raises(MemoryError, match="Out of memory while combining"):
+                importer.run(
+                    {"datasets": [str(tmp_path / "a.pkl"), str(tmp_path / "b.pkl")]},
+                    target,
+                )
+
+        assert len(target) == 0
+
+
+class TestBackgroundImportMemoryError:
+    """The background import thread should report MemoryError to the user."""
+
+    def test_importer_background_oom_reports_error(self, client):
+        """When an importer OOMs, the progress endpoint shows a user-friendly error."""
+        from vtsearch.routes.datasets import _run_importer_in_background
+
+        mock_importer = mock.MagicMock()
+        mock_importer.run.side_effect = MemoryError("simulated")
+
+        # Reset progress
+        update_progress("idle", "")
+
+        _run_importer_in_background(mock_importer, {})
+
+        # Wait for the background thread to finish
+        time.sleep(0.5)
+
+        progress = get_progress()
+        assert progress["error"] is not None
+        assert "Out of memory" in progress["error"]
+        assert progress["status"] == "idle"
+
+        # Reinitialise clips for subsequent tests
+        app_module.init_clips()
+
+    def test_demo_load_oom_reports_error(self, client):
+        """When loading a demo dataset OOMs, the progress shows the error."""
+        update_progress("idle", "")
+
+        with mock.patch(
+            "vtsearch.routes.datasets.load_demo_dataset",
+            side_effect=MemoryError("simulated"),
+        ):
+            resp = client.post(
+                "/api/dataset/load-demo",
+                json={"name": list(app_module.DEMO_DATASETS.keys())[0]},
+            )
+            assert resp.status_code == 200
+
+            # Wait for background thread
+            time.sleep(0.5)
+
+            progress = get_progress()
+            assert progress["error"] is not None
+            assert "Out of memory" in progress["error"]
+
+        # Reinitialise clips for subsequent tests
+        app_module.init_clips()

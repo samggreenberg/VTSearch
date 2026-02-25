@@ -9,6 +9,7 @@ to use these functions outside the Flask app.
 """
 
 import csv
+import gc
 import hashlib
 import io
 import pickle
@@ -337,76 +338,84 @@ def load_dataset_from_folder(
     clip_id = 1
     total_files = len(media_files)
 
-    for i, file_path in enumerate(media_files):
-        on_progress(
-            "embedding",
-            f"Embedding {media_type} {file_path.name}...",
-            i + 1,
-            total_files,
+    try:
+        for i, file_path in enumerate(media_files):
+            on_progress(
+                "embedding",
+                f"Embedding {media_type} {file_path.name}...",
+                i + 1,
+                total_files,
+            )
+
+            if content_vectors and file_path.name in content_vectors:
+                embedding = content_vectors[file_path.name]
+            else:
+                embedding = mt.embed_media(file_path)
+                if embedding is None:
+                    continue
+
+            if thin:
+                # Thin mode: store file path reference, skip loading bytes.
+                # Use stat for file_size and streaming hash for MD5.
+                if content_md5s and file_path.name in content_md5s:
+                    md5 = content_md5s[file_path.name]
+                else:
+                    md5 = _streaming_md5(file_path)
+                clip_data: dict[str, Any] = {
+                    "id": clip_id,
+                    "type": mt.type_id,
+                    "file_size": file_path.stat().st_size,
+                    "md5": md5,
+                    "embedding": embedding,
+                    "filename": file_path.name,
+                    "category": "custom",
+                    "origin": origin,
+                    "origin_name": file_path.name,
+                    "clip_bytes": None,
+                    "clip_string": None,
+                    "media_path": str(file_path.resolve()),
+                    "duration": 0,
+                }
+            else:
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read()
+
+                if content_md5s and file_path.name in content_md5s:
+                    md5 = content_md5s[file_path.name]
+                else:
+                    md5 = hashlib.md5(file_bytes).hexdigest()
+
+                # Build the base clip dict
+                clip_data = {
+                    "id": clip_id,
+                    "type": mt.type_id,
+                    "file_size": len(file_bytes),
+                    "md5": md5,
+                    "embedding": embedding,
+                    "filename": file_path.name,
+                    "category": "custom",
+                    "origin": origin,
+                    "origin_name": file_path.name,
+                    # Null-out optional media fields so clips from different types
+                    # stored in the same dict have consistent keys.
+                    "clip_bytes": None,
+                    "clip_string": None,
+                    "media_path": str(file_path.resolve()),
+                    "duration": 0,
+                }
+
+                # Merge in media-specific fields from the media type
+                clip_data.update(mt.load_clip_data(file_path))
+
+            clips[clip_id] = clip_data
+            clip_id += 1
+    except MemoryError:
+        clips.clear()
+        gc.collect()
+        raise MemoryError(
+            f"Out of memory after loading {clip_id - 1} of {total_files} files. "
+            "Try a smaller dataset or free up system RAM."
         )
-
-        if content_vectors and file_path.name in content_vectors:
-            embedding = content_vectors[file_path.name]
-        else:
-            embedding = mt.embed_media(file_path)
-            if embedding is None:
-                continue
-
-        if thin:
-            # Thin mode: store file path reference, skip loading bytes.
-            # Use stat for file_size and streaming hash for MD5.
-            if content_md5s and file_path.name in content_md5s:
-                md5 = content_md5s[file_path.name]
-            else:
-                md5 = _streaming_md5(file_path)
-            clip_data: dict[str, Any] = {
-                "id": clip_id,
-                "type": mt.type_id,
-                "file_size": file_path.stat().st_size,
-                "md5": md5,
-                "embedding": embedding,
-                "filename": file_path.name,
-                "category": "custom",
-                "origin": origin,
-                "origin_name": file_path.name,
-                "clip_bytes": None,
-                "clip_string": None,
-                "media_path": str(file_path.resolve()),
-                "duration": 0,
-            }
-        else:
-            with open(file_path, "rb") as f:
-                file_bytes = f.read()
-
-            if content_md5s and file_path.name in content_md5s:
-                md5 = content_md5s[file_path.name]
-            else:
-                md5 = hashlib.md5(file_bytes).hexdigest()
-
-            # Build the base clip dict
-            clip_data = {
-                "id": clip_id,
-                "type": mt.type_id,
-                "file_size": len(file_bytes),
-                "md5": md5,
-                "embedding": embedding,
-                "filename": file_path.name,
-                "category": "custom",
-                "origin": origin,
-                "origin_name": file_path.name,
-                # Null-out optional media fields so clips from different types
-                # stored in the same dict have consistent keys.
-                "clip_bytes": None,
-                "clip_string": None,
-                "media_path": str(file_path.resolve()),
-                "duration": 0,
-            }
-
-            # Merge in media-specific fields from the media type
-            clip_data.update(mt.load_clip_data(file_path))
-
-        clips[clip_id] = clip_data
-        clip_id += 1
 
     on_progress("idle", f"Loaded {len(clips)} {media_type} clips from folder")
 
@@ -586,8 +595,15 @@ def load_dataset_from_pickle(
         ``None``.  (Formerly returned ``creation_info``; that field has been
         removed.)
     """
-    with open(file_path, "rb") as f:
-        data = pickle.load(f)
+    try:
+        with open(file_path, "rb") as f:
+            data = pickle.load(f)
+    except MemoryError:
+        gc.collect()
+        raise MemoryError(
+            f"Out of memory while reading {file_path.name}. "
+            "The pickle file is too large for available RAM."
+        )
 
     clips.clear()
 
@@ -618,145 +634,162 @@ def load_dataset_from_pickle(
 
     # Convert to the app's clip format
     missing_media = 0
-    for clip_id, clip_info in clips_data.items():
-        # Determine media type
-        media_type = clip_info.get("type", "audio")
+    loaded_count = 0
+    total_count = len(clips_data)
+    try:
+        for clip_id, clip_info in clips_data.items():
+            # Determine media type
+            media_type = clip_info.get("type", "audio")
 
-        if thin:
-            # ── Thin mode: skip bytes, store media_path if available ──
-            media_path: str | None = clip_info.get("media_path")
+            if thin:
+                # ── Thin mode: skip bytes, store media_path if available ──
+                media_path: str | None = clip_info.get("media_path")
 
-            # Try to resolve a media_path from the external directory
-            if not media_path:
-                dir_key = _dir_keys.get(media_type)
-                if dir_key and dir_key in data and "filename" in clip_info:
-                    candidate = Path(data[dir_key]) / clip_info["filename"]
-                    if candidate.exists():
-                        media_path = str(candidate.resolve())
+                # Try to resolve a media_path from the external directory
+                if not media_path:
+                    dir_key = _dir_keys.get(media_type)
+                    if dir_key and dir_key in data and "filename" in clip_info:
+                        candidate = Path(data[dir_key]) / clip_info["filename"]
+                        if candidate.exists():
+                            media_path = str(candidate.resolve())
 
-            # We still need the embedding to be useful
-            if "embedding" not in clip_info:
-                missing_media += 1
+                # We still need the embedding to be useful
+                if "embedding" not in clip_info:
+                    missing_media += 1
+                    continue
+
+                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
+                clip_data: dict[str, Any] = {
+                    "id": clip_id,
+                    "type": media_type,
+                    "duration": clip_info.get("duration", 0),
+                    "file_size": clip_info.get("file_size", 0),
+                    "md5": clip_info.get("md5", ""),
+                    "embedding": np.array(clip_info["embedding"]),
+                    "clip_bytes": None,
+                    "clip_string": None,
+                    "media_path": media_path,
+                    "filename": fname,
+                    "category": clip_info.get("category", "unknown"),
+                    "origin": clip_info.get("origin", fallback_origin),
+                    "origin_name": clip_info.get("origin_name", fname),
+                }
+                if media_type == "image":
+                    clip_data["width"] = clip_info.get("width")
+                    clip_data["height"] = clip_info.get("height")
+                elif media_type == "paragraph":
+                    clip_data["word_count"] = clip_info.get("word_count")
+                    clip_data["character_count"] = clip_info.get("character_count")
+
+                clips[clip_id] = clip_data
+                loaded_count += 1
                 continue
 
-            fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-            clip_data: dict[str, Any] = {
-                "id": clip_id,
-                "type": media_type,
-                "duration": clip_info.get("duration", 0),
-                "file_size": clip_info.get("file_size", 0),
-                "md5": clip_info.get("md5", ""),
-                "embedding": np.array(clip_info["embedding"]),
-                "clip_bytes": None,
-                "clip_string": None,
-                "media_path": media_path,
-                "filename": fname,
-                "category": clip_info.get("category", "unknown"),
-                "origin": clip_info.get("origin", fallback_origin),
-                "origin_name": clip_info.get("origin_name", fname),
-            }
-            if media_type == "image":
-                clip_data["width"] = clip_info.get("width")
-                clip_data["height"] = clip_info.get("height")
+            # ── Full mode (original behaviour) ──
+            # Load the actual media content.
+            # Support both new key names (clip_bytes/clip_string) and legacy
+            # per-media-type key names (wav_bytes/video_bytes/image_bytes/
+            # text_content) for backward compatibility with old pickles.
+            clip_bytes = None
+            clip_string = None
+            media_bytes = None
+            media_path = None
+
+            if media_type == "audio":
+                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("wav_bytes")
+                if clip_bytes is not None:
+                    media_bytes = clip_bytes
+                elif "filename" in clip_info and "audio_dir" in data:
+                    audio_path = Path(data["audio_dir"]) / clip_info["filename"]
+                    if audio_path.exists():
+                        with open(audio_path, "rb") as f:
+                            clip_bytes = f.read()
+                            media_bytes = clip_bytes
+                        media_path = str(audio_path.resolve())
+                    else:
+                        missing_media += 1
+
+            elif media_type == "video":
+                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("video_bytes")
+                if clip_bytes is not None:
+                    media_bytes = clip_bytes
+                elif "filename" in clip_info and "video_dir" in data:
+                    video_path = Path(data["video_dir"]) / clip_info["filename"]
+                    if video_path.exists():
+                        with open(video_path, "rb") as f:
+                            clip_bytes = f.read()
+                            media_bytes = clip_bytes
+                        media_path = str(video_path.resolve())
+                    else:
+                        missing_media += 1
+
+            elif media_type == "image":
+                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("image_bytes")
+                if clip_bytes is not None:
+                    media_bytes = clip_bytes
+                elif "filename" in clip_info and "image_dir" in data:
+                    image_path = Path(data["image_dir"]) / clip_info["filename"]
+                    if image_path.exists():
+                        with open(image_path, "rb") as f:
+                            clip_bytes = f.read()
+                            media_bytes = clip_bytes
+                        media_path = str(image_path.resolve())
+                    else:
+                        missing_media += 1
+
             elif media_type == "paragraph":
-                clip_data["word_count"] = clip_info.get("word_count")
-                clip_data["character_count"] = clip_info.get("character_count")
+                clip_string = clip_info.get("clip_string") or clip_info.get("text_content")
+                if clip_string is not None:
+                    media_bytes = clip_string.encode("utf-8")  # For MD5 hash
+                elif "filename" in clip_info and "text_dir" in data:
+                    text_path = Path(data["text_dir"]) / clip_info["filename"]
+                    if text_path.exists():
+                        with open(text_path, "r", encoding="utf-8") as f:
+                            clip_string = f.read()
+                            media_bytes = clip_string.encode("utf-8")
+                        media_path = str(text_path.resolve())
+                    else:
+                        missing_media += 1
 
-            clips[clip_id] = clip_data
-            continue
+            if media_bytes:
+                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
+                clip_data = {
+                    "id": clip_id,
+                    "type": media_type,
+                    "duration": clip_info.get("duration", 0),
+                    "file_size": clip_info.get("file_size", len(media_bytes)),
+                    "md5": clip_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+                    "embedding": np.array(clip_info["embedding"]),
+                    "clip_bytes": clip_bytes,
+                    "clip_string": clip_string,
+                    "media_path": media_path or clip_info.get("media_path"),
+                    "filename": fname,
+                    "category": clip_info.get("category", "unknown"),
+                    "origin": clip_info.get("origin", fallback_origin),
+                    "origin_name": clip_info.get("origin_name", fname),
+                }
+                # Add media-specific metadata
+                if media_type == "image":
+                    clip_data["width"] = clip_info.get("width")
+                    clip_data["height"] = clip_info.get("height")
+                elif media_type == "paragraph":
+                    clip_data["word_count"] = clip_info.get("word_count")
+                    clip_data["character_count"] = clip_info.get("character_count")
 
-        # ── Full mode (original behaviour) ──
-        # Load the actual media content.
-        # Support both new key names (clip_bytes/clip_string) and legacy
-        # per-media-type key names (wav_bytes/video_bytes/image_bytes/
-        # text_content) for backward compatibility with old pickles.
-        clip_bytes = None
-        clip_string = None
-        media_bytes = None
-        media_path = None
+                clips[clip_id] = clip_data
+                loaded_count += 1
+    except MemoryError:
+        clips.clear()
+        del data
+        gc.collect()
+        raise MemoryError(
+            f"Out of memory after loading {loaded_count} of {total_count} clips from "
+            f"{file_path.name}. Try a smaller dataset or free up system RAM."
+        )
 
-        if media_type == "audio":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("wav_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "audio_dir" in data:
-                audio_path = Path(data["audio_dir"]) / clip_info["filename"]
-                if audio_path.exists():
-                    with open(audio_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(audio_path.resolve())
-                else:
-                    missing_media += 1
-
-        elif media_type == "video":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("video_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "video_dir" in data:
-                video_path = Path(data["video_dir"]) / clip_info["filename"]
-                if video_path.exists():
-                    with open(video_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(video_path.resolve())
-                else:
-                    missing_media += 1
-
-        elif media_type == "image":
-            clip_bytes = clip_info.get("clip_bytes") or clip_info.get("image_bytes")
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif "filename" in clip_info and "image_dir" in data:
-                image_path = Path(data["image_dir"]) / clip_info["filename"]
-                if image_path.exists():
-                    with open(image_path, "rb") as f:
-                        clip_bytes = f.read()
-                        media_bytes = clip_bytes
-                    media_path = str(image_path.resolve())
-                else:
-                    missing_media += 1
-
-        elif media_type == "paragraph":
-            clip_string = clip_info.get("clip_string") or clip_info.get("text_content")
-            if clip_string is not None:
-                media_bytes = clip_string.encode("utf-8")  # For MD5 hash
-            elif "filename" in clip_info and "text_dir" in data:
-                text_path = Path(data["text_dir"]) / clip_info["filename"]
-                if text_path.exists():
-                    with open(text_path, "r", encoding="utf-8") as f:
-                        clip_string = f.read()
-                        media_bytes = clip_string.encode("utf-8")
-                    media_path = str(text_path.resolve())
-                else:
-                    missing_media += 1
-
-        if media_bytes:
-            fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-            clip_data = {
-                "id": clip_id,
-                "type": media_type,
-                "duration": clip_info.get("duration", 0),
-                "file_size": clip_info.get("file_size", len(media_bytes)),
-                "md5": clip_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-                "embedding": np.array(clip_info["embedding"]),
-                "clip_bytes": clip_bytes,
-                "clip_string": clip_string,
-                "media_path": media_path or clip_info.get("media_path"),
-                "filename": fname,
-                "category": clip_info.get("category", "unknown"),
-                "origin": clip_info.get("origin", fallback_origin),
-                "origin_name": clip_info.get("origin_name", fname),
-            }
-            # Add media-specific metadata
-            if media_type == "image":
-                clip_data["width"] = clip_info.get("width")
-                clip_data["height"] = clip_info.get("height")
-            elif media_type == "paragraph":
-                clip_data["word_count"] = clip_info.get("word_count")
-                clip_data["character_count"] = clip_info.get("character_count")
-
-            clips[clip_id] = clip_data
+    # Release the raw pickle data now that clips are built
+    del data
+    gc.collect()
 
     if missing_media > 0:
         print(f"WARNING: {missing_media} media files missing from {file_path}", flush=True)
