@@ -257,8 +257,8 @@ class TestProcessorImporterRegistry:
 # ---------------------------------------------------------------------------
 
 
-class TestLocalFileDetectorImporter:
-    """Tests for the LocalFileDetectorImporter (formerly DetectorFileProcessorImporter)."""
+class TestLocalFileProcessorImporter:
+    """Tests for the LocalFileProcessorImporter (formerly DetectorFileProcessorImporter)."""
 
     def _get_importer(self):
         from vtsearch.processors.importers.detector_file import PROCESSOR_IMPORTER
@@ -269,9 +269,9 @@ class TestLocalFileDetectorImporter:
         assert self._get_importer().name == "detector_file"
 
     def test_class_name(self):
-        from vtsearch.processors.importers.detector_file import LocalFileDetectorImporter
+        from vtsearch.processors.importers.detector_file import LocalFileProcessorImporter
 
-        assert isinstance(self._get_importer(), LocalFileDetectorImporter)
+        assert isinstance(self._get_importer(), LocalFileProcessorImporter)
 
     def test_display_name(self):
         assert "detector" in self._get_importer().display_name.lower()
@@ -355,7 +355,7 @@ class TestLocalFileDetectorImporter:
 # ---------------------------------------------------------------------------
 
 
-class TestServerFileDetectorImporter:
+class TestServerFileProcessorImporter:
     def _get_importer(self):
         from vtsearch.processors.importers.server_detector_file import PROCESSOR_IMPORTER
 
@@ -365,9 +365,9 @@ class TestServerFileDetectorImporter:
         assert self._get_importer().name == "server_detector_file"
 
     def test_class_name(self):
-        from vtsearch.processors.importers.server_detector_file import ServerFileDetectorImporter
+        from vtsearch.processors.importers.server_detector_file import ServerFileProcessorImporter
 
-        assert isinstance(self._get_importer(), ServerFileDetectorImporter)
+        assert isinstance(self._get_importer(), ServerFileProcessorImporter)
 
     def test_display_name(self):
         assert "server" in self._get_importer().display_name.lower()

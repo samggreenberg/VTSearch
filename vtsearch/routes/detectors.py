@@ -98,7 +98,7 @@ def export_detector():
 
 
 # ---------------------------------------------------------------------------
-# Server-side detector file export (ServerFileDetectorExtractor)
+# Server-side detector file export (ServerFileProcessorExporter)
 # ---------------------------------------------------------------------------
 
 #: Default directory for server-side detector files.

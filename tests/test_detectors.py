@@ -547,7 +547,7 @@ class TestAutoDetect:
 
 
 class TestServerDetectorExport:
-    """Tests for the ServerFileDetectorExtractor endpoints."""
+    """Tests for the ServerFileProcessorExporter endpoints."""
 
     @pytest.fixture(autouse=True)
     def _setup_server_dir(self, tmp_path, monkeypatch):

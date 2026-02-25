@@ -1170,7 +1170,7 @@
     });
   }
 
-  // Server-side detector export (ServerFileDetectorExtractor)
+  // Server-side detector export (ServerFileProcessorExporter)
   if (menuDetectorExportServer && menuDetectorStatus && burgerDropdown) {
     menuDetectorExportServer.addEventListener("click", async () => {
       menuDetectorStatus.textContent = "";

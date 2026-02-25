@@ -25,7 +25,7 @@ from typing import Any
 from vtsearch.processors.importers.base import ProcessorImporter, ProcessorImporterField
 
 
-class ServerFileDetectorImporter(ProcessorImporter):
+class ServerFileProcessorImporter(ProcessorImporter):
     """Import a processor (detector) from a JSON file on the server filesystem.
 
     The user provides a file path on the server (the machine running the
@@ -104,4 +104,4 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     return result
 
 
-PROCESSOR_IMPORTER = ServerFileDetectorImporter()
+PROCESSOR_IMPORTER = ServerFileProcessorImporter()
