@@ -67,7 +67,7 @@ def list_medias() -> Response:
     Returns:
         A JSON array of media metadata dicts, each containing: ``id``, ``type``,
         ``duration``, ``file_size``, ``filename``, ``category``, ``md5``, and
-        optionally ``frequency``.
+        optionally ``frequency``, ``width``, ``height``, ``word_count``.
     """
     result: list[dict[str, Any]] = []
     for c in medias.values():
@@ -80,9 +80,10 @@ def list_medias() -> Response:
             "category": c.get("category", "unknown"),
             "md5": c["md5"],
         }
-        # Only include frequency if it exists (for synthetic medias)
-        if "frequency" in c:
-            media_data["frequency"] = c["frequency"]
+        # Only include optional fields when present
+        for key in ("frequency", "width", "height", "word_count"):
+            if key in c:
+                media_data[key] = c[key]
         result.append(media_data)
     return jsonify(result)
 
