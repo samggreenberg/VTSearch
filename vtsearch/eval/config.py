@@ -199,55 +199,55 @@ _VIDEO_QUERIES = [
 
 EVAL_DATASETS: dict[str, dict] = {
     # Audio
-    "sounds_s": {
-        "demo_dataset": "sounds_s",
+    "esc50_s": {
+        "demo_dataset": "esc50_s",
         "queries": _SOUNDS_QUERIES,
     },
-    "sounds_m": {
-        "demo_dataset": "sounds_m",
+    "esc50_m": {
+        "demo_dataset": "esc50_m",
         "queries": _SOUNDS_QUERIES,
     },
-    "sounds_l": {
-        "demo_dataset": "sounds_l",
+    "esc50_l": {
+        "demo_dataset": "esc50_l",
         "queries": _SOUNDS_QUERIES,
     },
     # Image
-    "images_s": {
-        "demo_dataset": "images_s",
+    "caltech101_s": {
+        "demo_dataset": "caltech101_s",
         "queries": _IMAGES_QUERIES,
     },
-    "images_m": {
-        "demo_dataset": "images_m",
+    "caltech101_m": {
+        "demo_dataset": "caltech101_m",
         "queries": _IMAGES_QUERIES,
     },
-    "images_l": {
-        "demo_dataset": "images_l",
+    "caltech256_l": {
+        "demo_dataset": "caltech256_l",
         "queries": _IMAGES_L_QUERIES,
     },
     # Text
-    "paragraphs_s": {
-        "demo_dataset": "paragraphs_s",
+    "20newsgroups_s": {
+        "demo_dataset": "20newsgroups_s",
         "queries": _PARAGRAPHS_QUERIES,
     },
-    "paragraphs_m": {
-        "demo_dataset": "paragraphs_m",
+    "20newsgroups_m": {
+        "demo_dataset": "20newsgroups_m",
         "queries": _PARAGRAPHS_QUERIES,
     },
-    "paragraphs_l": {
-        "demo_dataset": "paragraphs_l",
+    "20newsgroups_l": {
+        "demo_dataset": "20newsgroups_l",
         "queries": _PARAGRAPHS_QUERIES,
     },
     # Video
-    "videos_s": {
-        "demo_dataset": "videos_s",
+    "ucf101_s": {
+        "demo_dataset": "ucf101_s",
         "queries": _VIDEO_QUERIES,
     },
-    "videos_m": {
-        "demo_dataset": "videos_m",
+    "ucf101_m": {
+        "demo_dataset": "ucf101_m",
         "queries": _VIDEO_QUERIES,
     },
-    "videos_l": {
-        "demo_dataset": "videos_l",
+    "ucf101_l": {
+        "demo_dataset": "ucf101_l",
         "queries": _VIDEO_QUERIES,
     },
 }

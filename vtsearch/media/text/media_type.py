@@ -97,13 +97,36 @@ class TextMediaType(MediaType):
         "guns",
     ]
 
+    # Categories for AG News (4 topic categories).
+    _AG_NEWS_CATEGORIES = [
+        "World",
+        "Sports",
+        "Business",
+        "Sci/Tech",
+    ]
+
+    # Categories for BBC News (5 topic categories).
+    _BBC_NEWS_CATEGORIES = [
+        "business",
+        "entertainment",
+        "politics",
+        "sport",
+        "tech",
+    ]
+
+    # Categories for IMDB Movie Reviews (2 sentiment classes).
+    _IMDB_CATEGORIES = [
+        "pos",
+        "neg",
+    ]
+
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
         return [
             DemoDataset(
-                id="paragraphs_s",
-                label="Newsgroup Topic Mix (S)",
+                id="20newsgroups_s",
+                label="20 Newsgroups (S)",
                 description=(
                     "~375 articles across 15 topics — sports, science, cars,"
                     " medicine, religion, politics, and more from the"
@@ -115,8 +138,8 @@ class TextMediaType(MediaType):
                 slice_end=25,
             ),
             DemoDataset(
-                id="paragraphs_m",
-                label="Newsgroup Topic Mix (M)",
+                id="20newsgroups_m",
+                label="20 Newsgroups (M)",
                 description=(
                     "~750 articles across 15 topics — sports, science, cars,"
                     " medicine, religion, politics, and more from the"
@@ -128,8 +151,8 @@ class TextMediaType(MediaType):
                 slice_end=75,
             ),
             DemoDataset(
-                id="paragraphs_l",
-                label="Newsgroup Topic Mix (L)",
+                id="20newsgroups_l",
+                label="20 Newsgroups (L)",
                 description=(
                     "~1875 articles across 15 topics — sports, science, cars,"
                     " medicine, religion, politics, and more from the"
@@ -139,6 +162,43 @@ class TextMediaType(MediaType):
                 source="ag_news_sample",
                 slice_start=75,
                 slice_end=200,
+            ),
+            DemoDataset(
+                id="ag_news_a",
+                label="AG News (A)",
+                description=(
+                    "~120,000 news articles across 4 categories — world, sports,"
+                    " business, and science/technology from the AG News corpus."
+                ),
+                categories=self._AG_NEWS_CATEGORIES,
+                source="ag_news",
+                slice_start=0,
+                slice_end=30000,
+            ),
+            DemoDataset(
+                id="bbc_news_a",
+                label="BBC News (A)",
+                description=(
+                    "~2,225 news articles across 5 categories — business,"
+                    " entertainment, politics, sport, and tech from the BBC"
+                    " News dataset."
+                ),
+                categories=self._BBC_NEWS_CATEGORIES,
+                source="bbc_news",
+                slice_start=0,
+                slice_end=445,
+            ),
+            DemoDataset(
+                id="imdb_a",
+                label="IMDB Movie Reviews (A)",
+                description=(
+                    "~50,000 movie reviews across 2 sentiment classes — positive"
+                    " and negative from the IMDB dataset."
+                ),
+                categories=self._IMDB_CATEGORIES,
+                source="imdb",
+                slice_start=0,
+                slice_end=25000,
             ),
         ]
 

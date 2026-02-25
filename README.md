@@ -34,18 +34,18 @@ Available demos:
 
 | Demo | Media type | Description |
 |------|-----------|-------------|
-| **sounds_s** | Audio | ~350 clips across all 50 ESC-50 sound categories — animals, nature, urban, domestic, and human sounds |
-| **sounds_m** | Audio | ~650 clips across all 50 ESC-50 sound categories |
-| **sounds_l** | Audio | ~1000 clips across all 50 ESC-50 sound categories |
-| **images_s** | Image | ~250 photographs across 25 Caltech-101 categories — animals, vehicles, household objects, and nature |
-| **images_m** | Image | ~500 photographs across 25 Caltech-101 categories |
-| **images_l** | Image | ~750 photographs across 25 Caltech-101 categories |
-| **paragraphs_s** | Text | ~375 articles across 15 topics from 20 Newsgroups — sports, science, politics, religion, and more |
-| **paragraphs_m** | Text | ~750 articles across 15 topics from 20 Newsgroups |
-| **paragraphs_l** | Text | ~1875 articles across 15 topics from 20 Newsgroups |
-| **videos_s** | Video | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
-| **videos_m** | Video | ~250 clips across 10 UCF-101 action categories (manual download) |
-| **videos_l** | Video | ~600 clips across 10 UCF-101 action categories (manual download) |
+| **esc50_s** | Audio | ~350 clips across all 50 ESC-50 sound categories — animals, nature, urban, domestic, and human sounds |
+| **esc50_m** | Audio | ~650 clips across all 50 ESC-50 sound categories |
+| **esc50_l** | Audio | ~1000 clips across all 50 ESC-50 sound categories |
+| **caltech101_s** | Image | ~500 photographs across 25 Caltech-101 categories — animals, vehicles, household objects, and nature |
+| **caltech101_m** | Image | ~1,000 photographs across 25 Caltech-101 categories |
+| **caltech256_l** | Image | ~2,000 photographs across 25 Caltech-256 categories — animals, landmarks, vehicles, and everyday objects |
+| **20newsgroups_s** | Text | ~375 articles across 15 topics from 20 Newsgroups — sports, science, politics, religion, and more |
+| **20newsgroups_m** | Text | ~750 articles across 15 topics from 20 Newsgroups |
+| **20newsgroups_l** | Text | ~1875 articles across 15 topics from 20 Newsgroups |
+| **ucf101_s** | Video | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
+| **ucf101_m** | Video | ~250 clips across 10 UCF-101 action categories (manual download) |
+| **ucf101_l** | Video | ~600 clips across 10 UCF-101 action categories (manual download) |
 
 You can also load your own data from pickle files or folders via the same menu.
 

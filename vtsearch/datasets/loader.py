@@ -1313,6 +1313,9 @@ def load_demo_dataset(
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
+        else:
+            raise ValueError(f"Unsupported image source: {image_source!r} for dataset {dataset_name!r}")
+
     elif media_type == "paragraph":
         # Handle paragraph datasets — use text media type from registry
         from vtsearch.media import get as media_get
@@ -1419,6 +1422,9 @@ def load_demo_dataset(
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
+        else:
+            raise ValueError(f"Unsupported text source: {paragraph_source!r} for dataset {dataset_name!r}")
+
     elif media_type == "video":
         # Handle video datasets
         video_source = dataset_info.get("source", "ucf101")
@@ -1514,7 +1520,13 @@ def load_demo_dataset(
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
+        else:
+            raise ValueError(f"Unsupported video source: {video_source!r} for dataset {dataset_name!r}")
+
     # Handle audio datasets (ESC-50 logic)
+    audio_source = dataset_info.get("source", "")
+    if audio_source and audio_source != "esc50":
+        raise ValueError(f"Unsupported audio source: {audio_source!r} for dataset {dataset_name!r}")
     from vtsearch.media import get as media_get
 
     audio_mt = media_get("audio")

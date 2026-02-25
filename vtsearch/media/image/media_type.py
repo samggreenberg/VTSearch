@@ -166,14 +166,121 @@ class ImageMediaType(MediaType):
         "246.wine-bottle",
     ]
 
+    # Categories for Oxford Flowers 102 (102 flower species).
+    _OXFORD_FLOWERS_CATEGORIES = [
+        "pink primrose", "hard-leaved pocket orchid", "canterbury bells",
+        "sweet pea", "english marigold", "tiger lily", "moon orchid",
+        "bird of paradise", "monkshood", "globe thistle", "snapdragon",
+        "colt's foot", "king protea", "spear thistle", "yellow iris",
+        "globe-flower", "purple coneflower", "peruvian lily", "balloon flower",
+        "giant white arum lily", "fire lily", "pincushion flower", "fritillary",
+        "red ginger", "grape hyacinth", "corn poppy", "prince of wales feathers",
+        "stemless gentian", "artichoke", "sweet william", "carnation",
+        "garden phlox", "love in the mist", "mexican aster", "alpine sea holly",
+        "ruby-lipped cattleya", "cape flower", "great masterwort", "siam tulip",
+        "lenten rose", "barbeton daisy", "daffodil", "sword lily", "poinsettia",
+        "bolero deep blue", "wallflower", "marigold", "buttercup", "oxeye daisy",
+        "common dandelion", "petunia", "wild pansy", "primula", "sunflower",
+        "pelargonium", "bishop of llandaff", "gaura", "geranium", "orange dahlia",
+        "pink-yellow dahlia", "cautleya spicata", "japanese anemone",
+        "black-eyed susan", "silverbush", "californian poppy", "osteospermum",
+        "spring crocus", "bearded iris", "windflower", "tree poppy", "gazania",
+        "azalea", "water lily", "rose", "thorn apple", "morning glory",
+        "passion flower", "lotus", "toad lily", "anthurium", "frangipani",
+        "clematis", "hibiscus", "columbine", "desert-rose", "tree mallow",
+        "magnolia", "cyclamen", "watercress", "canna lily", "hippeastrum",
+        "bee balm", "ball moss", "foxglove", "bougainvillea", "camellia",
+        "mallow", "mexican petunia", "bromelia", "blanket flower",
+        "trumpet creeper", "blackberry lily",
+    ]
+
+    # Categories for Food-101 (101 food categories).
+    _FOOD101_CATEGORIES = [
+        "apple_pie", "baby_back_ribs", "baklava", "beef_carpaccio",
+        "beef_tartare", "beet_salad", "beignets", "bibimbap", "bread_pudding",
+        "breakfast_burrito", "bruschetta", "caesar_salad", "cannoli",
+        "caprese_salad", "carrot_cake", "ceviche", "cheesecake",
+        "cheese_plate", "chicken_curry", "chicken_quesadilla", "chicken_wings",
+        "chocolate_cake", "chocolate_mousse", "churros", "clam_chowder",
+        "club_sandwich", "crab_cakes", "creme_brulee", "croque_madame",
+        "cup_cakes", "deviled_eggs", "donuts", "dumplings", "edamame",
+        "eggs_benedict", "escargots", "falafel", "filet_mignon",
+        "fish_and_chips", "foie_gras", "french_fries", "french_onion_soup",
+        "french_toast", "fried_calamari", "fried_rice", "frozen_yogurt",
+        "garlic_bread", "gnocchi", "greek_salad", "grilled_cheese_sandwich",
+        "grilled_salmon", "guacamole", "gyoza", "hamburger", "hot_and_sour_soup",
+        "hot_dog", "huevos_rancheros", "hummus", "ice_cream", "lasagna",
+        "lobster_bisque", "lobster_roll_sandwich", "macaroni_and_cheese",
+        "macarons", "miso_soup", "mussels", "nachos", "omelette",
+        "onion_rings", "oysters", "pad_thai", "paella", "pancakes",
+        "panna_cotta", "peking_duck", "pho", "pizza", "pork_chop",
+        "poutine", "prime_rib", "pulled_pork_sandwich", "ramen",
+        "ravioli", "red_velvet_cake", "risotto", "samosa",
+        "sashimi", "scallops", "seaweed_salad", "shrimp_and_grits",
+        "spaghetti_bolognese", "spaghetti_carbonara", "spring_rolls",
+        "steak", "strawberry_shortcake", "sushi", "tacos", "takoyaki",
+        "tiramisu", "tuna_tartare", "waffles",
+    ]
+
+    # Categories for EuroSAT (10 land use classes).
+    _EUROSAT_CATEGORIES = [
+        "AnnualCrop",
+        "Forest",
+        "HerbaceousVegetation",
+        "Highway",
+        "Industrial",
+        "Pasture",
+        "PermanentCrop",
+        "Residential",
+        "River",
+        "SeaLake",
+    ]
+
+    # Categories for Stanford Dogs (120 breeds).
+    _STANFORD_DOGS_CATEGORIES = [
+        "Chihuahua", "Japanese_spaniel", "Maltese_dog", "Pekinese", "Shih-Tzu",
+        "Blenheim_spaniel", "papillon", "toy_terrier", "Rhodesian_ridgeback",
+        "Afghan_hound", "basset", "beagle", "bloodhound", "bluetick",
+        "black-and-tan_coonhound", "Walker_hound", "English_foxhound",
+        "redbone", "borzoi", "Irish_wolfhound", "Italian_greyhound",
+        "whippet", "Ibizan_hound", "Norwegian_elkhound", "otterhound",
+        "Saluki", "Scottish_deerhound", "Weimaraner", "Staffordshire_bullterrier",
+        "American_Staffordshire_terrier", "Bedlington_terrier", "Border_terrier",
+        "Kerry_blue_terrier", "Irish_terrier", "Norfolk_terrier",
+        "Norwich_terrier", "Yorkshire_terrier", "wire-haired_fox_terrier",
+        "Lakeland_terrier", "Sealyham_terrier", "Airedale", "cairn",
+        "Australian_terrier", "Dandie_Dinmont", "Boston_bull", "miniature_schnauzer",
+        "giant_schnauzer", "standard_schnauzer", "Scotch_terrier",
+        "Tibetan_terrier", "silky_terrier", "soft-coated_wheaten_terrier",
+        "West_Highland_white_terrier", "Lhasa", "flat-coated_retriever",
+        "curly-coated_retriever", "golden_retriever", "Labrador_retriever",
+        "Chesapeake_Bay_retriever", "German_short-haired_pointer", "vizsla",
+        "English_setter", "Irish_setter", "Gordon_setter", "Brittany_spaniel",
+        "clumber", "English_springer", "Welsh_springer_spaniel",
+        "cocker_spaniel", "Sussex_spaniel", "Irish_water_spaniel", "kuvasz",
+        "schipperke", "groenendael", "malinois", "briard", "kelpie",
+        "komondor", "Old_English_sheepdog", "Shetland_sheepdog", "collie",
+        "Border_collie", "Bouvier_des_Flandres", "Rottweiler",
+        "German_shepherd", "Doberman", "miniature_pinscher",
+        "Greater_Swiss_Mountain_dog", "Bernese_mountain_dog",
+        "Appenzeller", "EntleBucher", "boxer", "bull_mastiff",
+        "Tibetan_mastiff", "French_bulldog", "Great_Dane",
+        "Saint_Bernard", "Eskimo_dog", "malamute", "Siberian_husky",
+        "affenpinscher", "basenji", "pug", "Leonberg", "Newfoundland",
+        "Great_Pyrenees", "Samoyed", "Pomeranian", "chow",
+        "keeshond", "Brabancon_griffon", "Pembroke", "Cardigan",
+        "toy_poodle", "miniature_poodle", "standard_poodle",
+        "Mexican_hairless", "dingo", "dhole", "African_hunting_dog",
+    ]
+
     @property
     def demo_datasets(self) -> list:
         cats101 = self._DEMO_CATEGORIES_CALTECH101
         cats256 = self._DEMO_CATEGORIES_CALTECH256
         return [
             DemoDataset(
-                id="images_s",
-                label="Caltech-101 Object Mix (S)",
+                id="caltech101_s",
+                label="Caltech-101 (S)",
                 description=(
                     "~500 photographs across 25 categories — animals, vehicles,"
                     " household objects, and nature from the Caltech-101 dataset."
@@ -184,8 +291,8 @@ class ImageMediaType(MediaType):
                 slice_end=20,
             ),
             DemoDataset(
-                id="images_m",
-                label="Caltech-101 Object Mix (M)",
+                id="caltech101_m",
+                label="Caltech-101 (M)",
                 description=(
                     "~1,000 photographs across 25 categories — animals, vehicles,"
                     " household objects, and nature from the Caltech-101 dataset."
@@ -196,8 +303,8 @@ class ImageMediaType(MediaType):
                 slice_end=60,
             ),
             DemoDataset(
-                id="images_l",
-                label="Caltech-256 Object Mix (L)",
+                id="caltech256_l",
+                label="Caltech-256 (L)",
                 description=(
                     "~2,000 photographs across 25 categories — animals, landmarks,"
                     " vehicles, and everyday objects from the Caltech-256 dataset."
@@ -206,6 +313,54 @@ class ImageMediaType(MediaType):
                 source="caltech256",
                 slice_start=0,
                 slice_end=80,
+            ),
+            DemoDataset(
+                id="oxford_flowers_102_a",
+                label="Oxford Flowers 102 (A)",
+                description=(
+                    "~8,189 photographs of 102 flower species — roses, sunflowers,"
+                    " orchids, daisies, and many more from the Oxford Flowers dataset."
+                ),
+                categories=self._OXFORD_FLOWERS_CATEGORIES,
+                source="oxford_flowers_102",
+                slice_start=0,
+                slice_end=80,
+            ),
+            DemoDataset(
+                id="food101_a",
+                label="Food-101 (A)",
+                description=(
+                    "~101,000 food photographs across 101 categories — sushi,"
+                    " pizza, steak, ice cream, and more from the Food-101 dataset."
+                ),
+                categories=self._FOOD101_CATEGORIES,
+                source="food101",
+                slice_start=0,
+                slice_end=1000,
+            ),
+            DemoDataset(
+                id="eurosat_a",
+                label="EuroSAT (A)",
+                description=(
+                    "~27,000 satellite images across 10 land use classes — forest,"
+                    " residential, industrial, river, and more from the EuroSAT dataset."
+                ),
+                categories=self._EUROSAT_CATEGORIES,
+                source="eurosat",
+                slice_start=0,
+                slice_end=2700,
+            ),
+            DemoDataset(
+                id="stanford_dogs_a",
+                label="Stanford Dogs (A)",
+                description=(
+                    "~20,580 photographs of 120 dog breeds — from Chihuahuas to"
+                    " Great Danes, from the Stanford Dogs dataset."
+                ),
+                categories=self._STANFORD_DOGS_CATEGORIES,
+                source="stanford_dogs",
+                slice_start=0,
+                slice_end=171,
             ),
         ]
 

@@ -136,14 +136,81 @@ class AudioMediaType(MediaType):
         "hand_saw",
     ]
 
+    # Categories for GTZAN Music Genre (10 genres, 100 clips each = 1000 total).
+    _GTZAN_CATEGORIES = [
+        "blues",
+        "classical",
+        "country",
+        "disco",
+        "hiphop",
+        "jazz",
+        "metal",
+        "pop",
+        "reggae",
+        "rock",
+    ]
+
+    # Categories for Google Speech Commands v2 (35 keywords).
+    _SPEECH_COMMANDS_CATEGORIES = [
+        "yes",
+        "no",
+        "up",
+        "down",
+        "left",
+        "right",
+        "on",
+        "off",
+        "stop",
+        "go",
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "bed",
+        "bird",
+        "cat",
+        "dog",
+        "happy",
+        "house",
+        "marvin",
+        "sheila",
+        "tree",
+        "wow",
+        "backward",
+        "follow",
+        "forward",
+        "learn",
+        "visual",
+    ]
+
+    # Categories for UrbanSound8K (10 classes).
+    _URBANSOUND8K_CATEGORIES = [
+        "air_conditioner",
+        "car_horn",
+        "children_playing",
+        "dog_bark",
+        "drilling",
+        "engine_idling",
+        "gun_shot",
+        "jackhammer",
+        "siren",
+        "street_music",
+    ]
+
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
         folder = DATA_DIR / "ESC-50-master" / "audio"
         return [
             DemoDataset(
-                id="sounds_s",
-                label="ESC-50 Sound Mix (S)",
+                id="esc50_s",
+                label="ESC-50 (S)",
                 description=(
                     "~350 clips across 50 sound categories — animals, nature,"
                     " urban, domestic, and human sounds from the ESC-50 collection."
@@ -154,8 +221,8 @@ class AudioMediaType(MediaType):
                 slice_end=7,
             ),
             DemoDataset(
-                id="sounds_m",
-                label="ESC-50 Sound Mix (M)",
+                id="esc50_m",
+                label="ESC-50 (M)",
                 description=(
                     "~650 clips across 50 sound categories — animals, nature,"
                     " urban, domestic, and human sounds from the ESC-50 collection."
@@ -166,8 +233,8 @@ class AudioMediaType(MediaType):
                 slice_end=20,
             ),
             DemoDataset(
-                id="sounds_l",
-                label="ESC-50 Sound Mix (L)",
+                id="esc50_l",
+                label="ESC-50 (L)",
                 description=(
                     "~1000 clips across 50 sound categories — animals, nature,"
                     " urban, domestic, and human sounds from the ESC-50 collection."
@@ -176,6 +243,44 @@ class AudioMediaType(MediaType):
                 required_folder=folder,
                 slice_start=20,
                 slice_end=40,
+            ),
+            DemoDataset(
+                id="gtzan_a",
+                label="GTZAN Music Genre (A)",
+                description=(
+                    "~1000 audio clips across 10 music genres — blues, classical,"
+                    " country, disco, hip-hop, jazz, metal, pop, reggae, and rock."
+                ),
+                categories=self._GTZAN_CATEGORIES,
+                source="gtzan",
+                slice_start=0,
+                slice_end=100,
+            ),
+            DemoDataset(
+                id="speech_commands_v2_a",
+                label="Speech Commands v2 (A)",
+                description=(
+                    "~105,000 one-second utterances of 35 keywords — digits,"
+                    " directions, and common words from the Google Speech Commands"
+                    " v2 dataset."
+                ),
+                categories=self._SPEECH_COMMANDS_CATEGORIES,
+                source="speech_commands_v2",
+                slice_start=0,
+                slice_end=3000,
+            ),
+            DemoDataset(
+                id="urbansound8k_a",
+                label="UrbanSound8K (A)",
+                description=(
+                    "~8,732 urban sound clips across 10 classes — air conditioner,"
+                    " car horn, children playing, dog bark, drilling, engine, gun shot,"
+                    " jackhammer, siren, and street music."
+                ),
+                categories=self._URBANSOUND8K_CATEGORIES,
+                source="urbansound8k",
+                slice_start=0,
+                slice_end=873,
             ),
         ]
 

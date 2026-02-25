@@ -124,8 +124,8 @@ class VideoMediaType(MediaType):
         folder = VIDEO_DIR / "ucf101"
         return [
             DemoDataset(
-                id="videos_s",
-                label="UCF-101 Action Mix (S)",
+                id="ucf101_s",
+                label="UCF-101 (S)",
                 description=(
                     "~150 clips across 10 action categories — personal"
                     " activities and sports from the UCF-101 collection."
@@ -137,8 +137,8 @@ class VideoMediaType(MediaType):
                 slice_end=15,
             ),
             DemoDataset(
-                id="videos_m",
-                label="UCF-101 Action Mix (M)",
+                id="ucf101_m",
+                label="UCF-101 (M)",
                 description=(
                     "~250 clips across 10 action categories — personal"
                     " activities and sports from the UCF-101 collection."
@@ -150,8 +150,8 @@ class VideoMediaType(MediaType):
                 slice_end=40,
             ),
             DemoDataset(
-                id="videos_l",
-                label="UCF-101 Action Mix (L)",
+                id="ucf101_l",
+                label="UCF-101 (L)",
                 description=(
                     "~600 clips across 10 action categories — personal"
                     " activities and sports from the UCF-101 collection."
