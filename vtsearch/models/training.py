@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtsearch.config import TRAIN_EPOCHS
+from vtsearch.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN, TRAIN_EPOCHS
 
 if TYPE_CHECKING:
     import torch
@@ -59,7 +59,22 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         return float(np.median(scores))
 
 
-def build_model(input_dim: int, generator: torch.Generator | None = None) -> nn.Sequential:
+def _auto_hidden_dim(n_train: int) -> int:
+    """Choose hidden-layer width based on training-set size.
+
+    Keeps the model small when few votes are available to reduce
+    overfitting, and grows (up to ``MLP_HIDDEN_MAX``) as more labels
+    arrive.
+    """
+    return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
+
+
+def build_model(
+    input_dim: int,
+    hidden_dim: int = 64,
+    dropout: float = 0.0,
+    generator: torch.Generator | None = None,
+) -> nn.Sequential:
     """Construct the MLP architecture (untrained).
 
     The model outputs raw logits (no sigmoid).  Apply ``torch.sigmoid``
@@ -67,6 +82,9 @@ def build_model(input_dim: int, generator: torch.Generator | None = None) -> nn.
 
     Args:
         input_dim: Dimensionality of the input embeddings.
+        hidden_dim: Number of neurons in the hidden layer (default 64).
+        dropout: Dropout probability applied after the hidden layer
+            (default 0.0 — no dropout).  Active only during training.
         generator: Optional local RNG for weight initialisation.  When
             provided the weights are re-initialised using this generator
             instead of PyTorch's global RNG, making construction
@@ -74,14 +92,15 @@ def build_model(input_dim: int, generator: torch.Generator | None = None) -> nn.
 
     Returns:
         An ``nn.Sequential`` model with layers:
-        ``Linear(input_dim, 64) -> ReLU -> Linear(64, 1)``.
+        ``Linear(input_dim, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)``.
     """
     import torch.nn as nn  # noqa: PLC0415
 
     model = nn.Sequential(
-        nn.Linear(input_dim, 64),
+        nn.Linear(input_dim, hidden_dim),
         nn.ReLU(),
-        nn.Linear(64, 1),
+        nn.Dropout(dropout),
+        nn.Linear(hidden_dim, 1),
     )
     if generator is not None:
         for module in model.modules():
@@ -90,6 +109,38 @@ def build_model(input_dim: int, generator: torch.Generator | None = None) -> nn.
                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound, generator=generator)
+    return model
+
+
+def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
+    """Reconstruct a trained model from exported weight lists.
+
+    Handles both legacy (3-layer, no dropout) and current (4-layer with
+    dropout) weight formats.  Legacy keys ``2.weight`` / ``2.bias`` are
+    remapped to ``3.weight`` / ``3.bias`` automatically.
+
+    Args:
+        weights: Mapping of state-dict key names to nested Python lists
+            (as produced by ``tensor.tolist()``).
+
+    Returns:
+        A model in eval mode ready for inference.
+    """
+    import torch  # noqa: PLC0415
+
+    # Remap legacy 3-layer format (keys 0,2) → 4-layer format (keys 0,3)
+    if "2.weight" in weights and "3.weight" not in weights:
+        weights = dict(weights)
+        weights["3.weight"] = weights.pop("2.weight")
+        weights["3.bias"] = weights.pop("2.bias")
+
+    input_dim = len(weights["0.weight"][0])
+    hidden_dim = len(weights["0.bias"])
+
+    model = build_model(input_dim, hidden_dim=hidden_dim, dropout=0.0)
+    state_dict = {k: torch.tensor(v, dtype=torch.float32) for k, v in weights.items()}
+    model.load_state_dict(state_dict)
+    model.eval()
     return model
 
 
@@ -102,10 +153,14 @@ def train_model(
 ) -> nn.Sequential:
     """Train a small MLP classifier and return the trained model.
 
-    Trains a two-layer MLP (input -> 64 -> 1) using weighted binary
-    cross-entropy loss with logits (``BCEWithLogitsLoss``).  Class weights
-    are adjusted based on ``inclusion_value`` to bias the classifier toward
-    including more (positive) or fewer (positive) items.
+    The hidden-layer width is chosen automatically based on the number of
+    training examples (see :func:`_auto_hidden_dim`) and dropout is applied
+    during training to reduce overfitting.
+
+    Trains using weighted binary cross-entropy loss with logits
+    (``BCEWithLogitsLoss``).  Class weights are adjusted based on
+    ``inclusion_value`` to bias the classifier toward including more
+    (positive) or fewer (positive) items.
 
     A local ``torch.Generator`` seeded with *seed* is used for model-weight
     initialisation, so the same inputs always produce the same trained model
@@ -125,17 +180,19 @@ def train_model(
         seed: Seed for the local RNG used for weight initialisation (default 42).
 
     Returns:
-        A trained ``nn.Sequential`` model in eval mode with layers:
-        ``Linear(input_dim, 64) -> ReLU -> Linear(64, 1)``.
+        A trained ``nn.Sequential`` model in eval mode.
         The model outputs raw logits — apply ``torch.sigmoid`` at inference.
     """
     import torch  # noqa: PLC0415
     import torch.nn as nn  # noqa: PLC0415
 
+    n_train = len(X_train)
+    hidden_dim = _auto_hidden_dim(n_train)
+
     g = torch.Generator()
     g.manual_seed(seed)
 
-    model = build_model(input_dim, generator=g)
+    model = build_model(input_dim, hidden_dim=hidden_dim, dropout=MLP_DROPOUT, generator=g)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 

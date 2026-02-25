@@ -56,17 +56,9 @@ def _score_clips_with_detector(
     # Reconstruct the MLP model from weights
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.training import build_model
+    from vtsearch.models.training import build_model_from_weights
 
-    input_dim = len(weights["0.weight"][0])
-
-    model = build_model(input_dim)
-
-    state_dict = {}
-    for key, value in weights.items():
-        state_dict[key] = torch.tensor(value, dtype=torch.float32)
-    model.load_state_dict(state_dict)
-    model.eval()
+    model = build_model_from_weights(weights)
 
     # Score all clips
     all_ids = sorted(clips.keys())
@@ -268,17 +260,9 @@ def _score_clips_with_detectors(
         weights = detector_data["weights"]
         threshold = detector_data["threshold"]
 
-        input_dim = len(weights["0.weight"][0])
+        from vtsearch.models.training import build_model_from_weights
 
-        from vtsearch.models.training import build_model
-
-        model = build_model(input_dim)
-
-        state_dict = {}
-        for key, value in weights.items():
-            state_dict[key] = torch.tensor(value, dtype=torch.float32)
-        model.load_state_dict(state_dict)
-        model.eval()
+        model = build_model_from_weights(weights)
 
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()

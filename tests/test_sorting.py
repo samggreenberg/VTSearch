@@ -141,7 +141,8 @@ class TestBuildModel:
 
         model = build_model(128)
         keys = set(model.state_dict().keys())
-        assert keys == {"0.weight", "0.bias", "2.weight", "2.bias"}
+        # 4 layers: Linear(0), ReLU(1), Dropout(2), Linear(3)
+        assert keys == {"0.weight", "0.bias", "3.weight", "3.bias"}
 
 
 class TestTrainModelConfig:
@@ -167,7 +168,7 @@ class TestTrainModelConfig:
     def test_weight_decay_is_applied(self):
         """Weight decay should keep weights smaller than without it."""
         import vtsearch.config as config
-        from vtsearch.models.training import build_model
+        from vtsearch.models.training import _auto_hidden_dim, build_model
 
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 200
@@ -183,9 +184,10 @@ class TestTrainModelConfig:
 
             # Train without weight decay for comparison (use same local
             # generator approach as train_model for identical init weights)
+            hidden_dim = _auto_hidden_dim(len(X))
             g = torch.Generator()
             g.manual_seed(42)
-            model_no_wd = build_model(16, generator=g)
+            model_no_wd = build_model(16, hidden_dim=hidden_dim, dropout=config.MLP_DROPOUT, generator=g)
             optimizer = torch.optim.Adam(model_no_wd.parameters(), lr=0.001, weight_decay=0.0)
             loss_fn = torch.nn.BCEWithLogitsLoss()
             model_no_wd.train()

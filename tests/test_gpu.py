@@ -346,13 +346,9 @@ class TestDetectorGPU:
             weights = {k: v.tolist() for k, v in state_dict.items()}
 
             # Reconstruct on GPU (as a GPU-aware detector-sort would)
-            from vtsearch.models.training import build_model
+            from vtsearch.models.training import build_model_from_weights
 
-            gpu_model = build_model(dim).to(device)
-
-            loaded_state = {k: torch.tensor(v, dtype=torch.float32, device=device) for k, v in weights.items()}
-            gpu_model.load_state_dict(loaded_state)
-            gpu_model.eval()
+            gpu_model = build_model_from_weights(weights).to(device)
 
             # Score all clips on GPU
             all_embs = np.array([clips_dict[cid]["embedding"] for cid in sorted(clips_dict.keys())])
