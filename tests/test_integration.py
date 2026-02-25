@@ -201,7 +201,7 @@ class TestDetectorLifecycleWorkflow:
 
         # Step 2: Export a detector
         detector = _export_detector(client)
-        assert set(detector["weights"].keys()) == {"0.weight", "0.bias", "2.weight", "2.bias"}
+        assert set(detector["weights"].keys()) == {"0.weight", "0.bias", "3.weight", "3.bias"}
 
         # Step 3: Sort using the exported detector (immediate use)
         resp = client.post("/api/detector-sort", json={"detector": detector})

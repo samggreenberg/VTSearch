@@ -189,6 +189,9 @@ def train_model(
     n_train = len(X_train)
     hidden_dim = _auto_hidden_dim(n_train)
 
+    # Seed both a local Generator (for weight init) and the global RNG
+    # (for nn.Dropout during training) so results are reproducible.
+    torch.manual_seed(seed)
     g = torch.Generator()
     g.manual_seed(seed)
 

@@ -203,7 +203,7 @@ class TestSimulateVotingIterations:
 
     def test_cost_decreases_over_time_for_overlapping_data(self):
         """With overlapping data, cost should generally decrease as more votes come in."""
-        clips = _make_overlapping_clips(n_per_cat=30, dim=16)
+        clips = _make_overlapping_clips(n_per_cat=60, dim=16)
         rows = simulate_voting_iterations(
             clips,
             "alpha",

@@ -88,8 +88,8 @@ class TestTrainAndScore:
 
     def test_order_changes_after_new_vote(self):
         """After adding a vote and retraining, the sort order should change."""
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [19, 20]})
+        app_module.good_votes.update({k: None for k in [1, 2, 3, 4, 5]})
+        app_module.bad_votes.update({k: None for k in [16, 17, 18, 19, 20]})
         results_before, _ = app_module.train_and_score(
             app_module.clips, app_module.good_votes, app_module.bad_votes
         )
