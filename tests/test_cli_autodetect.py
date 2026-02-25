@@ -831,20 +831,20 @@ class TestAutodetectImporterCLI:
 class TestExporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values on exporters."""
 
-    def test_file_exporter_adds_filepath_arg(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_adds_filepath_arg(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args(["--filepath", "/tmp/results.json"])
         assert args.filepath == "/tmp/results.json"
 
-    def test_file_exporter_filepath_default(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_filepath_default(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -931,10 +931,10 @@ class TestExporterCLIArguments:
             }
         )
 
-    def test_file_exporter_validate_passes(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_validate_passes(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.json"})
 
     def test_gui_exporter_validate_passes_empty(self):
@@ -1043,7 +1043,7 @@ class TestRunExporter:
         results = _build_results_dict(hits, str(detector_path), "audio")
 
         output_file = tmp_path / "export_output.json"
-        _run_exporter("file", {"filepath": str(output_file)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_file)}, results)
 
         assert output_file.exists()
         saved = json.loads(output_file.read_text())
@@ -1096,7 +1096,7 @@ class TestAutodetectMainWithExporter:
         autodetect_main(
             str(dataset_path),
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 
@@ -1132,7 +1132,7 @@ class TestAutodetectMainWithExporter:
         autodetect_main(
             str(dataset_path),
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 
@@ -1157,7 +1157,7 @@ class TestAutodetectImporterMainWithExporter:
             "pickle",
             {"file": str(dataset_path)},
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 

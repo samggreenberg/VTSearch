@@ -153,12 +153,12 @@ def export_detector_server():
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(0.0)
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
@@ -176,8 +176,8 @@ def export_detector_server():
     model = train_model(X, y, input_dim, get_inclusion())
 
     if get_safe_thresholds():
-        all_ids = sorted(clips.keys())
-        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(medias.keys())
+        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -188,10 +188,10 @@ def export_detector_server():
     for key, value in state_dict.items():
         weights[key] = value.tolist()
 
-    # Determine media type from current clips
+    # Determine media type from current medias
     media_type = "audio"
-    if clips:
-        media_type = next(iter(clips.values())).get("type", "audio")
+    if medias:
+        media_type = next(iter(medias.values())).get("type", "audio")
 
     detector_data = {
         "weights": weights,

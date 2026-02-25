@@ -295,7 +295,7 @@ class TestExportWithFilteredResults:
             resp = client.post(
                 "/api/exporters/export",
                 json={
-                    "exporter_name": "file",
+                    "exporter_name": "server_json_file",
                     "field_values": {"filepath": str(fpath)},
                     "results": {
                         "media_type": "audio",
@@ -325,7 +325,7 @@ class TestExportWithFilteredResults:
             resp = client.post(
                 "/api/exporters/export",
                 json={
-                    "exporter_name": "file",
+                    "exporter_name": "server_json_file",
                     "field_values": {"filepath": str(fpath)},
                     "results": {
                         "media_type": "audio",
@@ -358,7 +358,7 @@ class TestExportWithFilteredResults:
             resp = client.post(
                 "/api/exporters/export",
                 json={
-                    "exporter_name": "file",
+                    "exporter_name": "server_json_file",
                     "field_values": {"filepath": str(fpath)},
                     "results": {
                         "media_type": "audio",
@@ -405,7 +405,7 @@ class TestExportWithFilteredResults:
             export_resp = client.post(
                 "/api/exporters/export",
                 json={
-                    "exporter_name": "file",
+                    "exporter_name": "server_json_file",
                     "field_values": {"filepath": str(fpath)},
                     "results": fill_data["results"],
                 },

@@ -1,4 +1,4 @@
-"""CSV label importer – loads labels from a ``.csv`` file on disk.
+"""Local CSV label importer – loads labels from a ``.csv`` file uploaded via the browser.
 
 The CSV file must have at least two columns: ``md5`` and ``label``.  A header
 row is required.  Any additional columns are silently ignored.
@@ -23,18 +23,18 @@ from typing import Any
 from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
 
 
-class CsvLabelImporter(LabelImporter):
-    """Import labels from a CSV file with ``md5`` and ``label`` columns.
+class LocalCsvLabelImporter(LabelImporter):
+    """Import labels from a CSV file uploaded from the user's local machine.
 
     The file must have a header row.  Any row missing the ``md5`` or
     ``label`` column, or with a label that is not ``"good"`` or ``"bad"``,
     is silently skipped by the route handler.
     """
 
-    name = "csv_file"
-    display_name = "CSV File"
-    description = "Import labels from a CSV file with md5 and label columns."
-    icon = "📊"
+    name = "local_csv_file"
+    display_name = "Local CSV File"
+    description = "Import labels from a CSV file uploaded from your local machine."
+    icon = "\U0001f4ca"  # bar chart
     fields = [
         LabelImporterField(
             key="file",
@@ -102,4 +102,4 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
     return results
 
 
-LABEL_IMPORTER = CsvLabelImporter()
+LABEL_IMPORTER = LocalCsvLabelImporter()

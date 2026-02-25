@@ -1,4 +1,8 @@
-"""CSV exporter – saves auto-detect results to a CSV file on disk.
+"""Server CSV exporter – saves auto-detect results to a CSV file on the server.
+
+Writes a CSV file to the server filesystem (the machine where the Python
+process is running).  The user supplies a path (absolute or relative) as a
+text field.
 
 No additional pip packages are required; uses only Python's ``csv`` and
 ``pathlib`` stdlib modules.
@@ -13,26 +17,27 @@ from typing import Any
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
-class CsvLabelsetExporter(LabelsetExporter):
-    """Save auto-detect results as a CSV file.
+class ServerCsvLabelsetExporter(LabelsetExporter):
+    """Save auto-detect results as a CSV file on the server filesystem.
 
     Produces one row per hit across all detectors, with columns for the
     detector name, filename, category, and score.  Opens directly in
     Excel, Google Sheets, or any spreadsheet application.
     """
 
-    name = "csv"
-    display_name = "Save to CSV"
-    description = "Write the results to a CSV file for spreadsheet analysis."
-    icon = "\U0001f4ca"
+    name = "server_csv_file"
+    display_name = "Server CSV File"
+    description = "Write the results to a CSV file on the server filesystem."
+    icon = "\U0001f5a5"  # desktop computer
     fields = [
         ExporterField(
             key="filepath",
-            label="File Path",
+            label="Server File Path",
             field_type="text",
             description=(
-                "Absolute or relative path where the CSV results file will be "
-                "written.  Parent directories are created automatically."
+                "Absolute or relative path on the server where the CSV "
+                "results file will be written.  Parent directories are "
+                "created automatically."
             ),
             placeholder="/home/user/autodetect_results.csv",
             default="autodetect_results.csv",
@@ -85,4 +90,4 @@ class CsvLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = CsvLabelsetExporter()
+EXPORTER = ServerCsvLabelsetExporter()

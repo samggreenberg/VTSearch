@@ -1,8 +1,10 @@
-"""JSON label importer – loads labels from a ``.json`` file on disk.
+"""Local JSON label importer – loads labels from a ``.json`` file uploaded via the browser.
 
 This importer reads the standard VTSearch label format::
 
     {"labels": [{"md5": "...", "label": "good"}, ...]}
+
+The file is uploaded from the user's local machine through the browser.
 
 No additional pip packages are required; uses only Python's ``json`` and
 ``pathlib`` stdlib modules.
@@ -17,18 +19,18 @@ from typing import Any
 from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
 
 
-class JsonLabelImporter(LabelImporter):
-    """Import labels from a JSON file in the standard VTSearch label format.
+class LocalJsonLabelImporter(LabelImporter):
+    """Import labels from a JSON file uploaded from the user's local machine.
 
     The file must be a JSON object with a top-level ``"labels"`` key whose
     value is a list of ``{"md5": "...", "label": "good"|"bad"}`` dicts.
     This is the same format produced by ``GET /api/labels/export``.
     """
 
-    name = "json_file"
-    display_name = "JSON File"
-    description = "Import labels from a VTSearch-format JSON file (.json)."
-    icon = "📄"
+    name = "local_json_file"
+    display_name = "Local JSON File"
+    description = "Import labels from a VTSearch-format JSON file uploaded from your local machine."
+    icon = "\U0001f4c4"  # page facing up
     fields = [
         LabelImporterField(
             key="file",
@@ -84,4 +86,4 @@ def _parse_json_bytes(raw: bytes) -> list[dict[str, str]]:
     return [entry for entry in labels if isinstance(entry, dict)]
 
 
-LABEL_IMPORTER = JsonLabelImporter()
+LABEL_IMPORTER = LocalJsonLabelImporter()

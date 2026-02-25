@@ -1,1 +1,0 @@
-# No additional packages required – uses only Python stdlib (json, pathlib).
