@@ -10,6 +10,7 @@ from vtsearch.models.diversity_tree import DiversityTree
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_vectors(n, dim=32, seed=42):
     """Create n random vectors keyed by 1..n."""
     rng = np.random.RandomState(seed)
@@ -37,6 +38,7 @@ def _make_clustered_vectors(cluster_sizes, dim=32, spread=0.1, seed=42):
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 class TestConstruction:
     def test_empty_vectors(self):
@@ -156,6 +158,7 @@ class TestConstruction:
 # Lookup
 # ---------------------------------------------------------------------------
 
+
 class TestLookup:
     def test_lookup_returns_leaf(self):
         vecs = _make_vectors(100)
@@ -176,6 +179,7 @@ class TestLookup:
 # ---------------------------------------------------------------------------
 # Labeling and seen tracking
 # ---------------------------------------------------------------------------
+
 
 class TestLabeling:
     def test_label_marks_leaf_and_ancestors(self):
@@ -216,6 +220,7 @@ class TestLabeling:
 # Unlabeling
 # ---------------------------------------------------------------------------
 
+
 class TestUnlabeling:
     def test_unlabel_single_removes_seen(self):
         vecs = _make_vectors(50)
@@ -232,7 +237,7 @@ class TestUnlabeling:
         tree = DiversityTree(vecs, k=2, min_node_size=10)
 
         # Label one vector from each cluster child
-        v1 = 1   # cluster 0
+        v1 = 1  # cluster 0
         v2 = 31  # cluster 1
         tree.label(v1)
         tree.label(v2)
@@ -269,6 +274,7 @@ class TestUnlabeling:
 # Diversity level
 # ---------------------------------------------------------------------------
 
+
 class TestDiversityLevel:
     def test_empty_tree(self):
         tree = DiversityTree({})
@@ -290,7 +296,7 @@ class TestDiversityLevel:
         tree = DiversityTree(vecs, k=2, min_node_size=10)
 
         # Label one from each top-level child
-        tree.label(1)   # cluster 0
+        tree.label(1)  # cluster 0
         tree.label(31)  # cluster 1
         assert tree.diversity_level() >= 1
 
@@ -327,6 +333,7 @@ class TestDiversityLevel:
 # Fractional diversity level
 # ---------------------------------------------------------------------------
 
+
 class TestFractionalDiversityLevel:
     def test_empty_tree(self):
         tree = DiversityTree({})
@@ -356,7 +363,7 @@ class TestFractionalDiversityLevel:
         """Labeling from all top-level children should give >= 1.0."""
         vecs = _make_clustered_vectors([30, 30], dim=32)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
-        tree.label(1)   # cluster 0
+        tree.label(1)  # cluster 0
         tree.label(31)  # cluster 1
         frac = tree.fractional_diversity_level()
         assert frac >= 1.0
@@ -381,9 +388,7 @@ class TestFractionalDiversityLevel:
             levels.append(tree.fractional_diversity_level())
 
         for i in range(1, len(levels)):
-            assert levels[i] >= levels[i - 1], (
-                f"Fractional level decreased: {levels[i-1]} -> {levels[i]} at step {i}"
-            )
+            assert levels[i] >= levels[i - 1], f"Fractional level decreased: {levels[i - 1]} -> {levels[i]} at step {i}"
 
     def test_span_info_includes_fractional_level(self):
         vecs = _make_clustered_vectors([30, 30], dim=32)
@@ -398,6 +403,7 @@ class TestFractionalDiversityLevel:
 # ---------------------------------------------------------------------------
 # Next sample
 # ---------------------------------------------------------------------------
+
 
 class TestNextSample:
     def test_empty_tree_returns_none(self):
@@ -459,6 +465,7 @@ class TestNextSample:
 # ---------------------------------------------------------------------------
 # Integration / workflow
 # ---------------------------------------------------------------------------
+
 
 class TestWorkflow:
     def test_label_unlabel_cycle(self):

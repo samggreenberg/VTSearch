@@ -443,8 +443,14 @@ def compute_labeling_status(
 
     # Span status from diversity tree info (passed in from the route)
     if span_info is None:
-        span = {"status": "red", "reason": "Diversity tree not available.", "level": -1, "depth": -1,
-                "next_level_seen": 0, "next_level_total": 0}
+        span = {
+            "status": "red",
+            "reason": "Diversity tree not available.",
+            "level": -1,
+            "depth": -1,
+            "next_level_seen": 0,
+            "next_level_total": 0,
+        }
     else:
         level = span_info["level"]
         depth = span_info["depth"]
@@ -453,14 +459,25 @@ def compute_labeling_status(
         if level >= depth and level >= 0:
             span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
         elif level >= 4:
-            span = {"status": "green",
-                    "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
+            span = {
+                "status": "green",
+                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
         elif level <= 1:
-            span = {"status": "red", "reason": "No tree coverage yet." if level < 0
-                    else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.", **span_info}
+            span = {
+                "status": "red",
+                "reason": "No tree coverage yet."
+                if level < 0
+                else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
         else:
-            span = {"status": "yellow", "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
-                    **span_info}
+            span = {
+                "status": "yellow",
+                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                **span_info,
+            }
 
     return {
         "good_count": good,
@@ -519,11 +536,13 @@ def calculate_diversity_level_over_time(
             tree.label(clip_id)
 
         num_labels = len(good_ids) + len(bad_ids)
-        results.append({
-            "num_labels": num_labels,
-            "diversity_level": round(tree.fractional_diversity_level(), 4),
-            "depth": d,
-        })
+        results.append(
+            {
+                "num_labels": num_labels,
+                "diversity_level": round(tree.fractional_diversity_level(), 4),
+                "depth": d,
+            }
+        )
 
     return results
 

@@ -10,7 +10,6 @@ from vtsearch.utils import (
     diversity_tree_unlabel,
     get_diversity_tree,
     good_votes,
-    label_history,
 )
 
 
@@ -264,9 +263,7 @@ class TestSpanLevelProgression:
             assert resp.status_code == 200
 
         # After voting on diverse clips, the level should have advanced past 0
-        assert tree.diversity_level() >= 1, (
-            f"Expected diversity_level >= 1 but got {tree.diversity_level()}"
-        )
+        assert tree.diversity_level() >= 1, f"Expected diversity_level >= 1 but got {tree.diversity_level()}"
 
     def test_labeling_status_reflects_span_progression(self, client):
         """The /api/labeling-status endpoint should reflect advancing span level."""
@@ -379,9 +376,7 @@ class TestDiversityLevelOverTime:
         data = resp.get_json()
         levels = [e["diversity_level"] for e in data["diversity_level_over_time"]]
         for i in range(1, len(levels)):
-            assert levels[i] >= levels[i - 1], (
-                f"Diversity level decreased at step {i}: {levels[i-1]} -> {levels[i]}"
-            )
+            assert levels[i] >= levels[i - 1], f"Diversity level decreased at step {i}: {levels[i - 1]} -> {levels[i]}"
 
     def test_labeling_status_includes_fractional_level(self, client):
         """The /api/labeling-status span info should include fractional_level."""
