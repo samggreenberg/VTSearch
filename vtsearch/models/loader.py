@@ -32,6 +32,30 @@ def initialize_models() -> None:
     gc.collect()
 
 
+def preload_favorite_media_types() -> list[str]:
+    """Eagerly load embedding models for all favorite media types.
+
+    Reads ``favorite_media_types`` from persisted settings and calls
+    :meth:`~vtsearch.media.base.MediaType.load_models` on each one so
+    that models are warm before the user opens the GUI.
+
+    Returns the list of type IDs that were preloaded.
+    """
+    from vtsearch.media import get as media_get
+    from vtsearch.settings import get_favorite_media_types
+
+    preloaded: list[str] = []
+    for type_id in get_favorite_media_types():
+        try:
+            mt = media_get(type_id)
+            print(f"  Preloading {mt.name} embedder...", flush=True)
+            mt.load_models()
+            preloaded.append(type_id)
+        except Exception as exc:
+            print(f"  Warning: failed to preload {type_id}: {exc}", flush=True)
+    return preloaded
+
+
 # ---------------------------------------------------------------------------
 # Backward-compatible getter functions
 #

@@ -26,7 +26,7 @@ from flask import Flask
 
 # Import refactored modules
 from vtsearch.clips import init_clips  # noqa: E402, F401 — used by tests via app_module.init_clips()
-from vtsearch.models import initialize_models  # noqa: E402
+from vtsearch.models import initialize_models, preload_favorite_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     clips_bp,
     datasets_bp,
@@ -188,11 +188,18 @@ if __name__ == "__main__":
     elif args.local:
         # Local development mode
         print("\U0001f680 Running in LOCAL mode (accessible from other devices)", flush=True)
+        initialize_models()
+        preloaded = preload_favorite_media_types()
+        if preloaded:
+            print(f"\u2705 Preloaded favorite media types: {', '.join(preloaded)}", flush=True)
         app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
     else:
         # Production mode \u2014 models load lazily when the first dataset is loaded
         print("\U0001f680 Running in PRODUCTION mode", flush=True)
         initialize_models()
+        preloaded = preload_favorite_media_types()
+        if preloaded:
+            print(f"\u2705 Preloaded favorite media types: {', '.join(preloaded)}", flush=True)
 
         print("\u2705 VTSearch is ready!", flush=True)
         print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)

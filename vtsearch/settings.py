@@ -46,7 +46,7 @@ _DEFAULTS: dict[str, Any] = {
     "swipe_animation": True,
     "show_thumbnails_left": False,
     "show_thumbnails_right": True,
-    "favorite_media_type": "",
+    "favorite_media_types": [],
     "favorite_processors": [],
 }
 
@@ -77,12 +77,20 @@ def _ensure_loaded() -> dict[str, Any]:
     global _settings
     if _settings is None:
         _settings = _load()
+        _migrate_favorite_media_type(_settings)
     return _settings
 
 
 # -------------------------------------------------------------------
 # Public API
 # -------------------------------------------------------------------
+
+
+def _migrate_favorite_media_type(data: dict[str, Any]) -> None:
+    """Migrate legacy ``favorite_media_type`` (string) to ``favorite_media_types`` (list)."""
+    if "favorite_media_type" in data and "favorite_media_types" not in data:
+        old = data.pop("favorite_media_type")
+        data["favorite_media_types"] = [old] if old else []
 
 
 def get_defaults() -> dict[str, Any]:
@@ -226,18 +234,35 @@ def set_show_thumbnails_right(value: bool) -> None:
 VALID_MEDIA_TYPES = ("audio", "image", "paragraph", "video")
 
 
-def get_favorite_media_type() -> str:
-    """Return the persisted favorite media type (empty string if unset)."""
-    return str(_ensure_loaded().get("favorite_media_type", _DEFAULTS["favorite_media_type"]))
+def get_favorite_media_types() -> list[str]:
+    """Return the list of favorite media type IDs (empty list if none set)."""
+    raw = _ensure_loaded().get("favorite_media_types", _DEFAULTS["favorite_media_types"])
+    if isinstance(raw, list):
+        return [v for v in raw if v in VALID_MEDIA_TYPES]
+    return []
 
 
-def set_favorite_media_type(value: str) -> None:
-    """Set and persist the favorite media type.  Must be a valid media type or empty string."""
-    if value != "" and value not in VALID_MEDIA_TYPES:
-        raise ValueError(f"Invalid media type: {value!r}")
+def set_favorite_media_types(value: list[str]) -> None:
+    """Set and persist the full list of favorite media types."""
+    for v in value:
+        if v not in VALID_MEDIA_TYPES:
+            raise ValueError(f"Invalid media type: {v!r}")
     s = _ensure_loaded()
-    s["favorite_media_type"] = value
+    s["favorite_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
     _save(s)
+
+
+def toggle_favorite_media_type(type_id: str) -> list[str]:
+    """Toggle a single media type's favorite status.  Returns the updated list."""
+    if type_id not in VALID_MEDIA_TYPES:
+        raise ValueError(f"Invalid media type: {type_id!r}")
+    current = get_favorite_media_types()
+    if type_id in current:
+        current.remove(type_id)
+    else:
+        current.append(type_id)
+    set_favorite_media_types(current)
+    return current
 
 
 def get_favorite_processors() -> list[dict[str, Any]]:
