@@ -105,11 +105,14 @@ def update_settings():
     if "show_thumbnails_right" in body:
         settings.set_show_thumbnails_right(bool(body["show_thumbnails_right"]))
 
-    if "favorite_media_type" in body:
+    if "favorite_media_types" in body:
+        val = body["favorite_media_types"]
+        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+            return jsonify({"error": "favorite_media_types must be a list of strings"}), 400
         try:
-            settings.set_favorite_media_type(str(body["favorite_media_type"]))
-        except ValueError:
-            return jsonify({"error": "favorite_media_type must be a valid media type or empty string"}), 400
+            settings.set_favorite_media_types(val)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     return jsonify(settings.get_all())
 

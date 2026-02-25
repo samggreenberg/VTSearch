@@ -304,6 +304,7 @@
   const showThumbnailsRightCheckbox = document.getElementById("show-thumbnails-right-checkbox");
   let showThumbnailsLeft = false;
   let showThumbnailsRight = true;
+  const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
 
   // ---- Dataset Management ----
 
@@ -651,15 +652,16 @@
         // Build tab bar and content sections
         const availableTypes = mediaOrder.filter(mt => (grouped[mt] || []).length > 0);
 
-        // Fetch the user's favorite media type to pick the initial tab
+        // Fetch the user's favorite media types to pick the initial tab
         let initialTab = availableTypes[0] || "audio";
         try {
           const settingsRes = await fetch("/api/settings");
           if (settingsRes.ok) {
             const settingsData = await settingsRes.json();
-            const fav = settingsData.favorite_media_type;
-            if (fav && availableTypes.includes(fav)) {
-              initialTab = fav;
+            const favs = settingsData.favorite_media_types || [];
+            const firstFav = favs.find(f => availableTypes.includes(f));
+            if (firstFav) {
+              initialTab = firstFav;
             }
           }
         } catch (_) { /* ignore – just use first available tab */ }
@@ -686,12 +688,6 @@
             Object.keys(sections).forEach(k => {
               sections[k].style.display = k === mt ? "" : "none";
             });
-            // Persist favorite media type
-            fetch("/api/settings", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ favorite_media_type: mt }),
-            }).catch(() => {});
           });
           tabBar.appendChild(tab);
 
@@ -1942,6 +1938,10 @@
       showThumbnailsRightCheckbox.checked = val;
       showThumbnailsRight = val;
     }
+    const favList = data.favorite_media_types || [];
+    favMtCheckboxes.forEach(cb => {
+      cb.checked = favList.includes(cb.dataset.mediaType);
+    });
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -2024,6 +2024,19 @@
       renderVotes();
     });
   }
+
+  // Favorite media type toggles
+  favMtCheckboxes.forEach(cb => {
+    cb.addEventListener("change", () => {
+      const selected = [];
+      favMtCheckboxes.forEach(c => { if (c.checked) selected.push(c.dataset.mediaType); });
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorite_media_types: selected }),
+      }).catch(() => {});
+    });
+  });
 
   // Default button — reset all settings to defaults
   if (settingsDefaultBtn) {

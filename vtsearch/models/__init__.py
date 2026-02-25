@@ -8,7 +8,14 @@ from vtsearch.models.embeddings import (
     embed_text_query,
     embed_video_file,
 )
-from vtsearch.models.loader import get_clap_model, get_clip_model, get_e5_model, get_xclip_model, initialize_models
+from vtsearch.models.loader import (
+    get_clap_model,
+    get_clip_model,
+    get_e5_model,
+    get_xclip_model,
+    initialize_models,
+    preload_favorite_media_types,
+)
 from vtsearch.models.progress import analyze_labeling_progress, clear_progress_cache, compute_labeling_status
 from vtsearch.models.training import (
     build_model,
@@ -31,6 +38,7 @@ __all__ = [
     "embed_text_query",
     # Loader
     "initialize_models",
+    "preload_favorite_media_types",
     "get_clap_model",
     "get_xclip_model",
     "get_clip_model",
