@@ -254,12 +254,12 @@ class TestFillFromSortConfirm:
 
 
 # ---------------------------------------------------------------------------
-# CLI _score_clips_with_detectors negative_hits
+# CLI _score_medias_with_detectors negative_hits
 # ---------------------------------------------------------------------------
 
 
 class TestCliScoringNegativeHits:
-    def test_score_clips_with_detectors_returns_negative_hits(self, client):
+    def test_score_medias_with_detectors_returns_negative_hits(self, client):
         """The multi-detector CLI scorer should include negative_hits."""
         from vtsearch.utils import medias
 
@@ -272,9 +272,9 @@ class TestCliScoringNegativeHits:
 
         detectors = {"test": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 
-        from vtsearch.cli import _score_clips_with_detectors
+        from vtsearch.cli import _score_medias_with_detectors
 
-        det_results = _score_clips_with_detectors(medias, detectors)
+        det_results = _score_medias_with_detectors(medias, detectors)
         for det_result in det_results.values():
             assert "negative_hits" in det_result
             assert isinstance(det_result["negative_hits"], list)

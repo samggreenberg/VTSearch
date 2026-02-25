@@ -369,7 +369,7 @@ class TestClipOrigins:
     def test_init_medias_have_filename(self):
         for cid, media in app_module.medias.items():
             assert "filename" in media, f"Clip {cid} missing filename"
-            assert media["filename"].startswith("test_clip_")
+            assert media["filename"].startswith("test_media_")
 
 
 # ---------------------------------------------------------------------------

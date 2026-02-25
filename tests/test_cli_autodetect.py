@@ -15,7 +15,7 @@ from vtsearch.cli import (
     _build_results_dict,
     _detect_media_type,
     _run_exporter,
-    _score_clips_with_detectors,
+    _score_medias_with_detectors,
     run_autodetect,
     run_autodetect_with_importer,
 )
@@ -310,7 +310,7 @@ class TestRunAutodetectWithImporter:
 
 
 # ---------------------------------------------------------------------------
-# Tests for _score_clips_with_detectors() (multi-processor)
+# Tests for _score_medias_with_detectors() (multi-processor)
 # ---------------------------------------------------------------------------
 
 
@@ -320,7 +320,7 @@ class TestScoreClipsWithDetectors:
     def test_single_detector_returns_one_result(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         assert len(results) == 1
         assert "det_a" in results
@@ -334,7 +334,7 @@ class TestScoreClipsWithDetectors:
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
         }
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         assert len(results) == 2
         assert "det_a" in results
@@ -344,7 +344,7 @@ class TestScoreClipsWithDetectors:
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detector["threshold"] = 0.0  # include all medias
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         scores = [h["score"] for h in results["det"]["hits"]]
         assert scores == sorted(scores, reverse=True)
@@ -352,7 +352,7 @@ class TestScoreClipsWithDetectors:
     def test_hits_have_required_fields(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         for hit in results["det"]["hits"]:
             assert "id" in hit
@@ -365,16 +365,16 @@ class TestScoreClipsWithDetectors:
         detectors = {"det": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 
         with pytest.raises(ValueError, match="No medias loaded"):
-            _score_clips_with_detectors({}, detectors)
+            _score_medias_with_detectors({}, detectors)
 
     def test_empty_detectors_raises_error(self):
         with pytest.raises(ValueError, match="No favorite processors"):
-            _score_clips_with_detectors(app_module.medias, {})
+            _score_medias_with_detectors(app_module.medias, {})
 
     def test_threshold_zero_returns_all_clips(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         assert results["det"]["total_hits"] == len(app_module.medias)
 
@@ -386,7 +386,7 @@ class TestScoreClipsWithDetectors:
             "det_a": {"weights": det_a["weights"], "threshold": 0.0},
             "det_b": {"weights": det_b["weights"], "threshold": 0.0},
         }
-        results = _score_clips_with_detectors(app_module.medias, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         # Both should return all medias (threshold=0), but with different score orderings
         ids_a = [h["id"] for h in results["det_a"]["hits"]]
@@ -406,7 +406,7 @@ class TestBuildMultiResultsDict:
     def test_basic_structure(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
-        detector_results = _score_clips_with_detectors(app_module.medias, detectors)
+        detector_results = _score_medias_with_detectors(app_module.medias, detectors)
         results = _build_multi_results_dict(detector_results, "audio")
 
         assert results["media_type"] == "audio"
@@ -421,7 +421,7 @@ class TestBuildMultiResultsDict:
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
         }
-        detector_results = _score_clips_with_detectors(app_module.medias, detectors)
+        detector_results = _score_medias_with_detectors(app_module.medias, detectors)
         results = _build_multi_results_dict(detector_results, "audio")
 
         assert results["detectors_run"] == 2
