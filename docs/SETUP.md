@@ -123,6 +123,65 @@ Open that URL in your browser. For faster startup during development, use `--loc
 python app.py --local
 ```
 
+## Docker
+
+If you prefer containers over a local Python install, VTSearch ships with ready-made Docker support.
+
+### Prerequisites
+
+Install [Docker](https://docs.docker.com/get-docker/) (includes Docker Compose). For GPU images you also need the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/).
+
+### CPU (default)
+
+Using Docker Compose (recommended):
+
+```bash
+docker compose up            # build & run (foreground)
+docker compose up -d         # build & run (detached)
+docker compose down          # stop & remove
+```
+
+Or with plain Docker:
+
+```bash
+docker build -t vtsearch .
+docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
+```
+
+### GPU
+
+Using Docker Compose:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+Or with plain Docker:
+
+```bash
+docker build -f Dockerfile.gpu -t vtsearch:gpu .
+docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
+```
+
+### Data persistence
+
+The `data/` directory inside the container (models, embeddings, settings, media files) is declared as a Docker volume. The commands above mount it as a named volume called `vtsearch-data` so everything persists across container restarts. To use a host directory instead:
+
+```bash
+docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
+```
+
+### Rebuilding
+
+After pulling new code, rebuild the image:
+
+```bash
+docker compose build           # CPU
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml build  # GPU
+```
+
+Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
+
 ## Next steps
 
 - **Load a dataset**: Click the hamburger menu in the top-left corner to browse demo datasets or import your own data.
