@@ -201,3 +201,305 @@ class TestExtractorAsProcessor:
         d = ext.to_dict()
         assert d["name"] == "my-ext"
         assert d["media_type"] == "image"
+
+
+# ---------------------------------------------------------------------------
+# OCR Extractor
+# ---------------------------------------------------------------------------
+
+
+class TestOCRExtractor:
+    def test_identity(self):
+        from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+        ext = OCRExtractor(name="test-ocr", language="en", threshold=0.6)
+        assert ext.name == "test-ocr"
+        assert ext.media_type == "image"
+        assert ext.language == "en"
+        assert ext.threshold == 0.6
+        assert isinstance(ext, Extractor)
+
+    def test_to_dict(self):
+        from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+        ext = OCRExtractor(name="ocr1", language="fr", threshold=0.7)
+        d = ext.to_dict()
+        assert d["name"] == "ocr1"
+        assert d["media_type"] == "image"
+        assert d["extractor_type"] == "ocr"
+        assert d["config"]["language"] == "fr"
+        assert d["config"]["threshold"] == 0.7
+
+    def test_from_config(self):
+        from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+        config = {"language": "de", "threshold": 0.8}
+        ext = OCRExtractor.from_config("rebuilt", config)
+        assert ext.name == "rebuilt"
+        assert ext.language == "de"
+        assert ext.threshold == 0.8
+
+    def test_from_config_defaults(self):
+        from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+        ext = OCRExtractor.from_config("default", {})
+        assert ext.language == "en"
+        assert ext.threshold == 0.5
+
+    def test_extract_returns_empty_when_no_clip_bytes(self):
+        from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+        ext = OCRExtractor(name="test", language="en")
+        ext._model = True  # Skip model loading
+        result = ext.extract({"id": 1})
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Speech Extractor
+# ---------------------------------------------------------------------------
+
+
+class TestSpeechExtractor:
+    def test_identity(self):
+        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+        ext = SpeechExtractor(name="test-speech", model_size="tiny", language="en")
+        assert ext.name == "test-speech"
+        assert ext.media_type == "audio"
+        assert ext.model_size == "tiny"
+        assert ext.language == "en"
+        assert isinstance(ext, Extractor)
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+        ext = SpeechExtractor(name="speech1", model_size="base", language="fr")
+        d = ext.to_dict()
+        assert d["name"] == "speech1"
+        assert d["media_type"] == "audio"
+        assert d["extractor_type"] == "speech"
+        assert d["config"]["model_size"] == "base"
+        assert d["config"]["language"] == "fr"
+
+    def test_from_config(self):
+        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+        config = {"model_size": "small", "language": "es"}
+        ext = SpeechExtractor.from_config("rebuilt", config)
+        assert ext.name == "rebuilt"
+        assert ext.model_size == "small"
+        assert ext.language == "es"
+
+    def test_from_config_defaults(self):
+        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+        ext = SpeechExtractor.from_config("default", {})
+        assert ext.model_size == "tiny"
+        assert ext.language is None
+
+    def test_extract_returns_empty_when_no_clip_bytes(self):
+        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+        ext = SpeechExtractor(name="test")
+        ext._model = True  # Skip model loading
+        result = ext.extract({"id": 1})
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Face Localizer
+# ---------------------------------------------------------------------------
+
+
+class TestFaceLocalizer:
+    def test_identity(self):
+        from vtsearch.media.image.face_localizer import FaceLocalizer
+
+        loc = FaceLocalizer(name="test-face", threshold=0.6, model_selection=0)
+        assert loc.name == "test-face"
+        assert loc.media_type == "image"
+        assert loc.threshold == 0.6
+        assert loc.model_selection == 0
+        assert isinstance(loc, Localizer)
+
+    def test_to_dict(self):
+        from vtsearch.media.image.face_localizer import FaceLocalizer
+
+        loc = FaceLocalizer(name="face1", threshold=0.7, model_selection=1)
+        d = loc.to_dict()
+        assert d["name"] == "face1"
+        assert d["media_type"] == "image"
+        assert d["localizer_type"] == "face"
+        assert d["config"]["threshold"] == 0.7
+        assert d["config"]["model_selection"] == 1
+
+    def test_from_config(self):
+        from vtsearch.media.image.face_localizer import FaceLocalizer
+
+        config = {"threshold": 0.3, "model_selection": 0}
+        loc = FaceLocalizer.from_config("rebuilt", config)
+        assert loc.name == "rebuilt"
+        assert loc.threshold == 0.3
+        assert loc.model_selection == 0
+
+    def test_from_config_defaults(self):
+        from vtsearch.media.image.face_localizer import FaceLocalizer
+
+        loc = FaceLocalizer.from_config("default", {})
+        assert loc.threshold == 0.5
+        assert loc.model_selection == 1
+
+    def test_localize_returns_empty_when_no_clip_bytes(self):
+        from vtsearch.media.image.face_localizer import FaceLocalizer
+
+        loc = FaceLocalizer(name="test")
+        loc._detector = True  # Skip model loading
+        result = loc.localize({"id": 1})
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Favorite localizer state management
+# ---------------------------------------------------------------------------
+
+
+class TestFavoriteLocalizerState:
+    def setup_method(self):
+        from vtsearch.utils.state import favorite_localizers
+
+        favorite_localizers.clear()
+
+    def test_add_and_get(self):
+        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers
+
+        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
+        locs = get_favorite_localizers()
+        assert "face1" in locs
+        assert locs["face1"]["localizer_type"] == "face"
+        assert locs["face1"]["media_type"] == "image"
+
+    def test_remove(self):
+        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers, remove_favorite_localizer
+
+        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
+        assert remove_favorite_localizer("face1") is True
+        assert remove_favorite_localizer("face1") is False
+        assert get_favorite_localizers() == {}
+
+    def test_rename(self):
+        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers, rename_favorite_localizer
+
+        add_favorite_localizer("old", "face", "image", {"threshold": 0.5})
+        assert rename_favorite_localizer("old", "new") is True
+        locs = get_favorite_localizers()
+        assert "new" in locs
+        assert "old" not in locs
+
+    def test_get_by_media(self):
+        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers_by_media
+
+        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
+        add_favorite_localizer("audio_loc", "face", "audio", {"threshold": 0.5})
+        image_locs = get_favorite_localizers_by_media("image")
+        assert "face1" in image_locs
+        assert "audio_loc" not in image_locs
+
+
+# ---------------------------------------------------------------------------
+# Pregen processors API route
+# ---------------------------------------------------------------------------
+
+
+class TestPregenProcessorsRoute:
+    def setup_method(self):
+        from vtsearch.utils.state import favorite_extractors, favorite_localizers
+
+        favorite_extractors.clear()
+        favorite_localizers.clear()
+
+    def teardown_method(self):
+        from vtsearch.utils.state import favorite_extractors, favorite_localizers
+
+        favorite_extractors.clear()
+        favorite_localizers.clear()
+
+    def test_list_pregen_processors(self, client):
+        res = client.get("/api/pregen-processors")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "processors" in data
+        names = [p["name"] for p in data["processors"]]
+        assert "OCR (PaddleOCR)" in names
+        assert "Speech (Whisper Tiny)" in names
+        assert "Face (MediaPipe)" in names
+
+    def test_add_pregen_processors(self, client):
+        res = client.post("/api/pregen-processors/add")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["success"] is True
+        assert len(data["added"]) == 3
+        assert "OCR (PaddleOCR)" in data["added"]
+        assert "Speech (Whisper Tiny)" in data["added"]
+        assert "Face (MediaPipe)" in data["added"]
+
+    def test_pregen_adds_to_favorites(self, client):
+        from vtsearch.utils.state import favorite_extractors, favorite_localizers
+
+        client.post("/api/pregen-processors/add")
+        assert "OCR (PaddleOCR)" in favorite_extractors
+        assert "Speech (Whisper Tiny)" in favorite_extractors
+        assert "Face (MediaPipe)" in favorite_localizers
+
+
+# ---------------------------------------------------------------------------
+# Factory registration
+# ---------------------------------------------------------------------------
+
+
+class TestExtractorFactoryRegistration:
+    def test_ocr_factory_registered(self):
+        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _ensure_extractor_factories
+
+        _EXTRACTOR_FACTORIES.clear()
+        _ensure_extractor_factories()
+        assert "ocr" in _EXTRACTOR_FACTORIES
+        assert "speech" in _EXTRACTOR_FACTORIES
+        assert "image_class" in _EXTRACTOR_FACTORIES
+
+    def test_build_ocr_extractor(self):
+        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
+
+        _EXTRACTOR_FACTORIES.clear()
+        _ensure_extractor_factories()
+        ext = _build_extractor("test-ocr", "ocr", {"language": "en", "threshold": 0.5})
+        assert ext.name == "test-ocr"
+        assert ext.media_type == "image"
+
+    def test_build_speech_extractor(self):
+        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
+
+        _EXTRACTOR_FACTORIES.clear()
+        _ensure_extractor_factories()
+        ext = _build_extractor("test-speech", "speech", {"model_size": "tiny"})
+        assert ext.name == "test-speech"
+        assert ext.media_type == "audio"
+
+
+class TestLocalizerFactoryRegistration:
+    def test_face_factory_registered(self):
+        from vtsearch.routes.detectors import _LOCALIZER_FACTORIES, _ensure_localizer_factories
+
+        _LOCALIZER_FACTORIES.clear()
+        _ensure_localizer_factories()
+        assert "face" in _LOCALIZER_FACTORIES
+
+    def test_build_face_localizer(self):
+        from vtsearch.routes.detectors import _LOCALIZER_FACTORIES, _build_localizer, _ensure_localizer_factories
+
+        _LOCALIZER_FACTORIES.clear()
+        _ensure_localizer_factories()
+        loc = _build_localizer("test-face", "face", {"threshold": 0.5})
+        assert loc.name == "test-face"
+        assert loc.media_type == "image"

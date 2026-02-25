@@ -1,4 +1,4 @@
-"""Blueprint for detector and extractor routes."""
+"""Blueprint for detector, extractor, and localizer routes."""
 
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +16,7 @@ from vtsearch.models import (
 from vtsearch.utils import (
     add_favorite_detector,
     add_favorite_extractor,
+    add_favorite_localizer,
     clips,
     get_calibrate_count,
     get_calibration_fraction,
@@ -23,12 +24,16 @@ from vtsearch.utils import (
     get_favorite_detectors_by_media,
     get_favorite_extractors,
     get_favorite_extractors_by_media,
+    get_favorite_localizers,
+    get_favorite_localizers_by_media,
     get_inclusion,
     get_safe_thresholds,
     remove_favorite_detector,
     remove_favorite_extractor,
+    remove_favorite_localizer,
     rename_favorite_detector,
     rename_favorite_extractor,
+    rename_favorite_localizer,
 )
 
 detectors_bp = Blueprint("detectors", __name__)
@@ -597,6 +602,14 @@ def _ensure_extractor_factories():
 
     _EXTRACTOR_FACTORIES["image_class"] = ImageClassExtractor.from_config
 
+    from vtsearch.media.image.ocr_extractor import OCRExtractor
+
+    _EXTRACTOR_FACTORIES["ocr"] = OCRExtractor.from_config
+
+    from vtsearch.media.audio.speech_extractor import SpeechExtractor
+
+    _EXTRACTOR_FACTORIES["speech"] = SpeechExtractor.from_config
+
 
 def _build_extractor(name: str, extractor_type: str, config: dict):
     """Instantiate an Extractor from its serialised form."""
@@ -772,3 +785,254 @@ def auto_extract():
             "results": results,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Localizer routes
+# ---------------------------------------------------------------------------
+
+# Registry of localizer type constructors.
+_LOCALIZER_FACTORIES: dict = {}
+
+
+def _ensure_localizer_factories():
+    """Populate the localizer factory registry on first use."""
+    if _LOCALIZER_FACTORIES:
+        return
+    from vtsearch.media.image.face_localizer import FaceLocalizer
+
+    _LOCALIZER_FACTORIES["face"] = FaceLocalizer.from_config
+
+
+def _build_localizer(name: str, localizer_type: str, config: dict):
+    """Instantiate a Localizer from its serialised form."""
+    _ensure_localizer_factories()
+    factory = _LOCALIZER_FACTORIES.get(localizer_type)
+    if factory is None:
+        raise ValueError(f"Unknown localizer_type: {localizer_type!r}")
+    return factory(name, config)
+
+
+@detectors_bp.route("/api/favorite-localizers")
+def get_favorite_localizers_route():
+    """Get all favorite localizers."""
+    localizers = get_favorite_localizers()
+    return jsonify({"localizers": list(localizers.values())})
+
+
+@detectors_bp.route("/api/favorite-localizers", methods=["POST"])
+def add_favorite_localizer_route():
+    """Add a new favorite localizer."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    name = data.get("name", "").strip()
+    localizer_type = data.get("localizer_type", "").strip()
+    media_type = data.get("media_type", "").strip()
+    config = data.get("config")
+
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    if not localizer_type:
+        return jsonify({"error": "localizer_type is required"}), 400
+    if not media_type:
+        return jsonify({"error": "media_type is required"}), 400
+    if not config or not isinstance(config, dict):
+        return jsonify({"error": "config is required"}), 400
+
+    try:
+        _build_localizer(name, localizer_type, config)
+    except Exception as e:
+        return jsonify({"error": f"Invalid localizer config: {e}"}), 400
+
+    add_favorite_localizer(name, localizer_type, media_type, config)
+    return jsonify({"success": True, "name": name})
+
+
+@detectors_bp.route("/api/favorite-localizers/<name>", methods=["DELETE"])
+def delete_favorite_localizer_route(name):
+    """Delete a favorite localizer."""
+    if remove_favorite_localizer(name):
+        return jsonify({"success": True})
+    return jsonify({"error": "Localizer not found"}), 404
+
+
+@detectors_bp.route("/api/favorite-localizers/<name>/rename", methods=["PUT"])
+def rename_favorite_localizer_route(name):
+    """Rename a favorite localizer."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    new_name = data.get("new_name", "").strip()
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
+
+    if rename_favorite_localizer(name, new_name):
+        return jsonify({"success": True, "new_name": new_name})
+    return jsonify({"error": "Localizer not found or new name already exists"}), 400
+
+
+@detectors_bp.route("/api/localize", methods=["POST"])
+def run_localize():
+    """Run a single localizer on all clips and return per-clip localization results."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    localizer_name = data.get("name", "").strip()
+    localizer_type = data.get("localizer_type", "").strip()
+    config = data.get("config")
+
+    if not localizer_type:
+        return jsonify({"error": "localizer_type is required"}), 400
+    if not config or not isinstance(config, dict):
+        return jsonify({"error": "config is required"}), 400
+
+    if not clips:
+        return jsonify({"error": "No clips loaded"}), 400
+
+    try:
+        localizer = _build_localizer(localizer_name or "adhoc", localizer_type, config)
+    except Exception as e:
+        return jsonify({"error": f"Invalid localizer config: {e}"}), 400
+
+    media_type = next(iter(clips.values())).get("type", "")
+    if localizer.media_type != media_type:
+        return (
+            jsonify({"error": f"Localizer media type '{localizer.media_type}' does not match clips '{media_type}'"}),
+            400,
+        )
+
+    results = []
+    for clip_id in sorted(clips.keys()):
+        clip = clips[clip_id]
+        localizations = localizer.localize(clip)
+        if localizations:
+            clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
+            clip_info["localizations"] = localizations
+            results.append(clip_info)
+
+    return jsonify(
+        {
+            "localizer_name": localizer.name,
+            "media_type": media_type,
+            "total_clips_with_hits": len(results),
+            "results": results,
+        }
+    )
+
+
+@detectors_bp.route("/api/auto-localize", methods=["POST"])
+def auto_localize():
+    """Run all favorite localizers for the current media type."""
+    if not clips:
+        return jsonify({"error": "No clips loaded"}), 400
+
+    media_type = next(iter(clips.values())).get("type", "")
+    localizers = get_favorite_localizers_by_media(media_type)
+
+    if not localizers:
+        return jsonify({"error": f"No favorite localizers found for media type: {media_type}"}), 400
+
+    sorted_clip_ids = sorted(clips.keys())
+
+    def _run_single_localizer(loc_name, loc_data):
+        try:
+            localizer = _build_localizer(loc_name, loc_data["localizer_type"], loc_data["config"])
+        except Exception:
+            return None
+
+        loc_results = []
+        for clip_id in sorted_clip_ids:
+            clip = clips[clip_id]
+            localizations = localizer.localize(clip)
+            if localizations:
+                clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
+                clip_info["localizations"] = localizations
+                loc_results.append(clip_info)
+
+        return loc_name, {
+            "localizer_name": loc_name,
+            "total_clips_with_hits": len(loc_results),
+            "results": loc_results,
+        }
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(localizers), 8)) as pool:
+        futures = [pool.submit(_run_single_localizer, name, data) for name, data in localizers.items()]
+        for future in futures:
+            outcome = future.result()
+            if outcome is not None:
+                name, result = outcome
+                results[name] = result
+
+    return jsonify(
+        {
+            "media_type": media_type,
+            "localizers_run": len(results),
+            "results": results,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pregen Processors
+# ---------------------------------------------------------------------------
+
+# Default pregen processor definitions: (name, processor_type, kind, media_type, config)
+# kind is "extractor" or "localizer"
+_PREGEN_PROCESSORS = [
+    {
+        "name": "OCR (PaddleOCR)",
+        "kind": "extractor",
+        "processor_type": "ocr",
+        "media_type": "image",
+        "config": {"language": "en", "threshold": 0.5},
+    },
+    {
+        "name": "Speech (Whisper Tiny)",
+        "kind": "extractor",
+        "processor_type": "speech",
+        "media_type": "audio",
+        "config": {"model_size": "tiny", "language": None},
+    },
+    {
+        "name": "Face (MediaPipe)",
+        "kind": "localizer",
+        "processor_type": "face",
+        "media_type": "image",
+        "config": {"threshold": 0.5, "model_selection": 1},
+    },
+]
+
+
+@detectors_bp.route("/api/pregen-processors", methods=["GET"])
+def list_pregen_processors():
+    """Return the list of available pregen processors."""
+    return jsonify({"processors": _PREGEN_PROCESSORS})
+
+
+@detectors_bp.route("/api/pregen-processors/add", methods=["POST"])
+def add_pregen_processors():
+    """Add all pregen processors as favorites.
+
+    Registers the OCR extractor, Speech extractor, and Face localizer
+    into the favorite extractors and localizers stores.
+    """
+    added = []
+    for proc in _PREGEN_PROCESSORS:
+        name = proc["name"]
+        kind = proc["kind"]
+        media_type = proc["media_type"]
+        config = proc["config"]
+        processor_type = proc["processor_type"]
+
+        if kind == "extractor":
+            add_favorite_extractor(name, processor_type, media_type, config)
+        elif kind == "localizer":
+            add_favorite_localizer(name, processor_type, media_type, config)
+        added.append(name)
+
+    return jsonify({"success": True, "added": added})

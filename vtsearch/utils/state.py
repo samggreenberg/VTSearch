@@ -45,6 +45,9 @@ favorite_detectors: dict[str, dict[str, Any]] = {}
 # Favorite extractors: name -> {name, extractor_type, media_type, config, created_at}
 favorite_extractors: dict[str, dict[str, Any]] = {}
 
+# Favorite localizers: name -> {name, localizer_type, media_type, config, created_at}
+favorite_localizers: dict[str, dict[str, Any]] = {}
+
 
 def clear_votes() -> None:
     """Clear all votes and the full label history.
@@ -401,6 +404,52 @@ def get_favorite_extractors() -> dict[str, dict[str, Any]]:
 def get_favorite_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all favorite extractors matching a given media type."""
     return {name: ext for name, ext in favorite_extractors.items() if ext["media_type"] == media_type}
+
+
+# ---------------------------------------------------------------------------
+# Favorite Localizers
+# ---------------------------------------------------------------------------
+
+
+def add_favorite_localizer(name: str, localizer_type: str, media_type: str, config: dict[str, Any]) -> None:
+    """Add or overwrite a named favorite localizer in the global store."""
+    import time
+
+    favorite_localizers[name] = {
+        "name": name,
+        "localizer_type": localizer_type,
+        "media_type": media_type,
+        "config": config,
+        "created_at": time.time(),
+    }
+
+
+def remove_favorite_localizer(name: str) -> bool:
+    """Remove a named favorite localizer. Returns True if found."""
+    if name in favorite_localizers:
+        del favorite_localizers[name]
+        return True
+    return False
+
+
+def rename_favorite_localizer(old_name: str, new_name: str) -> bool:
+    """Rename a favorite localizer. Returns True if succeeded."""
+    if old_name in favorite_localizers and new_name not in favorite_localizers:
+        favorite_localizers[new_name] = favorite_localizers[old_name].copy()
+        favorite_localizers[new_name]["name"] = new_name
+        del favorite_localizers[old_name]
+        return True
+    return False
+
+
+def get_favorite_localizers() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of all favorite localizers."""
+    return favorite_localizers.copy()
+
+
+def get_favorite_localizers_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return all favorite localizers matching a given media type."""
+    return {name: loc for name, loc in favorite_localizers.items() if loc["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------
