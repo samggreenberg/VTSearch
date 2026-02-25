@@ -348,7 +348,7 @@ class AudioMediaType(MediaType):
                 "file_size": len(wav_bytes),
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
                 "embedding": embedding,
-                "clip_bytes": wav_bytes,
+                "media_bytes": wav_bytes,
                 "filename": audio_path.name,
                 "category": meta["category"],
                 "origin": demo_origin,

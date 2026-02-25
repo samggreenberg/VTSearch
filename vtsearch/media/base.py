@@ -270,7 +270,7 @@ class MediaType(ABC):
 
         Old pickle formats stored media bytes under type-specific keys
         (e.g. ``"wav_bytes"``, ``"video_bytes"``).  New pickles use the
-        generic ``"clip_bytes"`` / ``"clip_string"`` keys.  When loading
+        generic ``"media_bytes"`` / ``"media_string"`` keys.  When loading
         old pickles, these keys are tried in order as fallbacks.
 
         Defaults to an empty list (no legacy keys).

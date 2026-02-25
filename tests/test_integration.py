@@ -95,7 +95,7 @@ class TestBrowseVoteLearnWorkflow:
         assert resp.status_code == 200
         status = resp.get_json()
         assert status["loaded"] is True
-        assert status["num_clips"] == app_module.NUM_MEDIAS
+        assert status["num_medias"] == app_module.NUM_MEDIAS
 
         # Step 2: List all medias (as frontend does on page load)
         resp = client.get("/api/medias")
