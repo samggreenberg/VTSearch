@@ -342,6 +342,8 @@
     demoDatasetsDiv.style.display = "none";
     extendedImporterForm.style.display = "none";
     backButton.style.display = "none";
+    const autodetectToggle = document.getElementById("autodetect-toggle");
+    if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     clipList.innerHTML = "";
@@ -369,6 +371,8 @@
     extendedImporterForm.style.display = "none";
     datasetProgress.style.display = "block";
     backButton.style.display = "none";
+    const autodetectToggle = document.getElementById("autodetect-toggle");
+    if (autodetectToggle) autodetectToggle.style.display = "none";
     // Reset progress bar to indeterminate state
     progressFill.style.width = "0%";
     progressFill.classList.add("indeterminate");
@@ -698,7 +702,7 @@
       </label>
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 8px 0 0 0;">When checked, automatically runs all favorite detectors and shows positive hits.</p>
     `;
-    datasetOptions.appendChild(autodetectDiv);
+    datasetWelcome.insertBefore(autodetectDiv, backButton);
   }
 
   function showExtendedImporterForm(importer) {
