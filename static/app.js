@@ -244,6 +244,7 @@
   const datasetBar = document.getElementById("dataset-bar");
   const datasetInfo = document.getElementById("dataset-info");
   const leftPanel = document.getElementById("left-panel");
+  const rightPanel = document.querySelector(".panel-right");
   const sortBar = document.getElementById("sort-bar");
 
   // Burger menu elements
@@ -341,10 +342,15 @@
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     clipList.innerHTML = "";
+    leftPanel.style.display = "none";
+    if (rightPanel) rightPanel.style.display = "none";
+    stripeContainer.innerHTML = "";
   }
 
   function showMainUI() {
     datasetWelcome.style.display = "none";
+    leftPanel.style.display = "";
+    if (rightPanel) rightPanel.style.display = "";
     sortBar.style.display = "block";
     datasetBar.style.display = "flex";
     if (!selected) {
@@ -1028,11 +1034,13 @@
       if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
         fetch("/api/dataset/clear", { method: "POST" })
           .then(() => {
-            showWelcomeScreen();
             clips = [];
             votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
             selected = null;
             datasetLoaded = false;
+            showWelcomeScreen();
+            renderVotes();
+            updateLabelCounts();
             closeBurgerMenu();
           });
       } else {

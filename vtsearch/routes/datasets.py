@@ -21,10 +21,10 @@ from vtsearch.config import (
     UCF101_SUBSET_DOWNLOAD_SIZE_MB,
 )
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
-from vtsearch.models.progress import clear_progress_cache
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
+    clear_all,
     clips,
     get_progress,
     good_votes,
@@ -75,12 +75,8 @@ def _load_embedder_for_clips() -> None:
 
 
 def clear_dataset():
-    """Clear the current dataset."""
-    clips.clear()
-    good_votes.clear()
-    bad_votes.clear()
-    label_history.clear()
-    clear_progress_cache()
+    """Clear the current dataset, votes, and all related state."""
+    clear_all()
 
 
 def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
