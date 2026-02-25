@@ -1,6 +1,7 @@
 """Integration tests for diversity tree wiring: build, label, unlabel, API."""
 
 from vtsearch.utils import (
+    add_label_to_history,
     bad_votes,
     build_diversity_tree,
     clips,
@@ -9,6 +10,7 @@ from vtsearch.utils import (
     diversity_tree_unlabel,
     get_diversity_tree,
     good_votes,
+    label_history,
 )
 
 
@@ -313,3 +315,81 @@ class TestLabelImporterUpdatesTree:
         )
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
+
+
+# ---------------------------------------------------------------------------
+# Diversity level over time (progress API)
+# ---------------------------------------------------------------------------
+
+
+class TestDiversityLevelOverTime:
+    def test_progress_includes_diversity_level_over_time(self, client):
+        """The /api/labeling-progress response should include diversity_level_over_time."""
+        _build_tree()
+
+        # Need at least one good and one bad vote + label history
+        good_votes[1] = None
+        bad_votes[2] = None
+        add_label_to_history(1, "good")
+        add_label_to_history(2, "bad")
+        diversity_tree_label(1)
+        diversity_tree_label(2)
+
+        resp = client.post("/api/labeling-progress")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "diversity_level_over_time" in data
+        assert isinstance(data["diversity_level_over_time"], list)
+        assert len(data["diversity_level_over_time"]) == 2
+
+    def test_diversity_level_entries_have_expected_fields(self, client):
+        """Each entry should have num_labels, diversity_level, and depth."""
+        _build_tree()
+
+        good_votes[1] = None
+        bad_votes[2] = None
+        add_label_to_history(1, "good")
+        add_label_to_history(2, "bad")
+        diversity_tree_label(1)
+        diversity_tree_label(2)
+
+        resp = client.post("/api/labeling-progress")
+        data = resp.get_json()
+        for entry in data["diversity_level_over_time"]:
+            assert "num_labels" in entry
+            assert "diversity_level" in entry
+            assert "depth" in entry
+
+    def test_diversity_level_monotonically_increases(self, client):
+        """Diversity level should not decrease when only adding labels."""
+        tree = _build_tree()
+
+        # Label several clips from different parts of the tree
+        cids = sorted(tree.vector_to_leaf.keys())[:6]
+        for i, cid in enumerate(cids):
+            if i % 2 == 0:
+                good_votes[cid] = None
+                add_label_to_history(cid, "good")
+            else:
+                bad_votes[cid] = None
+                add_label_to_history(cid, "bad")
+            diversity_tree_label(cid)
+
+        resp = client.post("/api/labeling-progress")
+        data = resp.get_json()
+        levels = [e["diversity_level"] for e in data["diversity_level_over_time"]]
+        for i in range(1, len(levels)):
+            assert levels[i] >= levels[i - 1], (
+                f"Diversity level decreased at step {i}: {levels[i-1]} -> {levels[i]}"
+            )
+
+    def test_labeling_status_includes_fractional_level(self, client):
+        """The /api/labeling-status span info should include fractional_level."""
+        _build_tree()
+        diversity_tree_label(1)
+        good_votes[1] = None
+
+        resp = client.get("/api/labeling-status")
+        data = resp.get_json()
+        assert "fractional_level" in data["span"]
+        assert isinstance(data["span"]["fractional_level"], (int, float))
