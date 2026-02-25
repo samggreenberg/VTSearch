@@ -187,6 +187,14 @@ header h1 { font-size: 1.3rem; color: var(--accent); }
 .burger-item { padding: 10px 16px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; gap: 8px; }
 .burger-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .burger-status { font-size: 0.7rem; color: var(--text-dim); padding: 4px 16px 8px; }
+.burger-item-parent { justify-content: space-between; }
+.burger-arrow { font-size: 0.7rem; transition: transform 0.15s; }
+.burger-item-parent[aria-expanded="true"] .burger-arrow { transform: rotate(90deg); }
+.burger-submenu { display: none; }
+.burger-submenu.show { display: block; }
+.burger-subitem { padding-left: 28px; font-size: 0.8rem; }
+.burger-item.disabled { opacity: 0.4; cursor: not-allowed; }
+.burger-item.disabled:hover { background: transparent; color: var(--text-secondary); }
 header h1 { margin-left: 48px; }
 
 /* Theme selector */

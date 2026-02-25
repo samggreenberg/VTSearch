@@ -257,10 +257,13 @@
   const menuDatasetExport = document.getElementById("menu-dataset-export");
   const menuDatasetChange = document.getElementById("menu-dataset-change");
   const menuLabelsExport = document.getElementById("menu-labels-export");
+  const menuLabelsExportSubmenu = document.getElementById("menu-labels-export-submenu");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
   const menuDetectorImport = document.getElementById("menu-detector-import");
   const menuDetectorExport = document.getElementById("menu-detector-export");
+  const menuDetectorExportSubmenu = document.getElementById("menu-detector-export-submenu");
+  const menuDetectorExportBrowser = document.getElementById("menu-detector-export-browser");
   const menuDetectorExportServer = document.getElementById("menu-detector-export-server");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
   const labelImporterModal = document.getElementById("label-importer-modal");
@@ -1003,6 +1006,12 @@
   function closeBurgerMenu() {
     burgerDropdown.classList.remove("show");
     burgerBtn.setAttribute("aria-expanded", "false");
+    // Collapse any open submenus
+    document.querySelectorAll(".burger-submenu.show").forEach(s => {
+      s.classList.remove("show");
+      const parent = s.previousElementSibling;
+      if (parent) parent.setAttribute("aria-expanded", "false");
+    });
     resumeActiveMedia();
   }
 
@@ -1104,22 +1113,109 @@
     });
   }
 
-  // Labels export
-  if (menuLabelsExport && menuLabelsStatus && burgerDropdown) {
-    menuLabelsExport.addEventListener("click", async () => {
-      menuLabelsStatus.textContent = "";
-      const res = await fetch("/api/labels/export");
-      const data = await res.json();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "labels.json";
-      a.click();
-      URL.revokeObjectURL(url);
-      menuLabelsStatus.textContent = `Exported ${data.labels.length} labels`;
+  // Labels export submenu toggle
+  let labelsExportersList = [];
+
+  async function loadLabelsExportersList() {
+    try {
+      const res = await fetch("/api/exporters");
+      if (res.ok) {
+        labelsExportersList = await res.json();
+        renderLabelsExportSubmenu();
+      }
+    } catch (_) {}
+  }
+
+  function renderLabelsExportSubmenu() {
+    if (!menuLabelsExportSubmenu) return;
+    menuLabelsExportSubmenu.innerHTML = "";
+    for (const exp of labelsExportersList) {
+      const item = document.createElement("div");
+      item.className = "burger-item burger-subitem";
+      item.setAttribute("role", "menuitem");
+      item.setAttribute("tabindex", "-1");
+      item.dataset.exporterName = exp.name;
+      item.textContent = `${exp.icon} ${exp.display_name}`;
+      item.addEventListener("click", () => runLabelExport(exp));
+      menuLabelsExportSubmenu.appendChild(item);
+    }
+  }
+
+  async function runLabelExport(exp) {
+    menuLabelsStatus.textContent = "";
+    // Collect required field values via prompts
+    const fieldValues = {};
+    for (const field of exp.fields) {
+      if (field.required) {
+        const val = await vtPrompt(field.label + (field.description ? ` (${field.description})` : ""), field.default || "");
+        if (val === null) {
+          menuLabelsStatus.textContent = "Export cancelled";
+          setTimeout(() => { menuLabelsStatus.textContent = ""; }, 2000);
+          return;
+        }
+        fieldValues[field.key] = val;
+      } else {
+        fieldValues[field.key] = field.default || "";
+      }
+    }
+
+    menuLabelsStatus.textContent = "Exporting labels\u2026";
+    try {
+      const labelsRes = await fetch("/api/labels/export");
+      const labelsData = await labelsRes.json();
+
+      const exportRes = await fetch("/api/exporters/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exporter_name: exp.name,
+          field_values: fieldValues,
+          results: labelsData,
+        }),
+      });
+      const result = await exportRes.json();
+      if (!exportRes.ok) {
+        menuLabelsStatus.textContent = result.error || "Export failed";
+        setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
+        return;
+      }
+      // Handle browser download if the exporter returns download_content
+      if (result.download_content) {
+        const blob = new Blob([result.download_content], { type: result.download_content_type || "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = result.download_filename || "labels.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      menuLabelsStatus.textContent = result.message || "Labels exported";
+      setTimeout(() => { menuLabelsStatus.textContent = ""; }, 4000);
+    } catch (e) {
+      menuLabelsStatus.textContent = "Export failed";
       setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
-      closeBurgerMenu();
+    }
+    closeBurgerMenu();
+  }
+
+  if (menuLabelsExport && menuLabelsExportSubmenu) {
+    menuLabelsExport.addEventListener("click", (e) => {
+      if (menuLabelsExport.classList.contains("disabled")) return;
+      e.stopPropagation();
+      const isOpen = menuLabelsExportSubmenu.classList.contains("show");
+      // Close any other open submenus
+      document.querySelectorAll(".burger-submenu.show").forEach(s => {
+        s.classList.remove("show");
+        const parent = s.previousElementSibling;
+        if (parent) parent.setAttribute("aria-expanded", "false");
+      });
+      if (!isOpen) {
+        menuLabelsExportSubmenu.classList.add("show");
+        menuLabelsExport.setAttribute("aria-expanded", "true");
+        if (labelsExportersList.length === 0) loadLabelsExportersList();
+      } else {
+        menuLabelsExport.setAttribute("aria-expanded", "false");
+      }
     });
   }
 
@@ -1139,15 +1235,31 @@
     });
   }
 
-  // Detector export
-  if (menuDetectorExport && menuDetectorStatus && burgerDropdown) {
-    menuDetectorExport.addEventListener("click", async () => {
-      menuDetectorStatus.textContent = "";
-      if (votes.good.length === 0 || votes.bad.length === 0) {
-        menuDetectorStatus.textContent = "Vote good & bad medias first";
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-        return;
+  // Detector export submenu toggle
+  if (menuDetectorExport && menuDetectorExportSubmenu) {
+    menuDetectorExport.addEventListener("click", (e) => {
+      if (menuDetectorExport.classList.contains("disabled")) return;
+      e.stopPropagation();
+      const isOpen = menuDetectorExportSubmenu.classList.contains("show");
+      // Close any other open submenus
+      document.querySelectorAll(".burger-submenu.show").forEach(s => {
+        s.classList.remove("show");
+        const parent = s.previousElementSibling;
+        if (parent) parent.setAttribute("aria-expanded", "false");
+      });
+      if (!isOpen) {
+        menuDetectorExportSubmenu.classList.add("show");
+        menuDetectorExport.setAttribute("aria-expanded", "true");
+      } else {
+        menuDetectorExport.setAttribute("aria-expanded", "false");
       }
+    });
+  }
+
+  // Detector export – browser download
+  if (menuDetectorExportBrowser && menuDetectorStatus && burgerDropdown) {
+    menuDetectorExportBrowser.addEventListener("click", async () => {
+      menuDetectorStatus.textContent = "";
       menuDetectorStatus.textContent = "Exporting detector\u2026";
       const res = await fetch("/api/detector/export", {
         method: "POST",
@@ -1172,17 +1284,12 @@
     });
   }
 
-  // Server-side detector export (ServerFileProcessorExporter)
+  // Detector export – save to server
   if (menuDetectorExportServer && menuDetectorStatus && burgerDropdown) {
     menuDetectorExportServer.addEventListener("click", async () => {
       menuDetectorStatus.textContent = "";
-      if (votes.good.length === 0 || votes.bad.length === 0) {
-        menuDetectorStatus.textContent = "Vote good & bad clips first";
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-        return;
-      }
 
-      const name = prompt("Enter a name for the detector file (saved on server):");
+      const name = await vtPrompt("Enter a name for the detector file (saved on server):");
       if (!name || !name.trim()) return;
 
       menuDetectorStatus.textContent = "Saving detector to server\u2026";
@@ -1195,9 +1302,8 @@
 
       if (res.status === 409) {
         const info = await res.json();
-        const overwrite = confirm(
-          `A detector file "${info.name}.json" already exists on the server.\n\n` +
-          `Path: ${info.path}\n\nOverwrite it?`
+        const overwrite = await vtConfirm(
+          `A detector file "${info.name}.json" already exists on the server.\n\nPath: ${info.path}\n\nOverwrite it?`
         );
         if (overwrite) {
           menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
@@ -1216,8 +1322,7 @@
             setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
           }
         } else {
-          // User chose not to overwrite; ask for a new name
-          const newName = prompt("Enter a different name:");
+          const newName = await vtPrompt("Enter a different name:");
           if (newName && newName.trim()) {
             menuDetectorStatus.textContent = "Saving detector to server\u2026";
             const res3 = await fetch("/api/detector/export-server", {
@@ -2217,6 +2322,31 @@
     loadRadio.disabled = false;
     loadRadio.parentElement.style.opacity = "1";
     loadRadio.parentElement.style.cursor = "pointer";
+
+    // Disable Export Detector when no detector can be trained (need good AND bad)
+    if (menuDetectorExport) {
+      if (hasGoodAndBad) {
+        menuDetectorExport.classList.remove("disabled");
+      } else {
+        menuDetectorExport.classList.add("disabled");
+        // Collapse submenu if open
+        if (menuDetectorExportSubmenu) menuDetectorExportSubmenu.classList.remove("show");
+        menuDetectorExport.setAttribute("aria-expanded", "false");
+      }
+    }
+
+    // Disable Export Labels when no labels exist (need any votes)
+    const hasAnyVotes = votes.good.length > 0 || votes.bad.length > 0;
+    if (menuLabelsExport) {
+      if (hasAnyVotes) {
+        menuLabelsExport.classList.remove("disabled");
+      } else {
+        menuLabelsExport.classList.add("disabled");
+        // Collapse submenu if open
+        if (menuLabelsExportSubmenu) menuLabelsExportSubmenu.classList.remove("show");
+        menuLabelsExport.setAttribute("aria-expanded", "false");
+      }
+    }
   }
 
   document.querySelectorAll('input[name="sort-mode"]').forEach(radio => {
