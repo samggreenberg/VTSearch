@@ -273,6 +273,7 @@
   const processorImporterFormDiv = document.getElementById("processor-importer-form");
   const processorImporterBack = document.getElementById("processor-importer-back");
   const menuFavoritesImport = document.getElementById("menu-favorites-import");
+  const menuFavoritesPregen = document.getElementById("menu-favorites-pregen");
   const menuFavoritesStatus = document.getElementById("menu-favorites-status");
   const menuFavoritesManage = document.getElementById("menu-favorites-manage");
   const menuFavoritesAutodetect = document.getElementById("menu-favorites-autodetect");
@@ -3395,6 +3396,42 @@
       labelImporterFormDiv.innerHTML = "";
       labelImporterBack.style.display = "none";
       labelImporterList.style.display = "";
+    });
+  }
+
+  // ---- Pregen processors ----
+
+  if (menuFavoritesPregen && burgerDropdown) {
+    menuFavoritesPregen.addEventListener("click", async () => {
+      closeBurgerMenu();
+      if (menuFavoritesStatus) {
+        menuFavoritesStatus.textContent = "Adding pregen processors\u2026";
+        menuFavoritesStatus.style.color = "var(--text-muted)";
+      }
+      try {
+        const res = await fetch("/api/pregen-processors/add", { method: "POST" });
+        const result = await res.json();
+        if (res.ok && result.success) {
+          const msg = `Added ${result.added.length} pregen processor(s)`;
+          if (menuFavoritesStatus) {
+            menuFavoritesStatus.textContent = msg;
+            menuFavoritesStatus.style.color = "var(--color-good)";
+            setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+          }
+        } else {
+          if (menuFavoritesStatus) {
+            menuFavoritesStatus.textContent = result.error || "Failed to add pregen processors";
+            menuFavoritesStatus.style.color = "var(--color-bad)";
+            setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+          }
+        }
+      } catch (err) {
+        if (menuFavoritesStatus) {
+          menuFavoritesStatus.textContent = `Error: ${err.message}`;
+          menuFavoritesStatus.style.color = "var(--color-bad)";
+          setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+        }
+      }
     });
   }
 
