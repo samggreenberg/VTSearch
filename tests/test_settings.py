@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-import app as app_module  # noqa: F401 — triggers conftest clip init
+import app as app_module  # noqa: F401 — triggers conftest media init
 from vtsearch import settings as settings_mod
 
 

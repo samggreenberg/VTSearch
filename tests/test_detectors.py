@@ -59,7 +59,7 @@ class TestDetectorSort:
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
-        assert len(data["results"]) == app_module.NUM_CLIPS
+        assert len(data["results"]) == app_module.NUM_MEDIAS
 
     def test_sort_results_sorted_descending(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
@@ -105,7 +105,7 @@ class TestDetectorSort:
         data = resp.get_json()
         score_map = {e["id"]: e["score"] for e in data["results"]}
 
-        # Good clips should score higher than bad clips on average
+        # Good medias should score higher than bad medias on average
         avg_good = np.mean([score_map[i] for i in app_module.good_votes])
         avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
         assert avg_good > avg_bad
@@ -123,7 +123,7 @@ class TestFavoriteDetectors:
         favorite_detectors.clear()
 
     def _export_detector(self, client):
-        """Helper: vote on some clips and export a valid detector payload."""
+        """Helper: vote on some medias and export a valid detector payload."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         resp = client.post("/api/detector/export")
@@ -392,7 +392,7 @@ class TestAutoDetect:
         assert "No favorite detectors" in resp.get_json()["error"]
 
     def test_no_matching_media_type_returns_400(self, client):
-        """A detector for a different media type should not match audio clips."""
+        """A detector for a different media type should not match audio medias."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         export_resp = client.post("/api/detector/export")
@@ -400,7 +400,7 @@ class TestAutoDetect:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Save as "image" type — clips are audio, so it won't match
+        # Save as "image" type — medias are audio, so it won't match
         client.post(
             "/api/favorite-detectors",
             json={
@@ -470,12 +470,12 @@ class TestAutoDetect:
             for hit in result["hits"]:
                 assert "embedding" not in hit
 
-    def test_hits_do_not_contain_clip_bytes(self, client):
+    def test_hits_do_not_contain_media_bytes(self, client):
         self._add_audio_detector(client)
         data = client.post("/api/auto-detect").get_json()
         for result in data["results"].values():
             for hit in result["hits"]:
-                assert "clip_bytes" not in hit
+                assert "media_bytes" not in hit
 
     def test_hits_contain_score(self, client):
         self._add_audio_detector(client)
@@ -525,15 +525,15 @@ class TestAutoDetect:
         for result in data["results"].values():
             for hit in result["negative_hits"]:
                 assert "embedding" not in hit
-                assert "clip_bytes" not in hit
+                assert "media_bytes" not in hit
 
     def test_hits_and_negative_hits_cover_all_clips(self, client):
-        """Positive + negative hits should cover every clip in the dataset."""
+        """Positive + negative hits should cover every media in the dataset."""
         self._add_audio_detector(client)
         data = client.post("/api/auto-detect").get_json()
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
-        total_clips = len(clips)
+        total_clips = len(medias)
         for result in data["results"].values():
             total_returned = len(result["hits"]) + len(result["negative_hits"])
             assert total_returned == total_clips

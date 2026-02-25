@@ -36,7 +36,7 @@ class TestExportLabels:
         entry = data["labels"][0]
         assert "md5" in entry
         assert "label" in entry
-        assert entry["md5"] == app_module.clips[1]["md5"]
+        assert entry["md5"] == app_module.medias[1]["md5"]
         assert entry["label"] == "good"
 
     def test_export_does_not_include_creation_info(self, client):
@@ -48,7 +48,7 @@ class TestExportLabels:
 
 class TestImportLabels:
     def test_import_good_label(self, client):
-        labels = [{"md5": app_module.clips[1]["md5"], "label": "good"}]
+        labels = [{"md5": app_module.medias[1]["md5"], "label": "good"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         assert resp.status_code == 200
         data = resp.get_json()
@@ -57,7 +57,7 @@ class TestImportLabels:
         assert 1 in app_module.good_votes
 
     def test_import_bad_label(self, client):
-        labels = [{"md5": app_module.clips[1]["md5"], "label": "bad"}]
+        labels = [{"md5": app_module.medias[1]["md5"], "label": "bad"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         assert resp.status_code == 200
         assert 1 in app_module.bad_votes
@@ -71,14 +71,14 @@ class TestImportLabels:
 
     def test_import_overrides_existing_label(self, client):
         app_module.good_votes[1] = None
-        labels = [{"md5": app_module.clips[1]["md5"], "label": "bad"}]
+        labels = [{"md5": app_module.medias[1]["md5"], "label": "bad"}]
         client.post("/api/labels/import", json={"labels": labels})
         assert 1 not in app_module.good_votes
         assert 1 in app_module.bad_votes
 
     def test_import_mixed_known_and_unknown(self, client):
         labels = [
-            {"md5": app_module.clips[1]["md5"], "label": "good"},
+            {"md5": app_module.medias[1]["md5"], "label": "good"},
             {"md5": "unknown_md5", "label": "good"},
         ]
         resp = client.post("/api/labels/import", json={"labels": labels})
@@ -87,7 +87,7 @@ class TestImportLabels:
         assert data["skipped"] == 1
 
     def test_import_invalid_label_value(self, client):
-        labels = [{"md5": app_module.clips[1]["md5"], "label": "meh"}]
+        labels = [{"md5": app_module.medias[1]["md5"], "label": "meh"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         data = resp.get_json()
         assert data["applied"] == 0
@@ -103,9 +103,9 @@ class TestImportLabels:
     def test_import_multiple_labels(self, client):
         labels = []
         for cid in [1, 2, 3]:
-            labels.append({"md5": app_module.clips[cid]["md5"], "label": "good"})
+            labels.append({"md5": app_module.medias[cid]["md5"], "label": "good"})
         for cid in [4, 5]:
-            labels.append({"md5": app_module.clips[cid]["md5"], "label": "bad"})
+            labels.append({"md5": app_module.medias[cid]["md5"], "label": "bad"})
         resp = client.post("/api/labels/import", json={"labels": labels})
         data = resp.get_json()
         assert data["applied"] == 5
@@ -130,14 +130,14 @@ class TestImportLabels:
         assert set(app_module.bad_votes) == {2, 4}
 
     def test_import_matches_by_origin(self, client):
-        """Labels with origin+origin_name match the correct clip."""
-        clip = app_module.clips[1]
+        """Labels with origin+origin_name match the correct media."""
+        media = app_module.medias[1]
         labels = [
             {
                 "md5": "wrong_md5_on_purpose",
                 "label": "good",
-                "origin": clip["origin"],
-                "origin_name": clip["origin_name"],
+                "origin": media["origin"],
+                "origin_name": media["origin_name"],
             }
         ]
         resp = client.post("/api/labels/import", json={"labels": labels})
@@ -146,18 +146,18 @@ class TestImportLabels:
         assert 1 in app_module.good_votes
 
     def test_import_duplicate_md5_labels_both_clips(self, client):
-        """Two clips sharing the same MD5 should both receive the label."""
-        # Temporarily give clip 2 the same MD5 as clip 1
-        original_md5 = app_module.clips[2]["md5"]
-        app_module.clips[2]["md5"] = app_module.clips[1]["md5"]
+        """Two medias sharing the same MD5 should both receive the label."""
+        # Temporarily give media 2 the same MD5 as media 1
+        original_md5 = app_module.medias[2]["md5"]
+        app_module.medias[2]["md5"] = app_module.medias[1]["md5"]
         try:
-            shared_md5 = app_module.clips[1]["md5"]
+            shared_md5 = app_module.medias[1]["md5"]
             labels = [{"md5": shared_md5, "label": "good"}]
             resp = client.post("/api/labels/import", json={"labels": labels})
             data = resp.get_json()
             assert data["applied"] == 1
-            # Both clips with the same MD5 should receive the label
+            # Both medias with the same MD5 should receive the label
             assert 1 in app_module.good_votes
             assert 2 in app_module.good_votes
         finally:
-            app_module.clips[2]["md5"] = original_md5
+            app_module.medias[2]["md5"] = original_md5

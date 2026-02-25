@@ -1,5 +1,5 @@
 (function() {
-  let clips = [];
+  let medias = [];
   let votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
   let labelSortMode = "time-desc"; // default: newest first
   let selected = null;
@@ -12,7 +12,7 @@
   let favoriteDetectors = [];  // List of favorite detectors
   let loadedDetector = null; // Stores loaded detector model weights
   let datasetLoaded = false;
-  let audioVolume = 1.0; // Persisted volume across clip loads
+  let audioVolume = 1.0; // Persisted volume across media loads
   let volumeSaveTimer = null;
   let progressTimer = null;
   let progressEtaState = null; // { startTime, lastCurrent, lastTime } for ETA calculation
@@ -25,7 +25,7 @@
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
-  const clipList = document.getElementById("clip-list");
+  const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
   const badList = document.getElementById("bad-list");
@@ -321,8 +321,8 @@
       showMainUI();
       const mtInfo = mediaTypesMap[status.media_type];
       datasetInfo.textContent = mtInfo
-        ? `${mtInfo.icon} ${status.num_clips} ${mtInfo.name.toLowerCase()} clips loaded`
-        : `${status.num_clips} clips loaded`;
+        ? `${mtInfo.icon} ${status.num_clips} ${mtInfo.name.toLowerCase()} loaded`
+        : `${status.num_clips} medias loaded`;
     } else {
       showWelcomeScreen();
     }
@@ -346,7 +346,7 @@
     if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
-    clipList.innerHTML = "";
+    mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
     stripeContainer.innerHTML = "";
@@ -360,8 +360,8 @@
     datasetBar.style.display = "flex";
     if (!selected) {
       center.className = "panel-center empty";
-      center.innerHTML = '<p>Select a clip from the left panel</p>';
-      announce("Dataset loaded. Select a clip from the left panel to begin.");
+      center.innerHTML = '<p>Select a media from the left panel</p>';
+      announce("Dataset loaded. Select a media from the left panel to begin.");
     }
   }
 
@@ -398,12 +398,12 @@
       stopProgressPolling();
       await checkDatasetStatus();
       if (datasetLoaded) {
-        await fetchClips();
+        await fetchMedias();
         await fetchVotes();
 
-        // Auto-select first clip if none selected
-        if (clips.length > 0 && !selected) {
-          selectClip(clips[0].id);
+        // Auto-select first media if none selected
+        if (medias.length > 0 && !selected) {
+          selectMedia(medias[0].id);
         }
 
         // Check if auto-detect mode is enabled
@@ -982,8 +982,8 @@
 
   // Pause/resume looping media when focus leaves the labeling interface
   function pauseActiveMedia() {
-    const audio = document.getElementById("clip-audio");
-    const video = document.getElementById("clip-video");
+    const audio = document.getElementById("media-audio");
+    const video = document.getElementById("media-video");
     window._mediaPausedForUI = false;
     if (audio && !audio.paused) { audio.pause(); window._mediaPausedForUI = true; }
     if (video && !video.paused) { video.pause(); window._mediaPausedForUI = true; }
@@ -991,8 +991,8 @@
 
   function resumeActiveMedia() {
     if (!window._mediaPausedForUI) return;
-    const audio = document.getElementById("clip-audio");
-    const video = document.getElementById("clip-video");
+    const audio = document.getElementById("media-audio");
+    const video = document.getElementById("media-video");
     if (audio) audio.play().catch(() => {});
     if (video) video.play().catch(() => {});
     window._mediaPausedForUI = false;
@@ -1087,10 +1087,11 @@
       if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
         fetch("/api/dataset/clear", { method: "POST" })
           .then(() => {
-            clips = [];
+            medias = [];
             votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
             selected = null;
             datasetLoaded = false;
+            updateMediaHeading();
             showWelcomeScreen();
             renderVotes();
             updateLabelCounts();
@@ -1142,7 +1143,7 @@
     menuDetectorExport.addEventListener("click", async () => {
       menuDetectorStatus.textContent = "";
       if (votes.good.length === 0 || votes.bad.length === 0) {
-        menuDetectorStatus.textContent = "Vote good & bad clips first";
+        menuDetectorStatus.textContent = "Vote good & bad medias first";
         setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
         return;
       }
@@ -1280,7 +1281,7 @@
     }
   }
 
-  // Add from current votes (train a new detector from labelled clips)
+  // Add from current votes (train a new detector from labelled medias)
   if (favAddFromVotesBtn) {
     favAddFromVotesBtn.addEventListener("click", async () => {
       if (votes.good.length === 0 || votes.bad.length === 0) {
@@ -1300,7 +1301,7 @@
         return;
       }
       const detectorData = await exportRes.json();
-      const mediaType = clips.length > 0 ? clips[0].type : "audio";
+      const mediaType = medias.length > 0 ? medias[0].type : "audio";
 
       const saveRes = await fetch("/api/favorite-detectors", {
         method: "POST",
@@ -1381,7 +1382,7 @@
       favImporterButtonsDiv.appendChild(btn);
     }
 
-    // Render a button for each label importer (trains from labelset matched to loaded clips)
+    // Render a button for each label importer (trains from labelset matched to loaded medias)
     for (const imp of labelImporters) {
       const fileField = imp.fields.find((f) => f.field_type === "file");
       if (!fileField) continue;
@@ -1428,7 +1429,7 @@
 
   if (menuFavoritesAutodetect) {
     menuFavoritesAutodetect.addEventListener("click", async () => {
-      if (clips.length === 0) {
+      if (medias.length === 0) {
         await vtAlert("No dataset loaded. Please load a dataset first.", "warning");
         return;
       }
@@ -1473,7 +1474,7 @@
   }
 
   async function runAutoDetectAfterLoad() {
-    if (clips.length === 0) {
+    if (medias.length === 0) {
       return;
     }
 
@@ -2007,7 +2008,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ show_thumbnails_left: showThumbnailsLeft }),
       }).catch(() => {});
-      renderClipList();
+      renderMediaList();
     });
   }
 
@@ -2057,9 +2058,9 @@
         // Update main UI controls that live outside the modal
         if (inclusionSlider) { inclusionSlider.value = defaults.inclusion || 0; inclusionValue.textContent = defaults.inclusion || 0; inclusion = defaults.inclusion || 0; }
         audioVolume = defaults.volume != null ? defaults.volume : 1.0;
-        const audioEl = document.getElementById("clip-audio");
+        const audioEl = document.getElementById("media-audio");
         if (audioEl) audioEl.volume = audioVolume;
-        renderClipList();
+        renderMediaList();
         renderVotes();
       } catch (_) {}
     });
@@ -2091,9 +2092,9 @@
           applyTheme(data.theme || "dark");
           if (inclusionSlider) { inclusionSlider.value = data.inclusion || 0; inclusionValue.textContent = data.inclusion || 0; inclusion = data.inclusion || 0; }
           audioVolume = typeof data.volume === "number" ? data.volume : 1.0;
-          const audioEl = document.getElementById("clip-audio");
+          const audioEl = document.getElementById("media-audio");
           if (audioEl) audioEl.volume = audioVolume;
-          renderClipList();
+          renderMediaList();
           renderVotes();
         }
       } catch (_) {
@@ -2141,7 +2142,7 @@
     radio.addEventListener("change", () => {
       // Validate selection
       if (radio.value === "learned" && (votes.good.length === 0 || votes.bad.length === 0)) {
-        sortStatus.textContent = "Vote good & bad clips first";
+        sortStatus.textContent = "Vote good & bad medias first";
         // Revert to text mode
         document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
         return;
@@ -2179,13 +2180,13 @@
       if (selectMode === "new") {
         const data = await fetchDiversityTreeNext();
         if (data.id != null) {
-          selectClip(data.id);
+          selectMedia(data.id);
         } else if (data.exhausted) {
           vtAlert("You have seen every branch of the diversity tree. Switch to Top or Hard mode, or add more data.", "warning");
         }
       } else {
         const nextClip = findNextClip();
-        if (nextClip) selectClip(nextClip.id);
+        if (nextClip) selectMedia(nextClip.id);
       }
     });
   });
@@ -2273,9 +2274,9 @@
       threshold = data.threshold;
       hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
-      renderClipList();
+      renderMediaList();
       const nextClip = findNextClip();
-      if (nextClip) selectClip(nextClip.id);
+      if (nextClip) selectMedia(nextClip.id);
     } catch (error) {
       hideSortProgress();
       sortStatus.textContent = `Error: ${error.message}`;
@@ -2289,7 +2290,7 @@
     if (!text) {
       sortOrder = null;
       sortStatus.textContent = "";
-      renderClipList();
+      renderMediaList();
       return;
     }
     sortTimer = setTimeout(() => fetchTextSort(text), 400);
@@ -2311,7 +2312,7 @@
         threshold = null;
         hideSortProgress();
         sortStatus.textContent = "Vote good & bad first";
-        renderClipList();
+        renderMediaList();
         return;
       }
       const data = await res.json();
@@ -2323,11 +2324,11 @@
       votes.learned_scores = fgScores;
       hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
-      renderClipList();
+      renderMediaList();
       renderVotes();
       if (autoSelect) {
         const nextClip = findNextClip();
-        if (nextClip) selectClip(nextClip.id);
+        if (nextClip) selectMedia(nextClip.id);
       }
     } catch (error) {
       hideSortProgress();
@@ -2362,7 +2363,7 @@
             threshold = null;
             hideSortProgress();
             sortStatus.textContent = "Vote good & bad first";
-            renderClipList();
+            renderMediaList();
             return null;
           }
           return res.json();
@@ -2378,7 +2379,7 @@
           votes.learned_scores = newScores;
           hideSortProgress();
           sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
-          renderClipList();
+          renderMediaList();
           renderVotes();
         })
         .catch(err => {
@@ -2409,7 +2410,7 @@
         threshold = null;
         hideSortProgress();
         sortStatus.textContent = "Failed to score with detector";
-        renderClipList();
+        renderMediaList();
         return;
       }
       const data = await res.json();
@@ -2417,10 +2418,10 @@
       threshold = data.threshold;
       hideSortProgress();
       sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
-      renderClipList();
+      renderMediaList();
       if (autoSelect) {
         const nextClip = findNextClip();
-        if (nextClip) selectClip(nextClip.id);
+        if (nextClip) selectMedia(nextClip.id);
       }
     } catch (error) {
       hideSortProgress();
@@ -2498,8 +2499,8 @@
     let ordered = sortOrder;
     let effectiveThreshold = threshold;
     if (!ordered || ordered.length === 0) {
-      // Null sort: use clips in their current (arbitrary) order
-      ordered = clips.map(c => ({ id: c.id, score: 0 }));
+      // Null sort: use medias in their current (arbitrary) order
+      ordered = medias.map(c => ({ id: c.id, score: 0 }));
       // Treat threshold as the bottom for Hard mode
       effectiveThreshold = -Infinity;
     }
@@ -2508,7 +2509,7 @@
       return null;
     }
 
-    // Get unlabeled clips (not voted on)
+    // Get unlabeled medias (not voted on)
     const unlabeled = ordered.filter(item => {
       return !votes.good.includes(item.id) && !votes.bad.includes(item.id);
     });
@@ -2519,10 +2520,10 @@
 
     let nextClip;
     if (selectMode === "top") {
-      // Select highest scoring unlabeled clip (or first in order for null sort)
+      // Select highest scoring unlabeled media (or first in order for null sort)
       nextClip = unlabeled[0];
     } else {
-      // Select unlabeled clip closest to threshold by list position,
+      // Select unlabeled media closest to threshold by list position,
       // breaking ties by score distance
       if (effectiveThreshold === null) {
         return null;
@@ -2535,7 +2536,7 @@
           break;
         }
       }
-      // Map clip id to its ordered index
+      // Map media id to its ordered index
       const idToIdx = {};
       ordered.forEach((item, idx) => { idToIdx[item.id] = idx; });
 
@@ -2557,10 +2558,35 @@
 
   // ---- Rendering ----
 
-  async function fetchClips() {
-    const res = await fetch("/api/clips");
-    clips = await res.json();
-    renderClipList();
+  // Map from type_id to plural display name (matches MediaType.folder_import_name)
+  const MEDIA_TYPE_NAMES = {
+    audio: "Sounds",
+    image: "Images",
+    video: "Videos",
+    paragraph: "Paragraphs",
+  };
+
+  function updateMediaHeading() {
+    const heading = document.getElementById("media-heading");
+    if (!heading) return;
+    if (!medias || medias.length === 0) {
+      heading.textContent = "Medias";
+      return;
+    }
+    const types = new Set(medias.map(m => m.type));
+    if (types.size === 1) {
+      const type = types.values().next().value;
+      heading.textContent = MEDIA_TYPE_NAMES[type] || "Medias";
+    } else {
+      heading.textContent = "Medias";
+    }
+  }
+
+  async function fetchMedias() {
+    const res = await fetch("/api/medias");
+    medias = await res.json();
+    updateMediaHeading();
+    renderMediaList();
   }
 
   async function fetchVotes() {
@@ -2580,19 +2606,18 @@
     inclusionValue.textContent = inclusion;
   }
 
-  function clipSupportsThumbnail(clip) {
-    return clip && (clip.type === "image" || clip.type === "video");
+  function mediaSupportsThumbnail(media) {
+    return media && (media.type === "image" || media.type === "video");
   }
 
-  function thumbnailUrl(clip) {
-    if (clip.type === "image" || clip.type === "video") {
-      return `/api/clips/${clip.id}/media`;
-    }
+  function thumbnailUrl(media) {
+    if (media.type === "image") return `/api/medias/${media.id}/image`;
+    if (media.type === "video") return `/api/medias/${media.id}/video`;
     return "";
   }
 
-  function renderClipList() {
-    clipList.innerHTML = "";
+  function renderMediaList() {
+    mediaList.innerHTML = "";
     const scoreMap = {};
     if (sortOrder) {
       sortOrder.forEach(s => { scoreMap[s.id] = s.score; });
@@ -2600,25 +2625,25 @@
 
     let ordered;
     if (sortOrder) {
-      ordered = sortOrder.map(s => clips.find(c => c.id === s.id)).filter(Boolean);
+      ordered = sortOrder.map(s => medias.find(c => c.id === s.id)).filter(Boolean);
     } else {
-      ordered = clips;
+      ordered = medias;
     }
 
     let thresholdLineInserted = false;
     ordered.forEach(c => {
-      // Insert threshold line before first clip whose score falls below threshold
+      // Insert threshold line before first media whose score falls below threshold
       if (threshold !== null && !thresholdLineInserted && scoreMap[c.id] !== undefined && scoreMap[c.id] < threshold) {
         const line = document.createElement("div");
-        line.className = "clip-threshold-line";
-        clipList.appendChild(line);
+        line.className = "media-threshold-line";
+        mediaList.appendChild(line);
         thresholdLineInserted = true;
       }
 
       const div = document.createElement("div");
       const isGood = votes.good.includes(c.id);
       const isBad = votes.bad.includes(c.id);
-      let className = "clip-item";
+      let className = "media-item";
       if (selected === c.id) className += " active";
       if (isGood) className += " labeled-good";
       if (isBad) className += " labeled-bad";
@@ -2626,25 +2651,25 @@
       div.setAttribute("role", "option");
       div.setAttribute("tabindex", "0");
       div.setAttribute("aria-selected", selected === c.id ? "true" : "false");
-      const clipLabel = c.filename || 'Clip #' + c.id;
-      const labelParts = [clipLabel];
+      const mediaLabel = c.filename || 'Media #' + c.id;
+      const labelParts = [mediaLabel];
       if (isGood) labelParts.push("labeled good");
       if (isBad) labelParts.push("labeled bad");
       if (scoreMap[c.id] !== undefined) labelParts.push(`score ${(scoreMap[c.id] * 100).toFixed(1)}%`);
       div.setAttribute("aria-label", labelParts.join(", "));
       let html = "";
-      const useThumbnail = showThumbnailsLeft && clipSupportsThumbnail(c);
+      const useThumbnail = showThumbnailsLeft && mediaSupportsThumbnail(c);
       if (useThumbnail) {
-        div.className += " clip-item-thumb";
-        const poster = c.type === "video" ? ` poster="/api/clips/${c.id}/media"` : "";
+        div.className += " media-item-thumb";
+        const poster = c.type === "video" ? ` poster="/api/medias/${c.id}/image"` : "";
         if (c.type === "video") {
-          html += `<video class="clip-thumbnail" src="${thumbnailUrl(c)}" muted preload="metadata"${poster}></video>`;
+          html += `<video class="media-thumbnail" src="${thumbnailUrl(c)}" muted preload="metadata"${poster}></video>`;
         } else {
-          html += `<img class="clip-thumbnail" src="${thumbnailUrl(c)}" alt="${clipLabel}" loading="lazy">`;
+          html += `<img class="media-thumbnail" src="${thumbnailUrl(c)}" alt="${mediaLabel}" loading="lazy">`;
         }
-        html += `<div class="clip-thumb-info">`;
+        html += `<div class="media-thumb-info">`;
       }
-      html += `<div style="font-weight: 500;">${clipLabel}</div>`;
+      html += `<div style="font-weight: 500;">${mediaLabel}</div>`;
       if (scoreMap[c.id] !== undefined) {
         html += `<span class="sim">${(scoreMap[c.id] * 100).toFixed(1)}%</span>`;
       }
@@ -2669,34 +2694,34 @@
         html += `</div>`;
       }
       div.innerHTML = html;
-      div.onclick = () => selectClip(c.id);
+      div.onclick = () => selectMedia(c.id);
       div.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectClip(c.id); }
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectMedia(c.id); }
       });
-      clipList.appendChild(div);
+      mediaList.appendChild(div);
     });
 
     renderStripe();
   }
 
-  function selectClip(id) {
+  function selectMedia(id) {
     selected = id;
-    renderClipList();
+    renderMediaList();
     renderCenter();
 
-    const activeItem = clipList.querySelector(".clip-item.active");
+    const activeItem = mediaList.querySelector(".media-item.active");
     if (activeItem) {
       activeItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
 
-    const c = clips.find(x => x.id === id);
+    const c = medias.find(x => x.id === id);
     if (c) {
-      announce(`Selected ${c.filename || 'Clip #' + c.id}`);
+      announce(`Selected ${c.filename || 'Media #' + c.id}`);
     }
   }
 
   function renderCenter() {
-    const c = clips.find(x => x.id === selected);
+    const c = medias.find(x => x.id === selected);
     if (!c) return;
     const isGood = votes.good.includes(c.id);
     const isBad = votes.bad.includes(c.id);
@@ -2725,36 +2750,36 @@
 
     // Render media player based on media type.
     // Known types get specialised players; new/unknown types fall back to
-    // the generic /api/clips/{id}/media endpoint.
+    // the generic /api/medias/{id}/media endpoint.
     let playerHTML = '';
     if (mediaType === "video") {
-      playerHTML = `<video controls loop autoplay src="/api/clips/${c.id}/media" id="clip-video" aria-label="${escapeHtml(c.filename || 'Video clip')}" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+      playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/video" id="media-video" aria-label="${escapeHtml(c.filename || 'Video media')}" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
     } else if (mediaType === "image") {
-      playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><img src="/api/clips/${c.id}/media" id="clip-image" alt="${escapeHtml(c.filename || 'Image clip')}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></div>`;
+      playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><img src="/api/medias/${c.id}/image" id="media-image" alt="${escapeHtml(c.filename || 'Image media')}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></div>`;
     } else if (mediaType === "paragraph") {
       playerHTML = `
-        <div id="clip-paragraph" style="max-width: 600px; max-height: 400px; overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); white-space: pre-wrap; line-height: 1.6; text-align: left;">
+        <div id="media-paragraph" style="max-width: 600px; max-height: 400px; overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); white-space: pre-wrap; line-height: 1.6; text-align: left;">
           Loading...
         </div>`;
     } else if (mediaType === "audio") {
       // Audio/Sound
       playerHTML = `
         <canvas id="waveform-canvas" width="600" height="120" role="img" aria-label="Audio waveform visualization"></canvas>
-        <audio controls controlslist="nodownload" loop autoplay src="/api/clips/${c.id}/media" id="clip-audio" aria-label="${escapeHtml(c.filename || 'Audio clip')}"></audio>`;
+        <audio controls controlslist="nodownload" loop autoplay src="/api/medias/${c.id}/audio" id="media-audio" aria-label="${escapeHtml(c.filename || 'Audio media')}"></audio>`;
     } else {
       // Unknown/new media type: try to render via generic endpoint.
       // If it loops, use a video element; otherwise use a generic embed.
       const loops = mtInfo && mtInfo.loops;
       if (loops) {
-        playerHTML = `<video controls loop autoplay src="/api/clips/${c.id}/media" id="clip-video" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+        playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/media" id="media-video" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
       } else {
-        playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><object data="/api/clips/${c.id}/media" style="max-width: 100%; max-height: 100%; border: 1px solid var(--border); border-radius: 8px;">${escapeHtml(c.filename || 'Media clip')}</object></div>`;
+        playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><object data="/api/medias/${c.id}/media" style="max-width: 100%; max-height: 100%; border: 1px solid var(--border); border-radius: 8px;">${escapeHtml(c.filename || 'Media')}</object></div>`;
       }
     }
 
     center.innerHTML = `
       <div class="meta">
-        <h2>${c.filename || 'Clip #' + c.id}</h2>
+        <h2>${c.filename || 'Media #' + c.id}</h2>
         <p>${metaInfo.join(' &middot; ')}</p>
       </div>
       <div class="media-swipe-wrapper" id="media-swipe-wrapper">
@@ -2800,7 +2825,7 @@
         </div>
         <div class="metadata-item">
           <span class="metadata-label">Filename</span>
-          <span class="metadata-value">${c.filename || 'clip_' + c.id + '.wav'}</span>
+          <span class="metadata-value">${c.filename || 'media_' + c.id + '.wav'}</span>
         </div>
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
@@ -2814,10 +2839,10 @@
     document.getElementById("vote-good").onclick = () => castVote(c.id, "good");
     document.getElementById("vote-bad").onclick = () => castVote(c.id, "bad");
 
-    // Draw waveform only for audio clips
+    // Draw waveform only for audio medias
     if (mediaType === "audio") {
       drawWaveform(c.id);
-      const audioEl = document.getElementById("clip-audio");
+      const audioEl = document.getElementById("media-audio");
       if (audioEl) {
         audioEl.volume = audioVolume;
         audioEl.addEventListener("volumechange", () => {
@@ -2832,11 +2857,11 @@
       if (paragraphController) paragraphController.abort();
       paragraphController = new AbortController();
       const expectedId = c.id;
-      fetch(`/api/clips/${c.id}/media`, { signal: paragraphController.signal })
+      fetch(`/api/medias/${c.id}/paragraph`, { signal: paragraphController.signal })
         .then(res => res.json())
         .then(data => {
           if (selected !== expectedId) return; // selection changed, discard stale response
-          const paragraphDiv = document.getElementById("clip-paragraph");
+          const paragraphDiv = document.getElementById("media-paragraph");
           if (paragraphDiv) {
             paragraphDiv.textContent = data.content;
           }
@@ -2852,13 +2877,13 @@
     if (isVoting) return; // Prevent double-click from toggling the vote off
     isVoting = true;
     try {
-      const clipName = (clips.find(c => c.id === id) || {}).filename || `Clip #${id}`;
-      await fetch(`/api/clips/${id}/vote`, {
+      const mediaName = (medias.find(c => c.id === id) || {}).filename || `Clip #${id}`;
+      await fetch(`/api/medias/${id}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vote }),
       });
-      announce(`Voted ${vote} on ${clipName}`);
+      announce(`Voted ${vote} on ${mediaName}`);
       await fetchVotes();
 
       // When voting Good while a text-sort query is active, store the query
@@ -2874,9 +2899,9 @@
         }
       }
 
-      // Auto-advance to next clip.  When swipe animation is enabled, play a
+      // Auto-advance to next media.  When swipe animation is enabled, play a
       // fast swipe-out before switching; otherwise advance immediately.
-      // In "new" select mode, use the diversity tree for the next clip.
+      // In "new" select mode, use the diversity tree for the next media.
       let nextId;
       if (selectMode === "new") {
         const data = await fetchDiversityTreeNext();
@@ -2898,16 +2923,16 @@
             wrapper.classList.remove(dir);
           }
         }
-        selectClip(nextId);
+        selectMedia(nextId);
       } else {
-        // No auto-advance (all clips voted, or toggled a vote off) —
-        // refresh clip list and center panel so vote button state updates.
-        renderClipList();
+        // No auto-advance (all medias voted, or toggled a vote off) —
+        // refresh media list and center panel so vote button state updates.
+        renderMediaList();
         renderCenter();
       }
 
       // Kick off learned sort in the background (non-blocking).
-      // When training completes, sortOrder/threshold update and the clip list
+      // When training completes, sortOrder/threshold update and the media list
       // re-renders — but the user can keep voting in the meantime.
       if (sortMode === "learned") {
         scheduleLearnedSort();
@@ -2917,7 +2942,7 @@
     }
   }
 
-  async function drawWaveform(clipId) {
+  async function drawWaveform(mediaId) {
     const canvas = document.getElementById("waveform-canvas");
     if (!canvas) return;
 
@@ -2931,7 +2956,7 @@
 
     try {
       // Fetch audio data
-      const response = await fetch(`/api/clips/${clipId}/media`);
+      const response = await fetch(`/api/medias/${mediaId}/audio`);
       const arrayBuffer = await response.arrayBuffer();
 
       // Decode audio data (reuse a single AudioContext to avoid leaks)
@@ -2991,8 +3016,8 @@
   }
 
   function labelSortKey(id, label) {
-    const clip = clips.find(c => c.id === id);
-    const name = clip ? (clip.filename || `Clip #${id}`) : `Clip #${id}`;
+    const media = medias.find(c => c.id === id);
+    const name = media ? (media.filename || `Clip #${id}`) : `Clip #${id}`;
     const time = votes.click_times[String(id)] ?? -1;
     const score = votes.learned_scores[String(id)] ?? -1;
     // Confidence: for "good" labels, higher score = more confident.
@@ -3034,7 +3059,7 @@
   }
 
   function renderVoteEntry(entry, label, parentEl) {
-    const clip = clips.find(c => c.id === entry.id);
+    const media = medias.find(c => c.id === entry.id);
     const div = document.createElement("div");
     div.className = "vote-entry";
     div.setAttribute("role", "button");
@@ -3045,14 +3070,14 @@
     else metaParts.push("imported");
     if (entry.confidence >= 0) metaParts.push(`${(entry.confidence * 100).toFixed(0)}%`);
 
-    const useThumbnail = showThumbnailsRight && clipSupportsThumbnail(clip);
+    const useThumbnail = showThumbnailsRight && mediaSupportsThumbnail(media);
     let html = "";
     if (useThumbnail) {
       div.className += " vote-entry-thumb";
-      if (clip.type === "video") {
-        html += `<video class="vote-thumbnail" src="${thumbnailUrl(clip)}" muted preload="metadata"></video>`;
+      if (media.type === "video") {
+        html += `<video class="vote-thumbnail" src="${thumbnailUrl(media)}" muted preload="metadata"></video>`;
       } else {
-        html += `<img class="vote-thumbnail" src="${thumbnailUrl(clip)}" alt="${entry.name}" loading="lazy">`;
+        html += `<img class="vote-thumbnail" src="${thumbnailUrl(media)}" alt="${entry.name}" loading="lazy">`;
       }
       html += `<div class="vote-thumb-info">`;
     }
@@ -3061,9 +3086,9 @@
       html += `</div>`;
     }
     div.innerHTML = html;
-    div.onclick = () => selectClip(entry.id);
+    div.onclick = () => selectMedia(entry.id);
     div.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectClip(entry.id); }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectMedia(entry.id); }
     });
     parentEl.appendChild(div);
   }
@@ -3096,7 +3121,7 @@
     highlight.className = "stripe-highlight";
     stripeContainer.appendChild(highlight);
 
-    // Render dots for each labeled clip
+    // Render dots for each labeled media
     sortOrder.forEach((item, index) => {
       const isGood = votes.good.includes(item.id);
       const isBad = votes.bad.includes(item.id);
@@ -3106,7 +3131,7 @@
         const dot = document.createElement("div");
         dot.className = `stripe-dot ${isGood ? "good" : "bad"}`;
         dot.style.top = `${(index / totalClips) * 100}%`;
-        dot.setAttribute("data-clip-id", item.id);
+        dot.setAttribute("data-media-id", item.id);
         dot.setAttribute("data-index", index);
         stripeContainer.appendChild(dot);
       }
@@ -3151,13 +3176,13 @@
     const clampedIndex = Math.max(0, Math.min(index, sortOrder.length - 1));
 
     if (sortOrder[clampedIndex]) {
-      const clipId = sortOrder[clampedIndex].id;
-      selectClip(clipId);
+      const mediaId = sortOrder[clampedIndex].id;
+      selectMedia(mediaId);
 
-      // Scroll the clip into view
-      const clipItems = clipList.querySelectorAll(".clip-item");
-      if (clipItems[clampedIndex]) {
-        clipItems[clampedIndex].scrollIntoView({ behavior: "smooth", block: "center" });
+      // Scroll the media into view
+      const mediaItems = mediaList.querySelectorAll(".media-item");
+      if (mediaItems[clampedIndex]) {
+        mediaItems[clampedIndex].scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
   });
@@ -3168,9 +3193,9 @@
     const highlight = stripeContainer.querySelector(".stripe-highlight");
     if (!highlight) return;
 
-    const scrollHeight = clipList.scrollHeight;
-    const clientHeight = clipList.clientHeight;
-    const scrollTop = clipList.scrollTop;
+    const scrollHeight = mediaList.scrollHeight;
+    const clientHeight = mediaList.clientHeight;
+    const scrollTop = mediaList.scrollTop;
 
     const topPercent = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
     const heightPercent = scrollHeight > 0 ? (clientHeight / scrollHeight) * 100 : 100;
@@ -3179,7 +3204,7 @@
     highlight.style.height = `${heightPercent}%`;
   }
 
-  clipList.addEventListener("scroll", updateStripeHighlight);
+  mediaList.addEventListener("scroll", updateStripeHighlight);
   window.addEventListener("resize", updateStripeHighlight);
 
   // ---- Label importer modal ----
@@ -3239,7 +3264,7 @@
         Import them from their origins?
       </div>
       <div style="display:flex;gap:10px;">
-        <button id="missing-import-btn" style="flex:1;padding:8px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.85rem;">Import clips</button>
+        <button id="missing-import-btn" style="flex:1;padding:8px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.85rem;">Import medias</button>
         <button id="missing-skip-btn" style="flex:1;padding:8px;background:var(--bg-secondary-btn);border:none;border-radius:4px;color:var(--text-btn-secondary);cursor:pointer;font-size:0.85rem;">Skip</button>
       </div>
       <div id="missing-status" style="min-height:1.4em;font-size:0.85rem;color:var(--text-muted);margin-top:8px;"></div>
@@ -3261,7 +3286,7 @@
       const importBtn = promptDiv.querySelector("#missing-import-btn");
       importBtn.disabled = true;
       importBtn.style.opacity = "0.5";
-      missingStatus.textContent = "Ingesting clips from origins\u2026";
+      missingStatus.textContent = "Ingesting medias from origins\u2026";
       missingStatus.style.color = "var(--text-muted)";
 
       try {
@@ -3753,7 +3778,7 @@
     // Update stats from cached status data
     if (_lastStatusData) {
       document.getElementById("stat-total-labels").textContent = _lastStatusData.total_count || 0;
-      document.getElementById("stat-total-clips").textContent = "—";
+      document.getElementById("stat-total-medias").textContent = "—";
     }
 
     document.getElementById("smart-section").style.display = "none";
@@ -3784,7 +3809,7 @@
   function displayProgressResults(data, metric) {
     // Update summary stats
     document.getElementById("stat-total-labels").textContent = data.total_labels;
-    document.getElementById("stat-total-clips").textContent = data.total_clips;
+    document.getElementById("stat-total-medias").textContent = data.total_medias;
 
     const ecChart = document.getElementById("error-cost-chart");
     if (ecChart) ecChart.setAttribute("role", "img");
@@ -4164,6 +4189,7 @@
     ctx.fillText(minLevel.toFixed(1), padding.left - 5, padding.top + chartHeight + 5);
   }
 
+
   // Modify fetchVotes to update label counts
   const originalFetchVotes = fetchVotes;
   fetchVotes = async function() {
@@ -4186,10 +4212,10 @@
   // Initialize
   fetchMediaTypes().then(() => checkDatasetStatus()).then(async () => {
     if (datasetLoaded) {
-      await fetchClips();
+      await fetchMedias();
       await fetchVotes();
-      if (clips.length > 0 && !selected) {
-        selectClip(clips[0].id);
+      if (medias.length > 0 && !selected) {
+        selectMedia(medias[0].id);
       }
     }
   });
@@ -4245,7 +4271,7 @@
       const data = await res.json();
       if (typeof data.volume === "number") {
         audioVolume = data.volume;
-        const audioEl = document.getElementById("clip-audio");
+        const audioEl = document.getElementById("media-audio");
         if (audioEl) audioEl.volume = audioVolume;
       }
       if (data.theme) {
@@ -4367,16 +4393,16 @@
 
   function adjustVolume(delta) {
     audioVolume = Math.max(0, Math.min(1, audioVolume + delta));
-    const audioEl = document.getElementById("clip-audio");
-    const videoEl = document.getElementById("clip-video");
+    const audioEl = document.getElementById("media-audio");
+    const videoEl = document.getElementById("media-video");
     if (audioEl) audioEl.volume = audioVolume;
     if (videoEl) videoEl.volume = audioVolume;
     saveVolume(audioVolume);
   }
 
   function toggleMediaPlayback() {
-    const audioEl = document.getElementById("clip-audio");
-    const videoEl = document.getElementById("clip-video");
+    const audioEl = document.getElementById("media-audio");
+    const videoEl = document.getElementById("media-video");
     const media = audioEl || videoEl;
     if (!media) return;
     if (media.paused) {

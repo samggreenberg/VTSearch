@@ -411,7 +411,7 @@ def calculate_safe_threshold(
 
     Args:
         xcal_threshold: The cross-calibrated threshold.
-        all_scores: Model output scores for all clips (used for GMM fitting).
+        all_scores: Model output scores for all medias (used for GMM fitting).
         n_labels: Total number of labelled examples (good + bad).
 
     Returns:
@@ -436,17 +436,17 @@ def train_and_score(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
 ) -> tuple[list[dict[str, Any]], float]:
-    """Train a small MLP on voted clip embeddings and score every clip.
+    """Train a small MLP on voted media embeddings and score every media.
 
     Uses k-fold calibration to determine an appropriate decision threshold,
-    then trains a final model on all labelled data and scores every clip in
+    then trains a final model on all labelled data and scores every media in
     ``clips_dict``.
 
     Args:
-        clips_dict: Mapping of clip ID to clip data dict. Each value must contain
+        clips_dict: Mapping of media ID to media data dict. Each value must contain
             an ``"embedding"`` key with a ``numpy.ndarray`` embedding vector.
-        good_votes: Dict whose keys are clip IDs labelled as good (values are ``None``).
-        bad_votes: Dict whose keys are clip IDs labelled as bad (values are ``None``).
+        good_votes: Dict whose keys are media IDs labelled as good (values are ``None``).
+        bad_votes: Dict whose keys are media IDs labelled as bad (values are ``None``).
         inclusion_value: Integer in ``[-10, 10]`` passed to the training and
             threshold-finding functions to control the inclusion/exclusion bias.
         safe_thresholds: When ``True``, blend the cross-calibration threshold with
@@ -496,7 +496,7 @@ def train_and_score(
     # Train final model on all data
     model = train_model(X, y, input_dim, inclusion_value)
 
-    # Score every clip
+    # Score every media
     all_ids = sorted(clips_dict.keys())
     all_embs = np.array([clips_dict[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)

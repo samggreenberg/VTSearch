@@ -103,37 +103,37 @@ class LabelSet:
     @classmethod
     def from_clips_and_votes(
         cls,
-        clips: dict[int, dict[str, Any]],
+        medias: dict[int, dict[str, Any]],
         good_votes: dict[int, None],
         bad_votes: dict[int, None],
     ) -> LabelSet:
-        """Build a ``LabelSet`` from the current clip and vote state.
+        """Build a ``LabelSet`` from the current media and vote state.
 
         Args:
-            clips: The global clips dict.
-            good_votes: Dict of clip IDs voted "good".
-            bad_votes: Dict of clip IDs voted "bad".
+            medias: The global medias dict.
+            good_votes: Dict of media IDs voted "good".
+            bad_votes: Dict of media IDs voted "bad".
 
         Returns:
             A new ``LabelSet`` containing one :class:`LabeledElement` per
-            voted clip, in vote-insertion order (good votes first, then bad).
+            voted media, in vote-insertion order (good votes first, then bad).
         """
         elements: list[LabeledElement] = []
         for cid in good_votes:
-            clip = clips.get(cid)
-            if clip:
-                elements.append(_clip_to_element(clip, "good"))
+            media = medias.get(cid)
+            if media:
+                elements.append(_clip_to_element(media, "good"))
         for cid in bad_votes:
-            clip = clips.get(cid)
-            if clip:
-                elements.append(_clip_to_element(clip, "bad"))
+            media = medias.get(cid)
+            if media:
+                elements.append(_clip_to_element(media, "bad"))
         return cls(elements)
 
     @classmethod
     def from_results(
         cls,
         results: dict[str, Any],
-        clips: dict[int, dict[str, Any]] | None = None,
+        medias: dict[int, dict[str, Any]] | None = None,
     ) -> LabelSet:
         """Build a ``LabelSet`` from an auto-detect results dict.
 
@@ -143,8 +143,8 @@ class LabelSet:
         Args:
             results: A results dict as produced by ``/api/auto-detect`` or
                 :func:`~vtsearch.cli._build_results_dict`.
-            clips: Optional clips dict for enriching hits with origin info.
-                When provided, origin data is looked up from the clip; when
+            medias: Optional medias dict for enriching hits with origin info.
+                When provided, origin data is looked up from the media; when
                 absent, origin data is taken from the hit dict itself (if
                 present).
 
@@ -156,12 +156,12 @@ class LabelSet:
             for hit in det_result.get("hits", []):
                 origin = hit.get("origin")
                 origin_name = hit.get("origin_name", "")
-                if clips and not origin:
-                    clip = clips.get(hit.get("id"))
-                    if clip:
-                        origin = clip.get("origin")
-                        origin_name = origin_name or clip.get(
-                            "origin_name", clip.get("filename", "")
+                if medias and not origin:
+                    media = medias.get(hit.get("id"))
+                    if media:
+                        origin = media.get("origin")
+                        origin_name = origin_name or media.get(
+                            "origin_name", media.get("filename", "")
                         )
                 elements.append(
                     LabeledElement(
@@ -205,13 +205,13 @@ class LabelSet:
         return cls(elements)
 
 
-def _clip_to_element(clip: dict[str, Any], label: str) -> LabeledElement:
-    """Convert a clip dict into a :class:`LabeledElement`."""
+def _clip_to_element(media: dict[str, Any], label: str) -> LabeledElement:
+    """Convert a media dict into a :class:`LabeledElement`."""
     return LabeledElement(
-        md5=clip["md5"],
+        md5=media["md5"],
         label=label,
-        origin=clip.get("origin"),
-        origin_name=clip.get("origin_name", clip.get("filename", "")),
-        filename=clip.get("filename", ""),
-        category=clip.get("category", ""),
+        origin=media.get("origin"),
+        origin_name=media.get("origin_name", media.get("filename", "")),
+        filename=media.get("filename", ""),
+        category=media.get("category", ""),
     )

@@ -57,11 +57,11 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 
 
 class ImageMediaType(MediaType):
-    """Handles image clips using the CLIP model (openai/clip-vit-base-patch32).
+    """Handles image medias using the CLIP model (openai/media-vit-base-patch32).
 
     * Embeds images via CLIP's vision encoder (768-dim vectors).
     * Embeds text queries via CLIP's text encoder (same 768-dim space).
-    * Serves clips as image files with MIME types inferred from extension.
+    * Serves medias as image files with MIME types inferred from extension.
     * Also exposes :meth:`embed_pil_image` for in-memory PIL Image objects
       (used when generating CIFAR-10 demo datasets).
     """
@@ -848,18 +848,18 @@ class ImageMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_clip_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path) -> dict:
         from PIL import Image  # noqa: PLC0415
 
         with open(file_path, "rb") as f:
-            clip_bytes = f.read()
+            media_bytes = f.read()
         try:
             img = Image.open(file_path)
             width, height = img.width, img.height
         except Exception:
             width, height = None, None
         return {
-            "clip_bytes": clip_bytes,
+            "media_bytes": media_bytes,
             "duration": 0,
             "width": width,
             "height": height,
@@ -869,15 +869,15 @@ class ImageMediaType(MediaType):
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def clip_response(self, clip: dict) -> MediaResponse:
-        filename = clip.get("filename", "")
+    def media_response(self, media: dict) -> MediaResponse:
+        filename = media.get("filename", "")
         ext = Path(filename).suffix.lower() if filename else ".jpg"
         mimetype = _IMAGE_MIME_TYPES.get(ext, "image/jpeg")
-        data = self._resolve_clip_bytes(clip)
+        data = self._resolve_media_bytes(media)
         if data is None:
-            return MediaResponse(data=b"", mimetype=mimetype, download_name=f"clip_{clip['id']}{ext}")
+            return MediaResponse(data=b"", mimetype=mimetype, download_name=f"media_{media['id']}{ext}")
         return MediaResponse(
             data=data,
             mimetype=mimetype,
-            download_name=f"clip_{clip['id']}{ext}",
+            download_name=f"media_{media['id']}{ext}",
         )

@@ -11,7 +11,7 @@ class TestSortClips:
         resp = client.post("/api/sort", json={"text": "high pitched beep"})
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_CLIPS
+        assert len(data["results"]) == app_module.NUM_MEDIAS
         assert "threshold" in data
 
     def test_result_contains_id_and_similarity(self, client):
@@ -27,11 +27,11 @@ class TestSortClips:
         similarities = [e["similarity"] for e in data["results"]]
         assert similarities == sorted(similarities, reverse=True)
 
-    def test_all_clip_ids_present(self, client):
+    def test_all_media_ids_present(self, client):
         resp = client.post("/api/sort", json={"text": "sine wave"})
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
-        assert ids == set(range(1, app_module.NUM_CLIPS + 1))
+        assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
 
     def test_similarity_values_in_range(self, client):
         resp = client.post("/api/sort", json={"text": "high pitch"})
@@ -56,8 +56,8 @@ class TestTrainAndScore:
     def test_returns_list_of_scored_clips(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.clips, app_module.good_votes, app_module.bad_votes)
-        assert len(results) == app_module.NUM_CLIPS
+        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        assert len(results) == app_module.NUM_MEDIAS
         assert isinstance(threshold, float)
         for entry in results:
             assert "id" in entry
@@ -66,21 +66,21 @@ class TestTrainAndScore:
     def test_scores_between_zero_and_one(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.clips, app_module.good_votes, app_module.bad_votes)
+        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         for entry in results:
             assert 0.0 <= entry["score"] <= 1.0
 
     def test_results_sorted_descending(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.clips, app_module.good_votes, app_module.bad_votes)
+        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         scores = [e["score"] for e in results]
         assert scores == sorted(scores, reverse=True)
 
     def test_good_clips_scored_higher_than_bad(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold = app_module.train_and_score(app_module.clips, app_module.good_votes, app_module.bad_votes)
+        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         score_map = {e["id"]: e["score"] for e in results}
         avg_good = np.mean([score_map[i] for i in app_module.good_votes])
         avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
@@ -91,14 +91,14 @@ class TestTrainAndScore:
         app_module.good_votes.update({k: None for k in [1, 2, 3, 4, 5]})
         app_module.bad_votes.update({k: None for k in [16, 17, 18, 19, 20]})
         results_before, _ = app_module.train_and_score(
-            app_module.clips, app_module.good_votes, app_module.bad_votes
+            app_module.medias, app_module.good_votes, app_module.bad_votes
         )
         order_before = [e["id"] for e in results_before]
 
-        # Add a new good vote on a clip that was in the middle
+        # Add a new good vote on a media that was in the middle
         app_module.good_votes[10] = None
         results_after, _ = app_module.train_and_score(
-            app_module.clips, app_module.good_votes, app_module.bad_votes
+            app_module.medias, app_module.good_votes, app_module.bad_votes
         )
         order_after = [e["id"] for e in results_after]
 
@@ -232,7 +232,7 @@ class TestLearnedSort:
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_CLIPS
+        assert len(data["results"]) == app_module.NUM_MEDIAS
         assert "threshold" in data
 
     def test_result_fields(self, client):
@@ -252,13 +252,13 @@ class TestLearnedSort:
         scores = [e["score"] for e in data["results"]]
         assert scores == sorted(scores, reverse=True)
 
-    def test_all_clip_ids_present(self, client):
+    def test_all_media_ids_present(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort")
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
-        assert ids == set(range(1, app_module.NUM_CLIPS + 1))
+        assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
 
     def test_only_good_votes_returns_400(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
@@ -290,7 +290,7 @@ class TestExampleSort:
         result_data = resp.get_json()
         assert "results" in result_data
         assert "threshold" in result_data
-        assert len(result_data["results"]) == app_module.NUM_CLIPS
+        assert len(result_data["results"]) == app_module.NUM_MEDIAS
 
     def test_sort_results_sorted_descending(self, client):
         wav_bytes = app_module.generate_wav(440.0, 1.0)

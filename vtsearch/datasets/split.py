@@ -13,11 +13,11 @@ def _category_seed(seed: int, category: str) -> int:
 
 
 def split_dataset(
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     test_fraction: float,
     seed: int,
 ) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]]]:
-    """Split a clips dict into simulation and test sets, stratified by category.
+    """Split a medias dict into simulation and test sets, stratified by category.
 
     Each category is split independently using the same fraction, so if
     ``test_fraction=0.2`` then roughly 20% of each category ends up in the
@@ -29,7 +29,7 @@ def split_dataset(
     Clip IDs are preserved (not renumbered) in both output dicts.
 
     Args:
-        clips: Mapping of clip ID to clip data dict.  Every clip must have a
+        medias: Mapping of media ID to media data dict.  Every media must have a
             ``"category"`` key.
         test_fraction: Fraction of each category to allocate to the test set.
             Must be in ``(0, 1)``.
@@ -38,21 +38,21 @@ def split_dataset(
 
     Returns:
         A 2-tuple ``(simulate_clips, test_clips)`` where each element is a
-        dict with the same structure as ``clips``.
+        dict with the same structure as ``medias``.
 
     Raises:
-        ValueError: If ``test_fraction`` is not in ``(0, 1)`` or if ``clips``
+        ValueError: If ``test_fraction`` is not in ``(0, 1)`` or if ``medias``
             is empty.
     """
     if not 0 < test_fraction < 1:
         raise ValueError(f"test_fraction must be in (0, 1), got {test_fraction}")
-    if not clips:
-        raise ValueError("clips dict is empty")
+    if not medias:
+        raise ValueError("medias dict is empty")
 
-    # Group clip IDs by category
+    # Group media IDs by category
     by_category: dict[str, list[int]] = defaultdict(list)
-    for clip_id, clip in clips.items():
-        by_category[clip["category"]].append(clip_id)
+    for media_id, media in medias.items():
+        by_category[media["category"]].append(media_id)
 
     simulate_clips: dict[int, dict[str, Any]] = {}
     test_clips: dict[int, dict[str, Any]] = {}
@@ -75,8 +75,8 @@ def split_dataset(
         simulate_ids = ids[n_test:]
 
         for cid in test_ids:
-            test_clips[cid] = clips[cid]
+            test_clips[cid] = medias[cid]
         for cid in simulate_ids:
-            simulate_clips[cid] = clips[cid]
+            simulate_clips[cid] = medias[cid]
 
     return simulate_clips, test_clips

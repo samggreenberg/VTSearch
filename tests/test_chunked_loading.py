@@ -35,11 +35,11 @@ def _make_wav_file(tmp_dir: Path, name: str, frequency: float = 440.0) -> Path:
 
 
 def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float = 440.0) -> Path:
-    """Create a test pickle with distinct WAV bytes per clip (using base_freq)."""
-    clips_data: dict[int, dict[str, Any]] = {}
+    """Create a test pickle with distinct WAV bytes per media (using base_freq)."""
+    medias_data: dict[int, dict[str, Any]] = {}
     for i in range(1, num_clips + 1):
         wav_bytes = _make_wav_bytes(frequency=base_freq + i * 10)
-        clip: dict[str, Any] = {
+        media: dict[str, Any] = {
             "id": i,
             "type": "audio",
             "duration": 0.1,
@@ -48,22 +48,22 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
             "embedding": np.random.randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
-            "clip_bytes": wav_bytes,
+            "media_bytes": wav_bytes,
         }
-        clips_data[i] = clip
+        medias_data[i] = media
 
     pkl_path = tmp_path / "test_chunked.pkl"
     with open(pkl_path, "wb") as f:
-        pickle.dump({"clips": clips_data}, f)
+        pickle.dump({"medias": medias_data}, f)
     return pkl_path
 
 
 def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> Path:
-    """Create a test pickle with *num_clips* audio clips."""
-    clips_data: dict[int, dict[str, Any]] = {}
+    """Create a test pickle with *num_clips* audio medias."""
+    medias_data: dict[int, dict[str, Any]] = {}
     for i in range(1, num_clips + 1):
         wav_bytes = _make_wav_bytes(frequency=440.0 + i)
-        clip: dict[str, Any] = {
+        media: dict[str, Any] = {
             "id": i,
             "type": "audio",
             "duration": 0.1,
@@ -74,12 +74,12 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
             "category": f"cat_{i % 3}",
         }
         if inline_bytes:
-            clip["clip_bytes"] = wav_bytes
-        clips_data[i] = clip
+            media["media_bytes"] = wav_bytes
+        medias_data[i] = media
 
     pkl_path = tmp_path / "test_chunked.pkl"
     with open(pkl_path, "wb") as f:
-        pickle.dump({"clips": clips_data}, f)
+        pickle.dump({"medias": medias_data}, f)
     return pkl_path
 
 
@@ -110,7 +110,7 @@ class TestFolderChunked:
         assert len(chunks[2]) == 1
 
     def test_chunk_ids_start_at_one(self, tmp_path):
-        """Each chunk's clip IDs start at 1 (not continuing from prior chunk)."""
+        """Each chunk's media IDs start at 1 (not continuing from prior chunk)."""
         for i in range(4):
             _make_wav_file(tmp_path, f"file_{i}.wav", frequency=440.0 + i * 10)
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=2, thin=True))
@@ -118,31 +118,31 @@ class TestFolderChunked:
             assert 1 in chunk
 
     def test_thin_mode_no_bytes(self, tmp_path):
-        """Thin mode: clip_bytes is None, media_path is set."""
+        """Thin mode: media_bytes is None, media_path is set."""
         _make_wav_file(tmp_path, "test.wav")
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
-        clip = chunks[0][1]
-        assert clip["clip_bytes"] is None
-        assert clip["media_path"] is not None
-        assert Path(clip["media_path"]).exists()
+        media = chunks[0][1]
+        assert media["media_bytes"] is None
+        assert media["media_path"] is not None
+        assert Path(media["media_path"]).exists()
 
     def test_full_mode_has_bytes(self, tmp_path):
-        """Full mode: clip_bytes is populated."""
+        """Full mode: media_bytes is populated."""
         _make_wav_file(tmp_path, "test.wav")
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=False))
-        clip = chunks[0][1]
-        assert clip["clip_bytes"] is not None
+        media = chunks[0][1]
+        assert media["media_bytes"] is not None
 
     def test_embeddings_present(self, tmp_path):
-        """Each clip in a chunk has an embedding array."""
+        """Each media in a chunk has an embedding array."""
         _make_wav_file(tmp_path, "test.wav")
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
-        clip = chunks[0][1]
-        assert isinstance(clip["embedding"], np.ndarray)
-        assert len(clip["embedding"]) > 0
+        media = chunks[0][1]
+        assert isinstance(media["embedding"], np.ndarray)
+        assert len(media["embedding"]) > 0
 
     def test_all_files_covered(self, tmp_path):
-        """The total number of clips across all chunks equals total files."""
+        """The total number of medias across all chunks equals total files."""
         for i in range(7):
             _make_wav_file(tmp_path, f"f_{i}.wav", frequency=440.0 + i * 10)
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=3, thin=True))
@@ -162,8 +162,8 @@ class TestFolderChunked:
         # Chunked
         chunked_filenames: set[str] = set()
         for chunk in load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=2, thin=True):
-            for clip in chunk.values():
-                chunked_filenames.add(clip["filename"])
+            for media in chunk.values():
+                chunked_filenames.add(media["filename"])
 
         assert mono_filenames == chunked_filenames
 
@@ -214,20 +214,20 @@ class TestPickleChunked:
     def test_thin_mode_drops_bytes(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 2, inline_bytes=True)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
-        for clip in chunks[0].values():
-            assert clip["clip_bytes"] is None
+        for media in chunks[0].values():
+            assert media["media_bytes"] is None
 
     def test_full_mode_keeps_bytes(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 2, inline_bytes=True)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
-        for clip in chunks[0].values():
-            assert clip["clip_bytes"] is not None
+        for media in chunks[0].values():
+            assert media["media_bytes"] is not None
 
     def test_embeddings_are_numpy(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 2)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
-        for clip in chunks[0].values():
-            assert isinstance(clip["embedding"], np.ndarray)
+        for media in chunks[0].values():
+            assert isinstance(media["embedding"], np.ndarray)
 
     def test_all_clips_covered(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 7)
@@ -238,10 +238,10 @@ class TestPickleChunked:
     def test_metadata_preserved(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 1)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
-        clip = chunks[0][1]
-        assert clip["type"] == "audio"
-        assert clip["filename"] == "clip_1.wav"
-        assert clip["category"] == "cat_1"
+        media = chunks[0][1]
+        assert media["type"] == "audio"
+        assert media["filename"] == "clip_1.wav"
+        assert media["category"] == "cat_1"
 
 
 # ======================================================================
@@ -263,9 +263,9 @@ class TestBaseImporterChunkedDefault:
             icon = ""
             fields: list[ImporterField] = []
 
-            def run(self, field_values, clips, thin=False):
-                clips[1] = {"id": 1, "type": "audio", "embedding": np.zeros(4)}
-                clips[2] = {"id": 2, "type": "audio", "embedding": np.ones(4)}
+            def run(self, field_values, medias, thin=False):
+                medias[1] = {"id": 1, "type": "audio", "embedding": np.zeros(4)}
+                medias[2] = {"id": 2, "type": "audio", "embedding": np.ones(4)}
 
         imp = DummyImporter()
         assert imp.supports_chunked is False

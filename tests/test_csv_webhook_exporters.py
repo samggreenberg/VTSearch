@@ -22,7 +22,7 @@ from vtsearch.datasets.loader import export_dataset_to_file
 
 
 def _make_dataset_file(tmp_path, clips_dict):
-    """Export a clips dict to a pickle file and return the path."""
+    """Export a medias dict to a pickle file and return the path."""
     pkl_bytes = export_dataset_to_file(clips_dict)
     dataset_path = tmp_path / "dataset.pkl"
     dataset_path.write_bytes(pkl_bytes)
@@ -282,7 +282,7 @@ class TestCsvExporterIntegration:
     """Integration: CSV exporter via _run_exporter and with real detector results."""
 
     def test_csv_via_run_exporter(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -510,7 +510,7 @@ class TestWebhookExporterIntegration:
     """Integration: Webhook exporter via _run_exporter."""
 
     def test_webhook_via_run_exporter(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))

@@ -20,26 +20,26 @@ from vtsearch.datasets.loader import load_dataset_from_pickle
 
 
 def _score_clips_with_detector(
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     detector_path: str,
 ) -> list[dict[str, Any]]:
-    """Score all *clips* using the detector at *detector_path*.
+    """Score all *medias* using the detector at *detector_path*.
 
-    Returns a list of dicts for clips predicted as "Good", sorted descending
+    Returns a list of dicts for medias predicted as "Good", sorted descending
     by score.  Each dict contains ``id``, ``filename``, ``category``, and
     ``score``.
 
     Raises:
         FileNotFoundError: If the detector file does not exist.
-        ValueError: If the clips dict is empty or the detector is invalid.
+        ValueError: If the medias dict is empty or the detector is invalid.
     """
     detector_file = Path(detector_path)
 
     if not detector_file.exists():
         raise FileNotFoundError(f"Detector file not found: {detector_path}")
 
-    if not clips:
-        raise ValueError("No clips loaded from dataset")
+    if not medias:
+        raise ValueError("No medias loaded from dataset")
 
     # Load detector
     with open(detector_file, "r") as f:
@@ -60,9 +60,9 @@ def _score_clips_with_detector(
 
     model = build_model_from_weights(weights)
 
-    # Score all clips
-    all_ids = sorted(clips.keys())
-    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    # Score all medias
+    all_ids = sorted(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     with torch.no_grad():
@@ -72,19 +72,19 @@ def _score_clips_with_detector(
     positive_hits = []
     for cid, score in zip(all_ids, scores):
         if score >= threshold:
-            clip = clips[cid]
+            media = medias[cid]
             hit: dict[str, Any] = {
                 "id": cid,
-                "filename": clip.get("filename", f"clip_{cid}"),
-                "category": clip.get("category", "unknown"),
+                "filename": media.get("filename", f"media_{cid}"),
+                "category": media.get("category", "unknown"),
                 "score": round(score, 4),
             }
-            if clip.get("origin") is not None:
-                hit["origin"] = clip["origin"]
-            if clip.get("origin_name"):
-                hit["origin_name"] = clip["origin_name"]
-            if clip.get("md5"):
-                hit["md5"] = clip["md5"]
+            if media.get("origin") is not None:
+                hit["origin"] = media["origin"]
+            if media.get("origin_name"):
+                hit["origin_name"] = media["origin_name"]
+            if media.get("md5"):
+                hit["md5"] = media["md5"]
             positive_hits.append(hit)
 
     # Sort by score descending
@@ -101,8 +101,8 @@ def run_autodetect(dataset_path: str, detector_path: str) -> list[dict[str, Any]
         detector_path: Path to a JSON file containing detector weights and threshold.
 
     Returns:
-        A list of dicts for clips predicted as "Good", each containing
-        the clip's ``id``, ``filename``, ``category``, and ``score``.
+        A list of dicts for medias predicted as "Good", each containing
+        the media's ``id``, ``filename``, ``category``, and ``score``.
 
     Raises:
         FileNotFoundError: If the dataset or detector file does not exist.
@@ -114,13 +114,13 @@ def run_autodetect(dataset_path: str, detector_path: str) -> list[dict[str, Any]
         raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
 
     # Load dataset in thin mode — CLI only needs embeddings, not media bytes
-    clips: dict[int, dict[str, Any]] = {}
-    load_dataset_from_pickle(dataset_file, clips, thin=True)
+    medias: dict[int, dict[str, Any]] = {}
+    load_dataset_from_pickle(dataset_file, medias, thin=True)
 
-    if not clips:
-        raise ValueError(f"No clips loaded from dataset: {dataset_path}")
+    if not medias:
+        raise ValueError(f"No medias loaded from dataset: {dataset_path}")
 
-    return _score_clips_with_detector(clips, detector_path)
+    return _score_clips_with_detector(medias, detector_path)
 
 
 def run_autodetect_with_importer(
@@ -138,8 +138,8 @@ def run_autodetect_with_importer(
         detector_path: Path to a JSON file containing detector weights and threshold.
 
     Returns:
-        A list of dicts for clips predicted as "Good", each containing
-        the clip's ``id``, ``filename``, ``category``, and ``score``.
+        A list of dicts for medias predicted as "Good", each containing
+        the media's ``id``, ``filename``, ``category``, and ``score``.
 
     Raises:
         ValueError: If the importer is unknown, required fields are missing,
@@ -156,13 +156,13 @@ def run_autodetect_with_importer(
     importer.validate_cli_field_values(field_values)
 
     # Use thin mode — CLI only needs embeddings for scoring, not media bytes
-    clips: dict[int, dict[str, Any]] = {}
-    importer.run_cli(field_values, clips, thin=True)
+    medias: dict[int, dict[str, Any]] = {}
+    importer.run_cli(field_values, medias, thin=True)
 
-    if not clips:
-        raise ValueError(f"No clips loaded by importer '{importer_name}'")
+    if not medias:
+        raise ValueError(f"No medias loaded by importer '{importer_name}'")
 
-    return _score_clips_with_detector(clips, detector_path)
+    return _score_clips_with_detector(medias, detector_path)
 
 
 def _list_importer_names() -> list[str]:
@@ -224,16 +224,16 @@ def _build_results_dict(
     }
 
 
-def _score_clips_with_detectors(
-    clips: dict[int, dict[str, Any]],
+def _score_medias_with_detectors(
+    medias: dict[int, dict[str, Any]],
     detectors: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Score all *clips* against every detector in *detectors*.
+    """Score all *medias* against every detector in *detectors*.
 
     Embeddings are extracted once and reused across all detectors.
 
     Args:
-        clips: The clips dict (must contain ``"embedding"`` per clip).
+        medias: The medias dict (must contain ``"embedding"`` per media).
         detectors: Mapping of detector name to detector data dict (with
             ``"weights"`` and ``"threshold"`` keys).
 
@@ -242,17 +242,17 @@ def _score_clips_with_detectors(
         ``"detector_name"``, ``"threshold"``, ``"total_hits"``, ``"hits"``).
 
     Raises:
-        ValueError: If *clips* or *detectors* is empty.
+        ValueError: If *medias* or *detectors* is empty.
     """
-    if not clips:
-        raise ValueError("No clips loaded from dataset")
+    if not medias:
+        raise ValueError("No medias loaded from dataset")
     if not detectors:
         raise ValueError("No favorite processors found for the dataset's media type")
 
     import torch  # noqa: PLC0415
 
-    all_ids = sorted(clips.keys())
-    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    all_ids = sorted(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     results: dict[str, dict[str, Any]] = {}
@@ -270,19 +270,19 @@ def _score_clips_with_detectors(
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
         for cid, score in zip(all_ids, scores):
-            clip = clips[cid]
+            media = medias[cid]
             hit: dict[str, Any] = {
                 "id": cid,
-                "filename": clip.get("filename", f"clip_{cid}"),
-                "category": clip.get("category", "unknown"),
+                "filename": media.get("filename", f"media_{cid}"),
+                "category": media.get("category", "unknown"),
                 "score": round(score, 4),
             }
-            if clip.get("origin") is not None:
-                hit["origin"] = clip["origin"]
-            if clip.get("origin_name"):
-                hit["origin_name"] = clip["origin_name"]
-            if clip.get("md5"):
-                hit["md5"] = clip["md5"]
+            if media.get("origin") is not None:
+                hit["origin"] = media["origin"]
+            if media.get("origin_name"):
+                hit["origin_name"] = media["origin_name"]
+            if media.get("md5"):
+                hit["md5"] = media["md5"]
             if score >= threshold:
                 positive_hits.append(hit)
             else:
@@ -310,7 +310,7 @@ def _build_multi_results_dict(
 
     Args:
         detector_results: Per-detector results from
-            :func:`_score_clips_with_detectors`.
+            :func:`_score_medias_with_detectors`.
         media_type: The media type string for the dataset.
 
     Returns:
@@ -323,10 +323,10 @@ def _build_multi_results_dict(
     }
 
 
-def _detect_media_type(clips: dict[int, dict[str, Any]]) -> str:
-    """Return the media type from the first clip, or ``"unknown"``."""
-    for clip in clips.values():
-        return clip.get("type", "unknown")
+def _detect_media_type(medias: dict[int, dict[str, Any]]) -> str:
+    """Return the media type from the first media, or ``"unknown"``."""
+    for media in medias.values():
+        return media.get("type", "unknown")
     return "unknown"
 
 
@@ -388,7 +388,7 @@ def _merge_detector_results(
     Args:
         accumulated: The running results dict (mutated in-place).
         new_chunk: Results from the latest chunk (same shape as
-            :func:`_score_clips_with_detectors` output).
+            :func:`_score_medias_with_detectors` output).
     """
     for det_name, det_result in new_chunk.items():
         if det_name not in accumulated:
@@ -432,12 +432,12 @@ def autodetect_main(
             raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
 
         # Thin mode — CLI only needs embeddings for scoring, not media bytes
-        clips: dict[int, dict[str, Any]] = {}
-        load_dataset_from_pickle(dataset_file, clips, thin=True)
-        if not clips:
-            raise ValueError(f"No clips loaded from dataset: {dataset_path}")
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(dataset_file, medias, thin=True)
+        if not medias:
+            raise ValueError(f"No medias loaded from dataset: {dataset_path}")
 
-        media_type = _detect_media_type(clips)
+        media_type = _detect_media_type(medias)
 
         from vtsearch.utils import get_favorite_detectors_by_media
 
@@ -448,7 +448,7 @@ def autodetect_main(
                 "Add processors to the settings file or use --settings to specify one."
             )
 
-        detector_results = _score_clips_with_detectors(clips, detectors)
+        detector_results = _score_medias_with_detectors(medias, detectors)
         results = _build_multi_results_dict(detector_results, media_type)
         _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
     except (FileNotFoundError, ValueError) as e:
@@ -496,12 +496,12 @@ def autodetect_importer_main(
         importer.validate_cli_field_values(field_values)
 
         # Thin mode — CLI only needs embeddings for scoring, not media bytes
-        clips: dict[int, dict[str, Any]] = {}
-        importer.run_cli(field_values, clips, thin=True)
-        if not clips:
-            raise ValueError(f"No clips loaded by importer '{importer_name}'")
+        medias: dict[int, dict[str, Any]] = {}
+        importer.run_cli(field_values, medias, thin=True)
+        if not medias:
+            raise ValueError(f"No medias loaded by importer '{importer_name}'")
 
-        media_type = _detect_media_type(clips)
+        media_type = _detect_media_type(medias)
 
         from vtsearch.utils import get_favorite_detectors_by_media
 
@@ -512,7 +512,7 @@ def autodetect_importer_main(
                 "Add processors to the settings file or use --settings to specify one."
             )
 
-        detector_results = _score_clips_with_detectors(clips, detectors)
+        detector_results = _score_medias_with_detectors(medias, detectors)
         results = _build_multi_results_dict(detector_results, media_type)
         _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
     except (FileNotFoundError, ValueError, NotADirectoryError) as e:
@@ -530,12 +530,12 @@ def autodetect_main_chunked(
     """CLI entry point: chunked autodetect on a pickle dataset.
 
     Identical to :func:`autodetect_main` but processes the dataset in
-    chunks of *chunk_size* clips at a time, merging results across
+    chunks of *chunk_size* medias at a time, merging results across
     chunks.  This bounds peak memory usage regardless of dataset size.
 
     Args:
         dataset_path: Path to the dataset pickle file.
-        chunk_size: Maximum number of clips to load at once.
+        chunk_size: Maximum number of medias to load at once.
         settings_path: Optional path to a settings JSON file.
         exporter_name: Optional registered exporter name.
         exporter_field_values: Optional exporter field values.
@@ -552,18 +552,18 @@ def autodetect_main_chunked(
         merged_results: dict[str, dict[str, Any]] = {}
         media_type: str | None = None
         detectors: dict[str, dict[str, Any]] | None = None
-        total_clips = 0
+        total_medias = 0
 
-        for chunk_num, chunk_clips in enumerate(
+        for chunk_num, chunk_medias in enumerate(
             load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True), 1
         ):
-            if not chunk_clips:
+            if not chunk_medias:
                 continue
 
-            total_clips += len(chunk_clips)
+            total_medias += len(chunk_medias)
 
             if media_type is None:
-                media_type = _detect_media_type(chunk_clips)
+                media_type = _detect_media_type(chunk_medias)
 
                 from vtsearch.utils import get_favorite_detectors_by_media
 
@@ -574,14 +574,14 @@ def autodetect_main_chunked(
                         "Add processors to the settings file or use --settings to specify one."
                     )
 
-            print(f"Processing chunk {chunk_num} ({len(chunk_clips)} clips)...", flush=True)
-            chunk_results = _score_clips_with_detectors(chunk_clips, detectors)
+            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
+            chunk_results = _score_medias_with_detectors(chunk_medias, detectors)
             _merge_detector_results(merged_results, chunk_results)
 
         if not merged_results:
-            raise ValueError(f"No clips loaded from dataset: {dataset_path}")
+            raise ValueError(f"No medias loaded from dataset: {dataset_path}")
 
-        print(f"Finished processing {total_clips} clips across {chunk_num} chunk(s).", flush=True)
+        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
         results = _build_multi_results_dict(merged_results, media_type or "unknown")
         _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
     except (FileNotFoundError, ValueError) as e:
@@ -601,13 +601,13 @@ def autodetect_importer_main_chunked(
 
     Identical to :func:`autodetect_importer_main` but uses the importer's
     :meth:`~DatasetImporter.run_chunked_cli` to load the dataset in chunks
-    of *chunk_size* clips, processing each chunk independently and merging
+    of *chunk_size* medias, processing each chunk independently and merging
     results.  This bounds peak memory usage regardless of dataset size.
 
     Args:
         importer_name: Registered name of the importer.
         field_values: Mapping of importer field keys to their CLI values.
-        chunk_size: Maximum number of clips to load at once.
+        chunk_size: Maximum number of medias to load at once.
         settings_path: Optional path to a settings JSON file.
         exporter_name: Optional registered exporter name.
         exporter_field_values: Optional exporter field values.
@@ -627,18 +627,18 @@ def autodetect_importer_main_chunked(
         merged_results: dict[str, dict[str, Any]] = {}
         media_type: str | None = None
         detectors: dict[str, dict[str, Any]] | None = None
-        total_clips = 0
+        total_medias = 0
 
-        for chunk_num, chunk_clips in enumerate(
+        for chunk_num, chunk_medias in enumerate(
             importer.run_chunked_cli(field_values, chunk_size, thin=True), 1
         ):
-            if not chunk_clips:
+            if not chunk_medias:
                 continue
 
-            total_clips += len(chunk_clips)
+            total_medias += len(chunk_medias)
 
             if media_type is None:
-                media_type = _detect_media_type(chunk_clips)
+                media_type = _detect_media_type(chunk_medias)
 
                 from vtsearch.utils import get_favorite_detectors_by_media
 
@@ -649,14 +649,14 @@ def autodetect_importer_main_chunked(
                         "Add processors to the settings file or use --settings to specify one."
                     )
 
-            print(f"Processing chunk {chunk_num} ({len(chunk_clips)} clips)...", flush=True)
-            chunk_results = _score_clips_with_detectors(chunk_clips, detectors)
+            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
+            chunk_results = _score_medias_with_detectors(chunk_medias, detectors)
             _merge_detector_results(merged_results, chunk_results)
 
         if not merged_results:
-            raise ValueError(f"No clips loaded by importer '{importer_name}'")
+            raise ValueError(f"No medias loaded by importer '{importer_name}'")
 
-        print(f"Finished processing {total_clips} clips across {chunk_num} chunk(s).", flush=True)
+        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
         results = _build_multi_results_dict(merged_results, media_type or "unknown")
         _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
     except (FileNotFoundError, ValueError, NotADirectoryError) as e:

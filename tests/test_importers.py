@@ -49,7 +49,7 @@ class TestImporterBaseContentVectors:
             description = "Minimal importer."
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         imp = MinimalImporter()
@@ -65,7 +65,7 @@ class TestImporterBaseContentVectors:
             description = "T"
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         assert Imp().content_vectors == {}
@@ -79,7 +79,7 @@ class TestImporterBaseContentVectors:
             description = "T"
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         a = Imp()
@@ -98,7 +98,7 @@ class TestImporterBaseContentVectors:
             description = "Provides vectors."
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 self.content_vectors["test.wav"] = np.array([1.0, 2.0, 3.0])
 
         imp = VectorImporter()
@@ -117,7 +117,7 @@ class TestImporterBaseContentMD5s:
             description = "Minimal importer."
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         imp = MinimalImporter()
@@ -133,7 +133,7 @@ class TestImporterBaseContentMD5s:
             description = "T"
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         assert Imp().content_md5s == {}
@@ -147,7 +147,7 @@ class TestImporterBaseContentMD5s:
             description = "T"
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         a = Imp()
@@ -164,7 +164,7 @@ class TestImporterBaseContentMD5s:
             description = "Provides MD5s."
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 self.content_md5s["test.wav"] = "d41d8cd98f00b204e9800998ecf8427e"
 
         imp = MD5Importer()
@@ -190,7 +190,7 @@ class TestImporterBaseIcon:
             icon = "🧪"
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         d = DummyImporter().to_dict()
@@ -206,7 +206,7 @@ class TestImporterBaseIcon:
             description = "No icon override."
             fields = []
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         d = MinimalImporter().to_dict()
@@ -443,7 +443,7 @@ class TestLoadDatasetContentVectors:
         mt.type_id = "audio"
         mt.file_extensions = ["*.wav"]
         mt.embed_media.return_value = embed_return
-        mt.load_clip_data.return_value = {"duration": 1.0}
+        mt.load_media_data.return_value = {"duration": 1.0}
         return mt
 
     def test_uses_content_vector_when_provided(self, tmp_path):
@@ -460,18 +460,18 @@ class TestLoadDatasetContentVectors:
         pre_vector = np.array([10.0, 20.0, 30.0])
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", clips, content_vectors={"a.wav": pre_vector}, on_progress=_noop
+                tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
 
-        assert len(clips) == 1
-        np.testing.assert_array_equal(clips[1]["embedding"], pre_vector)
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
         mt.embed_media.assert_not_called()
 
     def test_embeds_normally_when_not_in_content_vectors(self, tmp_path):
@@ -488,16 +488,16 @@ class TestLoadDatasetContentVectors:
         model_vector = np.array([1.0, 2.0, 3.0])
         mt = self._make_fake_media_type(embed_return=model_vector)
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, content_vectors={}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, content_vectors={}, on_progress=_noop)
 
-        assert len(clips) == 1
-        np.testing.assert_array_equal(clips[1]["embedding"], model_vector)
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
         mt.embed_media.assert_called_once()
 
     def test_mixed_content_vectors_and_embedding(self, tmp_path):
@@ -517,19 +517,19 @@ class TestLoadDatasetContentVectors:
         model_vector = np.array([1.0, 2.0])
         mt = self._make_fake_media_type(embed_return=model_vector)
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", clips, content_vectors={"a.wav": pre_vector}, on_progress=_noop
+                tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
 
-        assert len(clips) == 2
-        # One clip should have the pre-computed vector, the other the model vector
-        embeddings = {c["filename"]: c["embedding"] for c in clips.values()}
+        assert len(medias) == 2
+        # One media should have the pre-computed vector, the other the model vector
+        embeddings = {c["filename"]: c["embedding"] for c in medias.values()}
         np.testing.assert_array_equal(embeddings["a.wav"], pre_vector)
         np.testing.assert_array_equal(embeddings["b.wav"], model_vector)
 
@@ -547,16 +547,16 @@ class TestLoadDatasetContentVectors:
         model_vector = np.array([5.0, 6.0])
         mt = self._make_fake_media_type(embed_return=model_vector)
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=_noop)
 
-        assert len(clips) == 1
-        np.testing.assert_array_equal(clips[1]["embedding"], model_vector)
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
         mt.embed_media.assert_called_once()
 
     def test_content_vector_file_skips_none_embed_check(self, tmp_path):
@@ -574,18 +574,18 @@ class TestLoadDatasetContentVectors:
         # embed_media returns None, which would normally skip the file
         mt = self._make_fake_media_type(embed_return=None)
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", clips, content_vectors={"d.wav": pre_vector}, on_progress=_noop
+                tmp_path, "sounds", medias, content_vectors={"d.wav": pre_vector}, on_progress=_noop
             )
 
-        assert len(clips) == 1
-        np.testing.assert_array_equal(clips[1]["embedding"], pre_vector)
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +607,7 @@ class TestLoadDatasetContentMD5s:
         mt.type_id = "audio"
         mt.file_extensions = ["*.wav"]
         mt.embed_media.return_value = embed_return
-        mt.load_clip_data.return_value = {"duration": 1.0}
+        mt.load_media_data.return_value = {"duration": 1.0}
         return mt
 
     def test_uses_content_md5_when_provided(self, tmp_path):
@@ -624,16 +624,16 @@ class TestLoadDatasetContentMD5s:
         pre_md5 = "0" * 32
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
-        assert len(clips) == 1
-        assert clips[1]["md5"] == pre_md5
+        assert len(medias) == 1
+        assert medias[1]["md5"] == pre_md5
 
     def test_computes_md5_when_not_in_content_md5s(self, tmp_path):
         """A file NOT in content_md5s falls back to computing the hash."""
@@ -650,16 +650,16 @@ class TestLoadDatasetContentMD5s:
 
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, content_md5s={}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={}, on_progress=_noop)
 
-        assert len(clips) == 1
-        assert clips[1]["md5"] == expected_md5
+        assert len(medias) == 1
+        assert medias[1]["md5"] == expected_md5
 
     def test_mixed_content_md5s_and_computed(self, tmp_path):
         """Only files in content_md5s skip MD5 computation; others are hashed."""
@@ -679,16 +679,16 @@ class TestLoadDatasetContentMD5s:
         computed_md5 = hashlib.md5(wav_b.read_bytes()).hexdigest()
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
-        assert len(clips) == 2
-        md5s = {c["filename"]: c["md5"] for c in clips.values()}
+        assert len(medias) == 2
+        md5s = {c["filename"]: c["md5"] for c in medias.values()}
         assert md5s["a.wav"] == pre_md5
         assert md5s["b.wav"] == computed_md5
 
@@ -707,16 +707,16 @@ class TestLoadDatasetContentMD5s:
 
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", clips, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=_noop)
 
-        assert len(clips) == 1
-        assert clips[1]["md5"] == expected_md5
+        assert len(medias) == 1
+        assert medias[1]["md5"] == expected_md5
 
     def test_content_md5s_in_thin_mode(self, tmp_path):
         """content_md5s should work in thin mode too."""
@@ -732,15 +732,15 @@ class TestLoadDatasetContentMD5s:
         pre_md5 = "1" * 32
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        clips: dict = {}
+        medias: dict = {}
 
         def _noop(*a):
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", clips, content_md5s={"a.wav": pre_md5}, on_progress=_noop, thin=True
+                tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop, thin=True
             )
 
-        assert len(clips) == 1
-        assert clips[1]["md5"] == pre_md5
+        assert len(medias) == 1
+        assert medias[1]["md5"] == pre_md5

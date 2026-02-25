@@ -2,9 +2,9 @@
 
 For each combination of seed *s*, dataset *d*, and target category *c*:
 
-1. Load the dataset and split clips into **D_sim** (simulation) and
+1. Load the dataset and split medias into **D_sim** (simulation) and
    **D_test** (held-out) using *s* to control the random split.
-2. Assign ground-truth labels based on *c*: clips whose ``"category"``
+2. Assign ground-truth labels based on *c*: medias whose ``"category"``
    matches *c* are positive (``good``), others are negative (``bad``).
 3. Create a shuffled voting sequence from D_sim (order controlled by *s*).
 4. Iterate through the voting sequence.  At each step *t* (once at least
@@ -45,12 +45,12 @@ def _inclusion_weights(inclusion: int) -> tuple[float, float]:
     return 2.0 ** (-inclusion), 1.0
 
 
-def _split_clip_ids(
+def _split_media_ids(
     clips_dict: dict[int, dict[str, Any]],
     sim_fraction: float,
     rng: np.random.RandomState,
 ) -> tuple[list[int], list[int]]:
-    """Randomly partition clip IDs into simulation and test sets."""
+    """Randomly partition media IDs into simulation and test sets."""
     all_ids = sorted(clips_dict.keys())
     shuffled = rng.permutation(all_ids).tolist()
     n_sim = max(1, int(len(shuffled) * sim_fraction))
@@ -63,7 +63,7 @@ def _make_vote_sequence(
     target_category: str,
     rng: np.random.RandomState,
 ) -> list[tuple[int, str]]:
-    """Build a shuffled list of ``(clip_id, label)`` pairs from simulation IDs."""
+    """Build a shuffled list of ``(media_id, label)`` pairs from simulation IDs."""
     votes = [(cid, "good" if clips_dict[cid]["category"] == target_category else "bad") for cid in sim_ids]
     order = rng.permutation(len(votes))
     return [votes[i] for i in order]
@@ -128,12 +128,12 @@ def simulate_voting_iterations(
     """Simulate voting on *clips_dict* and evaluate at every step.
 
     Args:
-        clips_dict: Pre-loaded clip dict (``{id: clip_data}``).
+        clips_dict: Pre-loaded media dict (``{id: clip_data}``).
         target_category: Category treated as the positive class.
         seed: Random seed for splitting and vote ordering.
         dataset_name: Label included in result rows.
         inclusion: Inclusion setting in ``[-10, 10]``.
-        sim_fraction: Fraction of clips used for simulated voting.
+        sim_fraction: Fraction of medias used for simulated voting.
         safe_thresholds: When ``True``, blend the cross-calibration threshold
             with a GMM-based threshold for robustness with small label counts.
         calibrate_count: Number of random Train/Calibrate splits for threshold
@@ -149,9 +149,9 @@ def simulate_voting_iterations(
     torch.manual_seed(seed)
     start_time = time.monotonic()
 
-    sim_ids, test_ids = _split_clip_ids(clips_dict, sim_fraction, rng)
+    sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
 
-    # Ensure the test set has both positive and negative clips
+    # Ensure the test set has both positive and negative medias
     test_pos = [cid for cid in test_ids if clips_dict[cid]["category"] == target_category]
     test_neg = [cid for cid in test_ids if clips_dict[cid]["category"] != target_category]
     if not test_pos or not test_neg:
@@ -159,10 +159,10 @@ def simulate_voting_iterations(
 
     vote_seq = _make_vote_sequence(sim_ids, clips_dict, target_category, rng)
 
-    # Pre-compute all-clip embeddings for safe threshold GMM scoring
+    # Pre-compute all-media embeddings for safe threshold GMM scoring
     if safe_thresholds:
-        all_clip_ids = sorted(clips_dict.keys())
-        all_clip_embs = np.array([clips_dict[cid]["embedding"] for cid in all_clip_ids])
+        all_media_ids = sorted(clips_dict.keys())
+        all_clip_embs = np.array([clips_dict[cid]["embedding"] for cid in all_media_ids])
         X_all_clips = torch.tensor(all_clip_embs, dtype=torch.float32)
 
     good_votes: dict[int, None] = {}
@@ -247,15 +247,15 @@ def run_voting_iterations_eval(
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
     Args:
-        dataset_clips: Mapping of dataset name to a pre-loaded clips dict.
-            Each clips dict maps ``int`` clip IDs to clip data dicts
+        dataset_clips: Mapping of dataset name to a pre-loaded medias dict.
+            Each medias dict maps ``int`` media IDs to media data dicts
             (must include ``"embedding"`` and ``"category"`` keys).
         seeds: List of random seeds to iterate over.
         categories: Optional mapping of dataset name to list of target
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
         inclusion: Inclusion setting in ``[-10, 10]``.
-        sim_fraction: Fraction of clips reserved for simulated voting.
+        sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: When ``True``, blend thresholds with GMM
             (see :func:`simulate_voting_iterations`).
         calibrate_count: Number of random Train/Calibrate splits for threshold
@@ -311,7 +311,7 @@ def run_voting_iterations_eval_from_pickles(
         seeds: List of random seeds.
         categories: Optional category filter (see :func:`run_voting_iterations_eval`).
         inclusion: Inclusion setting in ``[-10, 10]``.
-        sim_fraction: Fraction of clips for simulation.
+        sim_fraction: Fraction of medias for simulation.
         safe_thresholds: When ``True``, blend thresholds with GMM.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
@@ -326,9 +326,9 @@ def run_voting_iterations_eval_from_pickles(
 
     dataset_clips: dict[str, dict[int, dict[str, Any]]] = {}
     for name, path in dataset_paths.items():
-        clips: dict[int, dict[str, Any]] = {}
-        load_dataset_from_pickle(Path(path), clips)
-        dataset_clips[name] = clips
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(Path(path), medias)
+        dataset_clips[name] = medias
 
     return run_voting_iterations_eval(
         dataset_clips,

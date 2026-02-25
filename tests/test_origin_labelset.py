@@ -3,10 +3,10 @@
 Covers:
 - Origin serialisation, display, equality, hashing
 - LabeledElement serialisation
-- LabelSet construction from clips+votes, from results, from dict
+- LabelSet construction from medias+votes, from results, from dict
 - LabelSet roundtrip serialisation
 - DatasetImporter.build_origin()
-- Clip matching helpers (build_clip_lookup, resolve_clip_ids)
+- Clip matching helpers (build_media_lookup, resolve_media_ids)
 - Integration with label export/import routes
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import app as app_module
 from vtsearch.datasets.labelset import LabelSet, LabeledElement
 from vtsearch.datasets.origin import Origin
-from vtsearch.utils import build_clip_lookup, resolve_clip_ids
+from vtsearch.utils import build_media_lookup, resolve_media_ids
 
 
 # ---------------------------------------------------------------------------
@@ -95,16 +95,16 @@ class TestLabeledElement:
             md5="abc",
             label="bad",
             origin=origin,
-            origin_name="clip.wav",
-            filename="clip.wav",
+            origin_name="media.wav",
+            filename="media.wav",
             category="dogs",
         )
         d = e.to_dict()
         assert d["md5"] == "abc"
         assert d["label"] == "bad"
         assert d["origin"] == origin
-        assert d["origin_name"] == "clip.wav"
-        assert d["filename"] == "clip.wav"
+        assert d["origin_name"] == "media.wav"
+        assert d["filename"] == "media.wav"
         assert d["category"] == "dogs"
 
     def test_from_dict(self):
@@ -196,8 +196,8 @@ class TestLabelSet:
                 md5="abc",
                 label="good",
                 origin=origin,
-                origin_name="clip.wav",
-                filename="clip.wav",
+                origin_name="media.wav",
+                filename="media.wav",
                 category="dogs",
             ),
         ]
@@ -209,7 +209,7 @@ class TestLabelSet:
         assert ls2.elements[0].origin == origin
 
     def test_from_clips_and_votes(self):
-        clips = {
+        medias = {
             1: {
                 "md5": "hash1",
                 "filename": "a.wav",
@@ -229,7 +229,7 @@ class TestLabelSet:
         good_votes = {1: None}
         bad_votes = {2: None, 3: None}
 
-        ls = LabelSet.from_clips_and_votes(clips, good_votes, bad_votes)
+        ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
         assert len(ls) == 3
         assert ls.elements[0].label == "good"
         assert ls.elements[0].origin == {"importer": "folder", "params": {"path": "/data"}}
@@ -240,10 +240,10 @@ class TestLabelSet:
         assert ls.elements[2].origin_name == "c.wav"
 
     def test_from_clips_and_votes_skips_missing_clips(self):
-        clips = {1: {"md5": "hash1", "filename": "a.wav", "category": "x"}}
+        medias = {1: {"md5": "hash1", "filename": "a.wav", "category": "x"}}
         good_votes = {1: None, 999: None}
         bad_votes = {}
-        ls = LabelSet.from_clips_and_votes(clips, good_votes, bad_votes)
+        ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
         assert len(ls) == 1
 
     def test_from_results(self):
@@ -284,7 +284,7 @@ class TestLabelSet:
         assert ls.elements[1].origin is None
 
     def test_from_results_with_clips_fallback(self):
-        """When hits don't have origin, look it up from clips dict."""
+        """When hits don't have origin, look it up from medias dict."""
         results = {
             "results": {
                 "d1": {
@@ -292,7 +292,7 @@ class TestLabelSet:
                 }
             }
         }
-        clips = {
+        medias = {
             1: {
                 "md5": "h1",
                 "filename": "a.wav",
@@ -300,7 +300,7 @@ class TestLabelSet:
                 "origin_name": "a.wav",
             }
         }
-        ls = LabelSet.from_results(results, clips=clips)
+        ls = LabelSet.from_results(results, medias=medias)
         assert len(ls) == 1
         assert ls.elements[0].origin is not None
         assert ls.elements[0].origin["importer"] == "folder"
@@ -325,7 +325,7 @@ class TestBuildOrigin:
                 ImporterField("file", "File", "file"),  # Should be excluded
             ]
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         imp = TestImporter()
@@ -344,7 +344,7 @@ class TestBuildOrigin:
                 ImporterField("opt", "Opt", "text", required=False),
             ]
 
-            def run(self, field_values, clips):
+            def run(self, field_values, medias):
                 pass
 
         imp = TestImporter()
@@ -353,23 +353,23 @@ class TestBuildOrigin:
 
 
 # ---------------------------------------------------------------------------
-# Integration: clips have origin after init_clips
+# Integration: medias have origin after init_medias
 # ---------------------------------------------------------------------------
 
 
 class TestClipOrigins:
-    def test_init_clips_have_origin(self):
-        """Every clip created by init_clips should have origin and origin_name."""
-        for cid, clip in app_module.clips.items():
-            assert "origin" in clip, f"Clip {cid} missing origin"
-            assert "origin_name" in clip, f"Clip {cid} missing origin_name"
-            assert clip["origin"]["importer"] == "test"
-            assert clip["origin_name"] == clip["filename"]
+    def test_init_medias_have_origin(self):
+        """Every media created by init_medias should have origin and origin_name."""
+        for cid, media in app_module.medias.items():
+            assert "origin" in media, f"Clip {cid} missing origin"
+            assert "origin_name" in media, f"Clip {cid} missing origin_name"
+            assert media["origin"]["importer"] == "test"
+            assert media["origin_name"] == media["filename"]
 
-    def test_init_clips_have_filename(self):
-        for cid, clip in app_module.clips.items():
-            assert "filename" in clip, f"Clip {cid} missing filename"
-            assert clip["filename"].startswith("test_clip_")
+    def test_init_medias_have_filename(self):
+        for cid, media in app_module.medias.items():
+            assert "filename" in media, f"Clip {cid} missing filename"
+            assert media["filename"].startswith("test_media_")
 
 
 # ---------------------------------------------------------------------------
@@ -441,70 +441,70 @@ class TestLabelExportOrigin:
 
 class TestBuildClipLookup:
     def test_origin_lookup_populated(self):
-        clips = {
+        medias = {
             1: {"id": 1, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"},
             2: {"id": 2, "md5": "h2", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "b.wav"},
         }
-        origin_lookup, md5_lookup = build_clip_lookup(clips)
+        origin_lookup, md5_lookup = build_media_lookup(medias)
         assert len(origin_lookup) == 2
         assert len(md5_lookup) == 2
 
     def test_md5_lookup_groups_duplicates(self):
-        """Two clips with the same MD5 should both appear in the md5_lookup."""
-        clips = {
+        """Two medias with the same MD5 should both appear in the md5_lookup."""
+        medias = {
             1: {"id": 1, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "a.wav"},
             2: {"id": 2, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "b.wav"},
         }
-        _, md5_lookup = build_clip_lookup(clips)
+        _, md5_lookup = build_media_lookup(medias)
         assert sorted(md5_lookup["same_hash"]) == [1, 2]
 
     def test_clips_without_origin_only_in_md5_lookup(self):
-        clips = {
+        medias = {
             1: {"id": 1, "md5": "h1"},
         }
-        origin_lookup, md5_lookup = build_clip_lookup(clips)
+        origin_lookup, md5_lookup = build_media_lookup(medias)
         assert len(origin_lookup) == 0
         assert md5_lookup["h1"] == [1]
 
 
 class TestResolveClipIds:
     def _make_lookups(self):
-        clips = {
+        medias = {
             1: {"id": 1, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"},
             2: {"id": 2, "md5": "h2", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "b.wav"},
             3: {"id": 3, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/b"}}, "origin_name": "a.wav"},
         }
-        return build_clip_lookup(clips)
+        return build_media_lookup(medias)
 
     def test_match_by_origin(self):
         origin_lookup, md5_lookup = self._make_lookups()
         entry = {"md5": "wrong", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
-        ids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [1]
 
     def test_fallback_to_md5(self):
         origin_lookup, md5_lookup = self._make_lookups()
         entry = {"md5": "h2"}
-        ids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [2]
 
     def test_md5_fallback_returns_all_duplicates(self):
-        """When falling back to MD5, all clips with that hash are returned."""
+        """When falling back to MD5, all medias with that hash are returned."""
         origin_lookup, md5_lookup = self._make_lookups()
         entry = {"md5": "h1"}
-        ids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert sorted(ids) == [1, 3]
 
     def test_no_match_returns_empty(self):
         origin_lookup, md5_lookup = self._make_lookups()
         entry = {"md5": "nonexistent"}
-        ids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == []
 
     def test_union_of_origin_and_md5(self):
-        """Origin and MD5 matches are unioned: all matching clips are returned."""
+        """Origin and MD5 matches are unioned: all matching medias are returned."""
         origin_lookup, md5_lookup = self._make_lookups()
-        # Origin matches clip 1, md5 "h1" matches clips 1 and 3 → union is [1, 3]
+        # Origin matches media 1, md5 "h1" matches medias 1 and 3 → union is [1, 3]
         entry = {"md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
-        ids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert sorted(ids) == [1, 3]

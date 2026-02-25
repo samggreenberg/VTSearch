@@ -122,10 +122,10 @@ class TestEmbedTextEnriched:
             def embed_text(self, text):
                 return embed_fn(text)
 
-            def load_clip_data(self, file_path):
+            def load_media_data(self, file_path):
                 return {"duration": 0}
 
-            def clip_response(self, clip):
+            def media_response(self, media):
                 from vtsearch.media.base import MediaResponse
 
                 return MediaResponse(data=b"", mimetype="text/plain")
@@ -357,27 +357,27 @@ class TestEnrichDescriptionsAPI:
 class TestEvalTextSortEnrich:
     def _make_synthetic_clips(self):
         rng = np.random.RandomState(0)
-        clips = {}
-        clip_id = 1
+        medias = {}
+        media_id = 1
         cat_dir = np.zeros(16)
         cat_dir[0] = 1.0
         for _ in range(10):
             emb = cat_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "cat", "type": "image"}
-            clip_id += 1
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "type": "image"}
+            media_id += 1
         dog_dir = np.zeros(16)
         dog_dir[1] = 1.0
         for _ in range(10):
             emb = dog_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "dog", "type": "image"}
-            clip_id += 1
-        return clips, cat_dir, dog_dir
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "type": "image"}
+            media_id += 1
+        return medias, cat_dir, dog_dir
 
     def test_eval_text_sort_with_enrich(self):
         """eval_text_sort should pass enrich to embed_text_query."""
-        clips, cat_dir, dog_dir = self._make_synthetic_clips()
+        medias, cat_dir, dog_dir = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
 
         call_kwargs = []
@@ -389,14 +389,14 @@ class TestEvalTextSortEnrich:
             return dog_dir.copy()
 
         with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
-            results = eval_text_sort(clips, queries, "image", k_values=[5], enrich=True)
+            results = eval_text_sort(medias, queries, "image", k_values=[5], enrich=True)
 
         assert len(results) == 1
         assert all(kw["enrich"] is True for kw in call_kwargs)
 
     def test_eval_text_sort_without_enrich(self):
         """eval_text_sort with enrich=False should pass enrich=False."""
-        clips, cat_dir, dog_dir = self._make_synthetic_clips()
+        medias, cat_dir, dog_dir = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
 
         call_kwargs = []
@@ -406,6 +406,6 @@ class TestEvalTextSortEnrich:
             return cat_dir.copy()
 
         with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
-            eval_text_sort(clips, queries, "image", k_values=[5], enrich=False)
+            eval_text_sort(medias, queries, "image", k_values=[5], enrich=False)
 
         assert all(kw["enrich"] is False for kw in call_kwargs)

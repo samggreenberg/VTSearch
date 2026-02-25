@@ -25,10 +25,10 @@ print("⏳ Initializing VTSearch...", flush=True)
 from flask import Flask
 
 # Import refactored modules
-from vtsearch.clips import init_clips  # noqa: E402, F401 — used by tests via app_module.init_clips()
+from vtsearch.medias import init_medias  # noqa: E402, F401 — used by tests via app_module.init_medias()
 from vtsearch.models import initialize_models, preload_favorite_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
-    clips_bp,
+    medias_bp,
     datasets_bp,
     detectors_bp,
     exporters_bp,
@@ -53,7 +53,7 @@ app = Flask(__name__)
 # ---------------------------------------------------------------------------
 
 app.register_blueprint(main_bp)
-app.register_blueprint(clips_bp)
+app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)
 app.register_blueprint(detectors_bp)
 app.register_blueprint(datasets_bp)
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         default=None,
         dest="chunk_size",
         help=(
-            "Process the dataset in chunks of N clips at a time to limit "
+            "Process the dataset in chunks of N medias at a time to limit "
             "memory usage. Used with --autodetect. When omitted the entire "
             "dataset is loaded at once (original behaviour)."
         ),

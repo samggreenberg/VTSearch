@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module  # noqa: F401 — triggers conftest clip init
+import app as app_module  # noqa: F401 — triggers conftest media init
 
 
 # ---------------------------------------------------------------------------
@@ -672,14 +672,14 @@ class TestFromLabelImportEndpoint:
         assert "name" in res.get_json()["error"].lower()
 
     def test_trains_from_matched_clips(self, client):
-        from vtsearch.utils import clips, favorite_detectors
+        from vtsearch.utils import medias, favorite_detectors
 
-        # Build labels from actual loaded clip md5s
+        # Build labels from actual loaded media md5s
         md5s = []
-        for cid in sorted(clips.keys()):
-            md5s.append(clips[cid].get("md5", ""))
+        for cid in sorted(medias.keys()):
+            md5s.append(medias[cid].get("md5", ""))
         if len(md5s) < 2:
-            pytest.skip("Need at least 2 clips for this test")
+            pytest.skip("Need at least 2 medias for this test")
 
         labels_data = {"labels": []}
         for i, md5 in enumerate(md5s):
@@ -691,7 +691,7 @@ class TestFromLabelImportEndpoint:
             })
 
         if len(labels_data["labels"]) < 2:
-            pytest.skip("Need at least 2 clips with md5 for this test")
+            pytest.skip("Need at least 2 medias with md5 for this test")
 
         # Ensure we have at least one good and one bad
         has_good = any(e["label"] == "good" for e in labels_data["labels"])
@@ -720,10 +720,10 @@ class TestFromLabelImportEndpoint:
         favorite_detectors.pop("from_label_import_test", None)
 
     def test_no_clips_returns_400(self, client):
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
-        saved = dict(clips)
-        clips.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             raw = json.dumps({"labels": [{"md5": "abc", "label": "good"}]}).encode()
             data = {
@@ -736,8 +736,8 @@ class TestFromLabelImportEndpoint:
                 content_type="multipart/form-data",
             )
             assert res.status_code == 400
-            assert "no clips" in res.get_json()["error"].lower()
+            assert "no medias" in res.get_json()["error"].lower()
         finally:
-            clips.update(saved)
+            medias.update(saved)
 
 

@@ -47,13 +47,13 @@ def device():
 
 
 def _make_embeddings(n: int, dim: int = 512, seed: int = 42) -> np.ndarray:
-    """Create deterministic random embeddings for *n* clips."""
+    """Create deterministic random embeddings for *n* medias."""
     rng = np.random.RandomState(seed)
     return rng.randn(n, dim).astype(np.float32)
 
 
 def _make_clips_dict(n: int = 20, dim: int = 512, seed: int = 42) -> dict:
-    """Build a minimal clips dict similar to the real application."""
+    """Build a minimal medias dict similar to the real application."""
     embs = _make_embeddings(n, dim, seed)
     return {i + 1: {"id": i + 1, "embedding": embs[i], "type": "audio"} for i in range(n)}
 
@@ -350,7 +350,7 @@ class TestDetectorGPU:
 
             gpu_model = build_model_from_weights(weights).to(device)
 
-            # Score all clips on GPU
+            # Score all medias on GPU
             all_embs = np.array([clips_dict[cid]["embedding"] for cid in sorted(clips_dict.keys())])
             X_all = torch.tensor(all_embs, dtype=torch.float32, device=device)
             with torch.no_grad():

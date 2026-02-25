@@ -92,10 +92,10 @@ class TestTrainAndScoreWithSafeThresholds:
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         results, threshold = train_and_score(
-            app_module.clips, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
+            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
         )
         assert 0.0 <= threshold <= 1.0
-        assert len(results) == len(app_module.clips)
+        assert len(results) == len(app_module.medias)
 
     def test_safe_thresholds_can_differ_from_xcal(self):
         """Safe threshold should differ from x-cal only threshold (at least sometimes).
@@ -106,10 +106,10 @@ class TestTrainAndScoreWithSafeThresholds:
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         _, thresh_off = train_and_score(
-            app_module.clips, app_module.good_votes, app_module.bad_votes, safe_thresholds=False
+            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=False
         )
         _, thresh_on = train_and_score(
-            app_module.clips, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
+            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
         )
         # They CAN be equal but with 6 labels, safe thresholds should blend
         # We just verify they're both valid — the blending is tested in unit tests
@@ -206,9 +206,9 @@ class TestSafeThresholdsEval:
     """Test that eval functions accept safe_thresholds parameter."""
 
     def _make_clips(self, n=40, dim=16, seed=42):
-        """Build a synthetic clips dict with two categories."""
+        """Build a synthetic medias dict with two categories."""
         rng = np.random.RandomState(seed)
-        clips = {}
+        medias = {}
         for i in range(n):
             cat = "target" if i < n // 2 else "other"
             # Make target embeddings cluster in one direction
@@ -216,22 +216,22 @@ class TestSafeThresholdsEval:
                 emb = rng.randn(dim).astype(np.float32) + 1.0
             else:
                 emb = rng.randn(dim).astype(np.float32) - 1.0
-            clips[i + 1] = {
+            medias[i + 1] = {
                 "id": i + 1,
                 "embedding": emb,
                 "category": cat,
             }
-        return clips
+        return medias
 
     def test_simulate_voting_iterations_accepts_safe_thresholds(self):
         from vtsearch.eval.voting_iterations import simulate_voting_iterations
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         rows_off = simulate_voting_iterations(
-            clips, "target", seed=42, safe_thresholds=False,
+            medias, "target", seed=42, safe_thresholds=False,
         )
         rows_on = simulate_voting_iterations(
-            clips, "target", seed=42, safe_thresholds=True,
+            medias, "target", seed=42, safe_thresholds=True,
         )
         # Both should produce valid results
         assert len(rows_off) > 0
@@ -245,9 +245,9 @@ class TestSafeThresholdsEval:
     def test_run_voting_iterations_eval_accepts_safe_thresholds(self):
         from vtsearch.eval.voting_iterations import run_voting_iterations_eval
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         df = run_voting_iterations_eval(
-            {"test": clips},
+            {"test": medias},
             seeds=[42],
             categories={"test": ["target"]},
             safe_thresholds=True,
@@ -260,9 +260,9 @@ class TestSafeThresholdsEval:
         from vtsearch.eval.runner import eval_learned_sort
         from vtsearch.eval.config import EvalQuery
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]
-        results = eval_learned_sort(clips, queries, safe_thresholds=True, seed=42)
+        results = eval_learned_sort(medias, queries, safe_thresholds=True, seed=42)
         assert len(results) > 0
         for lm in results:
             assert 0.0 <= lm.f1 <= 1.0
@@ -346,12 +346,12 @@ class TestCalibrationFractionTrainAndScore:
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         results, threshold = train_and_score(
-            app_module.clips,
+            app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
             calibration_fraction=0.2,
         )
-        assert len(results) == len(app_module.clips)
+        assert len(results) == len(app_module.medias)
         # threshold can be inf if the split is too extreme for 6 labels
         assert isinstance(threshold, float)
 
@@ -438,22 +438,22 @@ class TestCalibrationFractionEval:
 
     def _make_clips(self, n=40, dim=16, seed=42):
         rng = np.random.RandomState(seed)
-        clips = {}
+        medias = {}
         for i in range(n):
             cat = "target" if i < n // 2 else "other"
             if cat == "target":
                 emb = rng.randn(dim).astype(np.float32) + 1.0
             else:
                 emb = rng.randn(dim).astype(np.float32) - 1.0
-            clips[i + 1] = {"id": i + 1, "embedding": emb, "category": cat}
-        return clips
+            medias[i + 1] = {"id": i + 1, "embedding": emb, "category": cat}
+        return medias
 
     def test_simulate_voting_iterations_accepts_calibration_fraction(self):
         from vtsearch.eval.voting_iterations import simulate_voting_iterations
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         rows = simulate_voting_iterations(
-            clips, "target", seed=42, calibration_fraction=0.3,
+            medias, "target", seed=42, calibration_fraction=0.3,
         )
         assert len(rows) > 0
         for row in rows:
@@ -462,9 +462,9 @@ class TestCalibrationFractionEval:
     def test_run_voting_iterations_eval_accepts_calibration_fraction(self):
         from vtsearch.eval.voting_iterations import run_voting_iterations_eval
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         df = run_voting_iterations_eval(
-            {"test": clips},
+            {"test": medias},
             seeds=[42],
             categories={"test": ["target"]},
             calibration_fraction=0.2,
@@ -475,9 +475,9 @@ class TestCalibrationFractionEval:
         from vtsearch.eval.runner import eval_learned_sort
         from vtsearch.eval.config import EvalQuery
 
-        clips = self._make_clips()
+        medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]
-        results = eval_learned_sort(clips, queries, calibration_fraction=0.3, seed=42)
+        results = eval_learned_sort(medias, queries, calibration_fraction=0.3, seed=42)
         assert len(results) > 0
         for lm in results:
             assert 0.0 <= lm.f1 <= 1.0

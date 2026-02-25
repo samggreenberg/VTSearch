@@ -15,7 +15,7 @@ as strings).
 
 The label format used throughout is a list of dicts::
 
-    [{"md5": "<clip-md5>", "label": "good"}, ...]
+    [{"md5": "<media-md5>", "label": "good"}, ...]
 
 where ``label`` is ``"good"`` or ``"bad"``.
 
@@ -115,11 +115,11 @@ class LabelImporter:
 
     The :meth:`run` method must return a list of label dicts in the form::
 
-        [{"md5": "<clip-md5>", "label": "good"}, ...]
+        [{"md5": "<media-md5>", "label": "good"}, ...]
 
     where ``label`` is ``"good"`` or ``"bad"``.  The route handler applies
     these to the global vote state (``good_votes`` / ``bad_votes``) by
-    matching clip MD5 hashes.
+    matching media MD5 hashes.
 
     CLI support
     -----------

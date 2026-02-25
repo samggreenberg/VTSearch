@@ -47,13 +47,13 @@ def clear_favorites():
 
 
 def _vote_clips(client, good_ids, bad_ids):
-    """Vote a batch of clips via the API and verify each response."""
+    """Vote a batch of medias via the API and verify each response."""
     for cid in good_ids:
-        resp = client.post(f"/api/clips/{cid}/vote", json={"vote": "good"})
-        assert resp.status_code == 200, f"Failed voting clip {cid} good: {resp.get_json()}"
+        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+        assert resp.status_code == 200, f"Failed voting media {cid} good: {resp.get_json()}"
     for cid in bad_ids:
-        resp = client.post(f"/api/clips/{cid}/vote", json={"vote": "bad"})
-        assert resp.status_code == 200, f"Failed voting clip {cid} bad: {resp.get_json()}"
+        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
+        assert resp.status_code == 200, f"Failed voting media {cid} bad: {resp.get_json()}"
 
 
 def _export_detector(client):
@@ -87,32 +87,32 @@ def _save_favorite_detector(client, name, detector):
 
 
 class TestBrowseVoteLearnWorkflow:
-    """Simulates: user opens app, browses clips, votes, runs learned sort."""
+    """Simulates: user opens app, browses medias, votes, runs learned sort."""
 
     def test_full_browse_vote_learn_cycle(self, client):
-        # Step 1: Check dataset status — clips are pre-loaded by conftest
+        # Step 1: Check dataset status — medias are pre-loaded by conftest
         resp = client.get("/api/dataset/status")
         assert resp.status_code == 200
         status = resp.get_json()
         assert status["loaded"] is True
-        assert status["num_clips"] == app_module.NUM_CLIPS
+        assert status["num_clips"] == app_module.NUM_MEDIAS
 
-        # Step 2: List all clips (as frontend does on page load)
-        resp = client.get("/api/clips")
+        # Step 2: List all medias (as frontend does on page load)
+        resp = client.get("/api/medias")
         assert resp.status_code == 200
-        clips = resp.get_json()
-        assert len(clips) == app_module.NUM_CLIPS
-        clip_ids = [c["id"] for c in clips]
+        medias = resp.get_json()
+        assert len(medias) == app_module.NUM_MEDIAS
+        media_ids = [c["id"] for c in medias]
 
-        # Step 3: Stream audio for the first clip (user clicks play)
-        resp = client.get(f"/api/clips/{clip_ids[0]}/audio")
+        # Step 3: Stream audio for the first media (user clicks play)
+        resp = client.get(f"/api/medias/{media_ids[0]}/audio")
         assert resp.status_code == 200
         assert resp.content_type == "audio/wav"
         assert len(resp.data) > 0
 
-        # Step 4: Vote on several clips
-        good_ids = clip_ids[:3]
-        bad_ids = clip_ids[-3:]
+        # Step 4: Vote on several medias
+        good_ids = media_ids[:3]
+        bad_ids = media_ids[-3:]
         _vote_clips(client, good_ids, bad_ids)
 
         # Step 5: Verify votes via GET /api/votes
@@ -126,10 +126,10 @@ class TestBrowseVoteLearnWorkflow:
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
         learned = resp.get_json()
-        assert len(learned["results"]) == app_module.NUM_CLIPS
+        assert len(learned["results"]) == app_module.NUM_MEDIAS
         assert "threshold" in learned
 
-        # Verify good clips rank higher than bad clips on average
+        # Verify good medias rank higher than bad medias on average
         score_map = {e["id"]: e["score"] for e in learned["results"]}
         avg_good = np.mean([score_map[i] for i in good_ids])
         avg_bad = np.mean([score_map[i] for i in bad_ids])
@@ -156,7 +156,7 @@ class TestTextSearchThenLearnWorkflow:
         resp = client.post("/api/sort", json={"text": "high pitched beep"})
         assert resp.status_code == 200
         search_results = resp.get_json()["results"]
-        assert len(search_results) == app_module.NUM_CLIPS
+        assert len(search_results) == app_module.NUM_MEDIAS
 
         # All results sorted descending by similarity
         sims = [r["similarity"] for r in search_results]
@@ -166,7 +166,7 @@ class TestTextSearchThenLearnWorkflow:
         resp = client.post("/api/textsort-suggestions", json={"text": "high pitched beep"})
         assert resp.status_code == 200
 
-        # Step 3: Vote the top-ranked clips as good, bottom as bad
+        # Step 3: Vote the top-ranked medias as good, bottom as bad
         top_ids = [r["id"] for r in search_results[:3]]
         bottom_ids = [r["id"] for r in search_results[-3:]]
         _vote_clips(client, top_ids, bottom_ids)
@@ -196,7 +196,7 @@ class TestDetectorLifecycleWorkflow:
     """Simulates: user votes, exports a detector, saves it, then runs auto-detect."""
 
     def test_full_detector_lifecycle(self, client):
-        # Step 1: Vote on clips
+        # Step 1: Vote on medias
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
 
         # Step 2: Export a detector
@@ -207,7 +207,7 @@ class TestDetectorLifecycleWorkflow:
         resp = client.post("/api/detector-sort", json={"detector": detector})
         assert resp.status_code == 200
         sort_data = resp.get_json()
-        assert len(sort_data["results"]) == app_module.NUM_CLIPS
+        assert len(sort_data["results"]) == app_module.NUM_MEDIAS
         det_scores = [e["score"] for e in sort_data["results"]]
         assert det_scores == sorted(det_scores, reverse=True)
 
@@ -239,7 +239,7 @@ class TestDetectorLifecycleWorkflow:
         for hit in result["hits"]:
             assert hit["score"] >= result["threshold"] - 1e-6
             assert "embedding" not in hit
-            assert "clip_bytes" not in hit
+            assert "media_bytes" not in hit
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ class TestLabelRoundtripWorkflow:
     then continues voting and runs learned sort."""
 
     def test_label_roundtrip_then_continue(self, client):
-        # Step 1: Vote on clips
+        # Step 1: Vote on medias
         _vote_clips(client, [1, 3, 5], [2, 4])
 
         # Step 2: Export labels
@@ -294,7 +294,7 @@ class TestLabelRoundtripWorkflow:
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
         learned = resp.get_json()
-        assert len(learned["results"]) == app_module.NUM_CLIPS
+        assert len(learned["results"]) == app_module.NUM_MEDIAS
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ class TestInclusionAffectsLearning:
     changes inclusion, and re-sorts — verifying the output changes."""
 
     def test_inclusion_changes_learned_sort_results(self, client):
-        # Step 1: Vote on clips
+        # Step 1: Vote on medias
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
 
         # Step 2: Set inclusion to 0 (neutral) and run learned sort
@@ -421,14 +421,14 @@ class TestIterativeVotingWorkflow:
         assert resp.status_code == 200
         first_scores = {e["id"]: e["score"] for e in resp.get_json()["results"]}
 
-        # Step 3: User realizes clip 3 should be bad, toggles it
-        resp = client.post("/api/clips/3/vote", json={"vote": "good"})  # toggle off
+        # Step 3: User realizes media 3 should be bad, toggles it
+        resp = client.post("/api/medias/3/vote", json={"vote": "good"})  # toggle off
         assert resp.status_code == 200
-        resp = client.post("/api/clips/3/vote", json={"vote": "bad"})  # vote bad
+        resp = client.post("/api/medias/3/vote", json={"vote": "bad"})  # vote bad
         assert resp.status_code == 200
 
         # Also add a new good vote
-        resp = client.post("/api/clips/5/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/5/vote", json={"vote": "good"})
         assert resp.status_code == 200
 
         # Step 4: Verify vote state is correct
@@ -523,7 +523,7 @@ class TestDetectorFileImportWorkflow:
         app_module.bad_votes.clear()
         resp = client.post("/api/detector-sort", json={"detector": detector})
         assert resp.status_code == 200
-        assert len(resp.get_json()["results"]) == app_module.NUM_CLIPS
+        assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
         # Step 5: Rename the detector
         resp = client.put(
@@ -554,7 +554,7 @@ class TestDetectorFileImportWorkflow:
 
 
 class TestExampleSortWorkflow:
-    """Simulates: user uploads an example audio file to find similar clips,
+    """Simulates: user uploads an example audio file to find similar medias,
     votes on the results, then runs learned sort."""
 
     def test_example_sort_then_learn(self, client):
@@ -567,7 +567,7 @@ class TestExampleSortWorkflow:
         )
         assert resp.status_code == 200
         example_results = resp.get_json()
-        assert len(example_results["results"]) == app_module.NUM_CLIPS
+        assert len(example_results["results"]) == app_module.NUM_MEDIAS
 
         # Results should be sorted by similarity
         sims = [r["similarity"] for r in example_results["results"]]
@@ -583,7 +583,7 @@ class TestExampleSortWorkflow:
         assert resp.status_code == 200
         learned = resp.get_json()
 
-        # Good clips should score higher than bad on average
+        # Good medias should score higher than bad on average
         score_map = {e["id"]: e["score"] for e in learned["results"]}
         avg_good = np.mean([score_map[i] for i in top_ids])
         avg_bad = np.mean([score_map[i] for i in bottom_ids])
@@ -600,12 +600,12 @@ class TestErrorRecoveryWorkflow:
     Verifies that errors don't corrupt state or break subsequent requests."""
 
     def test_errors_dont_corrupt_state(self, client):
-        # Step 1: Try voting on a nonexistent clip
-        resp = client.post("/api/clips/9999/vote", json={"vote": "good"})
+        # Step 1: Try voting on a nonexistent media
+        resp = client.post("/api/medias/9999/vote", json={"vote": "good"})
         assert resp.status_code == 404
 
         # Step 2: Try an invalid vote value
-        resp = client.post("/api/clips/1/vote", json={"vote": "maybe"})
+        resp = client.post("/api/medias/1/vote", json={"vote": "maybe"})
         assert resp.status_code == 400
 
         # Step 3: Try learned sort with no votes
@@ -625,11 +625,11 @@ class TestErrorRecoveryWorkflow:
 
         resp = client.post("/api/sort", json={"text": "test sound"})
         assert resp.status_code == 200
-        assert len(resp.get_json()["results"]) == app_module.NUM_CLIPS
+        assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
-        assert len(resp.get_json()["results"]) == app_module.NUM_CLIPS
+        assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
         resp = client.post("/api/detector/export")
         assert resp.status_code == 200
@@ -776,15 +776,15 @@ class TestMultiSortModesWorkflow:
         learned_results = resp.get_json()["results"]
         learned_ids = [r["id"] for r in learned_results]
 
-        # All three modes returned all clips
-        assert set(text_ids) == set(range(1, app_module.NUM_CLIPS + 1))
-        assert set(example_ids) == set(range(1, app_module.NUM_CLIPS + 1))
-        assert set(learned_ids) == set(range(1, app_module.NUM_CLIPS + 1))
+        # All three modes returned all medias
+        assert set(text_ids) == set(range(1, app_module.NUM_MEDIAS + 1))
+        assert set(example_ids) == set(range(1, app_module.NUM_MEDIAS + 1))
+        assert set(learned_ids) == set(range(1, app_module.NUM_MEDIAS + 1))
 
         # Step 5: Text sort should still work after learning
         resp = client.post("/api/sort", json={"text": "low frequency tone"})
         assert resp.status_code == 200
-        assert len(resp.get_json()["results"]) == app_module.NUM_CLIPS
+        assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
 
 # ---------------------------------------------------------------------------
@@ -835,14 +835,14 @@ class TestLabelingProgressWorkflow:
 
 
 class TestVoteToggleStressWorkflow:
-    """Simulates: user rapidly toggles votes on the same clip, then
+    """Simulates: user rapidly toggles votes on the same media, then
     verifies the system remains in a consistent state."""
 
     def test_rapid_toggle_then_learn(self, client):
-        # Step 1: Toggle clip 1 several times
+        # Step 1: Toggle media 1 several times
         for _ in range(5):
-            client.post("/api/clips/1/vote", json={"vote": "good"})
-            client.post("/api/clips/1/vote", json={"vote": "good"})  # toggle off
+            client.post("/api/medias/1/vote", json={"vote": "good"})
+            client.post("/api/medias/1/vote", json={"vote": "good"})  # toggle off
 
         # After even number of toggles, should be unvoted
         resp = client.get("/api/votes")
@@ -850,12 +850,12 @@ class TestVoteToggleStressWorkflow:
         assert 1 not in resp.get_json()["bad"]
 
         # Step 2: Vote it good one final time
-        client.post("/api/clips/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"vote": "good"})
 
         # Step 3: Switch between good and bad
         for _ in range(3):
-            client.post("/api/clips/1/vote", json={"vote": "bad"})
-            client.post("/api/clips/1/vote", json={"vote": "good"})
+            client.post("/api/medias/1/vote", json={"vote": "bad"})
+            client.post("/api/medias/1/vote", json={"vote": "good"})
 
         # Should end on good
         resp = client.get("/api/votes")
@@ -866,7 +866,7 @@ class TestVoteToggleStressWorkflow:
         _vote_clips(client, [2, 3], [9, 10])
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
-        assert len(resp.get_json()["results"]) == app_module.NUM_CLIPS
+        assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
 
 # ---------------------------------------------------------------------------

@@ -9,24 +9,24 @@ config.TRAIN_EPOCHS = 30
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.config import NUM_CLIPS, SAMPLE_RATE
+from vtsearch.config import NUM_MEDIAS, SAMPLE_RATE
 from vtsearch.audio import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
-from vtsearch.utils import bad_votes, clips, good_votes, label_history, last_learned_scores, textsort_suggestions, vote_click_times
+from vtsearch.utils import bad_votes, medias, good_votes, label_history, last_learned_scores, textsort_suggestions, vote_click_times
 
 # Attach to app_module for backward compatibility with existing tests
-app_module.NUM_CLIPS = NUM_CLIPS
+app_module.NUM_MEDIAS = NUM_MEDIAS
 app_module.SAMPLE_RATE = SAMPLE_RATE
 app_module.generate_wav = generate_wav
 app_module.train_and_score = train_and_score
-app_module.clips = clips
+app_module.medias = medias
 app_module.good_votes = good_votes
 app_module.bad_votes = bad_votes
 
-# Initialize models and clips
+# Initialize models and medias
 initialize_models()
-app_module.init_clips()
+app_module.init_medias()
 
 
 @pytest.fixture(autouse=True)

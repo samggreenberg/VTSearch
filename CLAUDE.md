@@ -18,11 +18,11 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 
 ## Architecture
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing
-- `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_CLIPS, paths, model IDs)
-- `vtsearch/clips.py` — Test clip generation and embedding cache management
+- `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
+- `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_media_types, favorite_processors); auto-saves to `data/settings.json`
-- `vtsearch/routes/` — Flask blueprints: `main.py`, `clips.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`
+- `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/rss_feed/youtube_playlist/combine_datasets); auto-discovered via `IMPORTER` sentinel
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
@@ -30,13 +30,13 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `vtsearch/labels/importers/` — Label importers (json_file/csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
 - `vtsearch/processors/importers/` — Processor importers (detector_file/label_file/csv_label_file); auto-discovered via `PROCESSOR_IMPORTER` sentinel
 - `vtsearch/media/` — Media type plugins: audio, image, text, video
-- `vtsearch/utils/` — Global state (`clips` dict, votes), progress utilities
+- `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
 - `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (ARCHITECTURE.md, EXTENDING.md, EVAL.md, CLI.md, ML.md, SETUP.md, FEATURE_IDEAS.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures (client, vote reset, model init)
   - `test_audio.py` — WAV generation
-  - `test_clips.py` — Clip init, listing, audio endpoint, MD5
+  - `test_medias.py` — Media init, listing, audio endpoint, MD5
   - `test_votes.py` — Voting and vote retrieval
   - `test_sorting.py` — Text sort, learned sort, example sort, train_and_score
   - `test_labels.py` — Label export/import (via /api/labels/export and /api/labels/import)
@@ -89,10 +89,10 @@ Testing can crash the session. To avoid losing work, follow this workflow:
 This ensures work is recoverable if the session crashes during a test run.
 
 ## Key Details
-- Global state lives in `vtsearch/utils/state.py`: `clips`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors` are module-level dicts/lists
+- Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors` are module-level dicts/lists
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_media_types, favorite_processors
-- Each clip has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
+- Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)
 - `data/` dir created at runtime for embeddings, model cache, media files

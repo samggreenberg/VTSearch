@@ -269,7 +269,7 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
 def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract a UCF-101 subset for video demo datasets.
 
-    Downloads a 171 MB subset of UCF-101 (10 action classes, 405 clips) from
+    Downloads a 171 MB subset of UCF-101 (10 action classes, 405 medias) from
     HuggingFace and extracts it into ``VIDEO_DIR / "ucf101"`` with one
     subdirectory per action class.  Videos from all splits (train/val/test) are
     merged into a single flat category structure so that

@@ -23,8 +23,8 @@ from vtsearch.utils import (
     add_label_to_history,
     add_textsort_suggestion,
     bad_votes,
-    build_clip_lookup,
-    clips,
+    build_media_lookup,
+    medias,
     diversity_tree_label,
     diversity_tree_next_sample,
     get_calibrate_count,
@@ -38,7 +38,7 @@ from vtsearch.utils import (
     get_vote_click_times,
     good_votes,
     label_history,
-    resolve_clip_ids,
+    resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
     update_learned_scores,
@@ -56,7 +56,7 @@ def sort_progress():
 
 @sorting_bp.route("/api/sort", methods=["POST"])
 def sort_clips():
-    """Return clips sorted by cosine similarity to a text query."""
+    """Return medias sorted by cosine similarity to a text query."""
     try:
         data = request.get_json(force=True)
     except Exception:
@@ -73,15 +73,15 @@ def sort_clips():
         update_sort_progress("idle")
         return jsonify({"error": "text is required"}), 400
 
-    # Determine media type from current clips
-    if not clips:
+    # Determine media type from current medias
+    if not medias:
         update_sort_progress("idle")
-        return jsonify({"error": "No clips loaded"}), 400
+        return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(clips.values())).get("type", "audio")
+    media_type = next(iter(medias.values())).get("type", "audio")
 
-    # Total steps: 1 (embed) + len(clips) (similarities) + 1 (threshold)
-    total_steps = 1 + len(clips) + 1
+    # Total steps: 1 (embed) + len(medias) (similarities) + 1 (threshold)
+    total_steps = 1 + len(medias) + 1
 
     # Check if the embedder needs loading (first use of this media type)
     from vtsearch.media import get as media_get
@@ -123,8 +123,8 @@ def sort_clips():
     update_sort_progress("sorting", "Computing similarities…", 1, total_steps)
 
     # Vectorized cosine similarity: batch all embeddings into a matrix
-    all_ids = list(clips.keys())
-    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    all_ids = list(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
     text_norm = np.linalg.norm(text_vec)
     emb_norms = np.linalg.norm(all_embs, axis=1)
     norm_products = emb_norms * text_norm
@@ -135,7 +135,7 @@ def sort_clips():
 
     results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
     scores = similarities.tolist()
-    update_sort_progress("sorting", "Computing similarities…", 1 + len(clips), total_steps)
+    update_sort_progress("sorting", "Computing similarities…", 1 + len(medias), total_steps)
 
     # Calculate GMM-based threshold
     update_sort_progress("sorting", "Calculating threshold…", total_steps - 1, total_steps)
@@ -148,11 +148,11 @@ def sort_clips():
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
 def learned_sort():
-    """Train MLP on voted clips, return all clips sorted by predicted score."""
+    """Train MLP on voted medias, return all medias sorted by predicted score."""
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
     results, threshold = train_and_score(
-        clips,
+        medias,
         good_votes,
         bad_votes,
         get_inclusion(),
@@ -212,14 +212,14 @@ def export_labels():
     """
     from vtsearch.datasets.labelset import LabelSet
 
-    labelset = LabelSet.from_clips_and_votes(clips, good_votes, bad_votes)
+    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
     result: dict = labelset.to_dict()
     return jsonify(result)
 
 
 @sorting_bp.route("/api/labels/import", methods=["POST"])
 def import_labels():
-    """Import labels from JSON, matching clips by origin+origin_name (MD5 fallback)."""
+    """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -228,7 +228,7 @@ def import_labels():
     if not isinstance(labels, list):
         return jsonify({"error": "labels must be a list"}), 400
 
-    origin_lookup, md5_lookup = build_clip_lookup(clips)
+    origin_lookup, md5_lookup = build_media_lookup(medias)
 
     applied = 0
     skipped = 0
@@ -237,7 +237,7 @@ def import_labels():
         if label not in ("good", "bad"):
             skipped += 1
             continue
-        cids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         if not cids:
             skipped += 1
             continue
@@ -261,7 +261,7 @@ def import_labels():
 def fill_labels_from_sort():
     """Fill labels from the current sort results.
 
-    Assigns Good/Bad labels to currently-unlabeled clips based on their
+    Assigns Good/Bad labels to currently-unlabeled medias based on their
     position relative to the sort threshold.
 
     Request body (JSON)::
@@ -274,7 +274,7 @@ def fill_labels_from_sort():
         }
 
     When ``confirm`` is false (dry run), returns the counts of unlabeled
-    clips that would be labeled.  When ``confirm`` is true, applies the
+    medias that would be labeled.  When ``confirm`` is true, applies the
     labels and returns the resulting data as a results dict suitable for
     any exporter.
     """
@@ -295,7 +295,7 @@ def fill_labels_from_sort():
 
     confirm = bool(data.get("confirm", False))
 
-    # Find unlabeled clips above/below threshold
+    # Find unlabeled medias above/below threshold
     good_candidates = []
     bad_candidates = []
     for entry in sort_results:
@@ -305,7 +305,7 @@ def fill_labels_from_sort():
             continue
         if cid in good_votes or cid in bad_votes:
             continue
-        if cid not in clips:
+        if cid not in medias:
             continue
         if score >= thresh:
             good_candidates.append({"id": cid, "score": float(score)})
@@ -347,44 +347,44 @@ def fill_labels_from_sort():
     good_hits = []
     for entry in good_candidates:
         cid = entry["id"]
-        clip = clips.get(cid, {})
+        media = medias.get(cid, {})
         hit = {
             "id": cid,
-            "filename": clip.get("filename", f"clip_{cid}"),
-            "category": clip.get("category", "unknown"),
+            "filename": media.get("filename", f"media_{cid}"),
+            "category": media.get("category", "unknown"),
             "score": round(entry["score"], 4),
             "label": "good",
         }
-        if clip.get("origin") is not None:
-            hit["origin"] = clip["origin"]
-        if clip.get("origin_name"):
-            hit["origin_name"] = clip["origin_name"]
-        if clip.get("md5"):
-            hit["md5"] = clip["md5"]
+        if media.get("origin") is not None:
+            hit["origin"] = media["origin"]
+        if media.get("origin_name"):
+            hit["origin_name"] = media["origin_name"]
+        if media.get("md5"):
+            hit["md5"] = media["md5"]
         good_hits.append(hit)
 
     bad_hits = []
     for entry in bad_candidates:
         cid = entry["id"]
-        clip = clips.get(cid, {})
+        media = medias.get(cid, {})
         hit = {
             "id": cid,
-            "filename": clip.get("filename", f"clip_{cid}"),
-            "category": clip.get("category", "unknown"),
+            "filename": media.get("filename", f"media_{cid}"),
+            "category": media.get("category", "unknown"),
             "score": round(entry["score"], 4),
             "label": "bad",
         }
-        if clip.get("origin") is not None:
-            hit["origin"] = clip["origin"]
-        if clip.get("origin_name"):
-            hit["origin_name"] = clip["origin_name"]
-        if clip.get("md5"):
-            hit["md5"] = clip["md5"]
+        if media.get("origin") is not None:
+            hit["origin"] = media["origin"]
+        if media.get("origin_name"):
+            hit["origin_name"] = media["origin_name"]
+        if media.get("md5"):
+            hit["md5"] = media["md5"]
         bad_hits.append(hit)
 
     media_type = "unknown"
-    for clip in clips.values():
-        media_type = clip.get("type", "unknown")
+    for media in medias.values():
+        media_type = media.get("type", "unknown")
         break
 
     results_dict = {
@@ -456,7 +456,7 @@ def set_safe_thresholds_route():
 
 @sorting_bp.route("/api/example-sort", methods=["POST"])
 def example_sort():
-    """Sort clips by similarity to an uploaded example audio file."""
+    """Sort medias by similarity to an uploaded example audio file."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -483,9 +483,9 @@ def example_sort():
         if example_embedding is None:
             return jsonify({"error": "Failed to embed audio file"}), 500
 
-        # Vectorized cosine similarity with all clips
-        all_ids = list(clips.keys())
-        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        # Vectorized cosine similarity with all medias
+        all_ids = list(medias.keys())
+        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
         example_norm = np.linalg.norm(example_embedding)
         emb_norms = np.linalg.norm(all_embs, axis=1)
         norm_products = emb_norms * example_norm
@@ -508,7 +508,7 @@ def example_sort():
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 def label_file_sort():
-    """Train MLP on external audio files from a label file, then sort all clips."""
+    """Train MLP on external audio files from a label file, then sort all medias."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -604,9 +604,9 @@ def label_file_sort():
         # Train final model on all data
         model = train_model(X, y, input_dim, get_inclusion())
 
-        # Score every clip in the dataset
-        all_ids = sorted(clips.keys())
-        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        # Score every media in the dataset
+        all_ids = sorted(medias.keys())
+        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -642,7 +642,7 @@ def labeling_progress():
         return jsonify({"error": "no label history available"}), 400
 
     try:
-        analysis = analyze_labeling_progress(clips, label_history, good_votes, bad_votes, get_inclusion())
+        analysis = analyze_labeling_progress(medias, label_history, good_votes, bad_votes, get_inclusion())
         return jsonify(analysis)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -658,7 +658,7 @@ def labeling_status_indicator():
     try:
         tree = get_diversity_tree()
         span = tree.span_info() if tree is not None else None
-        status = compute_labeling_status(clips, label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
+        status = compute_labeling_status(medias, label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
         return jsonify(status)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -668,7 +668,7 @@ def labeling_status_indicator():
 def diversity_tree_next():
     """Return the next diverse sample from the Diversity Tree.
 
-    Returns ``{"id": <clip_id>}`` or ``{"id": null}`` when the tree is
+    Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
     exhausted or not yet built.  Also includes ``diversity_level`` so the
     frontend can display how many tree levels have been fully covered,
     and ``exhausted`` (bool) which is true when the tree exists but every

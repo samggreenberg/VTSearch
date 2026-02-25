@@ -26,7 +26,7 @@ class StubDetector(Detector):
     def media_type(self):
         return self._media_type
 
-    def detect(self, clip):
+    def detect(self, media):
         return self._result
 
 
@@ -46,7 +46,7 @@ class StubLocalizer(Localizer):
     def media_type(self):
         return self._media_type
 
-    def localize(self, clip):
+    def localize(self, media):
         return self._results
 
 
@@ -66,7 +66,7 @@ class StubExtractor(Extractor):
     def media_type(self):
         return self._media_type
 
-    def extract(self, clip):
+    def extract(self, media):
         return self._results
 
 

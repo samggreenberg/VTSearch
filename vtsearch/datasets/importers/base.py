@@ -34,7 +34,7 @@ Example \u2013 a minimal SFTP importer skeleton::
             ),
         ]
 
-        def run(self, field_values: dict, clips: dict) -> None:
+        def run(self, field_values: dict, medias: dict) -> None:
             import paramiko
             ...  # download files, then call load_dataset_from_folder(...)
 
@@ -156,18 +156,18 @@ class DatasetImporter:
         #: skip its own MD5 calculation for any file whose name appears here.
         self.content_md5s: dict[str, str] = {}
 
-    def run(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
-        """Perform the import, populating *clips* in-place.
+    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+        """Perform the import, populating *medias* in-place.
 
         Args:
             field_values: Mapping of :attr:`ImporterField.key` \u2192 value.
                 Fields with ``field_type="file"`` receive a Werkzeug
                 :class:`~werkzeug.datastructures.FileStorage` object; all
                 other fields receive plain strings.
-            clips: The global clips dict to populate.  Modify it in-place;
+            medias: The global medias dict to populate.  Modify it in-place;
                 do not replace the reference.
             thin: When ``True``, store a ``media_path`` file reference
-                instead of loading media bytes into ``clip_bytes``.  This
+                instead of loading media bytes into ``media_bytes``.  This
                 saves memory for CLI workflows that only need embeddings.
 
         Raises:
@@ -196,12 +196,12 @@ class DatasetImporter:
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        """Yield chunks of clips for memory-efficient piecewise processing.
+        """Yield chunks of medias for memory-efficient piecewise processing.
 
-        Each yielded dict is a self-contained clips dict with sequential
+        Each yielded dict is a self-contained medias dict with sequential
         IDs starting at 1.  The caller processes each chunk independently
         and discards it before consuming the next, bounding memory usage
-        to roughly *chunk_size* clips at a time.
+        to roughly *chunk_size* medias at a time.
 
         The default implementation calls :meth:`run` once and yields the
         result as a single chunk.  This means callers can always use the
@@ -214,17 +214,17 @@ class DatasetImporter:
 
         Args:
             field_values: Same mapping as :meth:`run`.
-            chunk_size: Maximum number of clips per yielded chunk.
+            chunk_size: Maximum number of medias per yielded chunk.
             thin: When ``True``, store file path references instead of
                 loading media bytes.
 
         Yields:
-            A dict mapping int clip IDs to clip data dicts.  Each yielded
-            dict contains at most *chunk_size* clips.
+            A dict mapping int media IDs to media data dicts.  Each yielded
+            dict contains at most *chunk_size* medias.
         """
-        clips: dict[int, dict[str, Any]] = {}
-        self.run(field_values, clips, thin=thin)
-        yield clips
+        medias: dict[int, dict[str, Any]] = {}
+        self.run(field_values, medias, thin=thin)
+        yield medias
 
     def run_chunked_cli(
         self,
@@ -239,9 +239,9 @@ class DatasetImporter:
         :meth:`run_chunked` should also override this if their CLI path
         differs (e.g. file-path strings instead of ``FileStorage`` objects).
         """
-        clips: dict[int, dict[str, Any]] = {}
-        self.run_cli(field_values, clips, thin=thin)
-        yield clips
+        medias: dict[int, dict[str, Any]] = {}
+        self.run_cli(field_values, medias, thin=thin)
+        yield medias
 
     # ------------------------------------------------------------------
     # CLI support
@@ -270,8 +270,8 @@ class DatasetImporter:
                 kwargs["choices"] = f.options
             parser.add_argument(arg_name, **kwargs)
 
-    def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
-        """Load a dataset from CLI-provided *field_values* into *clips*.
+    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+        """Load a dataset from CLI-provided *field_values* into *medias*.
 
         The default implementation simply delegates to :meth:`run`, which
         works for importers whose ``run()`` only expects plain string values.
@@ -280,11 +280,11 @@ class DatasetImporter:
 
         Args:
             field_values: Mapping of importer field keys to their CLI values.
-            clips: The global clips dict to populate.
+            medias: The global medias dict to populate.
             thin: When ``True``, store file path references instead of
                 loading media bytes.  Passed through to :meth:`run`.
         """
-        self.run(field_values, clips, thin=thin)
+        self.run(field_values, medias, thin=thin)
 
     def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
         """Raise ``ValueError`` if any required field is missing or empty."""
@@ -326,7 +326,7 @@ class DatasetImporter:
 
         The returned dict is the serialised form of an
         :class:`~vtsearch.datasets.origin.Origin` object and is stored on
-        each clip as ``clip["origin"]``.  It captures enough information to
+        each media as ``media["origin"]``.  It captures enough information to
         identify the data source (importer name + string-serialisable
         field values).
 

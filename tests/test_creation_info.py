@@ -23,7 +23,7 @@ class _DummyImporter(DatasetImporter):
         ImporterField("path", "Folder", "folder"),
     ]
 
-    def run(self, field_values, clips):
+    def run(self, field_values, medias):
         pass
 
 
@@ -77,7 +77,7 @@ class TestRealImporterCliArgs:
 
 
 # ---------------------------------------------------------------------------
-# Pickle round-trip: clips survive export -> import
+# Pickle round-trip: medias survive export -> import
 # ---------------------------------------------------------------------------
 
 
@@ -93,8 +93,8 @@ class TestPickleRoundTrip:
                 "embedding": np.zeros(10),
                 "filename": "clip_1.wav",
                 "category": "test",
-                "clip_bytes": b"\x00" * 100,
-                "clip_string": None,
+                "media_bytes": b"\x00" * 100,
+                "media_string": None,
             }
         }
 
@@ -114,7 +114,7 @@ class TestPickleRoundTrip:
         assert len(loaded_clips) == 1
 
     def test_old_format_pickle_loads(self, tmp_path):
-        """Old-style pickles (no wrapping 'clips' key) still load."""
+        """Old-style pickles (no wrapping 'medias' key) still load."""
         old_data = {
             1: {
                 "id": 1,
@@ -134,13 +134,13 @@ class TestPickleRoundTrip:
         result = load_dataset_from_pickle(pkl_path, loaded_clips)
         assert result is None
         assert len(loaded_clips) == 1
-        # Old wav_bytes key should be migrated to clip_bytes
-        assert loaded_clips[1]["clip_bytes"] == b"\x00" * 100
+        # Old wav_bytes key should be migrated to media_bytes
+        assert loaded_clips[1]["media_bytes"] == b"\x00" * 100
 
     def test_old_format_with_creation_info_uses_fallback_origin(self, tmp_path):
-        """Old pickles with creation_info use it as fallback origin for clips without one."""
+        """Old pickles with creation_info use it as fallback origin for medias without one."""
         old_data = {
-            "clips": {
+            "medias": {
                 1: {
                     "id": 1,
                     "type": "audio",

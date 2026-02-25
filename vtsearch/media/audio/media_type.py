@@ -22,12 +22,12 @@ from vtsearch.media.base import (
 
 
 class AudioMediaType(MediaType):
-    """Handles audio clips using the CLAP model (laion/clap-htsat-unfused).
+    """Handles audio medias using the CLAP model (laion/clap-htsat-unfused).
 
     * Embeds audio files via CLAP's audio encoder + projection head.
     * Embeds text queries via CLAP's text encoder + projection head, so
       queries land in the same 512-dimensional space as audio embeddings.
-    * Serves clips as ``audio/wav`` streams.
+    * Serves medias as ``audio/wav`` streams.
     """
 
     def __init__(self) -> None:
@@ -89,7 +89,7 @@ class AudioMediaType(MediaType):
 
     # Shared categories for all S/M/L audio demo datasets.
     # All three sizes use all 50 ESC-50 categories; only the underlying
-    # clips differ (disjoint slices of each category's 40 ESC-50 clips).
+    # medias differ (disjoint slices of each category's 40 ESC-50 medias).
     _DEMO_CATEGORIES = [
         # Animals
         "dog",
@@ -148,7 +148,7 @@ class AudioMediaType(MediaType):
         "hand_saw",
     ]
 
-    # Categories for GTZAN Music Genre (10 genres, 100 clips each = 1000 total).
+    # Categories for GTZAN Music Genre (10 genres, 100 medias each = 1000 total).
     _GTZAN_CATEGORIES = [
         "blues",
         "classical",
@@ -273,7 +273,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="urbansound8k_a",
                 label="UrbanSound8K (A)",
-                description="Real urban field recordings, pre-segmented into labeled clips.",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
                 categories=self._URBANSOUND8K_CATEGORIES,
                 source="urbansound8k",
                 slice_start=0,
@@ -464,28 +464,28 @@ class AudioMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_clip_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path) -> dict:
         import librosa  # noqa: PLC0415
 
         with open(file_path, "rb") as f:
-            clip_bytes = f.read()
+            media_bytes = f.read()
         try:
             audio_data, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0
-        return {"clip_bytes": clip_bytes, "duration": duration}
+        return {"media_bytes": media_bytes, "duration": duration}
 
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def clip_response(self, clip: dict) -> MediaResponse:
-        data = self._resolve_clip_bytes(clip)
+    def media_response(self, media: dict) -> MediaResponse:
+        data = self._resolve_media_bytes(media)
         if data is None:
-            return MediaResponse(data=b"", mimetype="audio/wav", download_name=f"clip_{clip['id']}.wav")
+            return MediaResponse(data=b"", mimetype="audio/wav", download_name=f"media_{media['id']}.wav")
         return MediaResponse(
             data=data,
             mimetype="audio/wav",
-            download_name=f"clip_{clip['id']}.wav",
+            download_name=f"media_{media['id']}.wav",
         )

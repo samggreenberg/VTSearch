@@ -105,13 +105,13 @@ class DatasetResult:
 
 
 def compute_average_precision(ranked_ids: list[int], relevant_ids: set[int]) -> float:
-    """Compute Average Precision for a ranked list of clip IDs.
+    """Compute Average Precision for a ranked list of media IDs.
 
     AP = sum over relevant positions of (precision@k) / num_relevant.
 
     Args:
         ranked_ids: Clip IDs in descending order of predicted relevance.
-        relevant_ids: Set of clip IDs that are actually relevant (match target category).
+        relevant_ids: Set of media IDs that are actually relevant (match target category).
 
     Returns:
         Average Precision score in [0, 1].  Returns 0 if no relevant items exist.
@@ -138,7 +138,7 @@ def compute_precision_recall_at_k(
 
     Args:
         ranked_ids: Clip IDs in descending order of predicted relevance.
-        relevant_ids: Set of clip IDs that are actually relevant.
+        relevant_ids: Set of media IDs that are actually relevant.
         k_values: List of k values to evaluate.  Defaults to [5, 10, 20].
 
     Returns:

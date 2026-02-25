@@ -33,7 +33,7 @@ def _default_progress() -> ProgressCallback:
 
 
 def load_esc50_metadata(esc50_dir: Path) -> dict[str, dict[str, Any]]:
-    """Load clip metadata from the ESC-50 ``esc50.csv`` metadata file.
+    """Load media metadata from the ESC-50 ``esc50.csv`` metadata file.
 
     Reads ``<esc50_dir>/meta/esc50.csv`` and builds a mapping from audio
     filename to its associated metadata fields.
@@ -47,7 +47,7 @@ def load_esc50_metadata(esc50_dir: Path) -> dict[str, dict[str, Any]]:
         with the keys:
 
         - ``"category"`` (``str``): Human-readable sound category label.
-        - ``"esc10"`` (``bool``): Whether the clip belongs to the ESC-10 subset.
+        - ``"esc10"`` (``bool``): Whether the media belongs to the ESC-10 subset.
         - ``"target"`` (``int``): Integer class index.
         - ``"fold"`` (``int``): Cross-validation fold number (1–5).
     """
@@ -247,7 +247,7 @@ def _streaming_md5(file_path: Path) -> str:
 def load_dataset_from_folder(
     folder_path: Path,
     media_type: str,
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     content_vectors: dict[str, Any] | None = None,
     content_md5s: dict[str, str] | None = None,
     on_progress: Optional[ProgressCallback] = None,
@@ -257,8 +257,8 @@ def load_dataset_from_folder(
     """Generate a dataset in-place from a flat folder of media files.
 
     Scans ``folder_path`` for all files matching the extensions for ``media_type``,
-    embeds each file using the appropriate model, and populates ``clips`` with
-    the resulting clip dicts. Progress is reported via :func:`update_progress`.
+    embeds each file using the appropriate model, and populates ``medias`` with
+    the resulting media dicts. Progress is reported via :func:`update_progress`.
 
     Files whose basename appears in ``content_vectors`` will use the supplied
     embedding instead of running the embedding model.  This allows importers
@@ -267,7 +267,7 @@ def load_dataset_from_folder(
     Similarly, files whose basename appears in ``content_md5s`` will use the
     supplied hash instead of computing it from the file contents.
 
-    The ``clips`` dict is cleared before loading begins.
+    The ``medias`` dict is cleared before loading begins.
 
     ``media_type`` is looked up in the media type registry by
     :attr:`~vtsearch.media.base.MediaType.folder_import_name` (e.g.
@@ -278,8 +278,8 @@ def load_dataset_from_folder(
     Args:
         folder_path: Path to a flat directory containing media files.
         media_type: Folder-import alias for the media type (e.g. ``"sounds"``).
-        clips: Dict to populate in-place. Existing entries are removed before
-            loading. Keys are sequential integer clip IDs starting from 1.
+        medias: Dict to populate in-place. Existing entries are removed before
+            loading. Keys are sequential integer media IDs starting from 1.
         content_vectors: Optional mapping of filename (basename) to a
             pre-computed embedding ``numpy.ndarray``.  When a file's name is
             found in this dict the supplied vector is used directly and the
@@ -290,10 +290,10 @@ def load_dataset_from_folder(
             calculation is performed for that file.
         origin: Optional serialised
             :class:`~vtsearch.datasets.origin.Origin` dict to attach to each
-            clip (as ``clip["origin"]``).  When ``None`` no origin is set
+            media (as ``media["origin"]``).  When ``None`` no origin is set
             and the caller is expected to set it afterwards.
         thin: When ``True``, store a ``media_path`` reference to the file on
-            disk instead of reading all bytes into ``clip_bytes``.  This saves
+            disk instead of reading all bytes into ``media_bytes``.  This saves
             memory for CLI workflows that only need embeddings for scoring.
             MD5 is still computed via streaming (constant memory).
 
@@ -326,8 +326,8 @@ def load_dataset_from_folder(
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
 
-    clips.clear()
-    clip_id = 1
+    medias.clear()
+    media_id = 1
     total_files = len(media_files)
 
     try:
@@ -353,8 +353,8 @@ def load_dataset_from_folder(
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = _streaming_md5(file_path)
-                clip_data: dict[str, Any] = {
-                    "id": clip_id,
+                media_data: dict[str, Any] = {
+                    "id": media_id,
                     "type": mt.type_id,
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
@@ -363,8 +363,8 @@ def load_dataset_from_folder(
                     "category": "custom",
                     "origin": origin,
                     "origin_name": file_path.name,
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": str(file_path.resolve()),
                     "duration": 0,
                 }
@@ -377,9 +377,9 @@ def load_dataset_from_folder(
                 else:
                     md5 = hashlib.md5(file_bytes).hexdigest()
 
-                # Build the base clip dict
-                clip_data = {
-                    "id": clip_id,
+                # Build the base media dict
+                media_data = {
+                    "id": media_id,
                     "type": mt.type_id,
                     "file_size": len(file_bytes),
                     "md5": md5,
@@ -388,28 +388,28 @@ def load_dataset_from_folder(
                     "category": "custom",
                     "origin": origin,
                     "origin_name": file_path.name,
-                    # Null-out optional media fields so clips from different types
+                    # Null-out optional media fields so medias from different types
                     # stored in the same dict have consistent keys.
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": str(file_path.resolve()),
                     "duration": 0,
                 }
 
                 # Merge in media-specific fields from the media type
-                clip_data.update(mt.load_clip_data(file_path))
+                media_data.update(mt.load_media_data(file_path))
 
-            clips[clip_id] = clip_data
-            clip_id += 1
+            medias[media_id] = media_data
+            media_id += 1
     except MemoryError:
-        clips.clear()
+        medias.clear()
         gc.collect()
         raise MemoryError(
-            f"Out of memory after loading {clip_id - 1} of {total_files} files. "
+            f"Out of memory after loading {media_id - 1} of {total_files} files. "
             "Try a smaller dataset or free up system RAM."
         )
 
-    on_progress("idle", f"Loaded {len(clips)} {media_type} clips from folder")
+    on_progress("idle", f"Loaded {len(medias)} {media_type} medias from folder")
 
 
 def load_dataset_from_folder_chunked(
@@ -422,25 +422,25 @@ def load_dataset_from_folder_chunked(
     origin: dict[str, Any] | None = None,
     thin: bool = False,
 ) -> Iterator[dict[int, dict[str, Any]]]:
-    """Yield chunks of clips from a flat folder of media files.
+    """Yield chunks of medias from a flat folder of media files.
 
     Works identically to :func:`load_dataset_from_folder` but yields the
-    clips in groups of at most *chunk_size*.  Each yielded dict is a
-    self-contained clips dict with IDs starting at 1.  After the caller
+    medias in groups of at most *chunk_size*.  Each yielded dict is a
+    self-contained medias dict with IDs starting at 1.  After the caller
     has processed a chunk, the dict can be discarded to free memory.
 
     Args:
         folder_path: Path to a flat directory containing media files.
         media_type: Folder-import alias (e.g. ``"sounds"``).
-        chunk_size: Maximum number of clips per chunk.
+        chunk_size: Maximum number of medias per chunk.
         content_vectors: Optional pre-computed embeddings keyed by filename.
         content_md5s: Optional pre-computed MD5s keyed by filename.
-        origin: Optional origin dict to attach to each clip.
-        thin: When ``True``, store ``media_path`` instead of ``clip_bytes``.
+        origin: Optional origin dict to attach to each media.
+        thin: When ``True``, store ``media_path`` instead of ``media_bytes``.
 
     Yields:
-        A dict mapping int clip IDs (starting at 1) to clip data dicts.
-        Each yielded dict contains at most *chunk_size* clips.
+        A dict mapping int media IDs (starting at 1) to media data dicts.
+        Each yielded dict contains at most *chunk_size* medias.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
@@ -476,8 +476,8 @@ def load_dataset_from_folder_chunked(
     # Process in groups of chunk_size
     for start in range(0, total_files, chunk_size):
         batch = media_files[start : start + chunk_size]
-        chunk_clips: dict[int, dict[str, Any]] = {}
-        clip_id = 1
+        chunk_medias: dict[int, dict[str, Any]] = {}
+        media_id = 1
 
         for i, file_path in enumerate(batch):
             global_idx = start + i
@@ -500,8 +500,8 @@ def load_dataset_from_folder_chunked(
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = _streaming_md5(file_path)
-                clip_data: dict[str, Any] = {
-                    "id": clip_id,
+                media_data: dict[str, Any] = {
+                    "id": media_id,
                     "type": mt.type_id,
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
@@ -510,8 +510,8 @@ def load_dataset_from_folder_chunked(
                     "category": "custom",
                     "origin": origin,
                     "origin_name": file_path.name,
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": str(file_path.resolve()),
                     "duration": 0,
                 }
@@ -524,8 +524,8 @@ def load_dataset_from_folder_chunked(
                 else:
                     md5 = hashlib.md5(file_bytes).hexdigest()
 
-                clip_data = {
-                    "id": clip_id,
+                media_data = {
+                    "id": media_id,
                     "type": mt.type_id,
                     "file_size": len(file_bytes),
                     "md5": md5,
@@ -534,50 +534,50 @@ def load_dataset_from_folder_chunked(
                     "category": "custom",
                     "origin": origin,
                     "origin_name": file_path.name,
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": str(file_path.resolve()),
                     "duration": 0,
                 }
-                clip_data.update(mt.load_clip_data(file_path))
+                media_data.update(mt.load_media_data(file_path))
 
-            chunk_clips[clip_id] = clip_data
-            clip_id += 1
+            chunk_medias[media_id] = media_data
+            media_id += 1
 
-        if chunk_clips:
-            yield chunk_clips
+        if chunk_medias:
+            yield chunk_medias
 
     on_progress("idle", f"Finished chunked loading of {total_files} {media_type} files")
 
 
 def load_dataset_from_pickle(
     file_path: Path,
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     thin: bool = False,
 ) -> dict[str, Any] | None:
-    """Load a dataset from a pickle file into the clips dict in-place.
+    """Load a dataset from a pickle file into the medias dict in-place.
 
     Supports two pickle formats:
 
-    - **New format**: A dict with a ``"clips"`` key mapping to clip data dicts.
+    - **New format**: A dict with a ``"medias"`` key mapping to media data dicts.
       May also include ``"audio_dir"``, ``"video_dir"``, ``"image_dir"``, or
       ``"text_dir"`` keys pointing to directories containing the raw media files
       when the bytes are not stored inline.
-    - **Old format**: A plain dict mapping clip ID to clip data dict (no wrapping
-      ``"clips"`` key).
+    - **Old format**: A plain dict mapping media ID to media data dict (no wrapping
+      ``"medias"`` key).
 
     If media bytes are not stored inline in the pickle, the function attempts to
     load them from the companion directory entry in the pickle. Clips for which
     no media bytes can be resolved are silently skipped (a warning is printed to
     stdout after loading).
 
-    The ``clips`` dict is cleared before loading begins.
+    The ``medias`` dict is cleared before loading begins.
 
     Args:
         file_path: Path to a ``.pkl`` file previously created by
             :func:`export_dataset_to_file` or :func:`load_demo_dataset`.
-        clips: Dict to populate in-place. Existing entries are removed before
-            loading. Keys are clip IDs (int); values are clip data dicts.
+        medias: Dict to populate in-place. Existing entries are removed before
+            loading. Keys are media IDs (int); values are media data dicts.
         thin: When ``True``, skip loading media bytes into memory.  Inline
             bytes from the pickle are discarded and external-dir files are
             referenced by ``media_path`` instead of read.  Useful for CLI
@@ -597,16 +597,17 @@ def load_dataset_from_pickle(
             "The pickle file is too large for available RAM."
         )
 
-    clips.clear()
+    medias.clear()
 
-    # Handle both old format (just clips dict) and new format (with metadata)
-    if isinstance(data, dict) and "clips" in data:
-        clips_data = data["clips"]
+    # Handle both old format (just medias dict) and new format (with metadata).
+    # Also support legacy "clips" key from pickles saved before the rename.
+    if isinstance(data, dict) and ("medias" in data or "clips" in data):
+        medias_data = data["medias"] if "medias" in data else data["clips"]
         # Old pickles may contain creation_info; extract a fallback origin
-        # for clips that predate per-element origin tracking.
+        # for medias that predate per-element origin tracking.
         creation_info = data.get("creation_info")
     else:
-        clips_data = data
+        medias_data = data
         creation_info = None
 
     fallback_origin = None
@@ -626,139 +627,144 @@ def load_dataset_from_pickle(
         _dir_keys[mt.type_id] = mt.dir_key
         _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
 
-    # Convert to the app's clip format
+    # Convert to the app's media format
     missing_media = 0
     loaded_count = 0
-    total_count = len(clips_data)
+    total_count = len(medias_data)
     try:
-        for clip_id, clip_info in clips_data.items():
+        for media_id, media_info in medias_data.items():
             # Determine media type
-            media_type = clip_info.get("type", "audio")
+            media_type = media_info.get("type", "audio")
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
-                media_path: str | None = clip_info.get("media_path")
+                media_path: str | None = media_info.get("media_path")
 
                 # Try to resolve a media_path from the external directory
                 if not media_path:
                     dir_key = _dir_keys.get(media_type)
-                    if dir_key and dir_key in data and "filename" in clip_info:
-                        candidate = Path(data[dir_key]) / clip_info["filename"]
+                    if dir_key and dir_key in data and "filename" in media_info:
+                        candidate = Path(data[dir_key]) / media_info["filename"]
                         if candidate.exists():
                             media_path = str(candidate.resolve())
 
                 # We still need the embedding to be useful
-                if "embedding" not in clip_info:
+                if "embedding" not in media_info:
                     missing_media += 1
                     continue
 
-                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-                clip_data: dict[str, Any] = {
-                    "id": clip_id,
+                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
+                media_data: dict[str, Any] = {
+                    "id": media_id,
                     "type": media_type,
-                    "duration": clip_info.get("duration", 0),
-                    "file_size": clip_info.get("file_size", 0),
-                    "md5": clip_info.get("md5", ""),
-                    "embedding": np.array(clip_info["embedding"]),
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "duration": media_info.get("duration", 0),
+                    "file_size": media_info.get("file_size", 0),
+                    "md5": media_info.get("md5", ""),
+                    "embedding": np.array(media_info["embedding"]),
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": media_path,
                     "filename": fname,
-                    "category": clip_info.get("category", "unknown"),
-                    "origin": clip_info.get("origin", fallback_origin),
-                    "origin_name": clip_info.get("origin_name", fname),
+                    "category": media_info.get("category", "unknown"),
+                    "origin": media_info.get("origin", fallback_origin),
+                    "origin_name": media_info.get("origin_name", fname),
                 }
-                # Preserve any extra metadata fields from the pickle
-                for extra_key in ("width", "height", "word_count", "character_count"):
-                    if extra_key in clip_info:
-                        clip_data[extra_key] = clip_info[extra_key]
+                if media_type == "image":
+                    media_data["width"] = media_info.get("width")
+                    media_data["height"] = media_info.get("height")
+                elif media_type == "paragraph":
+                    media_data["word_count"] = media_info.get("word_count")
+                    media_data["character_count"] = media_info.get("character_count")
 
-                clips[clip_id] = clip_data
+                medias[media_id] = media_data
                 loaded_count += 1
                 continue
 
             # ── Full mode (original behaviour) ──
             # Load the actual media content.
-            # Support both new key names (clip_bytes/clip_string) and legacy
-            # per-media-type key names for backward compatibility with old pickles.
-            clip_bytes = None
-            clip_string = None
+            # Support both new key names (media_bytes/media_string) and legacy
+            # key names (clip_bytes/clip_string, wav_bytes/video_bytes/image_bytes/
+            # text_content) for backward compatibility with old pickles.
             media_bytes = None
+            media_string = None
             media_path = None
 
-            # Try clip_bytes first (binary media), then legacy keys
-            clip_bytes = clip_info.get("clip_bytes")
-            if clip_bytes is None:
+            # Try media_bytes first (binary media), then legacy keys via registry
+            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
+            if bytes_val is None:
                 for legacy_key in _legacy_bytes.get(media_type, []):
-                    clip_bytes = clip_info.get(legacy_key)
-                    if clip_bytes is not None:
+                    bytes_val = media_info.get(legacy_key)
+                    if bytes_val is not None:
                         break
 
-            # Try clip_string (text media), then legacy keys
-            clip_string = clip_info.get("clip_string")
-            if clip_string is None:
+            # Try media_string (text media), then legacy keys
+            string_val = media_info.get("media_string") or media_info.get("clip_string")
+            if string_val is None:
                 for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = clip_info.get(legacy_key)
+                    val = media_info.get(legacy_key)
                     if isinstance(val, str):
-                        clip_string = val
+                        string_val = val
                         break
 
-            if clip_bytes is not None:
-                media_bytes = clip_bytes
-            elif clip_string is not None:
-                media_bytes = clip_string.encode("utf-8")
+            if bytes_val is not None:
+                media_bytes = bytes_val
+            elif string_val is not None:
+                media_string = string_val
+                media_bytes = string_val.encode("utf-8")
             else:
-                # Try loading from the external directory
+                # Try loading from the external directory via registry dir_key
                 dir_key = _dir_keys.get(media_type)
-                if dir_key and dir_key in data and "filename" in clip_info:
-                    ext_path = Path(data[dir_key]) / clip_info["filename"]
+                if dir_key and dir_key in data and "filename" in media_info:
+                    ext_path = Path(data[dir_key]) / media_info["filename"]
                     if ext_path.exists():
-                        if clip_string is None and ext_path.suffix in (".txt", ".md"):
+                        if media_string is None and ext_path.suffix in (".txt", ".md"):
                             with open(ext_path, "r", encoding="utf-8") as f:
-                                clip_string = f.read()
-                                media_bytes = clip_string.encode("utf-8")
+                                media_string = f.read()
+                                media_bytes = media_string.encode("utf-8")
                         else:
                             with open(ext_path, "rb") as f:
-                                clip_bytes = f.read()
-                                media_bytes = clip_bytes
+                                media_bytes = f.read()
                         media_path = str(ext_path.resolve())
                     else:
                         missing_media += 1
 
             if media_bytes:
-                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-                clip_data = {
-                    "id": clip_id,
+                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
+                media_data = {
+                    "id": media_id,
                     "type": media_type,
-                    "duration": clip_info.get("duration", 0),
-                    "file_size": clip_info.get("file_size", len(media_bytes)),
-                    "md5": clip_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-                    "embedding": np.array(clip_info["embedding"]),
-                    "clip_bytes": clip_bytes,
-                    "clip_string": clip_string,
-                    "media_path": media_path or clip_info.get("media_path"),
+                    "duration": media_info.get("duration", 0),
+                    "file_size": media_info.get("file_size", len(media_bytes)),
+                    "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+                    "embedding": np.array(media_info["embedding"]),
+                    "media_bytes": media_bytes,
+                    "media_string": media_string,
+                    "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
-                    "category": clip_info.get("category", "unknown"),
-                    "origin": clip_info.get("origin", fallback_origin),
-                    "origin_name": clip_info.get("origin_name", fname),
+                    "category": media_info.get("category", "unknown"),
+                    "origin": media_info.get("origin", fallback_origin),
+                    "origin_name": media_info.get("origin_name", fname),
                 }
-                # Preserve any extra metadata fields from the pickle
-                for extra_key in ("width", "height", "word_count", "character_count"):
-                    if extra_key in clip_info:
-                        clip_data[extra_key] = clip_info[extra_key]
+                # Add media-specific metadata
+                if media_type == "image":
+                    media_data["width"] = media_info.get("width")
+                    media_data["height"] = media_info.get("height")
+                elif media_type == "paragraph":
+                    media_data["word_count"] = media_info.get("word_count")
+                    media_data["character_count"] = media_info.get("character_count")
 
-                clips[clip_id] = clip_data
+                medias[media_id] = media_data
                 loaded_count += 1
     except MemoryError:
-        clips.clear()
+        medias.clear()
         del data
         gc.collect()
         raise MemoryError(
-            f"Out of memory after loading {loaded_count} of {total_count} clips from "
+            f"Out of memory after loading {loaded_count} of {total_count} medias from "
             f"{file_path.name}. Try a smaller dataset or free up system RAM."
         )
 
-    # Release the raw pickle data now that clips are built
+    # Release the raw pickle data now that medias are built
     del data
     gc.collect()
 
@@ -773,32 +779,32 @@ def load_dataset_from_pickle_chunked(
     chunk_size: int,
     thin: bool = False,
 ) -> Iterator[dict[int, dict[str, Any]]]:
-    """Yield chunks of clips from a pickle dataset file.
+    """Yield chunks of medias from a pickle dataset file.
 
     Works identically to :func:`load_dataset_from_pickle` but yields the
-    clips in groups of at most *chunk_size*.  Each yielded dict is a
-    self-contained clips dict with IDs starting at 1.
+    medias in groups of at most *chunk_size*.  Each yielded dict is a
+    self-contained medias dict with IDs starting at 1.
 
     The entire pickle is deserialized once (unavoidable for ``.pkl``
     format), but media bytes are dropped or skipped per-chunk so that
-    only one chunk's worth of clip data is alive at a time.
+    only one chunk's worth of media data is alive at a time.
 
     Args:
         file_path: Path to a ``.pkl`` dataset file.
-        chunk_size: Maximum number of clips per yielded chunk.
+        chunk_size: Maximum number of medias per yielded chunk.
         thin: When ``True``, skip loading media bytes into memory.
 
     Yields:
-        A dict mapping int clip IDs (starting at 1) to clip data dicts.
+        A dict mapping int media IDs (starting at 1) to media data dicts.
     """
     with open(file_path, "rb") as f:
         data = pickle.load(f)
 
-    if isinstance(data, dict) and "clips" in data:
-        clips_data = data["clips"]
+    if isinstance(data, dict) and ("medias" in data or "clips" in data):
+        medias_data = data["medias"] if "medias" in data else data["clips"]
         creation_info = data.get("creation_info")
     else:
-        clips_data = data
+        medias_data = data
         creation_info = None
 
     fallback_origin = None
@@ -815,139 +821,145 @@ def load_dataset_from_pickle_chunked(
         "paragraph": "text_dir",
     }
 
-    all_clip_ids = sorted(clips_data.keys())
+    all_media_ids = sorted(medias_data.keys())
 
-    for start in range(0, len(all_clip_ids), chunk_size):
-        batch_ids = all_clip_ids[start : start + chunk_size]
-        chunk_clips: dict[int, dict[str, Any]] = {}
+    for start in range(0, len(all_media_ids), chunk_size):
+        batch_ids = all_media_ids[start : start + chunk_size]
+        chunk_medias: dict[int, dict[str, Any]] = {}
         new_id = 1
 
-        for clip_id in batch_ids:
-            clip_info = clips_data[clip_id]
-            media_type = clip_info.get("type", "audio")
+        for media_id in batch_ids:
+            media_info = medias_data[media_id]
+            media_type = media_info.get("type", "audio")
 
             if thin:
-                media_path: str | None = clip_info.get("media_path")
+                media_path: str | None = media_info.get("media_path")
                 if not media_path:
                     dir_key = _dir_keys.get(media_type)
-                    if dir_key and dir_key in data and "filename" in clip_info:
-                        candidate = Path(data[dir_key]) / clip_info["filename"]
+                    if dir_key and dir_key in data and "filename" in media_info:
+                        candidate = Path(data[dir_key]) / media_info["filename"]
                         if candidate.exists():
                             media_path = str(candidate.resolve())
 
-                if "embedding" not in clip_info:
+                if "embedding" not in media_info:
                     continue
 
-                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-                clip_data: dict[str, Any] = {
+                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
+                media_data: dict[str, Any] = {
                     "id": new_id,
                     "type": media_type,
-                    "duration": clip_info.get("duration", 0),
-                    "file_size": clip_info.get("file_size", 0),
-                    "md5": clip_info.get("md5", ""),
-                    "embedding": np.array(clip_info["embedding"]),
-                    "clip_bytes": None,
-                    "clip_string": None,
+                    "duration": media_info.get("duration", 0),
+                    "file_size": media_info.get("file_size", 0),
+                    "md5": media_info.get("md5", ""),
+                    "embedding": np.array(media_info["embedding"]),
+                    "media_bytes": None,
+                    "media_string": None,
                     "media_path": media_path,
                     "filename": fname,
-                    "category": clip_info.get("category", "unknown"),
-                    "origin": clip_info.get("origin", fallback_origin),
-                    "origin_name": clip_info.get("origin_name", fname),
+                    "category": media_info.get("category", "unknown"),
+                    "origin": media_info.get("origin", fallback_origin),
+                    "origin_name": media_info.get("origin_name", fname),
                 }
                 if media_type == "image":
-                    clip_data["width"] = clip_info.get("width")
-                    clip_data["height"] = clip_info.get("height")
+                    media_data["width"] = media_info.get("width")
+                    media_data["height"] = media_info.get("height")
                 elif media_type == "paragraph":
-                    clip_data["word_count"] = clip_info.get("word_count")
-                    clip_data["character_count"] = clip_info.get("character_count")
+                    media_data["word_count"] = media_info.get("word_count")
+                    media_data["character_count"] = media_info.get("character_count")
 
-                chunk_clips[new_id] = clip_data
+                chunk_medias[new_id] = media_data
                 new_id += 1
                 continue
 
             # Full mode — same logic as load_dataset_from_pickle
-            clip_bytes = None
-            clip_string = None
             media_bytes = None
+            media_string = None
             media_path = None
 
             if media_type == "audio":
-                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("wav_bytes")
-                if clip_bytes is not None:
-                    media_bytes = clip_bytes
-                elif "filename" in clip_info and "audio_dir" in data:
-                    audio_path = Path(data["audio_dir"]) / clip_info["filename"]
+                media_bytes = (
+                    media_info.get("media_bytes")
+                    or media_info.get("clip_bytes")
+                    or media_info.get("wav_bytes")
+                )
+                if not media_bytes and "filename" in media_info and "audio_dir" in data:
+                    audio_path = Path(data["audio_dir"]) / media_info["filename"]
                     if audio_path.exists():
                         with open(audio_path, "rb") as f:
-                            clip_bytes = f.read()
-                            media_bytes = clip_bytes
+                            media_bytes = f.read()
                         media_path = str(audio_path.resolve())
 
             elif media_type == "video":
-                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("video_bytes")
-                if clip_bytes is not None:
-                    media_bytes = clip_bytes
-                elif "filename" in clip_info and "video_dir" in data:
-                    video_path = Path(data["video_dir"]) / clip_info["filename"]
+                media_bytes = (
+                    media_info.get("media_bytes")
+                    or media_info.get("clip_bytes")
+                    or media_info.get("video_bytes")
+                )
+                if not media_bytes and "filename" in media_info and "video_dir" in data:
+                    video_path = Path(data["video_dir"]) / media_info["filename"]
                     if video_path.exists():
                         with open(video_path, "rb") as f:
-                            clip_bytes = f.read()
-                            media_bytes = clip_bytes
+                            media_bytes = f.read()
                         media_path = str(video_path.resolve())
 
             elif media_type == "image":
-                clip_bytes = clip_info.get("clip_bytes") or clip_info.get("image_bytes")
-                if clip_bytes is not None:
-                    media_bytes = clip_bytes
-                elif "filename" in clip_info and "image_dir" in data:
-                    image_path = Path(data["image_dir"]) / clip_info["filename"]
+                media_bytes = (
+                    media_info.get("media_bytes")
+                    or media_info.get("clip_bytes")
+                    or media_info.get("image_bytes")
+                )
+                if not media_bytes and "filename" in media_info and "image_dir" in data:
+                    image_path = Path(data["image_dir"]) / media_info["filename"]
                     if image_path.exists():
                         with open(image_path, "rb") as f:
-                            clip_bytes = f.read()
-                            media_bytes = clip_bytes
+                            media_bytes = f.read()
                         media_path = str(image_path.resolve())
 
             elif media_type == "paragraph":
-                clip_string = clip_info.get("clip_string") or clip_info.get("text_content")
-                if clip_string is not None:
-                    media_bytes = clip_string.encode("utf-8")
-                elif "filename" in clip_info and "text_dir" in data:
-                    text_path = Path(data["text_dir"]) / clip_info["filename"]
+                media_string = (
+                    media_info.get("media_string")
+                    or media_info.get("clip_string")
+                    or media_info.get("text_content")
+                )
+                if media_string is not None:
+                    media_bytes = media_string.encode("utf-8")
+                elif "filename" in media_info and "text_dir" in data:
+                    text_path = Path(data["text_dir"]) / media_info["filename"]
                     if text_path.exists():
                         with open(text_path, "r", encoding="utf-8") as f:
-                            clip_string = f.read()
-                            media_bytes = clip_string.encode("utf-8")
+                            media_string = f.read()
+                            media_bytes = media_string.encode("utf-8")
                         media_path = str(text_path.resolve())
 
             if media_bytes:
-                fname = clip_info.get("filename", f"clip_{clip_id}.{media_type}")
-                clip_data = {
+                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
+                media_data = {
                     "id": new_id,
                     "type": media_type,
-                    "duration": clip_info.get("duration", 0),
-                    "file_size": clip_info.get("file_size", len(media_bytes)),
-                    "md5": clip_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-                    "embedding": np.array(clip_info["embedding"]),
-                    "clip_bytes": clip_bytes,
-                    "clip_string": clip_string,
-                    "media_path": media_path or clip_info.get("media_path"),
+                    "duration": media_info.get("duration", 0),
+                    "file_size": media_info.get("file_size", len(media_bytes)),
+                    "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+                    "embedding": np.array(media_info["embedding"]),
+                    "media_bytes": media_bytes,
+                    "media_string": media_string,
+                    "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
-                    "category": clip_info.get("category", "unknown"),
-                    "origin": clip_info.get("origin", fallback_origin),
-                    "origin_name": clip_info.get("origin_name", fname),
+                    "category": media_info.get("category", "unknown"),
+                    "origin": media_info.get("origin", fallback_origin),
+                    "origin_name": media_info.get("origin_name", fname),
                 }
                 if media_type == "image":
-                    clip_data["width"] = clip_info.get("width")
-                    clip_data["height"] = clip_info.get("height")
+                    media_data["width"] = media_info.get("width")
+                    media_data["height"] = media_info.get("height")
                 elif media_type == "paragraph":
-                    clip_data["word_count"] = clip_info.get("word_count")
-                    clip_data["character_count"] = clip_info.get("character_count")
+                    media_data["word_count"] = media_info.get("word_count")
+                    media_data["character_count"] = media_info.get("character_count")
 
-                chunk_clips[new_id] = clip_data
+                chunk_medias[new_id] = media_data
                 new_id += 1
 
-        if chunk_clips:
-            yield chunk_clips
+        if chunk_medias:
+            yield chunk_medias
 
 
 def embed_image_file_from_pil(image: Image.Image) -> Optional[np.ndarray]:
@@ -972,11 +984,11 @@ def embed_image_file_from_pil(image: Image.Image) -> Optional[np.ndarray]:
 
 def load_demo_dataset(
     dataset_name: str,
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     e5_model: Any = None,
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
-    """Load a named demo dataset into the clips dict, downloading and embedding as needed.
+    """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
     Checks for a cached ``.pkl`` file in ``EMBEDDINGS_DIR``; if found, loads
     from that file. If the cache is missing or the media bytes it references can
@@ -992,8 +1004,8 @@ def load_demo_dataset(
     Args:
         dataset_name: Key into ``DEMO_DATASETS`` identifying which demo dataset
             to load.  Raises ``ValueError`` if the key is not found.
-        clips: Dict to populate in-place. Existing entries are removed before
-            loading. Keys are integer clip IDs; values are clip data dicts.
+        medias: Dict to populate in-place. Existing entries are removed before
+            loading. Keys are integer media IDs; values are media data dicts.
         e5_model: Deprecated — kept for backward compatibility but no longer
             used.  The text embedding model is obtained from the media type
             registry.
@@ -1015,10 +1027,10 @@ def load_demo_dataset(
     pkl_file = EMBEDDINGS_DIR / f"{dataset_name}.pkl"
     if pkl_file.exists():
         on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
-        load_dataset_from_pickle(pkl_file, clips)
+        load_dataset_from_pickle(pkl_file, medias)
 
-        # Check if any clips were actually loaded
-        if len(clips) == 0:
+        # Check if any medias were actually loaded
+        if len(medias) == 0:
             # Pickle file exists but media files are missing, delete and re-embed
             on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
             pkl_file.unlink()
@@ -1036,39 +1048,39 @@ def load_demo_dataset(
     slice_start = dataset_info.get("slice_start", 0)
     slice_end = dataset_info.get("slice_end")
 
-    clips.clear()
+    medias.clear()
     external_dir = mt.load_demo_source(
         source=source,
         categories=categories,
         slice_start=slice_start,
         slice_end=slice_end,
-        clips=clips,
+        clips=medias,
         on_progress=on_progress,
     )
 
-    # Stamp the demo origin on all clips
+    # Stamp the demo origin on all medias
     demo_origin: dict[str, Any] = {"importer": "demo", "params": {"name": dataset_name}}
-    for clip in clips.values():
-        clip["origin"] = demo_origin
+    for media in medias.values():
+        media["origin"] = demo_origin
 
     # Build the pickle cache payload
-    # For types with external media dirs (audio, video), exclude clip_bytes
+    # For types with external media dirs (audio, video), exclude media_bytes
     # from the pickle and store the dir path so reloading can find the files.
     if external_dir is not None:
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
-            "clips": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items() if k != "clip_bytes"}
-                for cid, clip in clips.items()
+            "medias": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k != "media_bytes"}
+                for cid, media in medias.items()
             },
             mt.dir_key: external_dir,
         }
     else:
         pkl_data = {
             "name": dataset_name,
-            "clips": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-                for cid, clip in clips.items()
+            "medias": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
+                for cid, media in medias.items()
             },
         }
 
@@ -1080,46 +1092,46 @@ def load_demo_dataset(
 
 
 def export_dataset_to_file(
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
 ) -> bytes:
-    """Serialise the current clip dataset to a pickle-formatted byte string.
+    """Serialise the current media dataset to a pickle-formatted byte string.
 
-    Converts the in-memory ``clips`` dict to a portable format (converting any
+    Converts the in-memory ``medias`` dict to a portable format (converting any
     ``numpy.ndarray`` embeddings to plain Python lists) and returns it as bytes
     suitable for writing to a ``.pkl`` file or sending as an HTTP response.
 
     The resulting bytes can be reloaded with :func:`load_dataset_from_pickle`.
 
     Args:
-        clips: Mapping of clip ID to clip data dict.
+        medias: Mapping of media ID to media data dict.
 
     Returns:
         Raw bytes of the pickled dataset dict.
     """
     data: dict[str, Any] = {
-        "clips": {
+        "medias": {
             cid: {
-                "id": clip["id"],
-                "type": clip.get("type", "audio"),
-                "duration": clip["duration"],
-                "file_size": clip["file_size"],
-                "md5": clip["md5"],
-                "embedding": clip["embedding"].tolist()
-                if isinstance(clip["embedding"], np.ndarray)
-                else clip["embedding"],
-                "filename": clip.get("filename", f"clip_{cid}.wav"),
-                "category": clip.get("category", "unknown"),
-                "origin": clip.get("origin"),
-                "origin_name": clip.get("origin_name", clip.get("filename", "")),
-                "clip_bytes": clip.get("clip_bytes"),
-                "clip_string": clip.get("clip_string"),
-                "media_path": clip.get("media_path"),
-                "word_count": clip.get("word_count"),
-                "character_count": clip.get("character_count"),
-                "width": clip.get("width"),
-                "height": clip.get("height"),
+                "id": media["id"],
+                "type": media.get("type", "audio"),
+                "duration": media["duration"],
+                "file_size": media["file_size"],
+                "md5": media["md5"],
+                "embedding": media["embedding"].tolist()
+                if isinstance(media["embedding"], np.ndarray)
+                else media["embedding"],
+                "filename": media.get("filename", f"media_{cid}.wav"),
+                "category": media.get("category", "unknown"),
+                "origin": media.get("origin"),
+                "origin_name": media.get("origin_name", media.get("filename", "")),
+                "media_bytes": media.get("media_bytes"),
+                "media_string": media.get("media_string"),
+                "media_path": media.get("media_path"),
+                "word_count": media.get("word_count"),
+                "character_count": media.get("character_count"),
+                "width": media.get("width"),
+                "height": media.get("height"),
             }
-            for cid, clip in clips.items()
+            for cid, media in medias.items()
         }
     }
 

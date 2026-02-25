@@ -15,7 +15,7 @@ from vtsearch.cli import (
     _build_results_dict,
     _detect_media_type,
     _run_exporter,
-    _score_clips_with_detectors,
+    _score_medias_with_detectors,
     run_autodetect,
     run_autodetect_with_importer,
 )
@@ -28,7 +28,7 @@ from vtsearch.datasets.loader import export_dataset_to_file
 
 
 def _make_dataset_file(tmp_path, clips_dict):
-    """Export a clips dict to a pickle file and return the path."""
+    """Export a medias dict to a pickle file and return the path."""
     pkl_bytes = export_dataset_to_file(clips_dict)
     dataset_path = tmp_path / "dataset.pkl"
     dataset_path.write_bytes(pkl_bytes)
@@ -99,14 +99,14 @@ class TestRunAutodetect:
     """Tests for the core run_autodetect function."""
 
     def test_returns_list(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         assert isinstance(hits, list)
 
     def test_hits_have_required_fields(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -117,7 +117,7 @@ class TestRunAutodetect:
             assert "score" in hit
 
     def test_scores_in_valid_range(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -125,7 +125,7 @@ class TestRunAutodetect:
             assert 0.0 <= hit["score"] <= 1.0
 
     def test_hits_sorted_descending_by_score(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -133,7 +133,7 @@ class TestRunAutodetect:
         assert scores == sorted(scores, reverse=True)
 
     def test_all_hits_at_or_above_threshold(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         threshold = detector["threshold"]
 
@@ -145,10 +145,10 @@ class TestRunAutodetect:
         """Clips that were voted good should tend to score higher."""
         good_ids = [1, 2, 3]
         bad_ids = [18, 19, 20]
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, good_ids, bad_ids)
 
-        # Score all clips by re-running with a threshold of 0 so every clip is included
+        # Score all medias by re-running with a threshold of 0 so every media is included
         detector_data = json.loads(detector_path.read_text())
         detector_data["threshold"] = 0.0
         low_threshold_path = tmp_path / "detector_low.json"
@@ -167,7 +167,7 @@ class TestRunAutodetect:
             run_autodetect("/nonexistent/dataset.pkl", str(detector_path))
 
     def test_detector_file_not_found(self, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         with pytest.raises(FileNotFoundError, match="Detector file not found"):
             run_autodetect(str(dataset_path), "/nonexistent/detector.json")
 
@@ -176,11 +176,11 @@ class TestRunAutodetect:
         dataset_path = _make_dataset_file(tmp_path, empty_clips)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
 
-        with pytest.raises(ValueError, match="No clips loaded"):
+        with pytest.raises(ValueError, match="No medias loaded"):
             run_autodetect(str(dataset_path), str(detector_path))
 
     def test_detector_missing_weights_raises_error(self, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         bad_detector = tmp_path / "bad_detector.json"
         bad_detector.write_text(json.dumps({"threshold": 0.5}))
 
@@ -188,7 +188,7 @@ class TestRunAutodetect:
             run_autodetect(str(dataset_path), str(bad_detector))
 
     def test_detector_missing_threshold_raises_error(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
 
         # Write detector with threshold removed
@@ -200,7 +200,7 @@ class TestRunAutodetect:
             run_autodetect(str(dataset_path), str(no_threshold_path))
 
     def test_hits_do_not_contain_embedding(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -208,17 +208,17 @@ class TestRunAutodetect:
             assert "embedding" not in hit
 
     def test_hits_do_not_contain_raw_media(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         for hit in hits:
-            assert "clip_bytes" not in hit
-            assert "clip_string" not in hit
+            assert "media_bytes" not in hit
+            assert "media_string" not in hit
 
     def test_with_threshold_zero_returns_all_clips(self, client, tmp_path):
-        """A threshold of 0 should return all clips since sigmoid output >= 0."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        """A threshold of 0 should return all medias since sigmoid output >= 0."""
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         detector["threshold"] = 0.0
@@ -226,11 +226,11 @@ class TestRunAutodetect:
         zero_path.write_text(json.dumps(detector))
 
         hits = run_autodetect(str(dataset_path), str(zero_path))
-        assert len(hits) == len(app_module.clips)
+        assert len(hits) == len(app_module.medias)
 
     def test_with_threshold_one_returns_few_or_none(self, client, tmp_path):
-        """A threshold of 1.0 should return very few or no clips."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        """A threshold of 1.0 should return very few or no medias."""
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         detector["threshold"] = 1.0
@@ -238,8 +238,8 @@ class TestRunAutodetect:
         high_path.write_text(json.dumps(detector))
 
         hits = run_autodetect(str(dataset_path), str(high_path))
-        # With threshold=1.0 most clips should be excluded (sigmoid rarely reaches 1.0)
-        assert len(hits) < len(app_module.clips)
+        # With threshold=1.0 most medias should be excluded (sigmoid rarely reaches 1.0)
+        assert len(hits) < len(app_module.medias)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ class TestRunAutodetectWithImporter:
 
     def test_pickle_importer_returns_same_as_legacy(self, client, tmp_path):
         """Using --importer pickle should produce the same results as --dataset."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         legacy_hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -310,7 +310,7 @@ class TestRunAutodetectWithImporter:
 
 
 # ---------------------------------------------------------------------------
-# Tests for _score_clips_with_detectors() (multi-processor)
+# Tests for _score_medias_with_detectors() (multi-processor)
 # ---------------------------------------------------------------------------
 
 
@@ -320,7 +320,7 @@ class TestScoreClipsWithDetectors:
     def test_single_detector_returns_one_result(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         assert len(results) == 1
         assert "det_a" in results
@@ -334,7 +334,7 @@ class TestScoreClipsWithDetectors:
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
         }
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         assert len(results) == 2
         assert "det_a" in results
@@ -342,9 +342,9 @@ class TestScoreClipsWithDetectors:
 
     def test_hits_sorted_descending(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
-        detector["threshold"] = 0.0  # include all clips
+        detector["threshold"] = 0.0  # include all medias
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         scores = [h["score"] for h in results["det"]["hits"]]
         assert scores == sorted(scores, reverse=True)
@@ -352,7 +352,7 @@ class TestScoreClipsWithDetectors:
     def test_hits_have_required_fields(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
         for hit in results["det"]["hits"]:
             assert "id" in hit
@@ -364,19 +364,19 @@ class TestScoreClipsWithDetectors:
         _, detector = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
         detectors = {"det": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 
-        with pytest.raises(ValueError, match="No clips loaded"):
-            _score_clips_with_detectors({}, detectors)
+        with pytest.raises(ValueError, match="No medias loaded"):
+            _score_medias_with_detectors({}, detectors)
 
     def test_empty_detectors_raises_error(self):
         with pytest.raises(ValueError, match="No favorite processors"):
-            _score_clips_with_detectors(app_module.clips, {})
+            _score_medias_with_detectors(app_module.medias, {})
 
     def test_threshold_zero_returns_all_clips(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
-        assert results["det"]["total_hits"] == len(app_module.clips)
+        assert results["det"]["total_hits"] == len(app_module.medias)
 
     def test_different_detectors_may_flag_different_clips(self, client, tmp_path):
         """Two detectors trained on different goods should have different hit sets."""
@@ -386,12 +386,12 @@ class TestScoreClipsWithDetectors:
             "det_a": {"weights": det_a["weights"], "threshold": 0.0},
             "det_b": {"weights": det_b["weights"], "threshold": 0.0},
         }
-        results = _score_clips_with_detectors(app_module.clips, detectors)
+        results = _score_medias_with_detectors(app_module.medias, detectors)
 
-        # Both should return all clips (threshold=0), but with different score orderings
+        # Both should return all medias (threshold=0), but with different score orderings
         ids_a = [h["id"] for h in results["det_a"]["hits"]]
         ids_b = [h["id"] for h in results["det_b"]["hits"]]
-        assert set(ids_a) == set(ids_b)  # same clips
+        assert set(ids_a) == set(ids_b)  # same medias
         assert ids_a != ids_b  # different ordering (different scores)
 
 
@@ -406,7 +406,7 @@ class TestBuildMultiResultsDict:
     def test_basic_structure(self, client, tmp_path):
         _, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
-        detector_results = _score_clips_with_detectors(app_module.clips, detectors)
+        detector_results = _score_medias_with_detectors(app_module.medias, detectors)
         results = _build_multi_results_dict(detector_results, "audio")
 
         assert results["media_type"] == "audio"
@@ -421,7 +421,7 @@ class TestBuildMultiResultsDict:
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
         }
-        detector_results = _score_clips_with_detectors(app_module.clips, detectors)
+        detector_results = _score_medias_with_detectors(app_module.medias, detectors)
         results = _build_multi_results_dict(detector_results, "audio")
 
         assert results["detectors_run"] == 2
@@ -518,7 +518,7 @@ class TestAutodetectCLI:
     """Tests for the command-line --autodetect flag via subprocess."""
 
     def test_autodetect_prints_output(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -555,7 +555,7 @@ class TestAutodetectCLI:
 
     def test_autodetect_no_processors_fails(self, tmp_path):
         """Autodetect with an empty settings file should fail (no processors)."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
         empty_settings.write_text(json.dumps({"favorite_processors": []}))
 
@@ -600,10 +600,10 @@ class TestAutodetectCLI:
         assert "Error" in result.stderr
 
     def test_autodetect_output_contains_names(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
-        # Use threshold 0 to ensure all clips appear
+        # Use threshold 0 to ensure all medias appear
         detector["threshold"] = 0.0
         zero_path = tmp_path / "zero_threshold.json"
         zero_path.write_text(json.dumps(detector))
@@ -629,7 +629,7 @@ class TestAutodetectCLI:
         assert "Predicted Good" in result.stdout
 
     def test_autodetect_no_hits_message(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         # Use threshold 1.0 to ensure no hits
@@ -658,7 +658,7 @@ class TestAutodetectCLI:
 
     def test_autodetect_multiple_processors(self, client, tmp_path):
         """Multiple processors in settings should produce results from all."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         det_a_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20], name="det_a.json")
         det_b_path, _ = _make_detector_file(tmp_path, client, [5, 6, 7], [15, 16, 17], name="det_b.json")
         settings_path = _make_settings_file(tmp_path, [det_a_path, det_b_path])
@@ -701,7 +701,7 @@ class TestAutodetectImporterCLI:
 
     def test_importer_pickle_via_cli(self, client, tmp_path):
         """--importer pickle --file <path> should work like --dataset <path>."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -749,7 +749,7 @@ class TestAutodetectImporterCLI:
 
     def test_importer_no_processors_fails(self, tmp_path):
         """Autodetect with importer but no processors should fail."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
         empty_settings.write_text(json.dumps({"favorite_processors": []}))
 
@@ -954,7 +954,7 @@ class TestBuildResultsDict:
     """Tests for the _build_results_dict helper."""
 
     def test_basic_structure(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -989,7 +989,7 @@ class TestBuildResultsDict:
         assert det_names[0] == "bark_detector"
 
     def test_hits_included_in_results(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -1036,7 +1036,7 @@ class TestRunExporter:
     """Tests for the _run_exporter function."""
 
     def test_file_exporter_creates_file(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -1051,7 +1051,7 @@ class TestRunExporter:
         assert saved["detectors_run"] == 1
 
     def test_gui_exporter_prints_results(self, client, tmp_path, capsys):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
 
         # Use threshold 0 to ensure hits
@@ -1086,7 +1086,7 @@ class TestAutodetectMainWithExporter:
     """Tests for the autodetect_main function with exporter support."""
 
     def test_file_exporter_via_function(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1105,7 +1105,7 @@ class TestAutodetectMainWithExporter:
         assert "results" in saved
 
     def test_no_exporter_uses_gui_default(self, client, tmp_path, capsys):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1121,7 +1121,7 @@ class TestAutodetectMainWithExporter:
 
     def test_multi_processor_file_export(self, client, tmp_path):
         """autodetect_main with two processors should produce two-detector results."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         det_a_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20], name="det_a.json")
         det_b_path, _ = _make_detector_file(tmp_path, client, [5, 6, 7], [15, 16, 17], name="det_b.json")
         settings_path = _make_settings_file(tmp_path, [det_a_path, det_b_path])
@@ -1146,7 +1146,7 @@ class TestAutodetectImporterMainWithExporter:
     """Tests for the autodetect_importer_main function with exporter support."""
 
     def test_pickle_importer_file_exporter(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1177,7 +1177,7 @@ class TestAutodetectExporterCLI:
     """Tests for the --autodetect --exporter path via subprocess."""
 
     def test_file_exporter_via_cli(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1207,7 +1207,7 @@ class TestAutodetectExporterCLI:
         assert "results" in saved
 
     def test_file_exporter_with_importer_via_cli(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1239,7 +1239,7 @@ class TestAutodetectExporterCLI:
         assert "results" in saved
 
     def test_gui_exporter_via_cli(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1270,7 +1270,7 @@ class TestAutodetectExporterCLI:
         assert "score:" not in result.stdout.lower()
 
     def test_unknown_exporter_fails(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1296,7 +1296,7 @@ class TestAutodetectExporterCLI:
 
     def test_missing_exporter_required_field_fails(self, client, tmp_path):
         """Omitting required email_smtp fields should produce an error."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1323,7 +1323,7 @@ class TestAutodetectExporterCLI:
 
     def test_file_exporter_output_contains_media_type(self, client, tmp_path):
         """File exporter output should include the media_type from the dataset."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
@@ -1353,7 +1353,7 @@ class TestAutodetectExporterCLI:
 
     def test_file_exporter_stdout_shows_confirmation(self, client, tmp_path):
         """The CLI should print the exporter's confirmation message."""
-        dataset_path = _make_dataset_file(tmp_path, app_module.clips)
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 

@@ -31,10 +31,10 @@ def update_progress(
         status: Current operation phase. Recognised values:
             ``"idle"``, ``"loading"``, ``"downloading"``, ``"embedding"``.
         message: Human-readable description of what is currently happening
-            (e.g. ``"Embedding clip 12/200..."``). Defaults to ``""``.
+            (e.g. ``"Embedding media 12/200..."``). Defaults to ``""``.
         current: Number of units completed so far (e.g. bytes downloaded,
-            clips embedded). Defaults to 0.
-        total: Total number of units expected (e.g. total bytes, total clips).
+            medias embedded). Defaults to 0.
+        total: Total number of units expected (e.g. total bytes, total medias).
             A value of 0 indicates the total is unknown. Defaults to 0.
         error: If the operation failed, a string describing the error;
             otherwise ``None``. Defaults to ``None``.

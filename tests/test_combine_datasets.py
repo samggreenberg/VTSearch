@@ -23,27 +23,27 @@ import numpy as np
 import pytest
 
 
-def _unique_bytes(clip_id: int) -> bytes:
-    """Return unique bytes for a clip so MD5 hashes are distinct after reload."""
-    return clip_id.to_bytes(4, "little") + b"\x00" * 96
+def _unique_bytes(media_id: int) -> bytes:
+    """Return unique bytes for a media so MD5 hashes are distinct after reload."""
+    return media_id.to_bytes(4, "little") + b"\x00" * 96
 
 
-def _make_audio_clip(clip_id: int, md5: str = "", filename: str = "") -> dict:
-    """Return a minimal clip dict for testing."""
+def _make_audio_clip(media_id: int, md5: str = "", filename: str = "") -> dict:
+    """Return a minimal media dict for testing."""
     if not filename:
-        filename = f"clip_{clip_id}.wav"
-    raw = _unique_bytes(clip_id)
+        filename = f"clip_{media_id}.wav"
+    raw = _unique_bytes(media_id)
     if not md5:
         md5 = hashlib.md5(raw).hexdigest()
     return {
-        "id": clip_id,
+        "id": media_id,
         "type": "audio",
         "duration": 1.0,
         "file_size": 1000,
         "md5": md5,
-        "embedding": np.array([float(clip_id), float(clip_id) + 0.5]),
-        "clip_bytes": raw,
-        "clip_string": None,
+        "embedding": np.array([float(media_id), float(media_id) + 0.5]),
+        "media_bytes": raw,
+        "media_string": None,
         "media_path": None,
         "filename": filename,
         "category": "test",
@@ -52,25 +52,25 @@ def _make_audio_clip(clip_id: int, md5: str = "", filename: str = "") -> dict:
     }
 
 
-def _make_image_clip(clip_id: int, md5: str = "") -> dict:
-    """Return a minimal image clip dict for testing."""
-    raw = b"\x89PNG" + _unique_bytes(clip_id)
+def _make_image_clip(media_id: int, md5: str = "") -> dict:
+    """Return a minimal image media dict for testing."""
+    raw = b"\x89PNG" + _unique_bytes(media_id)
     if not md5:
         md5 = hashlib.md5(raw).hexdigest()
     return {
-        "id": clip_id,
+        "id": media_id,
         "type": "image",
         "duration": 0,
         "file_size": 2000,
         "md5": md5,
-        "embedding": np.array([float(clip_id)]),
-        "clip_bytes": raw,
-        "clip_string": None,
+        "embedding": np.array([float(media_id)]),
+        "media_bytes": raw,
+        "media_string": None,
         "media_path": None,
-        "filename": f"img_{clip_id}.png",
+        "filename": f"img_{media_id}.png",
         "category": "test",
         "origin": None,
-        "origin_name": f"img_{clip_id}.png",
+        "origin_name": f"img_{media_id}.png",
         "width": 32,
         "height": 32,
     }
@@ -79,9 +79,9 @@ def _make_image_clip(clip_id: int, md5: str = "") -> dict:
 def _write_pickle_dataset(path, clips_dict):
     """Write a pickle dataset file in the standard format."""
     data = {
-        "clips": {
-            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in clip.items()}
-            for cid, clip in clips_dict.items()
+        "medias": {
+            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
+            for cid, media in clips_dict.items()
         }
     }
     with open(path, "wb") as f:
@@ -160,18 +160,18 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": [str(p1), str(p2)]}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)]}, medias)
 
-        assert len(clips) == 4
+        assert len(medias) == 4
         # IDs should be re-assigned sequentially
-        assert set(clips.keys()) == {1, 2, 3, 4}
+        assert set(medias.keys()) == {1, 2, 3, 4}
 
     def test_deduplication_by_md5(self, tmp_path):
         """Clips with the same MD5 across datasets are included only once."""
         from vtsearch.datasets.importers.combine_datasets import IMPORTER
 
-        # Use the same clip_id (same bytes) to produce a genuine MD5 duplicate
+        # Use the same media_id (same bytes) to produce a genuine MD5 duplicate
         dup_clip_a = _make_audio_clip(1, filename="dup_a.wav")
         dup_clip_b = _make_audio_clip(1, filename="dup_b.wav")  # same bytes as dup_a
         ds1 = {1: dup_clip_a, 2: _make_audio_clip(2)}
@@ -180,10 +180,10 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": [str(p1), str(p2)]}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)]}, medias)
 
-        assert len(clips) == 3  # 4 total minus 1 duplicate
+        assert len(medias) == 3  # 4 total minus 1 duplicate
 
     def test_media_type_mismatch_raises(self, tmp_path):
         """Combining audio and image datasets raises ValueError."""
@@ -195,9 +195,9 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
+        medias: dict = {}
         with pytest.raises(ValueError, match="Media type mismatch"):
-            IMPORTER.run({"datasets": [str(p1), str(p2)]}, clips)
+            IMPORTER.run({"datasets": [str(p1), str(p2)]}, medias)
 
     def test_fewer_than_two_datasets_raises(self, tmp_path):
         """Providing only one dataset raises ValueError."""
@@ -207,9 +207,9 @@ class TestCombineDatasetsRun:
         p1 = tmp_path / "ds1.pkl"
         _write_pickle_dataset(p1, ds1)
 
-        clips: dict = {}
+        medias: dict = {}
         with pytest.raises(ValueError, match="At least two"):
-            IMPORTER.run({"datasets": [str(p1)]}, clips)
+            IMPORTER.run({"datasets": [str(p1)]}, medias)
 
     def test_missing_file_raises(self, tmp_path):
         """A non-existent path raises FileNotFoundError."""
@@ -219,9 +219,9 @@ class TestCombineDatasetsRun:
         p1 = tmp_path / "ds1.pkl"
         _write_pickle_dataset(p1, ds1)
 
-        clips: dict = {}
+        medias: dict = {}
         with pytest.raises(FileNotFoundError):
-            IMPORTER.run({"datasets": [str(p1), str(tmp_path / "missing.pkl")]}, clips)
+            IMPORTER.run({"datasets": [str(p1), str(tmp_path / "missing.pkl")]}, medias)
 
     def test_comma_separated_string_input(self, tmp_path):
         """The datasets field also accepts a comma-separated string."""
@@ -233,10 +233,10 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": f"{p1},{p2}"}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": f"{p1},{p2}"}, medias)
 
-        assert len(clips) == 2
+        assert len(medias) == 2
 
     def test_empty_dataset_skipped(self, tmp_path):
         """An empty pickle file is skipped without error."""
@@ -253,13 +253,13 @@ class TestCombineDatasetsRun:
         p3 = tmp_path / "ds3.pkl"
         _write_pickle_dataset(p3, ds3)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": [str(p1), str(p2), str(p3)]}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2), str(p3)]}, medias)
 
-        assert len(clips) == 2
+        assert len(medias) == 2
 
-    def test_preserves_clip_data_fields(self, tmp_path):
-        """Merged clips retain their original data fields."""
+    def test_preserves_media_data_fields(self, tmp_path):
+        """Merged medias retain their original data fields."""
         from vtsearch.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1, filename="song_a.wav")}
@@ -268,10 +268,10 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": [str(p1), str(p2)]}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)]}, medias)
 
-        filenames = {c["filename"] for c in clips.values()}
+        filenames = {c["filename"] for c in medias.values()}
         assert "song_a.wav" in filenames
         assert "song_b.wav" in filenames
 
@@ -287,10 +287,10 @@ class TestCombineDatasetsRun:
         _write_pickle_dataset(p2, ds2)
         _write_pickle_dataset(p3, ds3)
 
-        clips: dict = {}
-        IMPORTER.run({"datasets": [str(p1), str(p2), str(p3)]}, clips)
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2), str(p3)]}, medias)
 
-        assert len(clips) == 3
+        assert len(medias) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -308,10 +308,10 @@ class TestCombineDatasetsCli:
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        clips: dict = {}
-        IMPORTER.run_cli({"datasets": f"{p1},{p2}"}, clips)
+        medias: dict = {}
+        IMPORTER.run_cli({"datasets": f"{p1},{p2}"}, medias)
 
-        assert len(clips) == 2
+        assert len(medias) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +355,7 @@ class TestAvailableFilesEndpoint:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         test_pkl = EMBEDDINGS_DIR / "_test_combine.pkl"
-        test_pkl.write_bytes(pickle.dumps({"clips": {}}))
+        test_pkl.write_bytes(pickle.dumps({"medias": {}}))
         try:
             resp = client.get("/api/dataset/available-files")
             data = resp.get_json()

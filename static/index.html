@@ -51,11 +51,11 @@
 </header>
 <div class="layout" role="presentation">
   <!-- Left panel -->
-  <div class="panel-left" id="left-panel" role="region" aria-label="Clip list">
+  <div class="panel-left" id="left-panel" role="region" aria-label="Media list">
     <div class="dataset-bar" id="dataset-bar" style="display:none">
       <span class="dataset-info" id="dataset-info">No dataset loaded</span>
     </div>
-    <h2>Clips</h2>
+    <h2 id="media-heading">Medias</h2>
     <div class="sort-bar" id="sort-bar">
       <span class="sort-label">Sort</span>
       <div class="sort-mode">
@@ -95,8 +95,8 @@
         <div class="sort-progress-label" id="sort-progress-label">Searching and sorting...</div>
       </div>
     </div>
-    <div id="clip-list" role="listbox" aria-label="Clips"></div>
-    <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Clip overview showing labeled clips and current position">
+    <div id="media-list" role="listbox" aria-label="Medias"></div>
+    <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
       <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
     </div>
   </div>
@@ -195,8 +195,8 @@
           <div class="progress-stat-value" id="stat-total-labels">0</div>
         </div>
         <div class="progress-stat">
-          <div class="progress-stat-label">Total Clips</div>
-          <div class="progress-stat-value" id="stat-total-clips">0</div>
+          <div class="progress-stat-label" id="stat-total-medias-label">Total Medias</div>
+          <div class="progress-stat-value" id="stat-total-medias">0</div>
         </div>
       </div>
       <!-- Smart: Error Cost chart -->
@@ -211,7 +211,7 @@
       <div id="stable-section" class="progress-chart" style="display:none;">
         <h3>Stable: Prediction Flips Over Time</h3>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-          Shows how many unlabeled clips change prediction at each step. Near zero means stable.
+          Shows how many unlabeled medias change prediction at each step. Near zero means stable.
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
       </div>
