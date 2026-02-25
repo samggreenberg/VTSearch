@@ -404,8 +404,8 @@ def _compute_stable_status(
     avg_flip_rate = sum(flip_rates) / len(flip_rates)
     max_flip_rate = max(flip_rates)
 
-    STABLE_RATE_THRESHOLD = 0.02  # average less than 2% of predictions flipping
-    STABLE_MAX_THRESHOLD = 0.05  # no single recent step above 5%
+    STABLE_RATE_THRESHOLD = 0.005  # average less than 0.5% of predictions flipping
+    STABLE_MAX_THRESHOLD = 0.01  # no single recent step above 1%
 
     if avg_flip_rate < STABLE_RATE_THRESHOLD and max_flip_rate < STABLE_MAX_THRESHOLD:
         return {"status": "green", "reason": "Predictions have stabilized.", "avg_flip_rate": round(avg_flip_rate, 4)}
