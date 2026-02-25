@@ -2697,8 +2697,8 @@
         </div>
       </div>
       <div class="vote-buttons">
-        <button class="btn-bad${isBad ? " voted" : ""}" id="vote-bad">Bad</button>
-        <button class="btn-good${isGood ? " voted" : ""}" id="vote-good">Good</button>
+        <button class="btn-bad${isBad ? " voted" : ""}" id="vote-bad" title="Mark this media as a Bad example.">Bad</button>
+        <button class="btn-good${isGood ? " voted" : ""}" id="vote-good" title="Mark this media as a Good example.">Good</button>
       </div>`;
     document.getElementById("vote-good").onclick = () => castVote(c.id, "good");
     document.getElementById("vote-bad").onclick = () => castVote(c.id, "bad");
