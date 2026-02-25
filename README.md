@@ -91,6 +91,8 @@ This runs fast CPU tests only. Additional test modes:
 ├── static/                         # Frontend (HTML, JS, CSS, assets)
 ├── tests/                          # Test suite (pytest)
 ├── docs/                           # Extended documentation
+│   ├── HANDOFF.md                  # Project handoff & orientation guide
+│   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
 │   ├── ARCHITECTURE.md             # Architecture deep-dive
 │   ├── EXTENDING.md                # Plugin authoring guide
 │   ├── EVAL.md                     # Evaluation framework guide
@@ -100,6 +102,12 @@ This runs fast CPU tests only. Additional test modes:
 │   └── FEATURE_IDEAS.md            # Brainstorm of potential features
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
+
+## Deployment
+
+For production deployment, offline/air-gapped operation, Docker hardening, environment variables, network dependency details, and data directory management, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+New to the project? Start with [docs/HANDOFF.md](docs/HANDOFF.md) for a full orientation including a documentation map, key concepts, deployment checklist, and common workflows.
 
 ## Machine learning
 
