@@ -21,6 +21,7 @@
   let learnedSortDebounce = null;   // Debounce timer for background training
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
+  let isVoting = false;              // Re-entrance guard for castVote
   const clipList = document.getElementById("clip-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -2738,60 +2739,71 @@
   }
 
   async function castVote(id, vote) {
-    const clipName = (clips.find(c => c.id === id) || {}).filename || `Clip #${id}`;
-    await fetch(`/api/clips/${id}/vote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vote }),
-    });
-    announce(`Voted ${vote} on ${clipName}`);
-    await fetchVotes();
+    if (isVoting) return; // Prevent double-click from toggling the vote off
+    isVoting = true;
+    try {
+      const clipName = (clips.find(c => c.id === id) || {}).filename || `Clip #${id}`;
+      await fetch(`/api/clips/${id}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vote }),
+      });
+      announce(`Voted ${vote} on ${clipName}`);
+      await fetchVotes();
 
-    // When voting Good while a text-sort query is active, store the query
-    // as a suggested name for saving detectors / labelsets later.
-    if (vote === "good" && sortMode === "text") {
-      const textQuery = textSortInput.value.trim();
-      if (textQuery) {
-        fetch("/api/textsort-suggestions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: textQuery }),
-        }).catch(() => {}); // fire-and-forget
-      }
-    }
-
-    // Auto-advance to next clip.  When swipe animation is enabled, play a
-    // fast swipe-out before switching; otherwise advance immediately.
-    // In "new" select mode, use the diversity tree for the next clip.
-    let nextId;
-    if (selectMode === "new") {
-      const data = await fetchDiversityTreeNext();
-      nextId = data.id;
-      if (nextId == null && data.exhausted) {
-        vtAlert("You have seen every branch of the diversity tree. Switch to Top or Hard mode, or add more data.", "warning");
-      }
-    } else {
-      const c = findNextClip();
-      nextId = c ? c.id : null;
-    }
-    if (nextId != null && nextId !== selected) {
-      if (swipeAnimation) {
-        const dir = vote === "good" ? "swipe-right" : "swipe-left";
-        const wrapper = document.getElementById("media-swipe-wrapper");
-        if (wrapper) {
-          wrapper.classList.add(dir);
-          await new Promise(r => setTimeout(r, 180));
-          wrapper.classList.remove(dir);
+      // When voting Good while a text-sort query is active, store the query
+      // as a suggested name for saving detectors / labelsets later.
+      if (vote === "good" && sortMode === "text") {
+        const textQuery = textSortInput.value.trim();
+        if (textQuery) {
+          fetch("/api/textsort-suggestions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: textQuery }),
+          }).catch(() => {}); // fire-and-forget
         }
       }
-      selectClip(nextId);
-    }
 
-    // Kick off learned sort in the background (non-blocking).
-    // When training completes, sortOrder/threshold update and the clip list
-    // re-renders — but the user can keep voting in the meantime.
-    if (sortMode === "learned") {
-      scheduleLearnedSort();
+      // Auto-advance to next clip.  When swipe animation is enabled, play a
+      // fast swipe-out before switching; otherwise advance immediately.
+      // In "new" select mode, use the diversity tree for the next clip.
+      let nextId;
+      if (selectMode === "new") {
+        const data = await fetchDiversityTreeNext();
+        nextId = data.id;
+        if (nextId == null && data.exhausted) {
+          vtAlert("You have seen every branch of the diversity tree. Switch to Top or Hard mode, or add more data.", "warning");
+        }
+      } else {
+        const c = findNextClip();
+        nextId = c ? c.id : null;
+      }
+      if (nextId != null && nextId !== selected) {
+        if (swipeAnimation) {
+          const dir = vote === "good" ? "swipe-right" : "swipe-left";
+          const wrapper = document.getElementById("media-swipe-wrapper");
+          if (wrapper) {
+            wrapper.classList.add(dir);
+            await new Promise(r => setTimeout(r, 180));
+            wrapper.classList.remove(dir);
+          }
+        }
+        selectClip(nextId);
+      } else {
+        // No auto-advance (all clips voted, or toggled a vote off) —
+        // refresh clip list and center panel so vote button state updates.
+        renderClipList();
+        renderCenter();
+      }
+
+      // Kick off learned sort in the background (non-blocking).
+      // When training completes, sortOrder/threshold update and the clip list
+      // re-renders — but the user can keep voting in the meantime.
+      if (sortMode === "learned") {
+        scheduleLearnedSort();
+      }
+    } finally {
+      isVoting = false;
     }
   }
 
