@@ -46,6 +46,7 @@ _DEFAULTS: dict[str, Any] = {
     "swipe_animation": True,
     "show_thumbnails_left": False,
     "show_thumbnails_right": True,
+    "favorite_media_type": "",
     "favorite_processors": [],
 }
 
@@ -219,6 +220,23 @@ def set_show_thumbnails_right(value: bool) -> None:
     """Set and persist the show_thumbnails_right flag."""
     s = _ensure_loaded()
     s["show_thumbnails_right"] = bool(value)
+    _save(s)
+
+
+VALID_MEDIA_TYPES = ("audio", "image", "paragraph", "video")
+
+
+def get_favorite_media_type() -> str:
+    """Return the persisted favorite media type (empty string if unset)."""
+    return str(_ensure_loaded().get("favorite_media_type", _DEFAULTS["favorite_media_type"]))
+
+
+def set_favorite_media_type(value: str) -> None:
+    """Set and persist the favorite media type.  Must be a valid media type or empty string."""
+    if value != "" and value not in VALID_MEDIA_TYPES:
+        raise ValueError(f"Invalid media type: {value!r}")
+    s = _ensure_loaded()
+    s["favorite_media_type"] = value
     _save(s)
 
 
