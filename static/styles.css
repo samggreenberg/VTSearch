@@ -42,6 +42,8 @@
   --status-green-dot: #2ecc71;
   --status-green-label: #7deba0;
   --status-green-sub: #3a8a55;
+  --scrollbar-thumb: #3a3d52;
+  --scrollbar-thumb-hover: #7c8aff;
 }
 
 [data-theme="light"] {
@@ -86,6 +88,8 @@
   --status-green-dot: #43a047;
   --status-green-label: #2e7d32;
   --status-green-sub: #66bb6a;
+  --scrollbar-thumb: #c0c3cc;
+  --scrollbar-thumb-hover: #5a68d8;
 }
 
 [data-theme="highviz"] {
@@ -130,7 +134,16 @@
   --status-green-dot: #33ff33;
   --status-green-label: #00ff00;
   --status-green-sub: #00cc00;
+  --scrollbar-thumb: #888888;
+  --scrollbar-thumb-hover: #ffff00;
 }
+
+/* ---- Scrollbars ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--bg-panel); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-panel); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ---- Accessibility ---- */
 .sr-only {
