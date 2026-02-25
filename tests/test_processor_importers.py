@@ -797,7 +797,7 @@ class TestFromLabelImportEndpoint:
         raw = json.dumps({"labels": [{"md5": "abc", "label": "good"}]}).encode()
         data = {"file": (io.BytesIO(raw), "labels.json")}
         res = client.post(
-            "/api/favorite-detectors/from-label-import/json_file",
+            "/api/favorite-detectors/from-label-import/local_json_file",
             data=data,
             content_type="multipart/form-data",
         )
@@ -838,7 +838,7 @@ class TestFromLabelImportEndpoint:
             "name": "from_label_import_test",
         }
         res = client.post(
-            "/api/favorite-detectors/from-label-import/json_file",
+            "/api/favorite-detectors/from-label-import/local_json_file",
             data=data,
             content_type="multipart/form-data",
         )
@@ -864,7 +864,7 @@ class TestFromLabelImportEndpoint:
                 "name": "test",
             }
             res = client.post(
-                "/api/favorite-detectors/from-label-import/json_file",
+                "/api/favorite-detectors/from-label-import/local_json_file",
                 data=data,
                 content_type="multipart/form-data",
             )

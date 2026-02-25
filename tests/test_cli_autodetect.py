@@ -1043,7 +1043,7 @@ class TestRunExporter:
         results = _build_results_dict(hits, str(detector_path), "audio")
 
         output_file = tmp_path / "export_output.json"
-        _run_exporter("file", {"filepath": str(output_file)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_file)}, results)
 
         assert output_file.exists()
         saved = json.loads(output_file.read_text())
@@ -1096,7 +1096,7 @@ class TestAutodetectMainWithExporter:
         autodetect_main(
             str(dataset_path),
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 
@@ -1132,7 +1132,7 @@ class TestAutodetectMainWithExporter:
         autodetect_main(
             str(dataset_path),
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 
@@ -1157,7 +1157,7 @@ class TestAutodetectImporterMainWithExporter:
             "pickle",
             {"file": str(dataset_path)},
             settings_path=str(settings_path),
-            exporter_name="file",
+            exporter_name="server_json_file",
             exporter_field_values={"filepath": str(output_file)},
         )
 

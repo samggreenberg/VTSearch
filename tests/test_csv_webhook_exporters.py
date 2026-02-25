@@ -75,34 +75,34 @@ class TestCsvExporterMetadata:
     def test_csv_exporter_registered(self):
         from vtsearch.exporters import get_exporter
 
-        exp = get_exporter("csv")
+        exp = get_exporter("server_csv_file")
         assert exp is not None
 
     def test_csv_exporter_display_name(self):
         from vtsearch.exporters import get_exporter
 
-        exp = get_exporter("csv")
-        assert exp.display_name == "Save to CSV"
+        exp = get_exporter("server_csv_file")
+        assert exp.display_name == "Server CSV File"
 
     def test_csv_exporter_icon(self):
         from vtsearch.exporters import get_exporter
 
-        exp = get_exporter("csv")
+        exp = get_exporter("server_csv_file")
         assert exp.icon == "\U0001f4ca"
 
     def test_csv_exporter_has_filepath_field(self):
         from vtsearch.exporters import get_exporter
 
-        exp = get_exporter("csv")
+        exp = get_exporter("server_csv_file")
         keys = [f.key for f in exp.fields]
         assert "filepath" in keys
 
     def test_csv_exporter_to_dict(self):
         from vtsearch.exporters import get_exporter
 
-        exp = get_exporter("csv")
+        exp = get_exporter("server_csv_file")
         d = exp.to_dict()
-        assert d["name"] == "csv"
+        assert d["name"] == "server_csv_file"
         assert "fields" in d
         assert len(d["fields"]) >= 1
 
@@ -116,9 +116,9 @@ class TestCsvExporterCLI:
     """CLI argument parsing for the CSV exporter."""
 
     def test_adds_filepath_arg(self):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -126,9 +126,9 @@ class TestCsvExporterCLI:
         assert args.filepath == "/tmp/results.csv"
 
     def test_filepath_default(self):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -136,15 +136,15 @@ class TestCsvExporterCLI:
         assert args.filepath == "autodetect_results.csv"
 
     def test_validate_passes(self):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.csv"})
 
     def test_validate_missing_filepath(self):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --filepath"):
             exp.validate_cli_field_values({})
 
@@ -158,9 +158,9 @@ class TestCsvExporterExport:
     """Tests for the CSV export() method."""
 
     def test_creates_csv_file(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -170,9 +170,9 @@ class TestCsvExporterExport:
         assert "Saved" in result["message"]
 
     def test_csv_has_correct_header(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -183,9 +183,9 @@ class TestCsvExporterExport:
         assert header == ["detector", "threshold", "filename", "category", "score", "origin", "origin_name"]
 
     def test_csv_has_correct_row_count(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -197,9 +197,9 @@ class TestCsvExporterExport:
         assert len(rows) == 4
 
     def test_csv_row_values(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
@@ -214,9 +214,9 @@ class TestCsvExporterExport:
         assert first_row[4] == "0.95"
 
     def test_csv_empty_results(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = {"media_type": "audio", "detectors_run": 0, "results": {}}
         filepath = tmp_path / "empty.csv"
 
@@ -225,9 +225,9 @@ class TestCsvExporterExport:
         assert "0 hit(s)" in result["message"]
 
     def test_csv_creates_parent_dirs(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         filepath = tmp_path / "sub" / "dir" / "output.csv"
 
@@ -235,16 +235,16 @@ class TestCsvExporterExport:
         assert filepath.exists()
 
     def test_csv_empty_filepath_raises(self):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         with pytest.raises(ValueError, match="file path is required"):
             exp.export({}, {"filepath": ""})
 
     def test_csv_multiple_detectors(self, tmp_path):
-        from vtsearch.exporters.csv_file import CsvLabelsetExporter
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
-        exp = CsvLabelsetExporter()
+        exp = ServerCsvLabelsetExporter()
         results = {
             "media_type": "audio",
             "detectors_run": 2,
@@ -289,7 +289,7 @@ class TestCsvExporterIntegration:
         results = _build_results_dict(hits, str(detector_path), "audio")
 
         output_file = tmp_path / "integrated.csv"
-        _run_exporter("csv", {"filepath": str(output_file)}, results)
+        _run_exporter("server_csv_file", {"filepath": str(output_file)}, results)
 
         assert output_file.exists()
         with open(output_file, newline="", encoding="utf-8") as f:

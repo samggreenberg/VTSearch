@@ -387,7 +387,7 @@ class TestAutoDetectExportPipeline:
             resp = client.post(
                 "/api/exporters/export",
                 json={
-                    "exporter_name": "file",
+                    "exporter_name": "server_json_file",
                     "field_values": {"filepath": str(fpath)},
                     "results": auto_results,
                 },

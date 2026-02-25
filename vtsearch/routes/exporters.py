@@ -10,7 +10,7 @@ POST /api/exporters/export
     body.  Body (JSON)::
 
         {
-            "exporter_name": "file",
+            "exporter_name": "server_json_file",
             "field_values":  {"filepath": "/home/user/results.json"},
             "results":       { ...auto-detect results dict... }
         }
@@ -54,7 +54,7 @@ def run_export():
     .. code-block:: json
 
         {
-            "exporter_name": "file",
+            "exporter_name": "server_json_file",
             "field_values":  {"filepath": "/home/user/results.json"},
             "results":       {}
         }

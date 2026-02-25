@@ -301,12 +301,12 @@ class TestLabelImporterUpdatesTree:
         cid = 1
         md5 = medias[cid]["md5"]
 
-        # Import a label via the json_file label importer
+        # Import a label via the local_json_file label importer
         labels_data = {"labels": [{"md5": md5, "label": "good"}]}
         file_content = json.dumps(labels_data).encode()
 
         resp = client.post(
-            "/api/label-importers/import/json_file",
+            "/api/label-importers/import/local_json_file",
             data={"file": (io.BytesIO(file_content), "labels.json")},
             content_type="multipart/form-data",
         )

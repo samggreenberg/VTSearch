@@ -8,7 +8,7 @@ Usage::
 
     from vtsearch.exporters import get_exporter, list_exporters
 
-    exporter = get_exporter("file")
+    exporter = get_exporter("server_json_file")
     for exp in list_exporters():
         print(exp.name, exp.display_name)
 """

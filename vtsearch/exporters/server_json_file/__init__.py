@@ -1,4 +1,8 @@
-"""File exporter – saves auto-detect results to a JSON file on disk.
+"""Server JSON exporter – saves auto-detect results to a JSON file on the server.
+
+Writes a JSON file to the server filesystem (the machine where the Python
+process is running).  The user supplies a path (absolute or relative) as a
+text field rather than a browser file picker.
 
 No additional pip packages are required; uses only Python's ``json`` and
 ``pathlib`` stdlib modules.
@@ -13,25 +17,27 @@ from typing import Any
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
-class FileLabelsetExporter(LabelsetExporter):
-    """Save auto-detect results as a JSON file at a path chosen by the user.
+class ServerJsonLabelsetExporter(LabelsetExporter):
+    """Save auto-detect results as a JSON file on the server filesystem.
 
     The user supplies the destination path (absolute or relative to the
-    current working directory).  Parent directories are created automatically.
+    server's current working directory).  Parent directories are created
+    automatically.
     """
 
-    name = "file"
-    display_name = "Save to File"
-    description = "Write the results to a JSON file on the local filesystem."
-    icon = "💾"
+    name = "server_json_file"
+    display_name = "Server JSON File"
+    description = "Write the results to a JSON file on the server filesystem."
+    icon = "\U0001f5a5"  # desktop computer
     fields = [
         ExporterField(
             key="filepath",
-            label="File Path",
+            label="Server File Path",
             field_type="text",
             description=(
-                "Absolute or relative path where the JSON results file will be "
-                "written.  Parent directories are created automatically."
+                "Absolute or relative path on the server where the JSON "
+                "results file will be written.  Parent directories are "
+                "created automatically."
             ),
             placeholder="/home/user/autodetect_results.json",
             default="autodetect_results.json",
@@ -58,4 +64,4 @@ class FileLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = FileLabelsetExporter()
+EXPORTER = ServerJsonLabelsetExporter()
