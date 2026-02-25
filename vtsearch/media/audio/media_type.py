@@ -211,10 +211,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="esc50_s",
                 label="ESC-50 (S)",
-                description=(
-                    "~350 clips across 50 sound categories — animals, nature,"
-                    " urban, domestic, and human sounds from the ESC-50 collection."
-                ),
+                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
                 categories=cats,
                 required_folder=folder,
                 slice_start=0,
@@ -223,10 +220,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="esc50_m",
                 label="ESC-50 (M)",
-                description=(
-                    "~650 clips across 50 sound categories — animals, nature,"
-                    " urban, domestic, and human sounds from the ESC-50 collection."
-                ),
+                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
                 categories=cats,
                 required_folder=folder,
                 slice_start=7,
@@ -235,10 +229,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="esc50_l",
                 label="ESC-50 (L)",
-                description=(
-                    "~1000 clips across 50 sound categories — animals, nature,"
-                    " urban, domestic, and human sounds from the ESC-50 collection."
-                ),
+                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
                 categories=cats,
                 required_folder=folder,
                 slice_start=20,
@@ -247,10 +238,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="gtzan_a",
                 label="GTZAN Music Genre (A)",
-                description=(
-                    "~1000 audio clips across 10 music genres — blues, classical,"
-                    " country, disco, hip-hop, jazz, metal, pop, reggae, and rock."
-                ),
+                description="30-second music excerpts, one per genre.",
                 categories=self._GTZAN_CATEGORIES,
                 source="gtzan",
                 slice_start=0,
@@ -259,11 +247,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="speech_commands_v2_a",
                 label="Speech Commands v2 (A)",
-                description=(
-                    "~105,000 one-second utterances of 35 keywords — digits,"
-                    " directions, and common words from the Google Speech Commands"
-                    " v2 dataset."
-                ),
+                description="One-second keyword utterances from crowd-sourced speakers.",
                 categories=self._SPEECH_COMMANDS_CATEGORIES,
                 source="speech_commands_v2",
                 slice_start=0,
@@ -272,11 +256,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="urbansound8k_a",
                 label="UrbanSound8K (A)",
-                description=(
-                    "~8,732 urban sound clips across 10 classes — air conditioner,"
-                    " car horn, children playing, dog bark, drilling, engine, gun shot,"
-                    " jackhammer, siren, and street music."
-                ),
+                description="Real urban field recordings, pre-segmented into labeled clips.",
                 categories=self._URBANSOUND8K_CATEGORIES,
                 source="urbansound8k",
                 slice_start=0,
