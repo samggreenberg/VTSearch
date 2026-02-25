@@ -57,7 +57,7 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 
 
 class ImageMediaType(MediaType):
-    """Handles image medias using the CLIP model (openai/media-vit-base-patch32).
+    """Handles image medias using the CLIP model (openai/clip-vit-base-patch32).
 
     * Embeds images via CLIP's vision encoder (768-dim vectors).
     * Embeds text queries via CLIP's text encoder (same 768-dim space).
