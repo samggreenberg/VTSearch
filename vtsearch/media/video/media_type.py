@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import MODELS_CACHE_DIR, VIDEO_DIR, XCLIP_MODEL_ID
+from vtsearch.config import MODELS_CACHE_DIR, UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR, XCLIP_MODEL_ID
 
 if TYPE_CHECKING:
     import torch
@@ -90,6 +90,18 @@ class VideoMediaType(MediaType):
     def folder_import_name(self) -> str:
         return "videos"
 
+    @property
+    def tab_title(self) -> str:
+        return "Videos"
+
+    @property
+    def dir_key(self) -> str:
+        return "video_dir"
+
+    @property
+    def legacy_bytes_keys(self) -> list[str]:
+        return ["video_bytes"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
@@ -132,6 +144,7 @@ class VideoMediaType(MediaType):
                 required_folder=folder,
                 slice_start=0,
                 slice_end=15,
+                download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucf101_m",
@@ -142,6 +155,7 @@ class VideoMediaType(MediaType):
                 required_folder=folder,
                 slice_start=15,
                 slice_end=40,
+                download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucf101_l",
@@ -152,8 +166,79 @@ class VideoMediaType(MediaType):
                 required_folder=folder,
                 slice_start=40,
                 slice_end=150,
+                download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
             ),
         ]
+
+    # ------------------------------------------------------------------
+    # Demo dataset loading
+    # ------------------------------------------------------------------
+
+    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None):
+        import hashlib  # noqa: PLC0415
+
+        if on_progress is None:
+            from vtsearch.utils import update_progress
+
+            on_progress = update_progress
+
+        if source != "ucf101":
+            raise ValueError(f"Unsupported video source: {source!r}")
+
+        from vtsearch.datasets.downloader import download_ucf101_subset  # noqa: PLC0415
+        from vtsearch.datasets.loader import load_video_metadata_from_folders  # noqa: PLC0415
+
+        video_dir = download_ucf101_subset(on_progress=on_progress)
+        metadata = load_video_metadata_from_folders(video_dir, categories)
+
+        by_cat: dict[str, list] = {}
+        for fname, meta in sorted(metadata.items()):
+            cat = meta["category"]
+            by_cat.setdefault(cat, []).append((meta["path"], meta))
+
+        video_files: list[tuple] = []
+        for cat in categories:
+            video_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+        if getattr(self, "_model", None) is None:
+            on_progress("loading", "Loading video embedding model…", 0, 0)
+            self.load_models()
+
+        clip_id = 1
+        total = len(video_files)
+        on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
+        demo_origin: dict = {"importer": "demo", "params": {}}
+
+        for i, (video_path, meta) in enumerate(video_files):
+            on_progress(
+                "embedding",
+                f"Embedding {meta['category']}: {video_path.name} ({i + 1}/{total})",
+                i + 1,
+                total,
+            )
+            embedding = self.embed_media(video_path)
+            if embedding is None:
+                continue
+            with open(video_path, "rb") as f:
+                video_bytes = f.read()
+            media_fields = self.load_clip_data(video_path)
+            rel_filename = str(video_path.relative_to(video_dir))
+            clips[clip_id] = {
+                "id": clip_id,
+                "type": self.type_id,
+                "duration": media_fields["duration"],
+                "file_size": len(video_bytes),
+                "md5": hashlib.md5(video_bytes).hexdigest(),
+                "embedding": embedding,
+                "clip_bytes": video_bytes,
+                "filename": rel_filename,
+                "category": meta["category"],
+                "origin": demo_origin,
+                "origin_name": video_path.name,
+            }
+            clip_id += 1
+
+        return str(video_dir.absolute())
 
     # ------------------------------------------------------------------
     # Embeddings
@@ -180,10 +265,14 @@ class VideoMediaType(MediaType):
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading X-CLIP model weights…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+            self._model = XCLIPModel.from_pretrained(
+                XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            )
         self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False)
+            self._processor = XCLIPProcessor.from_pretrained(
+                XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False
+            )
 
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:

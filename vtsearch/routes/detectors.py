@@ -11,10 +11,6 @@ from vtsearch.models import (
     build_model_from_weights,
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
-    embed_audio_file,
-    embed_image_file,
-    embed_paragraph_file,
-    embed_video_file,
     train_model,
 )
 from vtsearch.utils import (
@@ -258,34 +254,19 @@ def import_detector_labels():
     # Optional explicit media type override
     media_type_hint = request.form.get("media_type", "").strip()
 
-    # Extension → media-type lookup tables
-    _AUDIO_EXTS = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
-    _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-    _VIDEO_EXTS = {".mp4", ".avi", ".mov", ".webm", ".mkv"}
-    _TEXT_EXTS = {".txt", ".md"}
+    # Use the media type registry for extension → type lookup and embedding.
+    from vtsearch.media import get as media_get
+    from vtsearch.media import get_by_extension
 
     def _media_type_for_path(p: Path) -> str | None:
-        ext = p.suffix.lower()
-        if ext in _AUDIO_EXTS:
-            return "audio"
-        if ext in _IMAGE_EXTS:
-            return "image"
-        if ext in _VIDEO_EXTS:
-            return "video"
-        if ext in _TEXT_EXTS:
-            return "paragraph"
-        return None
+        mt = get_by_extension(p.suffix)
+        return mt.type_id if mt else None
 
     def _embed(media_type: str, p: Path):
-        if media_type == "audio":
-            return embed_audio_file(p)
-        if media_type == "image":
-            return embed_image_file(p)
-        if media_type == "video":
-            return embed_video_file(p)
-        if media_type == "paragraph":
-            return embed_paragraph_file(p)
-        return None
+        try:
+            return media_get(media_type).embed_media(p)
+        except KeyError:
+            return None
 
     try:
         text = file.read().decode("utf-8")
@@ -724,11 +705,7 @@ def run_extract():
         clip = clips[clip_id]
         extractions = extractor.extract(clip)
         if extractions:
-            clip_info = {
-                k: v
-                for k, v in clip.items()
-                if k not in ("embedding", "clip_bytes", "clip_string")
-            }
+            clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
             clip_info["extractions"] = extractions
             results.append(clip_info)
 
@@ -768,11 +745,7 @@ def auto_extract():
             clip = clips[clip_id]
             extractions = extractor.extract(clip)
             if extractions:
-                clip_info = {
-                    k: v
-                    for k, v in clip.items()
-                    if k not in ("embedding", "clip_bytes", "clip_string")
-                }
+                clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
                 clip_info["extractions"] = extractions
                 ext_results.append(clip_info)
 

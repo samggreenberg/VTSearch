@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MODEL_ID, DATA_DIR, MODELS_CACHE_DIR, SAMPLE_RATE
+from vtsearch.config import CLAP_MODEL_ID, DATA_DIR, ESC50_DOWNLOAD_SIZE_MB, MODELS_CACHE_DIR, SAMPLE_RATE
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -62,6 +62,18 @@ class AudioMediaType(MediaType):
     @property
     def folder_import_name(self) -> str:
         return "sounds"
+
+    @property
+    def tab_title(self) -> str:
+        return "Sounds"
+
+    @property
+    def dir_key(self) -> str:
+        return "audio_dir"
+
+    @property
+    def legacy_bytes_keys(self) -> list[str]:
+        return ["wav_bytes"]
 
     # ------------------------------------------------------------------
     # Viewer
@@ -216,6 +228,7 @@ class AudioMediaType(MediaType):
                 required_folder=folder,
                 slice_start=0,
                 slice_end=7,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_m",
@@ -225,6 +238,7 @@ class AudioMediaType(MediaType):
                 required_folder=folder,
                 slice_start=7,
                 slice_end=20,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_l",
@@ -234,6 +248,7 @@ class AudioMediaType(MediaType):
                 required_folder=folder,
                 slice_start=20,
                 slice_end=40,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="gtzan_a",
@@ -243,6 +258,7 @@ class AudioMediaType(MediaType):
                 source="gtzan",
                 slice_start=0,
                 slice_end=100,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_a",
@@ -252,6 +268,7 @@ class AudioMediaType(MediaType):
                 source="speech_commands_v2",
                 slice_start=0,
                 slice_end=3000,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_a",
@@ -261,8 +278,85 @@ class AudioMediaType(MediaType):
                 source="urbansound8k",
                 slice_start=0,
                 slice_end=873,
+                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
         ]
+
+    # ------------------------------------------------------------------
+    # Demo dataset loading
+    # ------------------------------------------------------------------
+
+    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None):
+        import hashlib  # noqa: PLC0415
+
+        from vtsearch.datasets.downloader import download_esc50  # noqa: PLC0415
+        from vtsearch.datasets.loader import load_esc50_metadata  # noqa: PLC0415
+
+        if on_progress is None:
+            from vtsearch.utils import update_progress
+
+            on_progress = update_progress
+
+        if source and source != "esc50":
+            raise ValueError(f"Unsupported audio source: {source!r}")
+
+        audio_dir = download_esc50(on_progress=on_progress)
+        metadata = load_esc50_metadata(audio_dir.parent)
+
+        # Group files by category (sorted order within each)
+        by_cat: dict[str, list] = {}
+        for audio_path in sorted(audio_dir.glob("*.wav")):
+            if audio_path.name in metadata:
+                cat = metadata[audio_path.name]["category"]
+                if cat in categories:
+                    by_cat.setdefault(cat, []).append((audio_path, metadata[audio_path.name]))
+
+        # Slice each category and flatten
+        audio_files = []
+        for cat in categories:
+            audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+        # Load models
+        if getattr(self, "_model", None) is None:
+            on_progress("loading", "Loading audio embedding model…", 0, 0)
+            self.load_models()
+
+        clip_id = 1
+        total = len(audio_files)
+        on_progress("embedding", f"Starting embedding for {total} audio files...", 0, total)
+        demo_origin: dict = {"importer": "demo", "params": {}}
+
+        for i, (audio_path, meta) in enumerate(audio_files):
+            on_progress(
+                "embedding",
+                f"Embedding {meta['category']}: {audio_path.name} ({i + 1}/{total})",
+                i + 1,
+                total,
+            )
+            embedding = self.embed_media(audio_path)
+            if embedding is None:
+                continue
+
+            with open(audio_path, "rb") as f:
+                wav_bytes = f.read()
+
+            media_fields = self.load_clip_data(audio_path)
+            clips[clip_id] = {
+                "id": clip_id,
+                "type": self.type_id,
+                "duration": media_fields["duration"],
+                "file_size": len(wav_bytes),
+                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "embedding": embedding,
+                "clip_bytes": wav_bytes,
+                "filename": audio_path.name,
+                "category": meta["category"],
+                "origin": demo_origin,
+                "origin_name": audio_path.name,
+            }
+            clip_id += 1
+
+        return str(audio_dir.absolute())
 
     # ------------------------------------------------------------------
     # Embeddings
@@ -289,7 +383,9 @@ class AudioMediaType(MediaType):
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLAP model weights…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False)
+            self._model = ClapModel.from_pretrained(
+                CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            )
         self._on_progress("loading", "Loading CLAP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
@@ -300,7 +396,6 @@ class AudioMediaType(MediaType):
         # the first embedding stalls inside the progress-bar loop and skews
         # the ETA estimate for all remaining items.
         self._on_progress("loading", "Warming up audio pipeline…", 0, 0)
-        import librosa  # noqa: PLC0415
         import torch  # noqa: PLC0415
 
         dummy_audio = np.zeros(SAMPLE_RATE, dtype=np.float32)

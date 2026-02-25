@@ -64,6 +64,18 @@ class TextMediaType(MediaType):
     def folder_import_name(self) -> str:
         return "paragraphs"
 
+    @property
+    def tab_title(self) -> str:
+        return "Texts"
+
+    @property
+    def dir_key(self) -> str:
+        return "text_dir"
+
+    @property
+    def legacy_bytes_keys(self) -> list[str]:
+        return ["text_content"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
@@ -132,6 +144,7 @@ class TextMediaType(MediaType):
                 source="ag_news_sample",
                 slice_start=0,
                 slice_end=25,
+                download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_m",
@@ -141,6 +154,7 @@ class TextMediaType(MediaType):
                 source="ag_news_sample",
                 slice_start=25,
                 slice_end=75,
+                download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_l",
@@ -150,6 +164,7 @@ class TextMediaType(MediaType):
                 source="ag_news_sample",
                 slice_start=75,
                 slice_end=200,
+                download_size_mb=15,
             ),
             DemoDataset(
                 id="ag_news_a",
@@ -159,6 +174,7 @@ class TextMediaType(MediaType):
                 source="ag_news",
                 slice_start=0,
                 slice_end=30000,
+                download_size_mb=15,
             ),
             DemoDataset(
                 id="bbc_news_a",
@@ -168,6 +184,7 @@ class TextMediaType(MediaType):
                 source="bbc_news",
                 slice_start=0,
                 slice_end=445,
+                download_size_mb=15,
             ),
             DemoDataset(
                 id="imdb_a",
@@ -177,8 +194,83 @@ class TextMediaType(MediaType):
                 source="imdb",
                 slice_start=0,
                 slice_end=25000,
+                download_size_mb=15,
             ),
         ]
+
+    # ------------------------------------------------------------------
+    # Demo dataset loading
+    # ------------------------------------------------------------------
+
+    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None):
+        import hashlib  # noqa: PLC0415
+
+        if on_progress is None:
+            from vtsearch.utils import update_progress
+
+            on_progress = update_progress
+
+        if source != "ag_news_sample":
+            raise ValueError(f"Unsupported text source: {source!r}")
+
+        from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
+
+        texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
+
+        selected_texts = []
+        selected_categories = []
+        for cat_name in categories:
+            if cat_name in category_names:
+                cat_idx = category_names.index(cat_name)
+                cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
+                for text in cat_texts[slice_start : (slice_end or len(cat_texts))]:
+                    selected_texts.append(text)
+                    selected_categories.append(cat_name)
+
+        if getattr(self, "_model", None) is None:
+            on_progress("loading", "Loading text embedding model…", 0, 0)
+            self.load_models()
+
+        clip_id = 1
+        total = len(selected_texts)
+        on_progress("embedding", f"Starting embedding for {total} paragraphs...", 0, total)
+        demo_origin: dict = {"importer": "demo", "params": {}}
+
+        for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
+            on_progress("embedding", f"Embedding {category}: paragraph {i + 1}/{total}", i + 1, total)
+            text_content = text_content[:1000].strip()
+            if not text_content:
+                continue
+            try:
+                embedding = self.embed_text_passage(text_content)
+            except Exception as e:
+                print(f"Error embedding paragraph: {e}")
+                continue
+            if embedding is None:
+                continue
+            word_count = len(text_content.split())
+            character_count = len(text_content)
+            text_bytes = text_content.encode("utf-8")
+            fname = f"{category}_{clip_id}.txt"
+            clips[clip_id] = {
+                "id": clip_id,
+                "type": self.type_id,
+                "duration": 0,
+                "file_size": len(text_bytes),
+                "md5": hashlib.md5(text_bytes).hexdigest(),
+                "embedding": embedding,
+                "clip_bytes": None,
+                "clip_string": text_content,
+                "filename": fname,
+                "category": category,
+                "word_count": word_count,
+                "character_count": character_count,
+                "origin": demo_origin,
+                "origin_name": fname,
+            }
+            clip_id += 1
+
+        return None  # text content is inline
 
     # ------------------------------------------------------------------
     # Embeddings
