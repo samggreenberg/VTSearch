@@ -44,7 +44,8 @@ _DEFAULTS: dict[str, Any] = {
     "calibrate_count": 2,
     "calibration_fraction": 0.5,
     "swipe_animation": True,
-    "show_thumbnails": False,
+    "show_thumbnails_left": False,
+    "show_thumbnails_right": True,
     "favorite_processors": [],
 }
 
@@ -197,15 +198,27 @@ def set_swipe_animation(value: bool) -> None:
     _save(s)
 
 
-def get_show_thumbnails() -> bool:
-    """Return whether thumbnail display is enabled."""
-    return bool(_ensure_loaded().get("show_thumbnails", _DEFAULTS["show_thumbnails"]))
+def get_show_thumbnails_left() -> bool:
+    """Return whether left-panel (clip list) thumbnail display is enabled."""
+    return bool(_ensure_loaded().get("show_thumbnails_left", _DEFAULTS["show_thumbnails_left"]))
 
 
-def set_show_thumbnails(value: bool) -> None:
-    """Set and persist the show_thumbnails flag."""
+def set_show_thumbnails_left(value: bool) -> None:
+    """Set and persist the show_thumbnails_left flag."""
     s = _ensure_loaded()
-    s["show_thumbnails"] = bool(value)
+    s["show_thumbnails_left"] = bool(value)
+    _save(s)
+
+
+def get_show_thumbnails_right() -> bool:
+    """Return whether right-panel (vote list) thumbnail display is enabled."""
+    return bool(_ensure_loaded().get("show_thumbnails_right", _DEFAULTS["show_thumbnails_right"]))
+
+
+def set_show_thumbnails_right(value: bool) -> None:
+    """Set and persist the show_thumbnails_right flag."""
+    s = _ensure_loaded()
+    s["show_thumbnails_right"] = bool(value)
     _save(s)
 
 
