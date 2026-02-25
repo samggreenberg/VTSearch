@@ -8,7 +8,7 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.models import (
-    build_model,
+    build_model_from_weights,
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
     embed_audio_file,
@@ -121,17 +121,7 @@ def detector_sort():
         return jsonify({"error": "detector weights are required"}), 400
 
     # Reconstruct the model from weights
-    # Determine input_dim from the first layer weights
-    input_dim = len(weights["0.weight"][0])
-
-    model = build_model(input_dim)
-
-    # Load weights
-    state_dict = {}
-    for key, value in weights.items():
-        state_dict[key] = torch.tensor(value, dtype=torch.float32)
-    model.load_state_dict(state_dict)
-    model.eval()
+    model = build_model_from_weights(weights)
 
     # Score every clip
     all_ids = sorted(clips.keys())
@@ -561,15 +551,7 @@ def auto_detect():
         weights = detector_data["weights"]
         threshold = detector_data["threshold"]
 
-        input_dim = len(weights["0.weight"][0])
-
-        model = build_model(input_dim)
-
-        state_dict = {}
-        for key, value in weights.items():
-            state_dict[key] = torch.tensor(value, dtype=torch.float32)
-        model.load_state_dict(state_dict)
-        model.eval()
+        model = build_model_from_weights(weights)
 
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()

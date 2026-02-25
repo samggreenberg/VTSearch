@@ -19,6 +19,7 @@ from vtsearch.models.loader import (
 from vtsearch.models.progress import analyze_labeling_progress, clear_progress_cache, compute_labeling_status
 from vtsearch.models.training import (
     build_model,
+    build_model_from_weights,
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
@@ -45,6 +46,7 @@ __all__ = [
     "get_e5_model",
     # Training
     "build_model",
+    "build_model_from_weights",
     "train_model",
     "train_and_score",
     "calculate_gmm_threshold",
