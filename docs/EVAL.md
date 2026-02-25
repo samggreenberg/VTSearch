@@ -64,18 +64,18 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|
-| `sounds_s` | Audio | sounds_s | All 50 ESC-50 categories (animals, nature, urban, domestic, human) |
-| `sounds_m` | Audio | sounds_m | All 50 ESC-50 categories |
-| `sounds_l` | Audio | sounds_l | All 50 ESC-50 categories |
-| `images_s` | Image | images_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
-| `images_m` | Image | images_m | 25 Caltech-101 categories |
-| `images_l` | Image | images_l | 25 Caltech-101 categories |
-| `paragraphs_s` | Text | paragraphs_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
-| `paragraphs_m` | Text | paragraphs_m | 15 topics |
-| `paragraphs_l` | Text | paragraphs_l | 15 topics |
-| `videos_s` | Video | videos_s | 10 UCF-101 actions (ApplyEyeMakeup, CliffDiving, Drumming, JumpRope, etc.) |
-| `videos_m` | Video | videos_m | 10 UCF-101 actions |
-| `videos_l` | Video | videos_l | 10 UCF-101 actions |
+| `esc50_s` | Audio | esc50_s | All 50 ESC-50 categories (animals, nature, urban, domestic, human) |
+| `esc50_m` | Audio | esc50_m | All 50 ESC-50 categories |
+| `esc50_l` | Audio | esc50_l | All 50 ESC-50 categories |
+| `caltech101_s` | Image | caltech101_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
+| `caltech101_m` | Image | caltech101_m | 25 Caltech-101 categories |
+| `caltech256_l` | Image | caltech256_l | 25 Caltech-256 categories |
+| `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
+| `20newsgroups_m` | Text | 20newsgroups_m | 15 topics |
+| `20newsgroups_l` | Text | 20newsgroups_l | 15 topics |
+| `ucf101_s` | Video | ucf101_s | 10 UCF-101 actions (ApplyEyeMakeup, CliffDiving, Drumming, JumpRope, etc.) |
+| `ucf101_m` | Video | ucf101_m | 10 UCF-101 actions |
+| `ucf101_l` | Video | ucf101_l | 10 UCF-101 actions |
 
 ## Understanding the metrics
 

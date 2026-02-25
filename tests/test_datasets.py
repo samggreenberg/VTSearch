@@ -94,12 +94,12 @@ class TestDemoDatasetReadiness:
             pytest.skip("ESC-50 is present; cannot test stale-pkl scenario")
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "sounds_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "sounds_s", "clips": {}}))
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
+        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "clips": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "sounds_s"), None)
+            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
             assert ds is not None
             assert ds["status"] == "needs_download", "Stale audio pkl without ESC-50 dir must be needs_download"
             assert ds["ready"] is False
@@ -123,12 +123,12 @@ class TestDemoDatasetReadiness:
         # Create the directory structure but leave it empty
         esc50_dir.mkdir(parents=True, exist_ok=True)
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "sounds_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "sounds_s", "clips": {}}))
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
+        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "clips": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "sounds_s"), None)
+            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
             assert ds is not None
             assert ds["status"] == "needs_download", "Audio pkl with empty ESC-50 dir must be needs_download"
             assert ds["ready"] is False
@@ -154,12 +154,12 @@ class TestDemoDatasetReadiness:
             pytest.skip("UCF-101 is present; cannot test stale-pkl scenario")
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "videos_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "videos_s", "clips": {}}))
+        pkl_file = EMBEDDINGS_DIR / "ucf101_s.pkl"
+        pkl_file.write_bytes(pickle.dumps({"name": "ucf101_s", "clips": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "videos_s"), None)
+            ds = next((d for d in data["datasets"] if d["name"] == "ucf101_s"), None)
             assert ds is not None
             assert ds["status"] == "needs_download", "Stale video pkl without UCF-101 dir must be needs_download"
             assert ds["ready"] is False
@@ -178,10 +178,10 @@ class TestDemoDatasetReadiness:
         from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        # Ensure no pkl exists for sounds_s
-        pkl_file = EMBEDDINGS_DIR / "sounds_s.pkl"
+        # Ensure no pkl exists for esc50_s
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
         if pkl_file.exists():
-            pytest.skip("sounds_s.pkl exists; cannot test needs_embedding scenario")
+            pytest.skip("esc50_s.pkl exists; cannot test needs_embedding scenario")
 
         # Create the ESC-50 audio dir with a dummy file
         esc50_dir.mkdir(parents=True, exist_ok=True)
@@ -197,7 +197,7 @@ class TestDemoDatasetReadiness:
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "sounds_s"), None)
+            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
             assert ds is not None
             assert ds["status"] == "needs_embedding", "No pkl with source folder should be needs_embedding"
             assert ds["ready"] is False
@@ -215,15 +215,15 @@ class TestDemoDatasetReadiness:
         from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        pkl_file = EMBEDDINGS_DIR / "sounds_s.pkl"
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
         if pkl_file.exists():
-            pytest.skip("sounds_s.pkl exists; cannot test needs_download scenario")
+            pytest.skip("esc50_s.pkl exists; cannot test needs_download scenario")
         if esc50_dir.exists() and any(esc50_dir.iterdir()):
             pytest.skip("ESC-50 is present; cannot test needs_download scenario")
 
         resp = client.get("/api/dataset/demo-list")
         data = resp.get_json()
-        ds = next((d for d in data["datasets"] if d["name"] == "sounds_s"), None)
+        ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
         assert ds is not None
         assert ds["status"] == "needs_download"
         assert ds["ready"] is False

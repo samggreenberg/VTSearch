@@ -12,7 +12,7 @@ Usage::
     python -m vtsearch.eval --mode learned
 
     # Evaluate specific datasets
-    python -m vtsearch.eval --datasets images_s images_m
+    python -m vtsearch.eval --datasets caltech101_s caltech101_m
 
     # Custom train/test split for learned-sort
     python -m vtsearch.eval --mode learned --train-fraction 0.6
