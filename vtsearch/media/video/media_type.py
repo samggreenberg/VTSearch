@@ -221,7 +221,7 @@ class VideoMediaType(MediaType):
                 continue
             with open(video_path, "rb") as f:
                 video_bytes = f.read()
-            media_fields = self.load_clip_data(video_path)
+            media_fields = self.load_media_data(video_path)
             rel_filename = str(video_path.relative_to(video_dir))
             clips[clip_id] = {
                 "id": clip_id,
