@@ -281,10 +281,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="caltech101_s",
                 label="Caltech-101 (S)",
-                description=(
-                    "~500 photographs across 25 categories — animals, vehicles,"
-                    " household objects, and nature from the Caltech-101 dataset."
-                ),
+                description="Centered, well-lit object photos — a classic vision benchmark.",
                 categories=cats101,
                 source="caltech101",
                 slice_start=0,
@@ -293,10 +290,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="caltech101_m",
                 label="Caltech-101 (M)",
-                description=(
-                    "~1,000 photographs across 25 categories — animals, vehicles,"
-                    " household objects, and nature from the Caltech-101 dataset."
-                ),
+                description="Centered, well-lit object photos — a classic vision benchmark.",
                 categories=cats101,
                 source="caltech101",
                 slice_start=20,
@@ -305,10 +299,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="caltech256_l",
                 label="Caltech-256 (L)",
-                description=(
-                    "~2,000 photographs across 25 categories — animals, landmarks,"
-                    " vehicles, and everyday objects from the Caltech-256 dataset."
-                ),
+                description="Harder object photos with more varied, cluttered backgrounds than Caltech-101.",
                 categories=cats256,
                 source="caltech256",
                 slice_start=0,
@@ -317,10 +308,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="oxford_flowers_102_a",
                 label="Oxford Flowers 102 (A)",
-                description=(
-                    "~8,189 photographs of 102 flower species — roses, sunflowers,"
-                    " orchids, daisies, and many more from the Oxford Flowers dataset."
-                ),
+                description="Close-up flower photography with fine-grained species variation.",
                 categories=self._OXFORD_FLOWERS_CATEGORIES,
                 source="oxford_flowers_102",
                 slice_start=0,
@@ -329,10 +317,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="food101_a",
                 label="Food-101 (A)",
-                description=(
-                    "~101,000 food photographs across 101 categories — sushi,"
-                    " pizza, steak, ice cream, and more from the Food-101 dataset."
-                ),
+                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
                 categories=self._FOOD101_CATEGORIES,
                 source="food101",
                 slice_start=0,
@@ -341,10 +326,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="eurosat_a",
                 label="EuroSAT (A)",
-                description=(
-                    "~27,000 satellite images across 10 land use classes — forest,"
-                    " residential, industrial, river, and more from the EuroSAT dataset."
-                ),
+                description="Sentinel-2 satellite imagery classified by land use type.",
                 categories=self._EUROSAT_CATEGORIES,
                 source="eurosat",
                 slice_start=0,
@@ -353,10 +335,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="stanford_dogs_a",
                 label="Stanford Dogs (A)",
-                description=(
-                    "~20,580 photographs of 120 dog breeds — from Chihuahuas to"
-                    " Great Danes, from the Stanford Dogs dataset."
-                ),
+                description="Fine-grained dog breed photos — many visually similar breeds.",
                 categories=self._STANFORD_DOGS_CATEGORIES,
                 source="stanford_dogs",
                 slice_start=0,

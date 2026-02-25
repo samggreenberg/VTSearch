@@ -127,11 +127,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="20newsgroups_s",
                 label="20 Newsgroups (S)",
-                description=(
-                    "~375 articles across 15 topics — sports, science, cars,"
-                    " medicine, religion, politics, and more from the"
-                    " 20 Newsgroups collection."
-                ),
+                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
                 categories=cats,
                 source="ag_news_sample",
                 slice_start=0,
@@ -140,11 +136,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="20newsgroups_m",
                 label="20 Newsgroups (M)",
-                description=(
-                    "~750 articles across 15 topics — sports, science, cars,"
-                    " medicine, religion, politics, and more from the"
-                    " 20 Newsgroups collection."
-                ),
+                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
                 categories=cats,
                 source="ag_news_sample",
                 slice_start=25,
@@ -153,11 +145,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="20newsgroups_l",
                 label="20 Newsgroups (L)",
-                description=(
-                    "~1875 articles across 15 topics — sports, science, cars,"
-                    " medicine, religion, politics, and more from the"
-                    " 20 Newsgroups collection."
-                ),
+                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
                 categories=cats,
                 source="ag_news_sample",
                 slice_start=75,
@@ -166,10 +154,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="ag_news_a",
                 label="AG News (A)",
-                description=(
-                    "~120,000 news articles across 4 categories — world, sports,"
-                    " business, and science/technology from the AG News corpus."
-                ),
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
                 categories=self._AG_NEWS_CATEGORIES,
                 source="ag_news",
                 slice_start=0,
@@ -178,11 +163,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="bbc_news_a",
                 label="BBC News (A)",
-                description=(
-                    "~2,225 news articles across 5 categories — business,"
-                    " entertainment, politics, sport, and tech from the BBC"
-                    " News dataset."
-                ),
+                description="Full BBC news articles — professionally written and cleanly labeled.",
                 categories=self._BBC_NEWS_CATEGORIES,
                 source="bbc_news",
                 slice_start=0,
@@ -191,10 +172,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="imdb_a",
                 label="IMDB Movie Reviews (A)",
-                description=(
-                    "~50,000 movie reviews across 2 sentiment classes — positive"
-                    " and negative from the IMDB dataset."
-                ),
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
                 categories=self._IMDB_CATEGORIES,
                 source="imdb",
                 slice_start=0,

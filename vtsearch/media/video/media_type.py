@@ -126,10 +126,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_s",
                 label="UCF-101 (S)",
-                description=(
-                    "~150 clips across 10 action categories — personal"
-                    " activities and sports from the UCF-101 collection."
-                ),
+                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
@@ -139,10 +136,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_m",
                 label="UCF-101 (M)",
-                description=(
-                    "~250 clips across 10 action categories — personal"
-                    " activities and sports from the UCF-101 collection."
-                ),
+                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
@@ -152,10 +146,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_l",
                 label="UCF-101 (L)",
-                description=(
-                    "~600 clips across 10 action categories — personal"
-                    " activities and sports from the UCF-101 collection."
-                ),
+                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
