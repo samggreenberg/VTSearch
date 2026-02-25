@@ -298,9 +298,30 @@ class TestStableIndicatorThresholds:
         entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 100}]
         for i in range(1, 7):
             entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 0, "num_unlabeled": 100 - i})
-        # Inject one spike: 6 flips out of 93 unlabeled → ~6.5%, above 5% max threshold
+        # Inject one spike: 6 flips out of 93 unlabeled → ~6.5%, above 1% max threshold
         entries[-1] = {"time_index": 6, "num_labels": 16, "num_flips": 6, "num_unlabeled": 93}
 
         self._inject_stability(entries)
         result = _compute_stable_status(good=8, bad=8, total=16)
-        assert result["status"] == "yellow", "A single >5% spike should prevent green"
+        assert result["status"] == "yellow", "A single >1% spike should prevent green"
+
+    def test_low_flip_rate_still_yellow(self, client):
+        """Even a modest flip rate (~1.5%) should stay yellow under the tight thresholds."""
+        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 200}]
+        for i in range(1, 7):
+            # 3 flips out of ~194 unlabeled → ~1.5% per step
+            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 3, "num_unlabeled": 200 - i})
+        self._inject_stability(entries)
+        result = _compute_stable_status(good=8, bad=8, total=16)
+        assert result["status"] == "yellow", "~1.5% flip rate should stay yellow (threshold is 0.5% avg / 1% max)"
+
+    def test_near_zero_flips_green(self, client):
+        """Green requires practically zero flips — only the rare single flip tolerated."""
+        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 500}]
+        for i in range(1, 7):
+            # Mostly 0 flips, one step with 1 flip out of ~496 → 0.2%
+            flips = 1 if i == 3 else 0
+            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": flips, "num_unlabeled": 500 - i})
+        self._inject_stability(entries)
+        result = _compute_stable_status(good=8, bad=8, total=16)
+        assert result["status"] == "green", "Near-zero flips with rare single flip on large dataset should be green"
