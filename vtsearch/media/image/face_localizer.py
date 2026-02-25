@@ -81,7 +81,7 @@ class FaceLocalizer(Localizer):
     def localize(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
         """Detect faces in *clip* and return bounding boxes.
 
-        The *clip* dict must contain ``"clip_bytes"`` (raw image bytes).
+        The *clip* dict must contain ``"media_bytes"`` (raw image bytes).
 
         Returns a list of dicts, each with keys ``"confidence"`` and ``"bbox"``
         (``[x1, y1, x2, y2]`` in pixels).
@@ -89,13 +89,13 @@ class FaceLocalizer(Localizer):
         self.load_model()
         assert self._detector is not None
 
-        clip_bytes = clip.get("clip_bytes")
-        if clip_bytes is None:
+        media_bytes = clip.get("media_bytes")
+        if media_bytes is None:
             return []
 
         import numpy as np  # noqa: PLC0415
 
-        image = Image.open(io.BytesIO(clip_bytes)).convert("RGB")
+        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
         img_array = np.array(image)
         h, w = img_array.shape[:2]
 

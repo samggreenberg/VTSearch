@@ -74,7 +74,7 @@ class OCRExtractor(Extractor):
     def extract(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
         """Detect text regions in *clip* and return bounding boxes with text.
 
-        The *clip* dict must contain ``"clip_bytes"`` (raw image bytes).
+        The *clip* dict must contain ``"media_bytes"`` (raw image bytes).
 
         Returns a list of dicts, each with keys ``"confidence"``, ``"bbox"``
         (``[x1, y1, x2, y2]`` in pixels), and ``"label"`` (the detected text).
@@ -82,13 +82,13 @@ class OCRExtractor(Extractor):
         self.load_model()
         assert self._model is not None
 
-        clip_bytes = clip.get("clip_bytes")
-        if clip_bytes is None:
+        media_bytes = clip.get("media_bytes")
+        if media_bytes is None:
             return []
 
         import numpy as np  # noqa: PLC0415
 
-        image = Image.open(io.BytesIO(clip_bytes)).convert("RGB")
+        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
         img_array = np.array(image)
 
         results = self._model.ocr(img_array, cls=True)

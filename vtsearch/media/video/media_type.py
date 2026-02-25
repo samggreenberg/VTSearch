@@ -230,7 +230,7 @@ class VideoMediaType(MediaType):
                 "file_size": len(video_bytes),
                 "md5": hashlib.md5(video_bytes).hexdigest(),
                 "embedding": embedding,
-                "clip_bytes": video_bytes,
+                "media_bytes": video_bytes,
                 "filename": rel_filename,
                 "category": meta["category"],
                 "origin": demo_origin,

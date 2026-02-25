@@ -21,7 +21,7 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/status")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "num_clips" in data or "error" in data
+        assert "num_medias" in data or "error" in data
 
     def test_get_dataset_demo_list(self, client):
         resp = client.get("/api/dataset/demo-list")
@@ -53,7 +53,7 @@ class TestStartupState:
             assert resp.status_code == 200
             data = resp.get_json()
             assert data["loaded"] is False
-            assert data["num_clips"] == 0
+            assert data["num_medias"] == 0
         finally:
             app_module.medias.update(saved)
 

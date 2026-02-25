@@ -73,7 +73,7 @@ class SpeechExtractor(Extractor):
     def extract(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
         """Transcribe speech in *clip* and return segments with timestamps.
 
-        The *clip* dict must contain ``"clip_bytes"`` (raw audio bytes, WAV format)
+        The *clip* dict must contain ``"media_bytes"`` (raw audio bytes, WAV format)
         or ``"media_path"`` (path to audio file on disk).
 
         Returns a list of dicts, each with ``"confidence"``, ``"label"`` (text),
@@ -133,13 +133,13 @@ class SpeechExtractor(Extractor):
             if p.exists():
                 return p
 
-        clip_bytes = clip.get("clip_bytes")
-        if clip_bytes is None:
+        media_bytes = clip.get("media_bytes")
+        if media_bytes is None:
             return None
 
         # Write to a temporary WAV file
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tmp.write(clip_bytes)
+        tmp.write(media_bytes)
         tmp.close()
         return Path(tmp.name)
 

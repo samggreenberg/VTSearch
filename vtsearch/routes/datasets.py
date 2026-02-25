@@ -150,7 +150,7 @@ def dataset_status():
     return jsonify(
         {
             "loaded": len(medias) > 0,
-            "num_clips": len(medias),
+            "num_medias": len(medias),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
         }

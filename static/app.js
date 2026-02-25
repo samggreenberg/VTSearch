@@ -322,8 +322,8 @@
       showMainUI();
       const mtInfo = mediaTypesMap[status.media_type];
       datasetInfo.textContent = mtInfo
-        ? `${mtInfo.icon} ${status.num_clips} ${mtInfo.name.toLowerCase()} loaded`
-        : `${status.num_clips} medias loaded`;
+        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded`
+        : `${status.num_medias} medias loaded`;
     } else {
       showWelcomeScreen();
     }

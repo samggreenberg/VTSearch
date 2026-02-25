@@ -1023,35 +1023,35 @@ def run_localize():
     if not config or not isinstance(config, dict):
         return jsonify({"error": "config is required"}), 400
 
-    if not clips:
-        return jsonify({"error": "No clips loaded"}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
     try:
         localizer = _build_localizer(localizer_name or "adhoc", localizer_type, config)
     except Exception as e:
         return jsonify({"error": f"Invalid localizer config: {e}"}), 400
 
-    media_type = next(iter(clips.values())).get("type", "")
+    media_type = next(iter(medias.values())).get("type", "")
     if localizer.media_type != media_type:
         return (
-            jsonify({"error": f"Localizer media type '{localizer.media_type}' does not match clips '{media_type}'"}),
+            jsonify({"error": f"Localizer media type '{localizer.media_type}' does not match medias '{media_type}'"}),
             400,
         )
 
     results = []
-    for clip_id in sorted(clips.keys()):
-        clip = clips[clip_id]
-        localizations = localizer.localize(clip)
+    for media_id in sorted(medias.keys()):
+        media = medias[media_id]
+        localizations = localizer.localize(media)
         if localizations:
-            clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
-            clip_info["localizations"] = localizations
-            results.append(clip_info)
+            media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
+            media_info["localizations"] = localizations
+            results.append(media_info)
 
     return jsonify(
         {
             "localizer_name": localizer.name,
             "media_type": media_type,
-            "total_clips_with_hits": len(results),
+            "total_medias_with_hits": len(results),
             "results": results,
         }
     )
@@ -1060,16 +1060,16 @@ def run_localize():
 @detectors_bp.route("/api/auto-localize", methods=["POST"])
 def auto_localize():
     """Run all favorite localizers for the current media type."""
-    if not clips:
-        return jsonify({"error": "No clips loaded"}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(clips.values())).get("type", "")
+    media_type = next(iter(medias.values())).get("type", "")
     localizers = get_favorite_localizers_by_media(media_type)
 
     if not localizers:
         return jsonify({"error": f"No favorite localizers found for media type: {media_type}"}), 400
 
-    sorted_clip_ids = sorted(clips.keys())
+    sorted_media_ids = sorted(medias.keys())
 
     def _run_single_localizer(loc_name, loc_data):
         try:
@@ -1078,17 +1078,17 @@ def auto_localize():
             return None
 
         loc_results = []
-        for clip_id in sorted_clip_ids:
-            clip = clips[clip_id]
-            localizations = localizer.localize(clip)
+        for media_id in sorted_media_ids:
+            media = medias[media_id]
+            localizations = localizer.localize(media)
             if localizations:
-                clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
-                clip_info["localizations"] = localizations
-                loc_results.append(clip_info)
+                media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
+                media_info["localizations"] = localizations
+                loc_results.append(media_info)
 
         return loc_name, {
             "localizer_name": loc_name,
-            "total_clips_with_hits": len(loc_results),
+            "total_medias_with_hits": len(loc_results),
             "results": loc_results,
         }
 
