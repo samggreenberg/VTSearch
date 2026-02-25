@@ -298,8 +298,10 @@
   const settingsImportFile = document.getElementById("settings-import-file");
   const settingsExportBtn = document.getElementById("settings-export-btn");
   const swipeAnimationCheckbox = document.getElementById("swipe-animation-checkbox");
-  const showThumbnailsCheckbox = document.getElementById("show-thumbnails-checkbox");
-  let showThumbnails = false;
+  const showThumbnailsLeftCheckbox = document.getElementById("show-thumbnails-left-checkbox");
+  const showThumbnailsRightCheckbox = document.getElementById("show-thumbnails-right-checkbox");
+  let showThumbnailsLeft = false;
+  let showThumbnailsRight = true;
 
   // ---- Dataset Management ----
 
@@ -1867,9 +1869,14 @@
       swipeAnimationCheckbox.checked = val;
       swipeAnimation = val;
     }
-    if (showThumbnailsCheckbox) {
-      showThumbnailsCheckbox.checked = !!data.show_thumbnails;
-      showThumbnails = !!data.show_thumbnails;
+    if (showThumbnailsLeftCheckbox) {
+      showThumbnailsLeftCheckbox.checked = !!data.show_thumbnails_left;
+      showThumbnailsLeft = !!data.show_thumbnails_left;
+    }
+    if (showThumbnailsRightCheckbox) {
+      const val = data.show_thumbnails_right !== undefined ? !!data.show_thumbnails_right : true;
+      showThumbnailsRightCheckbox.checked = val;
+      showThumbnailsRight = val;
     }
   }
 
@@ -1928,16 +1935,28 @@
     });
   }
 
-  // Show Thumbnails toggle
-  if (showThumbnailsCheckbox) {
-    showThumbnailsCheckbox.addEventListener("change", () => {
-      showThumbnails = showThumbnailsCheckbox.checked;
+  // Show Thumbnails Left toggle
+  if (showThumbnailsLeftCheckbox) {
+    showThumbnailsLeftCheckbox.addEventListener("change", () => {
+      showThumbnailsLeft = showThumbnailsLeftCheckbox.checked;
       fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ show_thumbnails: showThumbnails }),
+        body: JSON.stringify({ show_thumbnails_left: showThumbnailsLeft }),
       }).catch(() => {});
       renderClipList();
+    });
+  }
+
+  // Show Thumbnails Right toggle
+  if (showThumbnailsRightCheckbox) {
+    showThumbnailsRightCheckbox.addEventListener("change", () => {
+      showThumbnailsRight = showThumbnailsRightCheckbox.checked;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_thumbnails_right: showThumbnailsRight }),
+      }).catch(() => {});
       renderVotes();
     });
   }
@@ -1981,7 +2000,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -2537,7 +2556,7 @@
       if (scoreMap[c.id] !== undefined) labelParts.push(`score ${(scoreMap[c.id] * 100).toFixed(1)}%`);
       div.setAttribute("aria-label", labelParts.join(", "));
       let html = "";
-      const useThumbnail = showThumbnails && clipSupportsThumbnail(c);
+      const useThumbnail = showThumbnailsLeft && clipSupportsThumbnail(c);
       if (useThumbnail) {
         div.className += " clip-item-thumb";
         const poster = c.type === "video" ? ` poster="/api/clips/${c.id}/image"` : "";
@@ -2923,7 +2942,7 @@
     else metaParts.push("imported");
     if (entry.confidence >= 0) metaParts.push(`${(entry.confidence * 100).toFixed(0)}%`);
 
-    const useThumbnail = showThumbnails && clipSupportsThumbnail(clip);
+    const useThumbnail = showThumbnailsRight && clipSupportsThumbnail(clip);
     let html = "";
     if (useThumbnail) {
       div.className += " vote-entry-thumb";
@@ -4007,9 +4026,14 @@
         swipeAnimation = !!data.swipe_animation;
         if (swipeAnimationCheckbox) swipeAnimationCheckbox.checked = swipeAnimation;
       }
-      if (showThumbnailsCheckbox) {
-        showThumbnailsCheckbox.checked = !!data.show_thumbnails;
-        showThumbnails = !!data.show_thumbnails;
+      if (showThumbnailsLeftCheckbox) {
+        showThumbnailsLeftCheckbox.checked = !!data.show_thumbnails_left;
+        showThumbnailsLeft = !!data.show_thumbnails_left;
+      }
+      if (showThumbnailsRightCheckbox) {
+        const val = data.show_thumbnails_right !== undefined ? !!data.show_thumbnails_right : true;
+        showThumbnailsRightCheckbox.checked = val;
+        showThumbnailsRight = val;
       }
     } catch (_) {
       // Settings not available yet; use defaults

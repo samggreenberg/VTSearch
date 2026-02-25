@@ -181,20 +181,35 @@ class TestSettingsModule:
     def test_safe_thresholds_default(self):
         assert settings_mod.get_safe_thresholds() is False
 
-    def test_get_set_show_thumbnails(self, isolated_settings):
-        settings_mod.set_show_thumbnails(True)
-        assert settings_mod.get_show_thumbnails() is True
+    def test_get_set_show_thumbnails_left(self, isolated_settings):
+        settings_mod.set_show_thumbnails_left(True)
+        assert settings_mod.get_show_thumbnails_left() is True
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["show_thumbnails"] is True
+        assert raw["show_thumbnails_left"] is True
 
-    def test_show_thumbnails_default(self):
-        assert settings_mod.get_show_thumbnails() is False
+    def test_show_thumbnails_left_default(self):
+        assert settings_mod.get_show_thumbnails_left() is False
 
-    def test_show_thumbnails_persists_across_reset(self, isolated_settings):
-        settings_mod.set_show_thumbnails(True)
+    def test_show_thumbnails_left_persists_across_reset(self, isolated_settings):
+        settings_mod.set_show_thumbnails_left(True)
         settings_mod.reset()
-        assert settings_mod.get_show_thumbnails() is True
+        assert settings_mod.get_show_thumbnails_left() is True
+
+    def test_get_set_show_thumbnails_right(self, isolated_settings):
+        settings_mod.set_show_thumbnails_right(False)
+        assert settings_mod.get_show_thumbnails_right() is False
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["show_thumbnails_right"] is False
+
+    def test_show_thumbnails_right_default(self):
+        assert settings_mod.get_show_thumbnails_right() is True
+
+    def test_show_thumbnails_right_persists_across_reset(self, isolated_settings):
+        settings_mod.set_show_thumbnails_right(False)
+        settings_mod.reset()
+        assert settings_mod.get_show_thumbnails_right() is False
 
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
@@ -203,7 +218,8 @@ class TestSettingsModule:
         assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
-        assert defaults["show_thumbnails"] is False
+        assert defaults["show_thumbnails_left"] is False
+        assert defaults["show_thumbnails_right"] is True
         assert "favorite_processors" not in defaults
 
     def test_corrupt_settings_file(self, isolated_settings):
@@ -475,23 +491,39 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["safe_thresholds"] is False
 
-    def test_update_show_thumbnails(self, client):
-        res = client.put("/api/settings", json={"show_thumbnails": True})
+    def test_update_show_thumbnails_left(self, client):
+        res = client.put("/api/settings", json={"show_thumbnails_left": True})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails"] is True
+        assert res.get_json()["show_thumbnails_left"] is True
 
         # Verify it persisted
         res2 = client.get("/api/settings")
-        assert res2.get_json()["show_thumbnails"] is True
+        assert res2.get_json()["show_thumbnails_left"] is True
 
-    def test_update_show_thumbnails_false(self, client):
-        client.put("/api/settings", json={"show_thumbnails": True})
-        res = client.put("/api/settings", json={"show_thumbnails": False})
+    def test_update_show_thumbnails_left_false(self, client):
+        client.put("/api/settings", json={"show_thumbnails_left": True})
+        res = client.put("/api/settings", json={"show_thumbnails_left": False})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails"] is False
+        assert res.get_json()["show_thumbnails_left"] is False
+
+    def test_update_show_thumbnails_right(self, client):
+        res = client.put("/api/settings", json={"show_thumbnails_right": True})
+        assert res.status_code == 200
+        assert res.get_json()["show_thumbnails_right"] is True
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["show_thumbnails_right"] is True
+
+    def test_update_show_thumbnails_right_false(self, client):
+        client.put("/api/settings", json={"show_thumbnails_right": True})
+        res = client.put("/api/settings", json={"show_thumbnails_right": False})
+        assert res.status_code == 200
+        assert res.get_json()["show_thumbnails_right"] is False
 
     def test_get_settings_includes_show_thumbnails(self, client):
         res = client.get("/api/settings")
         assert res.status_code == 200
         data = res.get_json()
-        assert "show_thumbnails" in data
+        assert "show_thumbnails_left" in data
+        assert "show_thumbnails_right" in data
