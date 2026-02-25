@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 import app as app_module
+from vtsearch.datasets.config import DEMO_DATASETS
 from vtsearch.utils import clips, clear_all, get_progress, update_progress
 from vtsearch.utils.state import clear_clips
 
@@ -143,7 +144,7 @@ class TestFolderMemoryError:
         mock_mt.embed_media.side_effect = embed_then_oom
         mock_mt.load_clip_data.return_value = {"clip_bytes": b"\x00", "duration": 1}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mock_mt):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mock_mt):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
                     tmp_path, "sounds", target, on_progress=mock_progress,
@@ -238,7 +239,7 @@ class TestBackgroundImportMemoryError:
         ):
             resp = client.post(
                 "/api/dataset/load-demo",
-                json={"name": list(app_module.DEMO_DATASETS.keys())[0]},
+                json={"name": list(DEMO_DATASETS.keys())[0]},
             )
             assert resp.status_code == 200
 
