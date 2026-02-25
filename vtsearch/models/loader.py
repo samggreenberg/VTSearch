@@ -11,6 +11,7 @@ to work unchanged.
 """
 
 import gc
+import sys
 
 from vtsearch.config import MODELS_CACHE_DIR
 
@@ -32,12 +33,55 @@ def initialize_models() -> None:
     gc.collect()
 
 
+def _make_console_progress(original_callback):
+    """Wrap *original_callback* to also print status to the terminal.
+
+    Used during startup preloading so the user sees intermediate status
+    messages and download progress bars in the console while models are
+    being loaded.
+    """
+    _last_msg: list[str | None] = [None]
+    _on_progress_line: list[bool] = [False]
+
+    def _callback(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+        original_callback(status, message, current, total)
+
+        if total > 0:
+            # Measurable progress (download / weight loading) — overwrite same line
+            pct = min(100, current * 100 // total)
+            filled = pct * 30 // 100
+            bar = "#" * filled + "." * (30 - filled)
+            line = f"\r    {message} [{bar}] {pct:>3}%"
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            _on_progress_line[0] = True
+            if current >= total:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                _on_progress_line[0] = False
+                _last_msg[0] = None
+        elif message and message != _last_msg[0]:
+            # New phase message — print on its own line
+            if _on_progress_line[0]:
+                sys.stdout.write("\n")
+                _on_progress_line[0] = False
+            sys.stdout.write(f"    {message}\n")
+            sys.stdout.flush()
+            _last_msg[0] = message
+
+    return _callback
+
+
 def preload_favorite_media_types() -> list[str]:
     """Eagerly load embedding models for all favorite media types.
 
     Reads ``favorite_media_types`` from persisted settings and calls
     :meth:`~vtsearch.media.base.MediaType.load_models` on each one so
     that models are warm before the user opens the GUI.
+
+    Prints intermediate status messages and download progress bars to
+    the console so that the user can see what is happening during the
+    (potentially long) model loading phase.
 
     Returns the list of type IDs that were preloaded.
     """
@@ -49,7 +93,14 @@ def preload_favorite_media_types() -> list[str]:
         try:
             mt = media_get(type_id)
             print(f"  Preloading {mt.name} embedder...", flush=True)
-            mt.load_models()
+            # Temporarily wrap the media type's progress callback so
+            # that status updates are also printed to the console.
+            original_cb = mt._on_progress
+            mt._on_progress = _make_console_progress(original_cb)
+            try:
+                mt.load_models()
+            finally:
+                mt._on_progress = original_cb
             preloaded.append(type_id)
         except Exception as exc:
             print(f"  Warning: failed to preload {type_id}: {exc}", flush=True)
