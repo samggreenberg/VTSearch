@@ -47,5 +47,5 @@ MLP_DROPOUT = 0.5
 # Model IDs
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"
 XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
-CLIP_MODEL_ID = "openai/media-vit-base-patch32"
+CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
