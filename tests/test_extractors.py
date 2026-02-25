@@ -28,7 +28,7 @@ class StubExtractor(Extractor):
     def media_type(self):
         return self._media_type
 
-    def extract(self, clip):
+    def extract(self, media):
         return self._results
 
 
@@ -131,8 +131,8 @@ class TestImageClassExtractor:
 
         ext = ImageClassExtractor("test", "person", threshold=0.5)
         ext._model = mock_model  # inject mock directly, skip load_model
-        clip = {"clip_bytes": self._make_image_bytes()}
-        hits = ext.extract(clip)
+        media = {"media_bytes": self._make_image_bytes()}
+        hits = ext.extract(media)
 
         assert len(hits) == 2
         assert all(h["label"] == "person" for h in hits)
@@ -149,8 +149,8 @@ class TestImageClassExtractor:
 
         ext = ImageClassExtractor("test", "person", threshold=0.5)
         ext._model = mock_model
-        clip = {"clip_bytes": self._make_image_bytes()}
-        hits = ext.extract(clip)
+        media = {"media_bytes": self._make_image_bytes()}
+        hits = ext.extract(media)
 
         assert len(hits) == 0
 
@@ -164,12 +164,12 @@ class TestImageClassExtractor:
 
         ext = ImageClassExtractor("test", "person", threshold=0.25)
         ext._model = mock_model
-        clip = {"clip_bytes": self._make_image_bytes()}
-        hits = ext.extract(clip)
+        media = {"media_bytes": self._make_image_bytes()}
+        hits = ext.extract(media)
 
         assert len(hits) == 0
 
-    def test_extract_missing_clip_bytes(self):
+    def test_extract_missing_media_bytes(self):
         from vtsearch.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor("test", "person")
@@ -358,19 +358,19 @@ class TestFavoriteExtractors:
 
 class TestExtractEndpoint:
     def test_extract_requires_clips(self, client):
-        from vtsearch.utils.state import clips
+        from vtsearch.utils.state import medias
 
-        saved = dict(clips)
-        clips.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             resp = client.post(
                 "/api/extract",
                 json={"extractor_type": "image_class", "config": {"target_class": "person"}},
             )
             assert resp.status_code == 400
-            assert "No clips loaded" in resp.get_json()["error"]
+            assert "No medias loaded" in resp.get_json()["error"]
         finally:
-            clips.update(saved)
+            medias.update(saved)
 
     def test_extract_media_type_mismatch(self, client):
         # Clips are audio, but image_class extractor expects image
@@ -405,15 +405,15 @@ class TestAutoExtract:
         favorite_extractors.clear()
 
     def test_no_clips_returns_400(self, client):
-        from vtsearch.utils.state import clips
+        from vtsearch.utils.state import medias
 
-        saved = dict(clips)
-        clips.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             resp = client.post("/api/auto-extract")
             assert resp.status_code == 400
         finally:
-            clips.update(saved)
+            medias.update(saved)
 
     def test_no_extractors_returns_400(self, client):
         resp = client.post("/api/auto-extract")

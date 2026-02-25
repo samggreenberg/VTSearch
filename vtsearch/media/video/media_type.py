@@ -49,12 +49,12 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
 
 
 class VideoMediaType(MediaType):
-    """Handles video clips using the X-CLIP model (microsoft/xclip-base-patch32).
+    """Handles video medias using the X-CLIP model (microsoft/xclip-base-patch32).
 
     * Embeds videos by sampling 8 evenly-spaced frames and running them through
       X-CLIP's video encoder.
     * Embeds text queries via X-CLIP's text encoder (same 768-dim space).
-    * Serves clips with MIME types inferred from the file extension.
+    * Serves medias with MIME types inferred from the file extension.
     """
 
     def __init__(self) -> None:
@@ -116,7 +116,7 @@ class VideoMediaType(MediaType):
 
     # Shared categories for all S/M/L video demo datasets.
     # All three sizes use the same 10 categories; only the underlying
-    # clips differ (disjoint slices within each category's UCF-101 videos).
+    # medias differ (disjoint slices within each category's UCF-101 videos).
     _DEMO_CATEGORIES = [
         "ApplyEyeMakeup",
         "ApplyLipstick",
@@ -138,7 +138,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_s",
                 label="UCF-101 (S)",
-                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
+                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
@@ -149,7 +149,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_m",
                 label="UCF-101 (M)",
-                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
+                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
@@ -160,7 +160,7 @@ class VideoMediaType(MediaType):
             DemoDataset(
                 id="ucf101_l",
                 label="UCF-101 (L)",
-                description="Action recognition clips sourced from YouTube, covering sports and everyday activities.",
+                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
                 categories=cats,
                 source="ucf101",
                 required_folder=folder,
@@ -248,10 +248,10 @@ class VideoMediaType(MediaType):
     def description_wrappers(self) -> list[str]:
         return [
             "a video of {text}",
-            "a clip showing {text}",
+            "a media showing {text}",
             "{text}",
             "footage of {text}",
-            "a video clip of {text}",
+            "a video media of {text}",
         ]
 
     def load_models(self) -> None:
@@ -347,9 +347,9 @@ class VideoMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_clip_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path) -> dict:
         with open(file_path, "rb") as f:
-            clip_bytes = f.read()
+            media_bytes = f.read()
         try:
             import cv2  # noqa: PLC0415
 
@@ -362,21 +362,21 @@ class VideoMediaType(MediaType):
                 cap.release()
         except Exception:
             duration = 0.0
-        return {"clip_bytes": clip_bytes, "duration": duration}
+        return {"media_bytes": media_bytes, "duration": duration}
 
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def clip_response(self, clip: dict) -> MediaResponse:
-        filename = clip.get("filename", "")
+    def media_response(self, media: dict) -> MediaResponse:
+        filename = media.get("filename", "")
         ext = Path(filename).suffix.lower() if filename else ".mp4"
         mimetype = _VIDEO_MIME_TYPES.get(ext, "video/mp4")
-        data = self._resolve_clip_bytes(clip)
+        data = self._resolve_media_bytes(media)
         if data is None:
-            return MediaResponse(data=b"", mimetype=mimetype, download_name=f"clip_{clip['id']}{ext}")
+            return MediaResponse(data=b"", mimetype=mimetype, download_name=f"media_{media['id']}{ext}")
         return MediaResponse(
             data=data,
             mimetype=mimetype,
-            download_name=f"clip_{clip['id']}{ext}",
+            download_name=f"media_{media['id']}{ext}",
         )

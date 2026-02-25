@@ -12,24 +12,24 @@ import pytest
 
 import app as app_module
 from vtsearch.datasets.config import DEMO_DATASETS
-from vtsearch.utils import clips, clear_all, get_progress, update_progress
-from vtsearch.utils.state import clear_clips
+from vtsearch.utils import medias, clear_all, get_progress, update_progress
+from vtsearch.utils.state import clear_medias
 
 
 class TestClearClipsGarbageCollection:
-    """clear_clips() should call gc.collect() to free old dataset memory."""
+    """clear_medias() should call gc.collect() to free old dataset memory."""
 
-    def test_clear_clips_calls_gc_collect(self):
+    def test_clear_medias_calls_gc_collect(self):
         with mock.patch("vtsearch.utils.state.gc.collect") as mock_gc:
-            clear_clips()
+            clear_medias()
             mock_gc.assert_called_once()
 
-    def test_clear_clips_empties_dict(self):
-        clips[999] = {"id": 999, "type": "audio", "embedding": np.zeros(10)}
-        clear_clips()
-        assert len(clips) == 0
-        # Restore test clips
-        app_module.init_clips()
+    def test_clear_medias_empties_dict(self):
+        medias[999] = {"id": 999, "type": "audio", "embedding": np.zeros(10)}
+        clear_medias()
+        assert len(medias) == 0
+        # Restore test medias
+        app_module.init_medias()
 
 
 class TestPickleMemoryError:
@@ -40,7 +40,7 @@ class TestPickleMemoryError:
         from vtsearch.datasets.loader import load_dataset_from_pickle
 
         pkl = tmp_path / "big.pkl"
-        pkl.write_bytes(pickle.dumps({"clips": {}}))
+        pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
         with mock.patch("vtsearch.datasets.loader.pickle.load", side_effect=MemoryError):
@@ -50,21 +50,21 @@ class TestPickleMemoryError:
         assert len(target) == 0
 
     def test_pickle_clip_loop_oom_clears_clips(self, tmp_path):
-        """If MemoryError occurs during clip processing, clips are cleared."""
+        """If MemoryError occurs during media processing, medias are cleared."""
         from vtsearch.datasets.loader import load_dataset_from_pickle
 
-        # Create a pickle with several clips
-        clips_data = {}
+        # Create a pickle with several medias
+        medias_data = {}
         for i in range(1, 6):
-            clips_data[i] = {
+            medias_data[i] = {
                 "type": "audio",
                 "embedding": [0.0] * 10,
-                "clip_bytes": b"\x00" * 100,
+                "media_bytes": b"\x00" * 100,
                 "filename": f"clip_{i}.wav",
                 "md5": f"md5_{i}",
             }
         pkl = tmp_path / "medium.pkl"
-        pkl.write_bytes(pickle.dumps({"clips": clips_data}))
+        pkl.write_bytes(pickle.dumps({"medias": medias_data}))
 
         target: dict = {}
 
@@ -90,22 +90,22 @@ class TestPickleMemoryError:
         """After a successful pickle load, the raw data is released via gc."""
         from vtsearch.datasets.loader import load_dataset_from_pickle
 
-        clips_data = {
+        medias_data = {
             1: {
                 "type": "paragraph",
                 "embedding": [0.0] * 10,
-                "clip_string": "hello",
+                "media_string": "hello",
                 "filename": "t.txt",
                 "md5": "abc",
             }
         }
         pkl = tmp_path / "small.pkl"
-        pkl.write_bytes(pickle.dumps({"clips": clips_data}))
+        pkl.write_bytes(pickle.dumps({"medias": medias_data}))
 
         target: dict = {}
         with mock.patch("vtsearch.datasets.loader.gc.collect") as mock_gc:
             load_dataset_from_pickle(pkl, target)
-            # gc.collect() should be called after building clips
+            # gc.collect() should be called after building medias
             assert mock_gc.call_count >= 1
 
         assert len(target) == 1
@@ -142,7 +142,7 @@ class TestFolderMemoryError:
             return np.zeros(10)
 
         mock_mt.embed_media.side_effect = embed_then_oom
-        mock_mt.load_clip_data.return_value = {"clip_bytes": b"\x00", "duration": 1}
+        mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mock_mt):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
@@ -161,16 +161,16 @@ class TestCombineMemoryError:
 
         # Create two small pickles
         for name in ("a.pkl", "b.pkl"):
-            clips_data = {
+            medias_data = {
                 1: {
                     "type": "audio",
                     "embedding": [0.0] * 10,
-                    "clip_bytes": b"\x00" * 100,
+                    "media_bytes": b"\x00" * 100,
                     "filename": f"{name}_clip.wav",
                     "md5": f"md5_{name}",
                 }
             }
-            (tmp_path / name).write_bytes(pickle.dumps({"clips": clips_data}))
+            (tmp_path / name).write_bytes(pickle.dumps({"medias": medias_data}))
 
         importer = CombineDatasetsImporter()
         target: dict = {}
@@ -226,8 +226,8 @@ class TestBackgroundImportMemoryError:
         assert "Out of memory" in progress["error"]
         assert progress["status"] == "idle"
 
-        # Reinitialise clips for subsequent tests
-        app_module.init_clips()
+        # Reinitialise medias for subsequent tests
+        app_module.init_medias()
 
     def test_demo_load_oom_reports_error(self, client):
         """When loading a demo dataset OOMs, the progress shows the error."""
@@ -250,5 +250,5 @@ class TestBackgroundImportMemoryError:
             assert progress["error"] is not None
             assert "Out of memory" in progress["error"]
 
-        # Reinitialise clips for subsequent tests
-        app_module.init_clips()
+        # Reinitialise medias for subsequent tests
+        app_module.init_medias()

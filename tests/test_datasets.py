@@ -34,20 +34,20 @@ class TestDatasetEndpoints:
     def test_clear_dataset(self, client):
         resp = client.post("/api/dataset/clear")
         assert resp.status_code == 200
-        # After clearing, clips should be empty
-        assert len(app_module.clips) == 0
+        # After clearing, medias should be empty
+        assert len(app_module.medias) == 0
 
         # Re-initialize for other tests
-        app_module.init_clips()
+        app_module.init_medias()
 
 
 class TestStartupState:
     """App should start with an empty dataset so the selection screen shows."""
 
     def test_status_loaded_false_when_clips_empty(self, client):
-        """GET /api/dataset/status returns loaded=False when clips is cleared."""
-        saved = dict(app_module.clips)
-        app_module.clips.clear()
+        """GET /api/dataset/status returns loaded=False when medias is cleared."""
+        saved = dict(app_module.medias)
+        app_module.medias.clear()
         try:
             resp = client.get("/api/dataset/status")
             assert resp.status_code == 200
@@ -55,13 +55,13 @@ class TestStartupState:
             assert data["loaded"] is False
             assert data["num_clips"] == 0
         finally:
-            app_module.clips.update(saved)
+            app_module.medias.update(saved)
 
-    def test_init_clips_not_called_automatically(self):
-        """init_clips() exists for testing but is not called in production startup.
+    def test_init_medias_not_called_automatically(self):
+        """init_medias() exists for testing but is not called in production startup.
 
         Verify that the production startup block in app.py does NOT call
-        init_clips() – it should only load models and wait for user selection.
+        init_medias() – it should only load models and wait for user selection.
         """
         import inspect
 
@@ -77,7 +77,7 @@ class TestStartupState:
         else_start = main_body.rfind("else:")
         assert else_start != -1, "Could not find else branch in __main__ block"
         else_body = main_body[else_start:]
-        assert "init_clips()" not in else_body, "init_clips() must not be called automatically in production startup"
+        assert "init_medias()" not in else_body, "init_medias() must not be called automatically in production startup"
 
 
 class TestDemoDatasetReadiness:
@@ -95,7 +95,7 @@ class TestDemoDatasetReadiness:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "clips": {}}))
+        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -124,7 +124,7 @@ class TestDemoDatasetReadiness:
         esc50_dir.mkdir(parents=True, exist_ok=True)
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "clips": {}}))
+        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -155,7 +155,7 @@ class TestDemoDatasetReadiness:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "ucf101_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "ucf101_s", "clips": {}}))
+        pkl_file.write_bytes(pickle.dumps({"name": "ucf101_s", "medias": {}}))
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()

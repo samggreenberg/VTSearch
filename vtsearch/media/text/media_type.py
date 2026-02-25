@@ -28,7 +28,7 @@ class TextMediaType(MediaType):
       asymmetric retrieval design (768-dim, L2-normalised).
     * Embeds text queries with the ``"query: "`` prefix so they land in the
       same space.
-    * Serves clips as JSON objects containing the text content and word/
+    * Serves medias as JSON objects containing the text content and word/
       character statistics (no binary bytes).
     """
 
@@ -348,14 +348,14 @@ class TextMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_clip_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path) -> dict:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 text_content = f.read().strip()
         except Exception:
             text_content = ""
         return {
-            "clip_string": text_content,
+            "media_string": text_content,
             "duration": 0,
             "word_count": len(text_content.split()),
             "character_count": len(text_content),
@@ -365,13 +365,13 @@ class TextMediaType(MediaType):
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def clip_response(self, clip: dict) -> MediaResponse:
-        content = self._resolve_clip_string(clip)
+    def media_response(self, media: dict) -> MediaResponse:
+        content = self._resolve_media_string(media)
         return MediaResponse(
             data={
                 "content": content,
-                "word_count": clip.get("word_count", 0) or len(content.split()),
-                "character_count": clip.get("character_count", 0) or len(content),
+                "word_count": media.get("word_count", 0) or len(content.split()),
+                "character_count": media.get("character_count", 0) or len(content),
             },
             mimetype="application/json",
         )

@@ -1,11 +1,11 @@
-"""Ingest missing clips into an existing dataset by re-running their origins.
+"""Ingest missing medias into an existing dataset by re-running their origins.
 
 When a label-set references elements that are not present in the current
 dataset, the user may choose to pull them in from their original sources.
 This module groups the missing entries by origin, runs the appropriate
-dataset importer for each origin, and cherry-picks only the clips that
-match the missing entries (by ``origin_name``).  The recovered clips are
-assigned fresh IDs that do not collide with existing clips and are
+dataset importer for each origin, and cherry-picks only the medias that
+match the missing entries (by ``origin_name``).  The recovered medias are
+assigned fresh IDs that do not collide with existing medias and are
 appended to the in-memory dataset.
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Optional
 
-from vtsearch.utils.state import next_clip_id
+from vtsearch.utils.state import next_media_id
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -46,26 +46,26 @@ def _group_by_origin(
     return groups
 
 
-def ingest_missing_clips(
+def ingest_missing_medias(
     missing_entries: list[dict[str, Any]],
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     on_progress: Optional[ProgressCallback] = None,
 ) -> int:
-    """Re-ingest missing clips from their origins into *clips*.
+    """Re-ingest missing medias from their origins into *medias*.
 
     Groups *missing_entries* by origin, runs each origin's dataset importer
-    to recover the full clip data (media bytes + embedding), then appends
-    the matched clips to *clips* with fresh, non-colliding IDs.
+    to recover the full media data (media bytes + embedding), then appends
+    the matched medias to *medias* with fresh, non-colliding IDs.
 
     Args:
         missing_entries: Label entries (dicts with ``origin``,
             ``origin_name``, ``md5``, ``label``, etc.) that were not found
             in the current dataset.
-        clips: The live dataset dict to extend in-place.
+        medias: The live dataset dict to extend in-place.
         on_progress: Optional progress callback.
 
     Returns:
-        The number of clips successfully ingested.
+        The number of medias successfully ingested.
     """
     from vtsearch.datasets.importers import get_importer
 
@@ -99,36 +99,36 @@ def ingest_missing_clips(
 
         on_progress(
             "ingesting",
-            f"Re-ingesting from {importer_name} ({len(wanted_names)} clips)...",
+            f"Re-ingesting from {importer_name} ({len(wanted_names)} medias)...",
             0,
             0,
         )
 
-        # Run the importer into a temporary clips dict
-        temp_clips: dict[int, dict[str, Any]] = {}
+        # Run the importer into a temporary medias dict
+        temp_medias: dict[int, dict[str, Any]] = {}
         try:
-            importer.run_cli(params, temp_clips)
+            importer.run_cli(params, temp_medias)
         except Exception:
             # If the importer fails (e.g. folder not found), skip this origin
             continue
 
-        # Set origin on temp clips that don't have one
-        for clip in temp_clips.values():
-            if clip.get("origin") is None:
-                clip["origin"] = origin_dict
-            if not clip.get("origin_name"):
-                clip["origin_name"] = clip.get("filename", "")
+        # Set origin on temp medias that don't have one
+        for media in temp_medias.values():
+            if media.get("origin") is None:
+                media["origin"] = origin_dict
+            if not media.get("origin_name"):
+                media["origin_name"] = media.get("filename", "")
 
-        # Cherry-pick matching clips
-        cid = next_clip_id(clips)
-        for temp_clip in temp_clips.values():
+        # Cherry-pick matching medias
+        cid = next_media_id(medias)
+        for temp_clip in temp_medias.values():
             clip_origin_name = temp_clip.get("origin_name", "")
             clip_md5 = temp_clip.get("md5", "")
             if clip_origin_name in wanted_names or clip_md5 in wanted_md5s:
                 temp_clip["id"] = cid
-                clips[cid] = temp_clip
+                medias[cid] = temp_clip
                 cid += 1
                 total_ingested += 1
 
-    on_progress("idle", f"Ingested {total_ingested} clip(s) from origins.", 0, 0)
+    on_progress("idle", f"Ingested {total_ingested} media(s) from origins.", 0, 0)
     return total_ingested

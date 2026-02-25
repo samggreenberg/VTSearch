@@ -13,7 +13,7 @@ from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
     clear_all,
-    clips,
+    medias,
     get_progress,
     good_votes,
     update_progress,
@@ -72,9 +72,9 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
-    if not clips:
+    if not medias:
         return
-    media_type = next(iter(clips.values())).get("type", "audio")
+    media_type = next(iter(medias.values())).get("type", "audio")
     from vtsearch.media import get as media_get
 
     try:
@@ -97,17 +97,17 @@ def clear_dataset():
 
 
 def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
-    """Set origin and origin_name on clips that don't already have them.
+    """Set origin and origin_name on medias that don't already have them.
 
-    Called after an importer finishes populating the clips dict.  Clips
+    Called after an importer finishes populating the medias dict.  Clips
     that already carry their own origin (e.g. loaded from a pickle that
     recorded per-element provenance) are left untouched.
     """
-    for clip in clips_dict.values():
-        if clip.get("origin") is None:
-            clip["origin"] = origin
-        if not clip.get("origin_name"):
-            clip["origin_name"] = clip.get("filename", "")
+    for media in clips_dict.values():
+        if media.get("origin") is None:
+            media["origin"] = origin
+        if not media.get("origin_name"):
+            media["origin_name"] = media.get("filename", "")
 
 
 def _run_importer_in_background(importer, field_values: dict) -> None:
@@ -117,12 +117,12 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         try:
             clear_dataset()
             gc.collect()
-            importer.run(field_values, clips)
-            _set_clip_origins(clips, importer.build_origin(field_values))
+            importer.run(field_values, medias)
+            _set_clip_origins(medias, importer.build_origin(field_values))
             _load_embedder_for_clips()
             build_diversity_tree()
         except MemoryError:
-            clips.clear()
+            medias.clear()
             gc.collect()
             update_progress(
                 "idle", "", 0, 0,
@@ -145,12 +145,12 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
 def dataset_status():
     """Return the current dataset status."""
     media_type = None
-    if clips:
-        media_type = next(iter(clips.values())).get("type", "audio")
+    if medias:
+        media_type = next(iter(medias.values())).get("type", "audio")
     return jsonify(
         {
-            "loaded": len(clips) > 0,
-            "num_clips": len(clips),
+            "loaded": len(medias) > 0,
+            "num_clips": len(medias),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
         }
@@ -403,13 +403,13 @@ def load_demo_dataset_route():
         try:
             clear_dataset()
             gc.collect()
-            load_demo_dataset(dataset_name, clips)
+            load_demo_dataset(dataset_name, medias)
             demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
-            _set_clip_origins(clips, demo_origin)
+            _set_clip_origins(medias, demo_origin)
             _load_embedder_for_clips()
             build_diversity_tree()
         except MemoryError:
-            clips.clear()
+            medias.clear()
             gc.collect()
             update_progress(
                 "idle", "", 0, 0,
@@ -488,11 +488,11 @@ def load_dataset_folder():
 @datasets_bp.route("/api/dataset/export")
 def export_dataset():
     """Export the current dataset to a pickle file."""
-    if not clips:
+    if not medias:
         return jsonify({"error": "No dataset loaded"}), 400
 
     try:
-        dataset_bytes = export_dataset_to_file(clips)
+        dataset_bytes = export_dataset_to_file(medias)
         return send_file(
             io.BytesIO(dataset_bytes),
             mimetype="application/octet-stream",

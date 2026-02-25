@@ -17,7 +17,7 @@ from vtsearch.utils import (
     add_favorite_detector,
     add_favorite_extractor,
     add_favorite_localizer,
-    clips,
+    medias,
     get_calibrate_count,
     get_calibration_fraction,
     get_favorite_detectors,
@@ -58,12 +58,12 @@ def export_detector():
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(0.0)
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
@@ -86,8 +86,8 @@ def export_detector():
 
     # Apply safe thresholds blending if enabled
     if get_safe_thresholds():
-        all_ids = sorted(clips.keys())
-        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(medias.keys())
+        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -104,7 +104,7 @@ def export_detector():
 
 @detectors_bp.route("/api/detector-sort", methods=["POST"])
 def detector_sort():
-    """Score all clips using a loaded detector model."""
+    """Score all medias using a loaded detector model."""
     import torch  # noqa: PLC0415
 
     data = request.get_json(force=True)
@@ -124,9 +124,9 @@ def detector_sort():
     # Reconstruct the model from weights
     model = build_model_from_weights(weights)
 
-    # Score every clip
-    all_ids = sorted(clips.keys())
-    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    # Score every media
+    all_ids = sorted(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
     with torch.no_grad():
         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -221,11 +221,11 @@ def import_detector_pkl():
         if not weights:
             return jsonify({"error": "Invalid detector file format"}), 400
 
-        # Prefer media_type stored in the file; fall back to current clips, then "audio"
+        # Prefer media_type stored in the file; fall back to current medias, then "audio"
         media_type = detector_data.get("media_type", "")
         if not media_type:
-            if clips:
-                media_type = next(iter(clips.values())).get("type", "audio")
+            if medias:
+                media_type = next(iter(medias.values())).get("type", "audio")
             else:
                 media_type = "audio"
 
@@ -354,9 +354,9 @@ def import_detector_labels():
         model = train_model(X, y, input_dim, get_inclusion())
 
         # Apply safe thresholds blending if enabled
-        if get_safe_thresholds() and clips:
-            all_ids = sorted(clips.keys())
-            all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        if get_safe_thresholds() and medias:
+            all_ids = sorted(medias.keys())
+            all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
             X_all = torch.tensor(all_embs, dtype=torch.float32)
             with torch.no_grad():
                 all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -388,7 +388,7 @@ def train_from_label_import(importer_name: str):
     """Train a detector from label importer results without modifying votes.
 
     Runs the named label importer to get ``[{md5, label}, ...]``, matches the
-    md5s to loaded clips, uses the matched embeddings to train a detector, and
+    md5s to loaded medias, uses the matched embeddings to train a detector, and
     saves it as a favorite.  Current votes are *not* modified.
     """
     from vtsearch.labels.importers import get_label_importer, list_label_importers
@@ -401,8 +401,8 @@ def train_from_label_import(importer_name: str):
             404,
         )
 
-    if not clips:
-        return jsonify({"error": "No clips loaded. Load a dataset first."}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded. Load a dataset first."}), 400
 
     # Build field_values from multipart form data
     has_file_fields = any(f.field_type == "file" for f in importer.fields)
@@ -434,10 +434,10 @@ def train_from_label_import(importer_name: str):
     if not isinstance(label_entries, list) or not label_entries:
         return jsonify({"error": "Label importer returned no entries."}), 400
 
-    # Match md5s to loaded clips and collect embeddings
-    from vtsearch.utils import build_clip_lookup, resolve_clip_ids
+    # Match md5s to loaded medias and collect embeddings
+    from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-    origin_lookup, md5_lookup = build_clip_lookup(clips)
+    origin_lookup, md5_lookup = build_media_lookup(medias)
 
     X_list: list = []
     y_list: list = []
@@ -450,14 +450,14 @@ def train_from_label_import(importer_name: str):
             skipped_count += 1
             continue
 
-        cids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         if not cids:
             skipped_count += 1
             continue
 
-        # Use the first matching clip's embedding
+        # Use the first matching media's embedding
         cid = cids[0]
-        embedding = clips[cid].get("embedding")
+        embedding = medias[cid].get("embedding")
         if embedding is None:
             skipped_count += 1
             continue
@@ -468,7 +468,7 @@ def train_from_label_import(importer_name: str):
 
     if loaded_count < 2:
         return (
-            jsonify({"error": f"Need at least 2 matched clips (matched {loaded_count}, skipped {skipped_count})"}),
+            jsonify({"error": f"Need at least 2 matched medias (matched {loaded_count}, skipped {skipped_count})"}),
             400,
         )
 
@@ -491,7 +491,7 @@ def train_from_label_import(importer_name: str):
     for key, value in state_dict.items():
         weights[key] = value.tolist()
 
-    media_type = next(iter(clips.values())).get("type", "audio")
+    media_type = next(iter(medias.values())).get("type", "audio")
     add_favorite_detector(name, media_type, weights, threshold)
 
     return jsonify(
@@ -508,16 +508,16 @@ def train_from_label_import(importer_name: str):
 @detectors_bp.route("/api/auto-detect", methods=["POST"])
 def auto_detect():
     """Run all favorite detectors for the current media type and return positive hits."""
-    if not clips:
-        return jsonify({"error": "No clips loaded"}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
     # Import any favorite processors from settings that aren't already loaded
     from vtsearch.settings import ensure_favorite_processors_imported
 
     newly_imported = ensure_favorite_processors_imported()
 
-    # Determine media type from current clips
-    media_type = next(iter(clips.values())).get("type", "audio")
+    # Determine media type from current medias
+    media_type = next(iter(medias.values())).get("type", "audio")
 
     # Get favorite detectors for this media type
     detectors = get_favorite_detectors_by_media(media_type)
@@ -528,8 +528,8 @@ def auto_detect():
     # Prepare shared data for all detectors
     import torch  # noqa: PLC0415
 
-    all_ids = sorted(clips.keys())
-    all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+    all_ids = sorted(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     def _run_single_detector(detector_name, detector_data):
@@ -545,10 +545,10 @@ def auto_detect():
         positive_hits = []
         negative_hits = []
         for cid, score in zip(all_ids, scores):
-            clip_info = clips[cid].copy()
+            clip_info = medias[cid].copy()
             clip_info.pop("embedding", None)
-            clip_info.pop("clip_bytes", None)
-            clip_info.pop("clip_string", None)
+            clip_info.pop("media_bytes", None)
+            clip_info.pop("media_string", None)
             clip_info["score"] = round(score, 4)
             if score >= threshold:
                 positive_hits.append(clip_info)
@@ -684,7 +684,7 @@ def rename_favorite_extractor_route(name):
 
 @detectors_bp.route("/api/extract", methods=["POST"])
 def run_extract():
-    """Run a single extractor on all clips and return per-clip extraction results."""
+    """Run a single extractor on all medias and return per-media extraction results."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -698,27 +698,31 @@ def run_extract():
     if not config or not isinstance(config, dict):
         return jsonify({"error": "config is required"}), 400
 
-    if not clips:
-        return jsonify({"error": "No clips loaded"}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
     try:
         extractor = _build_extractor(extractor_name or "adhoc", extractor_type, config)
     except Exception as e:
         return jsonify({"error": f"Invalid extractor config: {e}"}), 400
 
-    media_type = next(iter(clips.values())).get("type", "")
+    media_type = next(iter(medias.values())).get("type", "")
     if extractor.media_type != media_type:
         return (
-            jsonify({"error": f"Extractor media type '{extractor.media_type}' does not match clips '{media_type}'"}),
+            jsonify({"error": f"Extractor media type '{extractor.media_type}' does not match medias '{media_type}'"}),
             400,
         )
 
     results = []
-    for clip_id in sorted(clips.keys()):
-        clip = clips[clip_id]
-        extractions = extractor.extract(clip)
+    for media_id in sorted(medias.keys()):
+        media = medias[media_id]
+        extractions = extractor.extract(media)
         if extractions:
-            clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
+            clip_info = {
+                k: v
+                for k, v in media.items()
+                if k not in ("embedding", "media_bytes", "media_string")
+            }
             clip_info["extractions"] = extractions
             results.append(clip_info)
 
@@ -726,7 +730,7 @@ def run_extract():
         {
             "extractor_name": extractor.name,
             "media_type": media_type,
-            "total_clips_with_hits": len(results),
+            "total_medias_with_hits": len(results),
             "results": results,
         }
     )
@@ -735,36 +739,40 @@ def run_extract():
 @detectors_bp.route("/api/auto-extract", methods=["POST"])
 def auto_extract():
     """Run all favorite extractors for the current media type and return extraction results."""
-    if not clips:
-        return jsonify({"error": "No clips loaded"}), 400
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(clips.values())).get("type", "")
+    media_type = next(iter(medias.values())).get("type", "")
     extractors = get_favorite_extractors_by_media(media_type)
 
     if not extractors:
         return jsonify({"error": f"No favorite extractors found for media type: {media_type}"}), 400
 
-    sorted_clip_ids = sorted(clips.keys())
+    sorted_media_ids = sorted(medias.keys())
 
     def _run_single_extractor(ext_name, ext_data):
-        """Run a single extractor on all clips and return (name, result_dict) or None."""
+        """Run a single extractor on all medias and return (name, result_dict) or None."""
         try:
             extractor = _build_extractor(ext_name, ext_data["extractor_type"], ext_data["config"])
         except Exception:
             return None
 
         ext_results = []
-        for clip_id in sorted_clip_ids:
-            clip = clips[clip_id]
-            extractions = extractor.extract(clip)
+        for media_id in sorted_media_ids:
+            media = medias[media_id]
+            extractions = extractor.extract(media)
             if extractions:
-                clip_info = {k: v for k, v in clip.items() if k not in ("embedding", "clip_bytes", "clip_string")}
+                clip_info = {
+                    k: v
+                    for k, v in media.items()
+                    if k not in ("embedding", "media_bytes", "media_string")
+                }
                 clip_info["extractions"] = extractions
                 ext_results.append(clip_info)
 
         return ext_name, {
             "extractor_name": ext_name,
-            "total_clips_with_hits": len(ext_results),
+            "total_medias_with_hits": len(ext_results),
             "results": ext_results,
         }
 

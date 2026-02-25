@@ -1,4 +1,4 @@
-"""Global state management for clips and votes."""
+"""Global state management for medias and votes."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import gc
 import json
 from typing import Any
 
-# Clips storage: id -> {id, type, duration, file_size, embedding, clip_bytes, clip_string, ...}
-clips: dict[int, dict[str, Any]] = {}
+# Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, media_string, ...}
+medias: dict[int, dict[str, Any]] = {}
 
-# Diversity tree: built from clip embeddings after a dataset loads.
+# Diversity tree: built from media embeddings after a dataset loads.
 # ``None`` until a dataset is loaded and the tree is constructed.
 _diversity_tree: Any = None  # DiversityTree | None
 
@@ -17,17 +17,17 @@ _diversity_tree: Any = None  # DiversityTree | None
 good_votes: dict[int, None] = {}
 bad_votes: dict[int, None] = {}
 
-# Combined label history: [(clip_id, label, timestamp), ...]
+# Combined label history: [(media_id, label, timestamp), ...]
 # Tracks the order of all labels across both categories
 label_history: list[tuple[int, str, float]] = []
 
-# Click-time tracking: clip_id -> click order (1-indexed).
+# Click-time tracking: media_id -> click order (1-indexed).
 # Assigned when a vote is cast via the API; labels loaded via import get no entry
 # (the frontend treats missing entries as time=-1).
 vote_click_times: dict[int, int] = {}
 _click_counter: int = 0
 
-# Last learned-sort scores: clip_id -> score (float in [0, 1]).
+# Last learned-sort scores: media_id -> score (float in [0, 1]).
 # Updated each time /api/learned-sort completes.
 last_learned_scores: dict[int, float] = {}
 
@@ -53,7 +53,7 @@ def clear_votes() -> None:
     """Clear all votes and the full label history.
 
     Removes all entries from ``good_votes``, ``bad_votes``, and
-    ``label_history`` in place. Does not affect the ``clips`` dict.
+    ``label_history`` in place. Does not affect the ``medias`` dict.
     Also clears the progress model cache and click-time / score tracking.
     """
     global _click_counter
@@ -69,29 +69,29 @@ def clear_votes() -> None:
     clear_progress_cache()
 
 
-def clear_clips() -> None:
-    """Clear all loaded clips from memory.
+def clear_medias() -> None:
+    """Clear all loaded medias from memory.
 
-    Removes all entries from the ``clips`` dict in place. Does not affect
+    Removes all entries from the ``medias`` dict in place. Does not affect
     votes or label history. Also clears the progress model cache since
-    cached models reference clip embeddings.  Also clears the diversity tree.
+    cached models reference media embeddings.  Also clears the diversity tree.
     """
     global _diversity_tree
     from vtsearch.models.progress import clear_progress_cache
 
-    clips.clear()
+    medias.clear()
     _diversity_tree = None
     clear_progress_cache()
     gc.collect()
 
 
 def clear_all() -> None:
-    """Clear all clips, votes, and label history.
+    """Clear all medias, votes, and label history.
 
-    Convenience wrapper that calls :func:`clear_clips` followed by
+    Convenience wrapper that calls :func:`clear_medias` followed by
     :func:`clear_votes`.
     """
-    clear_clips()
+    clear_medias()
     clear_votes()
 
 
@@ -189,21 +189,21 @@ def set_safe_thresholds(value: bool) -> None:
     settings.set_safe_thresholds(value)
 
 
-def assign_click_time(clip_id: int) -> int:
-    """Assign the next click-time ordinal to a clip and return it.
+def assign_click_time(media_id: int) -> int:
+    """Assign the next click-time ordinal to a media and return it.
 
     Each call increments the global counter so click-times are unique and
     monotonically increasing.
     """
     global _click_counter
     _click_counter += 1
-    vote_click_times[clip_id] = _click_counter
+    vote_click_times[media_id] = _click_counter
     return _click_counter
 
 
-def remove_click_time(clip_id: int) -> None:
-    """Remove the click-time entry for a clip (e.g. when unlabelling)."""
-    vote_click_times.pop(clip_id, None)
+def remove_click_time(media_id: int) -> None:
+    """Remove the click-time entry for a media (e.g. when unlabelling)."""
+    vote_click_times.pop(media_id, None)
 
 
 def get_vote_click_times() -> dict[int, int]:
@@ -222,16 +222,16 @@ def get_learned_scores() -> dict[int, float]:
     return last_learned_scores.copy()
 
 
-def add_label_to_history(clip_id: int, label: str) -> None:
+def add_label_to_history(media_id: int, label: str) -> None:
     """Append a labelling event to the global label history with a timestamp.
 
     Args:
-        clip_id: Integer ID of the clip that was labelled.
+        media_id: Integer ID of the media that was labelled.
         label: The assigned label; should be ``"good"`` or ``"bad"``.
     """
     import time
 
-    label_history.append((clip_id, label, time.time()))
+    label_history.append((media_id, label, time.time()))
 
 
 def add_textsort_suggestion(text: str) -> None:
@@ -457,10 +457,10 @@ def get_favorite_localizers_by_media(media_type: str) -> dict[str, dict[str, Any
 # ---------------------------------------------------------------------------
 
 
-def build_diversity_tree(clip_dict: dict[int, dict[str, Any]] | None = None) -> None:
-    """Build a 3-Diversity Tree from clip embeddings.
+def build_diversity_tree(media_dict: dict[int, dict[str, Any]] | None = None) -> None:
+    """Build a 3-Diversity Tree from media embeddings.
 
-    Uses the global ``clips`` dict by default, or an explicit *clip_dict*
+    Uses the global ``medias`` dict by default, or an explicit *media_dict*
     if provided.  Existing labels in ``good_votes`` and ``bad_votes`` are
     replayed into the new tree so the seen state stays accurate.
     """
@@ -469,10 +469,10 @@ def build_diversity_tree(clip_dict: dict[int, dict[str, Any]] | None = None) -> 
 
     from vtsearch.models.diversity_tree import DiversityTree
 
-    source = clip_dict if clip_dict is not None else clips
+    source = media_dict if media_dict is not None else medias
     vectors: dict[int, np.ndarray] = {}
-    for cid, clip in source.items():
-        emb = clip.get("embedding")
+    for cid, media in source.items():
+        emb = media.get("embedding")
         if emb is not None:
             vectors[cid] = np.asarray(emb, dtype=np.float32)
 
@@ -503,16 +503,16 @@ def diversity_tree_next_sample() -> int | None:
     return _diversity_tree.next_sample()
 
 
-def diversity_tree_label(clip_id: int) -> None:
-    """Mark *clip_id* as labeled in the diversity tree."""
-    if _diversity_tree is not None and clip_id in _diversity_tree.vector_to_leaf:
-        _diversity_tree.label(clip_id)
+def diversity_tree_label(media_id: int) -> None:
+    """Mark *media_id* as labeled in the diversity tree."""
+    if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
+        _diversity_tree.label(media_id)
 
 
-def diversity_tree_unlabel(clip_id: int) -> None:
-    """Remove *clip_id*'s label from the diversity tree."""
-    if _diversity_tree is not None and clip_id in _diversity_tree.vector_to_leaf:
-        _diversity_tree.unlabel(clip_id)
+def diversity_tree_unlabel(media_id: int) -> None:
+    """Remove *media_id*'s label from the diversity tree."""
+    if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
+        _diversity_tree.unlabel(media_id)
 
 
 # ---------------------------------------------------------------------------
@@ -525,49 +525,49 @@ def _origin_key(origin: dict[str, Any], origin_name: str) -> str:
     return json.dumps(origin, sort_keys=True) + "\0" + origin_name
 
 
-def build_clip_lookup(
-    clip_dict: dict[int, dict[str, Any]],
+def build_media_lookup(
+    media_dict: dict[int, dict[str, Any]],
 ) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
-    """Build lookup tables for matching label entries to clips.
+    """Build lookup tables for matching label entries to medias.
 
     Returns ``(origin_lookup, md5_lookup)`` where:
 
     * **origin_lookup** maps ``_origin_key(origin, origin_name)`` to a list of
-      clip IDs that share that origin+name pair.
-    * **md5_lookup** maps an MD5 hex string to a list of clip IDs whose
+      media IDs that share that origin+name pair.
+    * **md5_lookup** maps an MD5 hex string to a list of media IDs whose
       content hash matches.
 
-    Both lookups map to *lists* because the same key can match multiple clips
+    Both lookups map to *lists* because the same key can match multiple medias
     (e.g. duplicate files with the same MD5).
     """
     origin_lookup: dict[str, list[int]] = {}
     md5_lookup: dict[str, list[int]] = {}
 
-    for clip in clip_dict.values():
-        cid = clip["id"]
+    for media in media_dict.values():
+        cid = media["id"]
 
-        origin = clip.get("origin")
-        origin_name = clip.get("origin_name", "")
+        origin = media.get("origin")
+        origin_name = media.get("origin_name", "")
         if origin is not None and origin_name:
             key = _origin_key(origin, origin_name)
             origin_lookup.setdefault(key, []).append(cid)
 
-        md5 = clip.get("md5", "")
+        md5 = media.get("md5", "")
         if md5:
             md5_lookup.setdefault(md5, []).append(cid)
 
     return origin_lookup, md5_lookup
 
 
-def resolve_clip_ids(
+def resolve_media_ids(
     entry: dict[str, Any],
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
 ) -> list[int]:
-    """Resolve a label entry to matching clip ID(s).
+    """Resolve a label entry to matching media ID(s).
 
-    Returns the **union** of clips matched by ``origin`` + ``origin_name``
-    and clips matched by ``md5``.  Both lookups are always attempted so that
+    Returns the **union** of medias matched by ``origin`` + ``origin_name``
+    and medias matched by ``md5``.  Both lookups are always attempted so that
     a label is applied to every element in the dataset that corresponds to
     the entry, regardless of whether it was matched by provenance or by
     content hash.  Duplicate IDs are removed.
@@ -595,7 +595,7 @@ def find_missing_entries(
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
 ) -> list[dict[str, Any]]:
-    """Return label entries that do not match any clip by origin+name or md5.
+    """Return label entries that do not match any media by origin+name or md5.
 
     Only entries with a valid label (``"good"`` or ``"bad"``) are considered;
     entries with invalid labels are silently excluded (they are already counted
@@ -606,14 +606,14 @@ def find_missing_entries(
         label = entry.get("label", "")
         if label not in ("good", "bad"):
             continue
-        cids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         if not cids:
             missing.append(entry)
     return missing
 
 
-def next_clip_id(clip_dict: dict[int, dict[str, Any]]) -> int:
-    """Return the next available clip ID (one past the current maximum)."""
-    if not clip_dict:
+def next_media_id(media_dict: dict[int, dict[str, Any]]) -> int:
+    """Return the next available media ID (one past the current maximum)."""
+    if not media_dict:
         return 1
-    return max(clip_dict) + 1
+    return max(media_dict) + 1

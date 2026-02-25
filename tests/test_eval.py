@@ -288,7 +288,7 @@ class TestCosineSimilarity:
 
 
 # =====================================================================
-# Runner: eval_text_sort with synthetic clips
+# Runner: eval_text_sort with synthetic medias
 # =====================================================================
 
 
@@ -296,30 +296,30 @@ class TestEvalTextSort:
     """Test eval_text_sort using mocked embeddings."""
 
     def _make_synthetic_clips(self):
-        """Create clips with known embeddings: cats point one way, dogs another."""
+        """Create medias with known embeddings: cats point one way, dogs another."""
         rng = np.random.RandomState(0)
-        clips = {}
-        clip_id = 1
-        # "cat" clips cluster around [1, 0, 0, ...]
+        medias = {}
+        media_id = 1
+        # "cat" medias cluster around [1, 0, 0, ...]
         cat_dir = np.zeros(16)
         cat_dir[0] = 1.0
         for _ in range(10):
             emb = cat_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "cat", "type": "image"}
-            clip_id += 1
-        # "dog" clips cluster around [0, 1, 0, ...]
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "type": "image"}
+            media_id += 1
+        # "dog" medias cluster around [0, 1, 0, ...]
         dog_dir = np.zeros(16)
         dog_dir[1] = 1.0
         for _ in range(10):
             emb = dog_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "dog", "type": "image"}
-            clip_id += 1
-        return clips, cat_dir, dog_dir
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "type": "image"}
+            media_id += 1
+        return medias, cat_dir, dog_dir
 
     def test_text_sort_separates_categories(self):
-        clips, cat_dir, dog_dir = self._make_synthetic_clips()
+        medias, cat_dir, dog_dir = self._make_synthetic_clips()
 
         queries = [
             EvalQuery("a cat", "cat"),
@@ -333,7 +333,7 @@ class TestEvalTextSort:
             return dog_dir.copy()
 
         with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
-            results = eval_text_sort(clips, queries, "image", k_values=[5, 10])
+            results = eval_text_sort(medias, queries, "image", k_values=[5, 10])
 
         assert len(results) == 2
         # With clean clusters, AP should be very high
@@ -342,11 +342,11 @@ class TestEvalTextSort:
             assert qm.num_relevant == 10
 
     def test_text_sort_returns_correct_fields(self):
-        clips, cat_dir, _ = self._make_synthetic_clips()
+        medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
 
         with patch("vtsearch.models.embeddings.embed_text_query", return_value=cat_dir.copy()):
-            results = eval_text_sort(clips, queries, "image", k_values=[5])
+            results = eval_text_sort(medias, queries, "image", k_values=[5])
 
         qm = results[0]
         assert qm.query_text == "a cat"
@@ -357,17 +357,17 @@ class TestEvalTextSort:
 
     def test_text_sort_elapsed_seconds_without_start_time(self):
         """Without start_time, elapsed_seconds defaults to 0."""
-        clips, cat_dir, _ = self._make_synthetic_clips()
+        medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
         with patch("vtsearch.models.embeddings.embed_text_query", return_value=cat_dir.copy()):
-            results = eval_text_sort(clips, queries, "image", k_values=[5])
+            results = eval_text_sort(medias, queries, "image", k_values=[5])
         assert results[0].elapsed_seconds == 0.0
 
     def test_text_sort_elapsed_seconds_with_start_time(self):
         """With start_time, elapsed_seconds is populated and non-negative."""
         import time
 
-        clips, cat_dir, _ = self._make_synthetic_clips()
+        medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat"), EvalQuery("a dog", "dog")]
 
         def mock_embed(text, media_type, enrich=False):
@@ -375,7 +375,7 @@ class TestEvalTextSort:
 
         start = time.monotonic()
         with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
-            results = eval_text_sort(clips, queries, "image", k_values=[5], start_time=start)
+            results = eval_text_sort(medias, queries, "image", k_values=[5], start_time=start)
         for qm in results:
             assert qm.elapsed_seconds >= 0.0
         # Second query should have equal or later timestamp
@@ -383,7 +383,7 @@ class TestEvalTextSort:
 
 
 # =====================================================================
-# Runner: eval_learned_sort with synthetic clips
+# Runner: eval_learned_sort with synthetic medias
 # =====================================================================
 
 
@@ -391,22 +391,22 @@ class TestEvalLearnedSort:
     def _make_synthetic_clips(self, dim=16, n_per_cat=20):
         """Two categories with separable embeddings."""
         rng = np.random.RandomState(42)
-        clips = {}
-        clip_id = 1
+        medias = {}
+        media_id = 1
         for _ in range(n_per_cat):
             emb = rng.normal(1.0, 0.3, dim).astype(np.float32)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "cat_a", "type": "image"}
-            clip_id += 1
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_a", "type": "image"}
+            media_id += 1
         for _ in range(n_per_cat):
             emb = rng.normal(-1.0, 0.3, dim).astype(np.float32)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "cat_b", "type": "image"}
-            clip_id += 1
-        return clips
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_b", "type": "image"}
+            media_id += 1
+        return medias
 
     def test_learned_sort_returns_metrics(self):
-        clips = self._make_synthetic_clips()
+        medias = self._make_synthetic_clips()
         queries = [EvalQuery("category a stuff", "cat_a")]
-        results = eval_learned_sort(clips, queries, train_fraction=0.5, seed=42)
+        results = eval_learned_sort(medias, queries, train_fraction=0.5, seed=42)
         assert len(results) == 1
         lm = results[0]
         assert lm.target_category == "cat_a"
@@ -417,29 +417,29 @@ class TestEvalLearnedSort:
 
     def test_learned_sort_well_separated_categories(self):
         """With well-separated embeddings, learned sort should get high F1."""
-        clips = self._make_synthetic_clips(n_per_cat=30)
+        medias = self._make_synthetic_clips(n_per_cat=30)
         queries = [EvalQuery("a", "cat_a")]
-        results = eval_learned_sort(clips, queries, train_fraction=0.5, seed=42)
+        results = eval_learned_sort(medias, queries, train_fraction=0.5, seed=42)
         assert results[0].f1 > 0.7  # generous threshold for small synthetic data
 
     def test_learned_sort_skips_tiny_categories(self):
-        """Categories with < 2 clips should be skipped."""
-        clips = {
+        """Categories with < 2 medias should be skipped."""
+        medias = {
             1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare", "type": "image"},
             2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common", "type": "image"},
         }
         queries = [EvalQuery("rare stuff", "rare")]
-        results = eval_learned_sort(clips, queries, train_fraction=0.5)
-        assert len(results) == 0  # skipped due to too few clips
+        results = eval_learned_sort(medias, queries, train_fraction=0.5)
+        assert len(results) == 0  # skipped due to too few medias
 
     def test_learned_sort_elapsed_seconds(self):
         """With start_time, elapsed_seconds is populated on results."""
         import time
 
-        clips = self._make_synthetic_clips()
+        medias = self._make_synthetic_clips()
         queries = [EvalQuery("category a stuff", "cat_a")]
         start = time.monotonic()
-        results = eval_learned_sort(clips, queries, train_fraction=0.5, seed=42, start_time=start)
+        results = eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, start_time=start)
         assert len(results) == 1
         assert results[0].elapsed_seconds > 0.0
 

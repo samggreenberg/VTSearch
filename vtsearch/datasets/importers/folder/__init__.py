@@ -41,18 +41,18 @@ class FolderDatasetImporter(DatasetImporter):
         ),
     ]
 
-    def run(self, field_values: dict, clips: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
-        load_dataset_from_folder(folder, media_type, clips, thin=thin)
+        load_dataset_from_folder(folder, media_type, medias, thin=thin)
 
-    def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
         if not folder.exists():
             raise FileNotFoundError(f"Folder not found: {folder}")
         if not folder.is_dir():
             raise NotADirectoryError(f"Not a directory: {folder}")
-        self.run(field_values, clips, thin=thin)
+        self.run(field_values, medias, thin=thin)
 
     @property
     def supports_chunked(self) -> bool:

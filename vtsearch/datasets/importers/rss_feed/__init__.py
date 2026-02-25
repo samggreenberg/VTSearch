@@ -70,7 +70,7 @@ class RSSDatasetImporter(DatasetImporter):
         ),
     ]
 
-    def run(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         try:
             import feedparser
         except ImportError as exc:
@@ -152,13 +152,13 @@ class RSSDatasetImporter(DatasetImporter):
                 )
                 continue
 
-        load_dataset_from_folder(download_dir, media_type, clips, on_progress=progress, thin=thin)
+        load_dataset_from_folder(download_dir, media_type, medias, on_progress=progress, thin=thin)
 
-    def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         url = field_values.get("url", "")
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
-        self.run(field_values, clips, thin=thin)
+        self.run(field_values, medias, thin=thin)
 
     @property
     def supports_chunked(self) -> bool:

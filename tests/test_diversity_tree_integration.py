@@ -4,7 +4,7 @@ from vtsearch.utils import (
     add_label_to_history,
     bad_votes,
     build_diversity_tree,
-    clips,
+    medias,
     diversity_tree_label,
     diversity_tree_next_sample,
     diversity_tree_unlabel,
@@ -19,7 +19,7 @@ from vtsearch.utils import (
 
 
 def _build_tree():
-    """Build the diversity tree from the global test clips."""
+    """Build the diversity tree from the global test medias."""
     build_diversity_tree()
     tree = get_diversity_tree()
     assert tree is not None
@@ -36,19 +36,19 @@ class TestBuildDiversityTree:
         tree = _build_tree()
         # k=3 diversity tree
         assert tree.k == 3
-        # All clips with embeddings should be in the tree
-        for cid, clip in clips.items():
-            if clip.get("embedding") is not None:
+        # All medias with embeddings should be in the tree
+        for cid, media in medias.items():
+            if media.get("embedding") is not None:
                 assert cid in tree.vector_to_leaf
 
     def test_empty_clips_yields_none(self):
-        saved = dict(clips)
-        clips.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             build_diversity_tree()
             assert get_diversity_tree() is None
         finally:
-            clips.update(saved)
+            medias.update(saved)
 
     def test_replays_existing_votes(self):
         """If votes exist before tree is built, they are replayed."""
@@ -94,11 +94,11 @@ class TestDiversityTreeUnlabel:
 
 
 class TestDiversityTreeNextSample:
-    def test_returns_clip_id(self):
+    def test_returns_media_id(self):
         _build_tree()
         next_id = diversity_tree_next_sample()
         assert next_id is not None
-        assert next_id in clips
+        assert next_id in medias
 
     def test_returns_none_when_no_tree(self):
         assert diversity_tree_next_sample() is None
@@ -109,9 +109,9 @@ class TestDiversityTreeNextSample:
         diversity_tree_label(first)
         second = diversity_tree_next_sample()
         # After labeling the root representative, the tree should suggest
-        # a different clip (or None if fully seen).
+        # a different media (or None if fully seen).
         if second is not None:
-            assert second != first or len(clips) == 1
+            assert second != first or len(medias) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class TestDiversityTreeNextEndpoint:
         assert "diversity_level" in data
         assert "exhausted" in data
         assert data["id"] is not None
-        assert data["id"] in clips
+        assert data["id"] in medias
         assert data["diversity_level"] == -1  # nothing labeled yet
         assert data["exhausted"] is False
 
@@ -170,14 +170,14 @@ class TestVoteUpdatesTree:
     def test_good_vote_labels_tree(self, client):
         tree = _build_tree()
         cid = 1
-        resp = client.post(f"/api/clips/{cid}/vote", json={"vote": "good"})
+        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
 
     def test_bad_vote_labels_tree(self, client):
         tree = _build_tree()
         cid = 2
-        resp = client.post(f"/api/clips/{cid}/vote", json={"vote": "bad"})
+        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
 
@@ -185,20 +185,20 @@ class TestVoteUpdatesTree:
         tree = _build_tree()
         cid = 1
         # Vote good
-        client.post(f"/api/clips/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
         assert cid in tree.labeled_ids
         # Toggle good off (unlabel)
-        client.post(f"/api/clips/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
         assert cid not in tree.labeled_ids
 
     def test_switch_vote_keeps_labeled(self, client):
-        """Switching from good to bad should keep the clip labeled."""
+        """Switching from good to bad should keep the media labeled."""
         tree = _build_tree()
         cid = 3
-        client.post(f"/api/clips/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
         assert cid in tree.labeled_ids
         # Switch to bad
-        client.post(f"/api/clips/{cid}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
         assert cid in tree.labeled_ids
 
 
@@ -211,7 +211,7 @@ class TestLabelImportUpdatesTree:
     def test_import_labels_tree(self, client):
         tree = _build_tree()
         cid = 1
-        md5 = clips[cid]["md5"]
+        md5 = medias[cid]["md5"]
         resp = client.post(
             "/api/labels/import",
             json={"labels": [{"md5": md5, "label": "good"}]},
@@ -231,38 +231,38 @@ class TestSpanLevelProgression:
         tree = _build_tree()
         assert tree.diversity_level() == -1
 
-        # Label clips guided by next_sample until the tree is exhausted or
+        # Label medias guided by next_sample until the tree is exhausted or
         # we've done enough iterations to cover the full tree.
-        max_iters = len(clips) + 1
+        max_iters = len(medias) + 1
         for _ in range(max_iters):
             sample = diversity_tree_next_sample()
             if sample is None:
                 break
             diversity_tree_label(sample)
 
-        # After labeling all suggested clips the tree must be fully covered
+        # After labeling all suggested medias the tree must be fully covered
         final_level = tree.diversity_level()
         assert final_level == tree.depth(), (
             f"Expected diversity_level {tree.depth()} (fully covered) but got {final_level}"
         )
 
     def test_span_advances_beyond_zero_via_votes(self, client):
-        """Voting on clips from different subtrees advances the span level past 0."""
+        """Voting on medias from different subtrees advances the span level past 0."""
         tree = _build_tree()
         depth = tree.depth()
         if depth < 1:
             # Tree too shallow to test progression beyond 0
             return
 
-        # Use next_sample to find clips from each depth-1 subtree and vote on them
-        for _ in range(len(clips)):
+        # Use next_sample to find medias from each depth-1 subtree and vote on them
+        for _ in range(len(medias)):
             sample = diversity_tree_next_sample()
             if sample is None:
                 break
-            resp = client.post(f"/api/clips/{sample}/vote", json={"vote": "good"})
+            resp = client.post(f"/api/medias/{sample}/vote", json={"vote": "good"})
             assert resp.status_code == 200
 
-        # After voting on diverse clips, the level should have advanced past 0
+        # After voting on diverse medias, the level should have advanced past 0
         assert tree.diversity_level() >= 1, f"Expected diversity_level >= 1 but got {tree.diversity_level()}"
 
     def test_labeling_status_reflects_span_progression(self, client):
@@ -275,7 +275,7 @@ class TestSpanLevelProgression:
         assert data["span"]["level"] == -1
         assert data["span"]["status"] == "red"
 
-        # Label all clips to fully cover the tree
+        # Label all medias to fully cover the tree
         for vid in tree.vector_to_leaf:
             diversity_tree_label(vid)
             good_votes[vid] = None
@@ -299,7 +299,7 @@ class TestLabelImporterUpdatesTree:
 
         tree = _build_tree()
         cid = 1
-        md5 = clips[cid]["md5"]
+        md5 = medias[cid]["md5"]
 
         # Import a label via the json_file label importer
         labels_data = {"labels": [{"md5": md5, "label": "good"}]}
@@ -361,7 +361,7 @@ class TestDiversityLevelOverTime:
         """Diversity level should not decrease when only adding labels."""
         tree = _build_tree()
 
-        # Label several clips from different parts of the tree
+        # Label several medias from different parts of the tree
         cids = sorted(tree.vector_to_leaf.keys())[:6]
         for i, cid in enumerate(cids):
             if i % 2 == 0:

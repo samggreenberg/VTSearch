@@ -34,7 +34,7 @@ _cache_prev_predictions: Optional[dict[int, int]] = None
 def clear_progress_cache() -> None:
     """Clear all cached progress data.
 
-    Must be called whenever votes are cleared, clips change, or inclusion
+    Must be called whenever votes are cleared, medias change, or inclusion
     is altered so that stale models are not reused.
     """
     global _cache_inclusion, _cache_prev_predictions
@@ -68,21 +68,21 @@ def _ensure_cache(
     if start >= len(label_history):
         return  # already up to date
 
-    all_clip_ids = sorted(clips_dict.keys())
+    all_media_ids = sorted(clips_dict.keys())
 
     for t in range(start, len(label_history)):
-        clip_id, label, _ = label_history[t]
+        media_id, label, _ = label_history[t]
 
         # Incrementally update running label sets
         if label == "unlabel":
-            _cache_good_ids.discard(clip_id)
-            _cache_bad_ids.discard(clip_id)
+            _cache_good_ids.discard(media_id)
+            _cache_bad_ids.discard(media_id)
         elif label == "good":
-            _cache_bad_ids.discard(clip_id)
-            _cache_good_ids.add(clip_id)
+            _cache_bad_ids.discard(media_id)
+            _cache_good_ids.add(media_id)
         else:
-            _cache_good_ids.discard(clip_id)
-            _cache_bad_ids.add(clip_id)
+            _cache_good_ids.discard(media_id)
+            _cache_bad_ids.add(media_id)
 
         good_ids = list(_cache_good_ids)
         bad_ids = list(_cache_bad_ids)
@@ -119,7 +119,7 @@ def _ensure_cache(
 
                 # --- Stability ---
                 labeled_ids = _cache_good_ids | _cache_bad_ids
-                unlabeled_ids = [cid for cid in all_clip_ids if cid not in labeled_ids]
+                unlabeled_ids = [cid for cid in all_media_ids if cid not in labeled_ids]
 
                 if not unlabeled_ids:
                     stability = {
@@ -268,7 +268,7 @@ def recreate_model_at_time(
     """Return the cached model for a given labelling step, training it if needed.
 
     Args:
-        clips_dict: Mapping of clip ID to clip data dict with ``"embedding"``.
+        clips_dict: Mapping of media ID to media data dict with ``"embedding"``.
         label_history: Ordered labelling events.
         time_index: Index into *label_history*.
         inclusion_value: FPR/FNR trade-off in ``[-10, 10]``.
@@ -501,8 +501,8 @@ def calculate_diversity_level_over_time(
     from vtsearch.models.diversity_tree import DiversityTree
 
     vectors: dict[int, np.ndarray] = {}
-    for cid, clip in clips_dict.items():
-        emb = clip.get("embedding")
+    for cid, media in clips_dict.items():
+        emb = media.get("embedding")
         if emb is not None:
             vectors[cid] = np.asarray(emb, dtype=np.float32)
 
@@ -516,24 +516,24 @@ def calculate_diversity_level_over_time(
     bad_ids: set[int] = set()
     results: list[dict[str, Any]] = []
 
-    for clip_id, label, _ in label_history:
-        if clip_id not in tree.vector_to_leaf:
+    for media_id, label, _ in label_history:
+        if media_id not in tree.vector_to_leaf:
             continue
 
         if label == "unlabel":
-            was_labeled = clip_id in good_ids or clip_id in bad_ids
-            good_ids.discard(clip_id)
-            bad_ids.discard(clip_id)
-            if was_labeled and clip_id not in good_ids and clip_id not in bad_ids:
-                tree.unlabel(clip_id)
+            was_labeled = media_id in good_ids or media_id in bad_ids
+            good_ids.discard(media_id)
+            bad_ids.discard(media_id)
+            if was_labeled and media_id not in good_ids and media_id not in bad_ids:
+                tree.unlabel(media_id)
         elif label == "good":
-            bad_ids.discard(clip_id)
-            good_ids.add(clip_id)
-            tree.label(clip_id)
+            bad_ids.discard(media_id)
+            good_ids.add(media_id)
+            tree.label(media_id)
         else:  # bad
-            good_ids.discard(clip_id)
-            bad_ids.add(clip_id)
-            tree.label(clip_id)
+            good_ids.discard(media_id)
+            bad_ids.add(media_id)
+            tree.label(media_id)
 
         num_labels = len(good_ids) + len(bad_ids)
         results.append(
@@ -572,5 +572,5 @@ def analyze_labeling_progress(
         "stability_over_time": stability,
         "diversity_level_over_time": diversity,
         "total_labels": len(current_good_votes) + len(current_bad_votes),
-        "total_clips": len(clips_dict),
+        "total_medias": len(clips_dict),
     }

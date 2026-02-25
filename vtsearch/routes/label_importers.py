@@ -20,10 +20,10 @@ POST /api/label-importers/import/<importer_name>
         }
 
     When ``missing_count`` is non-zero the response contains the label entries
-    that could not be matched to any clip in the current dataset (neither by
+    that could not be matched to any media in the current dataset (neither by
     ``origin`` + ``origin_name`` nor by ``md5``).  The frontend can prompt the
     user and then call ``POST /api/label-importers/ingest-missing`` to pull
-    those clips from their origins.
+    those medias from their origins.
 
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their origins,
@@ -38,12 +38,12 @@ from vtsearch.labels.importers import get_label_importer, list_label_importers
 from vtsearch.utils import (
     add_label_to_history,
     bad_votes,
-    build_clip_lookup,
-    clips,
+    build_media_lookup,
+    medias,
     diversity_tree_label,
     find_missing_entries,
     good_votes,
-    resolve_clip_ids,
+    resolve_media_ids,
 )
 
 label_importers_bp = Blueprint("label_importers", __name__)
@@ -66,7 +66,7 @@ def _apply_labels(
         if label not in ("good", "bad"):
             skipped += 1
             continue
-        cids = resolve_clip_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         if not cids:
             skipped += 1
             continue
@@ -162,7 +162,7 @@ def run_label_import(importer_name: str):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup = build_clip_lookup(clips)
+    origin_lookup, md5_lookup = build_media_lookup(medias)
     applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup)
 
     # Detect entries that could not be matched at all
@@ -193,15 +193,15 @@ def run_label_import(importer_name: str):
 
 @label_importers_bp.route("/api/label-importers/ingest-missing", methods=["POST"])
 def ingest_missing():
-    """Re-ingest missing clips from their origins, then apply their labels.
+    """Re-ingest missing medias from their origins, then apply their labels.
 
     Expects a JSON body::
 
         {"entries": [<label-entry>, ...]}
 
     Groups the entries by origin, runs each origin's dataset importer to
-    recover the full clip data (media bytes + embedding), appends the
-    matched clips to the live dataset, and applies the labels.
+    recover the full media data (media bytes + embedding), appends the
+    matched medias to the live dataset, and applies the labels.
 
     Returns::
 
@@ -213,18 +213,18 @@ def ingest_missing():
     if not isinstance(entries, list) or not entries:
         return jsonify({"error": "Request must contain a non-empty 'entries' list."}), 400
 
-    from vtsearch.datasets.ingest import ingest_missing_clips
+    from vtsearch.datasets.ingest import ingest_missing_medias
 
-    ingested = ingest_missing_clips(entries, clips)
+    ingested = ingest_missing_medias(entries, medias)
 
-    # Now apply labels to the newly ingested clips
-    origin_lookup, md5_lookup = build_clip_lookup(clips)
+    # Now apply labels to the newly ingested medias
+    origin_lookup, md5_lookup = build_media_lookup(medias)
     applied, _ = _apply_labels(entries, origin_lookup, md5_lookup)
 
     return jsonify(
         {
             "ingested": ingested,
             "applied": applied,
-            "message": f"Ingested {ingested} clip(s), applied {applied} label(s).",
+            "message": f"Ingested {ingested} media(s), applied {applied} label(s).",
         }
     )

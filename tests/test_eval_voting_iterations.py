@@ -10,7 +10,7 @@ import pandas as pd
 from vtsearch.eval.voting_iterations import (
     _inclusion_weights,
     _make_vote_sequence,
-    _split_clip_ids,
+    _split_media_ids,
     run_voting_iterations_eval,
     simulate_voting_iterations,
 )
@@ -28,17 +28,17 @@ def _make_separable_clips(dim=16, n_per_cat=20, seed=0):
     category "beta"  clusters around [-1, 0, 0, ...].
     """
     rng = np.random.RandomState(seed)
-    clips = {}
-    clip_id = 1
+    medias = {}
+    media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(1.0, 0.2, dim).astype(np.float32)
-        clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "alpha"}
-        clip_id += 1
+        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-1.0, 0.2, dim).astype(np.float32)
-        clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "beta"}
-        clip_id += 1
-    return clips
+        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        media_id += 1
+    return medias
 
 
 def _make_overlapping_clips(dim=16, n_per_cat=20, seed=0):
@@ -48,31 +48,31 @@ def _make_overlapping_clips(dim=16, n_per_cat=20, seed=0):
     category "beta"  centred at [-0.3, 0, 0, ...], with large noise.
     """
     rng = np.random.RandomState(seed)
-    clips = {}
-    clip_id = 1
+    medias = {}
+    media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(0.3, 1.0, dim).astype(np.float32)
-        clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "alpha"}
-        clip_id += 1
+        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-0.3, 1.0, dim).astype(np.float32)
-        clips[clip_id] = {"id": clip_id, "embedding": emb, "category": "beta"}
-        clip_id += 1
-    return clips
+        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        media_id += 1
+    return medias
 
 
 def _make_three_category_clips(dim=16, n_per_cat=15, seed=0):
     """Three categories: alpha, beta, gamma."""
     rng = np.random.RandomState(seed)
-    clips = {}
-    clip_id = 1
+    medias = {}
+    media_id = 1
     centres = {"alpha": 1.0, "beta": -1.0, "gamma": 0.0}
     for cat, centre in centres.items():
         for _ in range(n_per_cat):
             emb = rng.normal(centre, 0.2, dim).astype(np.float32)
-            clips[clip_id] = {"id": clip_id, "embedding": emb, "category": cat}
-            clip_id += 1
-    return clips
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": cat}
+            media_id += 1
+    return medias
 
 
 # ------------------------------------------------------------------
@@ -99,45 +99,45 @@ class TestInclusionWeights:
 
 class TestSplitClipIds:
     def test_split_sizes(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         rng = np.random.RandomState(42)
-        sim, test = _split_clip_ids(clips, 0.5, rng)
-        assert len(sim) + len(test) == len(clips)
+        sim, test = _split_media_ids(medias, 0.5, rng)
+        assert len(sim) + len(test) == len(medias)
         assert len(sim) == 10
         assert len(test) == 10
 
     def test_no_overlap(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         rng = np.random.RandomState(42)
-        sim, test = _split_clip_ids(clips, 0.5, rng)
+        sim, test = _split_media_ids(medias, 0.5, rng)
         assert set(sim).isdisjoint(set(test))
 
     def test_deterministic(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         rng1 = np.random.RandomState(42)
-        sim1, test1 = _split_clip_ids(clips, 0.5, rng1)
+        sim1, test1 = _split_media_ids(medias, 0.5, rng1)
         rng2 = np.random.RandomState(42)
-        sim2, test2 = _split_clip_ids(clips, 0.5, rng2)
+        sim2, test2 = _split_media_ids(medias, 0.5, rng2)
         assert sim1 == sim2
         assert test1 == test2
 
 
 class TestMakeVoteSequence:
     def test_all_clips_voted(self):
-        clips = _make_separable_clips(n_per_cat=5)
-        sim_ids = list(clips.keys())[:5]
+        medias = _make_separable_clips(n_per_cat=5)
+        sim_ids = list(medias.keys())[:5]
         rng = np.random.RandomState(42)
-        seq = _make_vote_sequence(sim_ids, clips, "alpha", rng)
+        seq = _make_vote_sequence(sim_ids, medias, "alpha", rng)
         assert len(seq) == 5
         assert {cid for cid, _ in seq} == set(sim_ids)
 
     def test_labels_match_category(self):
-        clips = _make_separable_clips(n_per_cat=5)
-        sim_ids = list(clips.keys())
+        medias = _make_separable_clips(n_per_cat=5)
+        sim_ids = list(medias.keys())
         rng = np.random.RandomState(42)
-        seq = _make_vote_sequence(sim_ids, clips, "alpha", rng)
+        seq = _make_vote_sequence(sim_ids, medias, "alpha", rng)
         for cid, label in seq:
-            expected = "good" if clips[cid]["category"] == "alpha" else "bad"
+            expected = "good" if medias[cid]["category"] == "alpha" else "bad"
             assert label == expected
 
 
@@ -148,9 +148,9 @@ class TestMakeVoteSequence:
 
 class TestSimulateVotingIterations:
     def test_returns_rows(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         rows = simulate_voting_iterations(
-            clips,
+            medias,
             target_category="alpha",
             seed=42,
             dataset_name="test_ds",
@@ -160,9 +160,9 @@ class TestSimulateVotingIterations:
         assert len(rows) > 0
 
     def test_row_schema(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         rows = simulate_voting_iterations(
-            clips,
+            medias,
             target_category="alpha",
             seed=42,
             dataset_name="test_ds",
@@ -172,9 +172,9 @@ class TestSimulateVotingIterations:
             assert set(row.keys()) == expected_keys
 
     def test_seed_determinism(self):
-        clips = _make_separable_clips(n_per_cat=10)
-        rows1 = simulate_voting_iterations(clips, "alpha", seed=42)
-        rows2 = simulate_voting_iterations(clips, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=10)
+        rows1 = simulate_voting_iterations(medias, "alpha", seed=42)
+        rows2 = simulate_voting_iterations(medias, "alpha", seed=42)
         assert len(rows1) == len(rows2)
         for r1, r2 in zip(rows1, rows2):
             # Compare all fields except elapsed_seconds (wall-clock timing varies between runs)
@@ -183,9 +183,9 @@ class TestSimulateVotingIterations:
             assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
-        clips = _make_separable_clips(n_per_cat=10)
-        rows1 = simulate_voting_iterations(clips, "alpha", seed=42)
-        rows2 = simulate_voting_iterations(clips, "alpha", seed=99)
+        medias = _make_separable_clips(n_per_cat=10)
+        rows1 = simulate_voting_iterations(medias, "alpha", seed=42)
+        rows2 = simulate_voting_iterations(medias, "alpha", seed=99)
         # Different seeds should produce different vote orderings / splits,
         # so the t-indexed costs should differ (not guaranteed for every row,
         # but at least the full sequence should differ).
@@ -194,8 +194,8 @@ class TestSimulateVotingIterations:
         assert costs1 != costs2
 
     def test_t_values_monotonically_increase(self):
-        clips = _make_separable_clips(n_per_cat=10)
-        rows = simulate_voting_iterations(clips, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42)
         t_vals = [r["t"] for r in rows]
         assert t_vals == sorted(t_vals)
         # t starts >=2 because we need at least 1 good + 1 bad
@@ -203,9 +203,9 @@ class TestSimulateVotingIterations:
 
     def test_cost_decreases_over_time_for_overlapping_data(self):
         """With overlapping data, cost should generally decrease as more votes come in."""
-        clips = _make_overlapping_clips(n_per_cat=60, dim=16)
+        medias = _make_overlapping_clips(n_per_cat=60, dim=16)
         rows = simulate_voting_iterations(
-            clips,
+            medias,
             "alpha",
             seed=42,
             sim_fraction=0.5,
@@ -221,23 +221,23 @@ class TestSimulateVotingIterations:
         assert late_avg <= early_avg * 1.15
 
     def test_empty_when_no_test_positives(self):
-        """If all clips of target category land in sim, test set has no positives -> empty."""
-        # Only 1 clip of target category — likely all end up in sim with 50% split
-        clips = {
+        """If all medias of target category land in sim, test set has no positives -> empty."""
+        # Only 1 media of target category — likely all end up in sim with 50% split
+        medias = {
             1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare"},
             2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common"},
             3: {"id": 3, "embedding": -np.ones(8, dtype=np.float32) * 0.9, "category": "common"},
             4: {"id": 4, "embedding": -np.ones(8, dtype=np.float32) * 0.8, "category": "common"},
         }
-        rows = simulate_voting_iterations(clips, "rare", seed=42, sim_fraction=0.5)
+        rows = simulate_voting_iterations(medias, "rare", seed=42, sim_fraction=0.5)
         # Might be empty or not depending on split — just shouldn't crash
         assert isinstance(rows, list)
 
     def test_inclusion_affects_cost(self):
         """With overlapping data, different inclusion values produce different costs."""
-        clips = _make_overlapping_clips(n_per_cat=20)
-        rows_inc0 = simulate_voting_iterations(clips, "alpha", seed=42, inclusion=0)
-        rows_inc5 = simulate_voting_iterations(clips, "alpha", seed=42, inclusion=5)
+        medias = _make_overlapping_clips(n_per_cat=20)
+        rows_inc0 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0)
+        rows_inc5 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=5)
         # Same splits but different inclusion -> costs should differ
         costs0 = [r["cost"] for r in rows_inc0]
         costs5 = [r["cost"] for r in rows_inc5]
@@ -245,8 +245,8 @@ class TestSimulateVotingIterations:
 
     def test_elapsed_seconds_non_negative_and_increasing(self):
         """elapsed_seconds should be non-negative and non-decreasing over rows."""
-        clips = _make_separable_clips(n_per_cat=10)
-        rows = simulate_voting_iterations(clips, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42)
         times = [r["elapsed_seconds"] for r in rows]
         assert all(t >= 0.0 for t in times)
         for i in range(1, len(times)):
@@ -260,9 +260,9 @@ class TestSimulateVotingIterations:
 
 class TestRunVotingIterationsEval:
     def test_returns_dataframe(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha"]},
         )
@@ -270,18 +270,18 @@ class TestRunVotingIterationsEval:
         assert list(df.columns) == ["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
 
     def test_multiple_seeds(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[1, 2, 3],
             categories={"ds1": ["alpha"]},
         )
         assert set(df["seed"].unique()) == {1, 2, 3}
 
     def test_multiple_categories(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha", "beta"]},
         )
@@ -289,9 +289,9 @@ class TestRunVotingIterationsEval:
 
     def test_auto_categories(self):
         """When categories=None, all unique categories are used."""
-        clips = _make_three_category_clips(n_per_cat=10)
+        medias = _make_three_category_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[42],
         )
         assert set(df["category"].unique()) == {"alpha", "beta", "gamma"}
@@ -307,9 +307,9 @@ class TestRunVotingIterationsEval:
         assert set(df["dataset"].unique()) == {"ds1", "ds2"}
 
     def test_cost_column_numeric(self):
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha"]},
         )
@@ -319,9 +319,9 @@ class TestRunVotingIterationsEval:
 
     def test_full_cross_product_shape(self):
         """2 seeds x 1 dataset x 2 categories -> each combo produces rows."""
-        clips = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=10)
         df = run_voting_iterations_eval(
-            dataset_clips={"ds1": clips},
+            dataset_clips={"ds1": medias},
             seeds=[1, 2],
             categories={"ds1": ["alpha", "beta"]},
         )

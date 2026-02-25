@@ -123,7 +123,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         ),
     ]
 
-    def run(self, field_values: dict, clips: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
         media_type = field_values.get("media_type", "sounds")
 
@@ -145,13 +145,13 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
-        load_dataset_from_folder(extract_dir, media_type, clips, on_progress=progress, thin=thin)
+        load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
 
-    def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         url = field_values.get("url", "")
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
-        self.run(field_values, clips, thin=thin)
+        self.run(field_values, medias, thin=thin)
 
     @property
     def supports_chunked(self) -> bool:

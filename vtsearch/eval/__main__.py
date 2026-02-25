@@ -66,7 +66,7 @@ def main() -> None:
         "--train-fraction",
         type=float,
         default=0.5,
-        help="Fraction of clips used for training in learned-sort eval (default: 0.5).",
+        help="Fraction of medias used for training in learned-sort eval (default: 0.5).",
     )
     parser.add_argument(
         "--seed",

@@ -2,11 +2,11 @@
 
 Two evaluation modes:
 
-1. **Text sort**: For each query, embed the text, rank all clips by cosine
-   similarity to the query embedding, and measure how well clips of the
+1. **Text sort**: For each query, embed the text, rank all medias by cosine
+   similarity to the query embedding, and measure how well medias of the
    target category float to the top (AP, P@k, R@k).
 
-2. **Learned sort**: For each category, randomly split its clips into
+2. **Learned sort**: For each category, randomly split its medias into
    train/test.  Simulate votes (target = good, rest = bad) on the
    train set, run ``train_and_score``, and measure classification
    quality on the held-out test set.
@@ -39,11 +39,11 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 def _run_text_sort_query(
     query: EvalQuery,
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     media_type: str,
     enrich: bool = False,
 ) -> list[dict[str, Any]]:
-    """Embed the query text and rank clips by cosine similarity.
+    """Embed the query text and rank medias by cosine similarity.
 
     Returns a list of ``{"id": int, "similarity": float}`` sorted descending.
     """
@@ -54,16 +54,16 @@ def _run_text_sort_query(
         raise RuntimeError(f"Could not embed query {query.text!r} for media type {media_type}")
 
     results = []
-    for clip_id, clip in clips.items():
-        sim = _cosine_similarity(clip["embedding"], text_vec)
-        results.append({"id": clip_id, "similarity": sim})
+    for media_id, media in medias.items():
+        sim = _cosine_similarity(media["embedding"], text_vec)
+        results.append({"id": media_id, "similarity": sim})
 
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return results
 
 
 def eval_text_sort(
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     queries: list[EvalQuery],
     media_type: str,
     k_values: list[int] | None = None,
@@ -72,11 +72,11 @@ def eval_text_sort(
 ) -> list:
     """Run text-sort evaluation for a list of queries.
 
-    For each query, computes AP, P@k, and R@k treating clips whose
+    For each query, computes AP, P@k, and R@k treating medias whose
     ``"category"`` matches ``query.target_category`` as relevant.
 
     Args:
-        clips: Loaded clip dict (``{id: clip_data}``).
+        medias: Loaded media dict (``{id: media_data}``).
         queries: List of :class:`EvalQuery` to evaluate.
         media_type: The media type string for embedding dispatch.
         k_values: Optional k values for P@k/R@k.
@@ -91,9 +91,9 @@ def eval_text_sort(
 
     results: list[QueryMetrics] = []
     for query in queries:
-        ranked = _run_text_sort_query(query, clips, media_type, enrich=enrich)
+        ranked = _run_text_sort_query(query, medias, media_type, enrich=enrich)
         ranked_ids = [r["id"] for r in ranked]
-        relevant_ids = {cid for cid, c in clips.items() if c.get("category") == query.target_category}
+        relevant_ids = {cid for cid, c in medias.items() if c.get("category") == query.target_category}
 
         qm = compute_metrics(ranked_ids, relevant_ids, query.text, query.target_category, k_values)
         if start_time is not None:
@@ -104,7 +104,7 @@ def eval_text_sort(
 
 
 def eval_learned_sort(
-    clips: dict[int, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
     queries: list[EvalQuery],
     train_fraction: float = 0.5,
     seed: int = 42,
@@ -116,18 +116,18 @@ def eval_learned_sort(
     """Run learned-sort evaluation via simulated voting.
 
     For each query/category:
-      1. Partition clips into target-category (positive) and others (negative).
+      1. Partition medias into target-category (positive) and others (negative).
       2. Randomly split both pools into train and test by ``train_fraction``.
       3. Build ``good_votes`` from train positives, ``bad_votes`` from train
          negatives.
-      4. Call ``train_and_score`` on the full clip set.
+      4. Call ``train_and_score`` on the full media set.
       5. Measure accuracy/precision/recall/F1 on the test set using the
          cross-calibrated threshold.
 
     Args:
-        clips: Loaded clip dict.
+        medias: Loaded media dict.
         queries: List of :class:`EvalQuery` (one per category to test).
-        train_fraction: Fraction of clips to use for training (rest for test).
+        train_fraction: Fraction of medias to use for training (rest for test).
         seed: Random seed for reproducible splits.
         safe_thresholds: When ``True``, blend the cross-calibration threshold
             with a GMM-based threshold for robustness with small label counts.
@@ -147,9 +147,9 @@ def eval_learned_sort(
     results: list[LearnedSortMetrics] = []
 
     for query in queries:
-        # Split clips into target vs. other
-        target_ids = [cid for cid, c in clips.items() if c.get("category") == query.target_category]
-        other_ids = [cid for cid, c in clips.items() if c.get("category") != query.target_category]
+        # Split medias into target vs. other
+        target_ids = [cid for cid, c in medias.items() if c.get("category") == query.target_category]
+        other_ids = [cid for cid, c in medias.items() if c.get("category") != query.target_category]
 
         if len(target_ids) < 2 or len(other_ids) < 2:
             continue  # not enough data
@@ -175,7 +175,7 @@ def eval_learned_sort(
 
         # Run train_and_score
         scored, threshold = train_and_score(
-            clips,
+            medias,
             good_votes,
             bad_votes,
             safe_thresholds=safe_thresholds,
@@ -272,16 +272,16 @@ def run_eval(
         print(f"Evaluating: {ds_id}  (media_type={media_type})")
         print(f"{'=' * 60}")
 
-        # Load the demo dataset into a fresh clips dict
-        clips: dict[int, dict] = {}
+        # Load the demo dataset into a fresh medias dict
+        medias: dict[int, dict] = {}
         try:
-            load_demo_dataset(demo_id, clips)
+            load_demo_dataset(demo_id, medias)
         except Exception as e:
             print(f"ERROR loading dataset {demo_id}: {e}", file=sys.stderr)
             continue
 
-        print(f"Loaded {len(clips)} clips across categories: ", end="")
-        categories = sorted({c.get("category", "?") for c in clips.values()})
+        print(f"Loaded {len(medias)} medias across categories: ", end="")
+        categories = sorted({c.get("category", "?") for c in medias.values()})
         print(", ".join(categories))
 
         queries = eval_cfg["queries"]
@@ -290,7 +290,7 @@ def run_eval(
         # --- Text sort ---
         if mode in ("text", "both"):
             print(f"\n--- Text Sort Evaluation ({len(queries)} queries) ---")
-            text_results = eval_text_sort(clips, queries, media_type, k_values, enrich=enrich, start_time=start_time)
+            text_results = eval_text_sort(medias, queries, media_type, k_values, enrich=enrich, start_time=start_time)
             ds_result.text_sort = text_results
 
             for qm in text_results:
@@ -308,7 +308,7 @@ def run_eval(
         if mode in ("learned", "both"):
             print(f"\n--- Learned Sort Evaluation ({len(queries)} categories) ---")
             learned_results = eval_learned_sort(
-                clips,
+                medias,
                 queries,
                 train_fraction,
                 seed,

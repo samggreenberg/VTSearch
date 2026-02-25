@@ -20,17 +20,17 @@ def _get_progress():
 
 
 def _load_clips_from_pickle(file_path: Path) -> dict[int, dict[str, Any]]:
-    """Load clips from a pickle file without clearing a target dict.
+    """Load medias from a pickle file without clearing a target dict.
 
-    Returns a fresh dict mapping clip-id to clip-data.  This is a
+    Returns a fresh dict mapping media-id to media-data.  This is a
     simplified version of :func:`~vtsearch.datasets.loader.load_dataset_from_pickle`
     that avoids side-effects on any global state.
     """
     from vtsearch.datasets.loader import load_dataset_from_pickle
 
-    temp_clips: dict[int, dict[str, Any]] = {}
-    load_dataset_from_pickle(file_path, temp_clips)
-    return temp_clips
+    temp_medias: dict[int, dict[str, Any]] = {}
+    load_dataset_from_pickle(file_path, temp_medias)
+    return temp_medias
 
 
 class CombineDatasetsImporter(DatasetImporter):
@@ -53,7 +53,7 @@ class CombineDatasetsImporter(DatasetImporter):
         ),
     ]
 
-    def run(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Combine datasets specified by *field_values['datasets']*.
 
         ``field_values["datasets"]`` may be either:
@@ -75,7 +75,7 @@ class CombineDatasetsImporter(DatasetImporter):
 
         progress = _get_progress()
 
-        # Load each dataset, validate media types, collect clips
+        # Load each dataset, validate media types, collect medias
         all_clips: list[dict[str, Any]] = []
         media_type: str | None = None
         seen_md5s: set[str] = set()
@@ -104,25 +104,25 @@ class CombineDatasetsImporter(DatasetImporter):
                 elif source_media_type != media_type:
                     raise ValueError(
                         f"Media type mismatch: expected '{media_type}' but "
-                        f"'{pkl_path.name}' contains '{source_media_type}' clips."
+                        f"'{pkl_path.name}' contains '{source_media_type}' medias."
                     )
 
-                # Collect clips, deduplicating by MD5
-                for clip in source_clips.values():
-                    md5 = clip.get("md5", "")
+                # Collect medias, deduplicating by MD5
+                for media in source_clips.values():
+                    md5 = media.get("md5", "")
                     if md5 and md5 in seen_md5s:
                         total_dupes += 1
                         continue
                     if md5:
                         seen_md5s.add(md5)
-                    all_clips.append(clip)
+                    all_clips.append(media)
 
                 # Free the temp dict before loading the next source
                 del source_clips
                 gc.collect()
         except MemoryError:
             all_clips.clear()
-            clips.clear()
+            medias.clear()
             gc.collect()
             raise MemoryError(
                 "Out of memory while combining datasets. "
@@ -130,22 +130,22 @@ class CombineDatasetsImporter(DatasetImporter):
             )
 
         if not all_clips:
-            raise ValueError("No clips found in any of the selected datasets.")
+            raise ValueError("No medias found in any of the selected datasets.")
 
-        # Assign fresh sequential IDs and populate the target clips dict
-        clips.clear()
-        for new_id, clip in enumerate(all_clips, start=1):
-            clip["id"] = new_id
-            clips[new_id] = clip
+        # Assign fresh sequential IDs and populate the target medias dict
+        medias.clear()
+        for new_id, media in enumerate(all_clips, start=1):
+            media["id"] = new_id
+            medias[new_id] = media
 
-        msg = f"Combined {len(clips)} clips from {len(paths)} datasets"
+        msg = f"Combined {len(medias)} medias from {len(paths)} datasets"
         if total_dupes:
             msg += f" ({total_dupes} duplicate(s) skipped)"
         progress("idle", msg)
 
-    def run_cli(self, field_values: dict[str, Any], clips: dict, thin: bool = False) -> None:
+    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """CLI entry point -- *datasets* is a comma-separated path string."""
-        self.run(field_values, clips, thin=thin)
+        self.run(field_values, medias, thin=thin)
 
     @property
     def supports_chunked(self) -> bool:
@@ -197,23 +197,23 @@ class CombineDatasetsImporter(DatasetImporter):
             elif source_media_type != media_type:
                 raise ValueError(
                     f"Media type mismatch: expected '{media_type}' but "
-                    f"'{pkl_path.name}' contains '{source_media_type}' clips."
+                    f"'{pkl_path.name}' contains '{source_media_type}' medias."
                 )
 
-            chunk_clips: dict[int, dict[str, Any]] = {}
+            chunk_medias: dict[int, dict[str, Any]] = {}
             new_id = 1
-            for clip in source_clips.values():
-                md5 = clip.get("md5", "")
+            for media in source_clips.values():
+                md5 = media.get("md5", "")
                 if md5 and md5 in seen_md5s:
                     continue
                 if md5:
                     seen_md5s.add(md5)
-                clip["id"] = new_id
-                chunk_clips[new_id] = clip
+                media["id"] = new_id
+                chunk_medias[new_id] = media
                 new_id += 1
 
-            if chunk_clips:
-                yield chunk_clips
+            if chunk_medias:
+                yield chunk_medias
 
     def run_chunked_cli(
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,

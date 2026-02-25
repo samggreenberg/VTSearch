@@ -195,8 +195,8 @@ class MediaType(ABC):
     * Which file extensions to scan when importing a folder (:attr:`file_extensions`).
     * Whether the viewer should loop (:attr:`loops`).
     * Which demo datasets are available (:attr:`demo_datasets`).
-    * How to serve a clip over HTTP (:meth:`clip_response`).
-    * How to load media-specific clip fields from a file (:meth:`load_clip_data`).
+    * How to serve a media over HTTP (:meth:`media_response`).
+    * How to load media-specific media fields from a file (:meth:`load_media_data`).
     * An optional folder-import alias (:attr:`folder_import_name`) for the
       ``/api/dataset/load-folder`` endpoint.
 
@@ -417,39 +417,39 @@ class MediaType(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def load_clip_data(self, file_path: Path) -> dict:
-        """Load and return media-specific fields for a clip dict.
+    def load_media_data(self, file_path: Path) -> dict:
+        """Load and return media-specific fields for a media dict.
 
-        The returned dict is merged into the *base* clip dict (which already
+        The returned dict is merged into the *base* media dict (which already
         contains ``id``, ``type``, ``file_size``, ``md5``, ``embedding``,
         ``filename``, and ``category``).  You must include at minimum a
         ``"duration"`` key.
 
         Example return value for audio::
 
-            {"clip_bytes": b"...", "duration": 3.2}
+            {"media_bytes": b"...", "duration": 3.2}
 
         Example return value for images::
 
-            {"clip_bytes": b"...", "duration": 0, "width": 32, "height": 32}
+            {"media_bytes": b"...", "duration": 0, "width": 32, "height": 32}
         """
 
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def _resolve_clip_bytes(self, clip: dict) -> bytes | None:
+    def _resolve_media_bytes(self, media: dict) -> bytes | None:
         """Return binary media data, lazy-loading from ``media_path`` if needed.
 
-        In thin mode, ``clip_bytes`` is ``None`` but ``media_path`` points to
+        In thin mode, ``media_bytes`` is ``None`` but ``media_path`` points to
         the source file on disk.  This helper transparently loads the bytes on
-        demand so that :meth:`clip_response` works regardless of how the clip
+        demand so that :meth:`media_response` works regardless of how the media
         was loaded.
         """
-        clip_bytes = clip.get("clip_bytes")
-        if clip_bytes is not None:
-            return clip_bytes
-        media_path = clip.get("media_path")
+        media_bytes = media.get("media_bytes")
+        if media_bytes is not None:
+            return media_bytes
+        media_path = media.get("media_path")
         if media_path:
             path = Path(media_path)
             if path.exists():
@@ -457,16 +457,16 @@ class MediaType(ABC):
                     return f.read()
         return None
 
-    def _resolve_clip_string(self, clip: dict) -> str:
+    def _resolve_media_string(self, media: dict) -> str:
         """Return text content, lazy-loading from ``media_path`` if needed.
 
-        Same lazy-loading pattern as :meth:`_resolve_clip_bytes` but for
-        text media types that store ``clip_string`` instead of ``clip_bytes``.
+        Same lazy-loading pattern as :meth:`_resolve_media_bytes` but for
+        text media types that store ``media_string`` instead of ``media_bytes``.
         """
-        clip_string = clip.get("clip_string")
-        if clip_string is not None:
-            return clip_string
-        media_path = clip.get("media_path")
+        media_string = media.get("media_string")
+        if media_string is not None:
+            return media_string
+        media_path = media.get("media_path")
         if media_path:
             path = Path(media_path)
             if path.exists():
@@ -495,30 +495,30 @@ class MediaType(ABC):
         }
 
     @abstractmethod
-    def clip_response(self, clip: dict) -> MediaResponse:
-        """Return a :class:`MediaResponse` with the clip's media content.
+    def media_response(self, media: dict) -> MediaResponse:
+        """Return a :class:`MediaResponse` with the media's media content.
 
         For binary media, set ``data`` to raw bytes with an appropriate
         ``mimetype``.  For structured data (e.g. text paragraphs), set
         ``data`` to a JSON-serialisable dict with ``mimetype="application/json"``.
 
-        Implementations should use :meth:`_resolve_clip_bytes` or
-        :meth:`_resolve_clip_string` to transparently support both preloaded
-        clips and thin (lazy-loaded) clips.
+        Implementations should use :meth:`_resolve_media_bytes` or
+        :meth:`_resolve_media_string` to transparently support both preloaded
+        medias and thin (lazy-loaded) medias.
         """
 
 
 class Processor(ABC):
     """Abstract base class for all processors (detectors, localizers, extractors, etc.).
 
-    A *Processor* takes a single media clip and produces an answer.  The
+    A *Processor* takes a single media media and produces an answer.  The
     exact type of the answer depends on the subclass:
 
-    * A :class:`Detector` returns ``bool`` — "does this clip match?"
-    * A :class:`Localizer` returns ``list[dict]`` — "where in this clip
+    * A :class:`Detector` returns ``bool`` — "does this media match?"
+    * A :class:`Localizer` returns ``list[dict]`` — "where in this media
       is the item of interest?" (bounding boxes with confidence scores).
     * An :class:`Extractor` returns ``list[dict]`` — "what details are
-      inside this clip?" (bounding boxes, labels, and other metadata).
+      inside this media?" (bounding boxes, labels, and other metadata).
 
     Every processor knows its :attr:`name` (a unique human-readable
     identifier) and the :attr:`media_type` it operates on (e.g.
@@ -528,7 +528,7 @@ class Processor(ABC):
 
     * :attr:`name`
     * :attr:`media_type`
-    * :meth:`process` — run the processor on a single clip dict.
+    * :meth:`process` — run the processor on a single media dict.
 
     Subclasses *may* override:
 
@@ -567,8 +567,8 @@ class Processor(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def process(self, clip: dict[str, Any]) -> Any:
-        """Run this processor on *clip* and return the result.
+    def process(self, media: dict[str, Any]) -> Any:
+        """Run this processor on *media* and return the result.
 
         The return type depends on the subclass:
 
@@ -592,7 +592,7 @@ class Processor(ABC):
 class Detector(Processor):
     """Abstract base class for detectors.
 
-    A *Detector* answers "is this clip Good?" with a boolean.  Each
+    A *Detector* answers "is this media Good?" with a boolean.  Each
     concrete ``Detector`` operates on exactly **one** media type (declared
     via :attr:`media_type`).
 
@@ -600,8 +600,8 @@ class Detector(Processor):
 
     * :attr:`name` — unique identifier for this detector.
     * :attr:`media_type` — which media type it works on.
-    * :meth:`detect` — run detection on a single clip dict and return
-      ``True`` if the clip matches, ``False`` otherwise.
+    * :meth:`detect` — run detection on a single media dict and return
+      ``True`` if the media matches, ``False`` otherwise.
 
     The generic :meth:`process` method delegates to :meth:`detect`.
     """
@@ -611,26 +611,26 @@ class Detector(Processor):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def detect(self, clip: dict[str, Any]) -> bool:
-        """Run detection on *clip* and return whether it matches.
+    def detect(self, media: dict[str, Any]) -> bool:
+        """Run detection on *media* and return whether it matches.
 
-        Returns ``True`` if the clip is a positive match for this detector,
+        Returns ``True`` if the media is a positive match for this detector,
         ``False`` otherwise.
         """
 
-    def process(self, clip: dict[str, Any]) -> bool:
-        """Run detection on *clip* (delegates to :meth:`detect`)."""
-        return self.detect(clip)
+    def process(self, media: dict[str, Any]) -> bool:
+        """Run detection on *media* (delegates to :meth:`detect`)."""
+        return self.detect(media)
 
 
 class Localizer(Processor):
     """Abstract base class for localizers.
 
     A *Localizer* sits between a :class:`Detector` and an :class:`Extractor`
-    in the processor hierarchy.  While a Detector answers "does this clip
+    in the processor hierarchy.  While a Detector answers "does this media
     match?" (bool) and an Extractor answers "what details are inside this
-    clip?" (bounding boxes, labels, metadata, etc.), a Localizer answers
-    "**where** in this clip is the item of interest?" by returning bounding
+    media?" (bounding boxes, labels, metadata, etc.), a Localizer answers
+    "**where** in this media is the item of interest?" by returning bounding
     boxes with confidence scores — but no further classification or
     extraction metadata.
 
@@ -652,7 +652,7 @@ class Localizer(Processor):
 
     * :attr:`name` — unique identifier for this localizer.
     * :attr:`media_type` — which media type it works on.
-    * :meth:`localize` — run localization on a single clip dict and return
+    * :meth:`localize` — run localization on a single media dict and return
       a list of bounding-box dicts.
 
     The generic :meth:`process` method delegates to :meth:`localize`.
@@ -663,8 +663,8 @@ class Localizer(Processor):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def localize(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run localization on *clip* and return a list of bounding-box dicts.
+    def localize(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run localization on *media* and return a list of bounding-box dicts.
 
         Each dict in the returned list describes **one region** where the
         item of interest was found.  Every dict **must** include:
@@ -689,16 +689,16 @@ class Localizer(Processor):
             ]
         """
 
-    def process(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run localization on *clip* (delegates to :meth:`localize`)."""
-        return self.localize(clip)
+    def process(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run localization on *media* (delegates to :meth:`localize`)."""
+        return self.localize(media)
 
 
 class Extractor(Processor):
     """Abstract base class for extractors.
 
-    While a *Detector* answers "is this clip Good?" (True/False), an
-    *Extractor* answers "what Good things are inside this clip, and where?"
+    While a *Detector* answers "is this media Good?" (True/False), an
+    *Extractor* answers "what Good things are inside this media, and where?"
     by returning structured details for each occurrence found.
 
     For example an image extractor might return bounding boxes and class
@@ -711,7 +711,7 @@ class Extractor(Processor):
 
     * :attr:`name` — unique identifier for this extractor.
     * :attr:`media_type` — which media type it works on.
-    * :meth:`extract` — run extraction on a single clip dict and return a
+    * :meth:`extract` — run extraction on a single media dict and return a
       list of result dicts.
 
     The generic :meth:`process` method delegates to :meth:`extract`.
@@ -722,8 +722,8 @@ class Extractor(Processor):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def extract(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run extraction on *clip* and return a list of result dicts.
+    def extract(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run extraction on *media* and return a list of result dicts.
 
         Each dict in the returned list describes **one occurrence** of the
         thing the extractor is looking for.  The schema of these dicts is
@@ -746,6 +746,6 @@ class Extractor(Processor):
             ]
         """
 
-    def process(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run extraction on *clip* (delegates to :meth:`extract`)."""
-        return self.extract(clip)
+    def process(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run extraction on *media* (delegates to :meth:`extract`)."""
+        return self.extract(media)

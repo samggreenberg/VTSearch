@@ -208,7 +208,7 @@ def set_swipe_animation(value: bool) -> None:
 
 
 def get_show_thumbnails_left() -> bool:
-    """Return whether left-panel (clip list) thumbnail display is enabled."""
+    """Return whether left-panel (media list) thumbnail display is enabled."""
     return bool(_ensure_loaded().get("show_thumbnails_left", _DEFAULTS["show_thumbnails_left"]))
 
 

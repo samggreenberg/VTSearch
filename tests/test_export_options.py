@@ -41,11 +41,11 @@ SAMPLE_RESULTS = {
 
 class TestFillFromSortDryRun:
     def _sort_results(self):
-        """Build a simple sort_results list with all clip ids."""
-        from vtsearch.utils import clips
+        """Build a simple sort_results list with all media ids."""
+        from vtsearch.utils import medias
 
         results = []
-        for i, cid in enumerate(sorted(clips.keys())):
+        for i, cid in enumerate(sorted(medias.keys())):
             # Alternate scores: first half above 0.5, second half below
             score = 0.9 - (i * 0.04)
             results.append({"id": cid, "score": round(score, 4)})
@@ -114,9 +114,9 @@ class TestFillFromSortDryRun:
         )
         data = resp.get_json()
         total = data["good_count"] + data["bad_count"]
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
-        assert total == len(clips) - 3
+        assert total == len(medias) - 3
 
     def test_missing_sort_results_returns_400(self, client):
         resp = client.post(
@@ -147,10 +147,10 @@ class TestFillFromSortDryRun:
 
 class TestFillFromSortConfirm:
     def _sort_results(self):
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
         results = []
-        for i, cid in enumerate(sorted(clips.keys())):
+        for i, cid in enumerate(sorted(medias.keys())):
             score = 0.9 - (i * 0.04)
             results.append({"id": cid, "score": round(score, 4)})
         return results
@@ -174,9 +174,9 @@ class TestFillFromSortConfirm:
 
         # Verify labels were actually applied
         total_applied = data["good_applied"] + data["bad_applied"]
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
-        assert total_applied == len(clips)  # all were unlabeled
+        assert total_applied == len(medias)  # all were unlabeled
         assert len(app_module.good_votes) == data["good_applied"]
         assert len(app_module.bad_votes) == data["bad_applied"]
 
@@ -202,7 +202,7 @@ class TestFillFromSortConfirm:
         assert "hits" in det
 
     def test_confirm_does_not_relabel_already_voted(self, client):
-        # Pre-label some clips
+        # Pre-label some medias
         app_module.good_votes.update({1: None})
         app_module.bad_votes.update({2: None})
 
@@ -217,10 +217,10 @@ class TestFillFromSortConfirm:
             },
         )
         data = resp.get_json()
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
         total_applied = data["good_applied"] + data["bad_applied"]
-        assert total_applied == len(clips) - 2  # 2 already voted
+        assert total_applied == len(medias) - 2  # 2 already voted
 
     def test_confirm_good_only(self, client):
         results = self._sort_results()
@@ -261,7 +261,7 @@ class TestFillFromSortConfirm:
 class TestCliScoringNegativeHits:
     def test_score_clips_with_detectors_returns_negative_hits(self, client):
         """The multi-detector CLI scorer should include negative_hits."""
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
         # Train a detector via the API to get valid weights
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
@@ -274,12 +274,12 @@ class TestCliScoringNegativeHits:
 
         from vtsearch.cli import _score_clips_with_detectors
 
-        det_results = _score_clips_with_detectors(clips, detectors)
+        det_results = _score_clips_with_detectors(medias, detectors)
         for det_result in det_results.values():
             assert "negative_hits" in det_result
             assert isinstance(det_result["negative_hits"], list)
             total = len(det_result["hits"]) + len(det_result["negative_hits"])
-            assert total == len(clips)
+            assert total == len(medias)
 
 
 # ---------------------------------------------------------------------------
@@ -384,9 +384,9 @@ class TestExportWithFilteredResults:
 
     def test_fill_from_sort_results_exportable(self, client):
         """Results from fill-from-sort should be exportable via the file exporter."""
-        from vtsearch.utils import clips
+        from vtsearch.utils import medias
 
-        sort_results = [{"id": cid, "score": round(0.9 - (i * 0.04), 4)} for i, cid in enumerate(sorted(clips.keys()))]
+        sort_results = [{"id": cid, "score": round(0.9 - (i * 0.04), 4)} for i, cid in enumerate(sorted(medias.keys()))]
 
         fill_resp = client.post(
             "/api/labels/fill-from-sort",
