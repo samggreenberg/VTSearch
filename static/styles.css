@@ -294,7 +294,7 @@ video { max-width: 600px; max-height: 400px; }
 .label-io-status { font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 8px; }
 
 /* Dataset management */
-.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; max-width: 800px; margin: 0 auto; text-align: center; }
+.dataset-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 48px; width: 100%; max-width: 800px; margin: 0 auto; text-align: center; }
 .dataset-welcome.wide { max-width: min(1040px, 95vw); }
 .dataset-welcome h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 8px; }
 .dataset-welcome p { font-size: 1rem; color: var(--text-secondary); margin-bottom: 16px; }
