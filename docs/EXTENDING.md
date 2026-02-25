@@ -717,13 +717,13 @@ class CodeMediaType(MediaType):
             return None
 
     # ------------------------------------------------------------------
-    # Clip data (required method)
+    # Media data (required method)
     # ------------------------------------------------------------------
 
-    def load_clip_data(self, file_path: Path) -> dict:
-        """Return media-specific fields to merge into the clip dict.
+    def load_media_data(self, file_path: Path) -> dict:
+        """Return media-specific fields to merge into the media dict.
 
-        The base clip dict already contains: id, type, file_size, md5,
+        The base media dict already contains: id, type, file_size, md5,
         embedding, filename, category.  You MUST include a "duration" key
         (use 0 for non-temporal media).
         """
@@ -803,7 +803,7 @@ additional changes:
 | `load_models()`                     | `() -> None`                                       |
 | `embed_media(file_path)`            | `(Path) -> Optional[np.ndarray]`                   |
 | `embed_text(text)`                  | `(str) -> Optional[np.ndarray]`                    |
-| `load_clip_data(file_path)`         | `(Path) -> dict` (must include `"duration"` key)   |
+| `load_media_data(file_path)`        | `(Path) -> dict` (must include `"duration"` key)   |
 | `clip_response(clip)`               | `(dict) -> MediaResponse`                           |
 
 ### Making dataset export aware of custom clip fields

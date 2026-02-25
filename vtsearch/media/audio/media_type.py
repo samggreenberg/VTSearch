@@ -340,7 +340,7 @@ class AudioMediaType(MediaType):
             with open(audio_path, "rb") as f:
                 wav_bytes = f.read()
 
-            media_fields = self.load_clip_data(audio_path)
+            media_fields = self.load_media_data(audio_path)
             clips[clip_id] = {
                 "id": clip_id,
                 "type": self.type_id,
