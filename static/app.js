@@ -261,6 +261,7 @@
   const menuLabelsStatus = document.getElementById("menu-labels-status");
   const menuDetectorImport = document.getElementById("menu-detector-import");
   const menuDetectorExport = document.getElementById("menu-detector-export");
+  const menuDetectorExportServer = document.getElementById("menu-detector-export-server");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
   const labelImporterModal = document.getElementById("label-importer-modal");
   const labelImporterModalClose = document.getElementById("label-importer-modal-close");
@@ -1163,8 +1164,88 @@
       a.download = "detector.json";
       a.click();
       URL.revokeObjectURL(url);
-      menuDetectorStatus.textContent = "Detector exported";
+      menuDetectorStatus.textContent = "Detector exported (browser)";
       setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+      closeBurgerMenu();
+    });
+  }
+
+  // Server-side detector export (ServerFileDetectorExtractor)
+  if (menuDetectorExportServer && menuDetectorStatus && burgerDropdown) {
+    menuDetectorExportServer.addEventListener("click", async () => {
+      menuDetectorStatus.textContent = "";
+      if (votes.good.length === 0 || votes.bad.length === 0) {
+        menuDetectorStatus.textContent = "Vote good & bad clips first";
+        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+        return;
+      }
+
+      const name = prompt("Enter a name for the detector file (saved on server):");
+      if (!name || !name.trim()) return;
+
+      menuDetectorStatus.textContent = "Saving detector to server\u2026";
+
+      const res = await fetch("/api/detector/export-server", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+
+      if (res.status === 409) {
+        const info = await res.json();
+        const overwrite = confirm(
+          `A detector file "${info.name}.json" already exists on the server.\n\n` +
+          `Path: ${info.path}\n\nOverwrite it?`
+        );
+        if (overwrite) {
+          menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
+          const res2 = await fetch("/api/detector/export-server", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name.trim(), overwrite: true }),
+          });
+          if (res2.ok) {
+            const data2 = await res2.json();
+            menuDetectorStatus.textContent = `Saved to server: ${data2.name}.json`;
+            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+          } else {
+            const err = await res2.json().catch(() => ({}));
+            menuDetectorStatus.textContent = err.error || "Server export failed";
+            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+          }
+        } else {
+          // User chose not to overwrite; ask for a new name
+          const newName = prompt("Enter a different name:");
+          if (newName && newName.trim()) {
+            menuDetectorStatus.textContent = "Saving detector to server\u2026";
+            const res3 = await fetch("/api/detector/export-server", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: newName.trim() }),
+            });
+            if (res3.ok) {
+              const data3 = await res3.json();
+              menuDetectorStatus.textContent = `Saved to server: ${data3.name}.json`;
+              setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+            } else {
+              const err = await res3.json().catch(() => ({}));
+              menuDetectorStatus.textContent = err.error || "Server export failed";
+              setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+            }
+          } else {
+            menuDetectorStatus.textContent = "Export cancelled";
+            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
+          }
+        }
+      } else if (res.ok) {
+        const data = await res.json();
+        menuDetectorStatus.textContent = `Saved to server: ${data.name}.json`;
+        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        menuDetectorStatus.textContent = err.error || "Server export failed";
+        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+      }
       closeBurgerMenu();
     });
   }
