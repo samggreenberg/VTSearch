@@ -1,0 +1,2 @@
+# YouTube playlist importer dependencies
+yt-dlp

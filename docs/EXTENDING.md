@@ -838,11 +838,16 @@ requirements.txt              # Core deps + includes per-media + per-importer + 
 ├── requirements-importers.txt          # Aggregates all data importer deps
 │   ├── vtsearch/datasets/importers/pickle/requirements.txt
 │   ├── vtsearch/datasets/importers/folder/requirements.txt
-│   └── vtsearch/datasets/importers/http_zip/requirements.txt
+│   ├── vtsearch/datasets/importers/http_zip/requirements.txt
+│   ├── vtsearch/datasets/importers/rss_feed/requirements.txt
+│   ├── vtsearch/datasets/importers/youtube_playlist/requirements.txt
+│   └── vtsearch/datasets/importers/combine_datasets/requirements.txt
 ├── requirements-exporters.txt          # Aggregates all exporter deps
 │   ├── vtsearch/exporters/gui/requirements.txt
 │   ├── vtsearch/exporters/file/requirements.txt
-│   └── vtsearch/exporters/email_smtp/requirements.txt
+│   ├── vtsearch/exporters/email_smtp/requirements.txt
+│   ├── vtsearch/exporters/csv_file/requirements.txt
+│   └── vtsearch/exporters/webhook/requirements.txt
 requirements-cpu.txt          # CPU-specific pins (lists packages INLINE)
 requirements-gpu.txt          # GPU-specific (minimal, includes importers)
 requirements-dev.txt          # Dev tools (pytest)

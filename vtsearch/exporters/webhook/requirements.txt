@@ -1,0 +1,1 @@
+# webhook exporter — no additional dependencies beyond core deps (uses requests).

@@ -130,7 +130,7 @@ VTSearch/
 
 ## Dependency graph
 
-Arrows point from dependant → dependency.  Modules on the left import
+Arrows point from dependent → dependency.  Modules on the left import
 modules on the right.
 
 ```

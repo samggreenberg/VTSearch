@@ -10,3 +10,6 @@
 -r vtsearch/datasets/importers/pickle/requirements.txt
 -r vtsearch/datasets/importers/folder/requirements.txt
 -r vtsearch/datasets/importers/http_zip/requirements.txt
+-r vtsearch/datasets/importers/rss_feed/requirements.txt
+-r vtsearch/datasets/importers/youtube_playlist/requirements.txt
+-r vtsearch/datasets/importers/combine_datasets/requirements.txt

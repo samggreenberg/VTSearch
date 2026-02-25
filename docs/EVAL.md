@@ -73,7 +73,7 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 | `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
 | `20newsgroups_m` | Text | 20newsgroups_m | 15 topics |
 | `20newsgroups_l` | Text | 20newsgroups_l | 15 topics |
-| `ucf101_s` | Video | ucf101_s | 10 UCF-101 actions (ApplyEyeMakeup, CliffDiving, Drumming, JumpRope, etc.) |
+| `ucf101_s` | Video | ucf101_s | 10 UCF-101 actions (ApplyEyeMakeup, ApplyLipstick, Archery, BabyCrawling, BalanceBeam, etc.) |
 | `ucf101_m` | Video | ucf101_m | 10 UCF-101 actions |
 | `ucf101_l` | Video | ucf101_l | 10 UCF-101 actions |
 
@@ -143,7 +143,7 @@ from vtsearch.eval.runner import run_eval
 from vtsearch.eval.visualize import plot_eval_results
 
 train_fractions = [0.3, 0.5, 0.7, 0.9]
-datasets = ["animals_images"]
+datasets = ["caltech101_s"]
 
 for frac in train_fractions:
     print(f"\n=== train_fraction={frac} ===")
@@ -182,7 +182,7 @@ from vtsearch.eval.runner import run_eval
 from vtsearch.eval.visualize import plot_eval_results
 
 seeds = [1, 2, 3, 42, 100]
-datasets = ["animals_images", "nature_sounds"]
+datasets = ["caltech101_s", "esc50_s"]
 all_results = []
 
 for seed in seeds:
@@ -223,7 +223,7 @@ from vtsearch.eval.visualize import plot_voting_iterations
 from vtsearch.eval.voting_iterations import run_voting_iterations_eval
 
 # Load datasets
-datasets_to_eval = ["nature_sounds", "animals_images"]
+datasets_to_eval = ["esc50_s", "caltech101_s"]
 dataset_clips = {}
 for name in datasets_to_eval:
     clips = {}
@@ -235,8 +235,8 @@ df = run_voting_iterations_eval(
     dataset_clips=dataset_clips,
     seeds=[1, 2, 3, 42, 100],           # multiple seeds for averaging
     categories={                          # specific categories to test
-        "nature_sounds": ["rain", "frog"],
-        "animals_images": ["cat", "dog"],
+        "esc50_s": ["rain", "frog"],
+        "caltech101_s": ["dolphin", "flamingo"],
     },
     inclusion=0,                          # inclusion bias setting
     sim_fraction=0.5,                     # fraction used for simulated voting
