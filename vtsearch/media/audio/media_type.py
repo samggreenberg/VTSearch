@@ -294,6 +294,28 @@ class AudioMediaType(MediaType):
         with intercept_tqdm_progress(self._on_progress):
             self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
 
+        # Warmup: import librosa (heavy — pulls in numba, scipy, etc.) and
+        # run a single dummy forward pass so that the first real embed_media
+        # call runs at the same speed as every subsequent one.  Without this
+        # the first embedding stalls inside the progress-bar loop and skews
+        # the ETA estimate for all remaining items.
+        self._on_progress("loading", "Warming up audio pipeline…", 0, 0)
+        import librosa  # noqa: PLC0415
+        import torch  # noqa: PLC0415
+
+        dummy_audio = np.zeros(SAMPLE_RATE, dtype=np.float32)
+        inputs = self._processor(
+            audio=dummy_audio,
+            sampling_rate=SAMPLE_RATE,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=480000,
+            truncation=True,
+        )
+        with torch.no_grad():
+            outputs = self._model.audio_model(**inputs)
+            self._model.audio_projection(outputs.pooler_output)
+
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
