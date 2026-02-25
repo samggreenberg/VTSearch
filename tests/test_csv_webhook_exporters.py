@@ -88,7 +88,7 @@ class TestCsvExporterMetadata:
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
-        assert exp.icon == "\U0001f4ca"
+        assert exp.icon == "\U0001f5a5"
 
     def test_csv_exporter_has_filepath_field(self):
         from vtsearch.exporters import get_exporter

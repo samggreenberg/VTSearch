@@ -153,12 +153,12 @@ def export_detector_server():
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in clips:
-            X_list.append(clips[cid]["embedding"])
+        if cid in medias:
+            X_list.append(medias[cid]["embedding"])
             y_list.append(0.0)
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)

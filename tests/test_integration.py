@@ -738,7 +738,7 @@ class TestGuiExporterWorkflow:
         assert resp.status_code == 200
         exporter_names = {e["name"] for e in resp.get_json()}
         assert "gui" in exporter_names
-        assert "file" in exporter_names
+        assert "server_json_file" in exporter_names
 
 
 # ---------------------------------------------------------------------------

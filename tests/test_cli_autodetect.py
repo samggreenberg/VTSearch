@@ -831,20 +831,20 @@ class TestAutodetectImporterCLI:
 class TestExporterCLIArguments:
     """Tests for add_cli_arguments and validate_cli_field_values on exporters."""
 
-    def test_file_exporter_adds_filepath_arg(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_adds_filepath_arg(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args(["--filepath", "/tmp/results.json"])
         assert args.filepath == "/tmp/results.json"
 
-    def test_file_exporter_filepath_default(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_filepath_default(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -931,10 +931,10 @@ class TestExporterCLIArguments:
             }
         )
 
-    def test_file_exporter_validate_passes(self):
-        from vtsearch.exporters.file import FileLabelsetExporter
+    def test_server_json_exporter_validate_passes(self):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
 
-        exp = FileLabelsetExporter()
+        exp = ServerJsonLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.json"})
 
     def test_gui_exporter_validate_passes_empty(self):
