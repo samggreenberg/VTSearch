@@ -1,5 +1,11 @@
 import app as app_module
-from vtsearch.models.progress import _cache_good_ids, _cache_bad_ids, _ensure_cache
+from vtsearch.models.progress import (
+    _cache_good_ids,
+    _cache_bad_ids,
+    _cached_steps,
+    _compute_stable_status,
+    _ensure_cache,
+)
 from vtsearch.utils import clips, label_history
 
 
@@ -228,3 +234,73 @@ class TestProgressCacheWithLabelChanges:
         data = resp.get_json()
         assert data["good_count"] == 5  # lost 1, gained 1
         assert data["bad_count"] == 4  # lost 1
+
+
+class TestStableIndicatorThresholds:
+    """The Stable indicator should not turn green prematurely."""
+
+    def _inject_stability(self, entries):
+        """Inject fake stability entries into the progress cache."""
+        _cached_steps.clear()
+        for entry in entries:
+            _cached_steps.append({"model": None, "threshold": None, "good_ids": [], "bad_ids": [], "stability": entry})
+
+    def test_not_green_with_only_first_zero_entry(self, client):
+        """The first entry always has 0 flips (no prior predictions).
+
+        Even with a few subsequent low-flip steps, the indicator should
+        stay yellow — the first zero must not count toward stability.
+        """
+        self._inject_stability(
+            [
+                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},  # always-zero first
+                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
+                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
+                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
+            ]
+        )
+        result = _compute_stable_status(good=5, bad=5, total=10)
+        assert result["status"] == "yellow", (
+            "Should be yellow: only 3 real entries after dropping the bogus first zero"
+        )
+
+    def test_needs_five_real_entries_for_green(self, client):
+        """Green requires at least 5 non-trivial stability entries."""
+        # 1 bogus first + 4 real = only 4 usable → yellow
+        self._inject_stability(
+            [
+                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},
+                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
+                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
+                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
+                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
+            ]
+        )
+        result = _compute_stable_status(good=5, bad=5, total=10)
+        assert result["status"] == "yellow", "4 real entries (after dropping first) is not enough"
+
+        # Add one more → 5 usable → green
+        self._inject_stability(
+            [
+                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},
+                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
+                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
+                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
+                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
+                {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
+            ]
+        )
+        result = _compute_stable_status(good=5, bad=5, total=10)
+        assert result["status"] == "green", "5 real low-flip entries should be enough"
+
+    def test_single_spike_prevents_green(self, client):
+        """One spike above the max threshold should keep the indicator yellow."""
+        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 100}]
+        for i in range(1, 7):
+            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 0, "num_unlabeled": 100 - i})
+        # Inject one spike: 6 flips out of 93 unlabeled → ~6.5%, above 5% max threshold
+        entries[-1] = {"time_index": 6, "num_labels": 16, "num_flips": 6, "num_unlabeled": 93}
+
+        self._inject_stability(entries)
+        result = _compute_stable_status(good=8, bad=8, total=16)
+        assert result["status"] == "yellow", "A single >5% spike should prevent green"
