@@ -16,9 +16,10 @@ class TestMakeConsoleProgress:
     def test_forwards_to_original_callback(self):
         """Every call should be forwarded to the original callback."""
         calls = []
-        original = lambda status, message="", current=0, total=0: calls.append(
-            (status, message, current, total)
-        )
+
+        def original(status, message="", current=0, total=0):
+            calls.append((status, message, current, total))
+
         cb = _make_console_progress(original)
 
         cb("loading", "Loading model...", 0, 0)
