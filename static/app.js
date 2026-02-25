@@ -336,6 +336,7 @@
     center.innerHTML = "";
     center.appendChild(datasetWelcome);
     datasetWelcome.classList.remove("wide");
+    datasetWelcome.classList.remove("demo-mode");
     datasetWelcome.style.display = "flex";
     center.className = "panel-center";
     datasetOptions.style.display = "flex";
@@ -560,6 +561,7 @@
       demoDatasetsDiv.style.display = "flex";
       backButton.style.display = "block";
       datasetWelcome.classList.add("wide");
+      datasetWelcome.classList.add("demo-mode");
 
       // Fetch demo datasets
       try {
@@ -670,6 +672,10 @@
         tabBar.className = "demo-tab-bar";
         demoDatasetsDiv.appendChild(tabBar);
 
+        const demoContentArea = document.createElement("div");
+        demoContentArea.className = "demo-content-area";
+        demoDatasetsDiv.appendChild(demoContentArea);
+
         const sections = {};
 
         availableTypes.forEach(mt => {
@@ -723,7 +729,7 @@
 
           renderTable(items, section);
           sections[mt] = section;
-          demoDatasetsDiv.appendChild(section);
+          demoContentArea.appendChild(section);
         });
 
         // Activate the initial tab
