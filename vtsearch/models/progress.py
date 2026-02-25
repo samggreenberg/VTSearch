@@ -378,7 +378,15 @@ def _compute_stable_status(
         }
 
     stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
-    if len(stability) < 3:
+
+    # The first stability entry always reports 0 flips because there are no
+    # prior predictions to compare against.  Drop it so it doesn't
+    # artificially drag the average toward zero.
+    if len(stability) > 1:
+        stability = stability[1:]
+
+    MIN_STABLE_ENTRIES = 5
+    if len(stability) < MIN_STABLE_ENTRIES:
         return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
 
     recent = stability[-10:]
@@ -394,10 +402,12 @@ def _compute_stable_status(
             flip_rates.append(0.0)
 
     avg_flip_rate = sum(flip_rates) / len(flip_rates)
+    max_flip_rate = max(flip_rates)
 
-    STABLE_RATE_THRESHOLD = 0.02  # less than 2% of predictions flipping
+    STABLE_RATE_THRESHOLD = 0.02  # average less than 2% of predictions flipping
+    STABLE_MAX_THRESHOLD = 0.05  # no single recent step above 5%
 
-    if avg_flip_rate < STABLE_RATE_THRESHOLD:
+    if avg_flip_rate < STABLE_RATE_THRESHOLD and max_flip_rate < STABLE_MAX_THRESHOLD:
         return {"status": "green", "reason": "Predictions have stabilized.", "avg_flip_rate": round(avg_flip_rate, 4)}
     return {
         "status": "yellow",
