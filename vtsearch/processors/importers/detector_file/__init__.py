@@ -23,8 +23,8 @@ from typing import Any
 from vtsearch.processors.importers.base import ProcessorImporter, ProcessorImporterField
 
 
-class DetectorFileProcessorImporter(ProcessorImporter):
-    """Import a processor (detector) from a JSON file.
+class LocalFileProcessorImporter(ProcessorImporter):
+    """Import a processor (detector) from a local JSON file uploaded via the browser.
 
     The file must contain ``"weights"`` (serialised MLP state dict) and
     ``"threshold"`` (float).  An optional ``"media_type"`` key specifies the
@@ -32,8 +32,8 @@ class DetectorFileProcessorImporter(ProcessorImporter):
     """
 
     name = "detector_file"
-    display_name = "Detector File (.json)"
-    description = "Import a pre-trained detector from a VTSearch detector JSON file."
+    display_name = "Local Detector File (.json)"
+    description = "Import a pre-trained detector from a JSON file uploaded from your local machine."
     icon = "\U0001f4c4"  # page facing up
     fields = [
         ProcessorImporterField(
@@ -103,4 +103,4 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     return result
 
 
-PROCESSOR_IMPORTER = DetectorFileProcessorImporter()
+PROCESSOR_IMPORTER = LocalFileProcessorImporter()

@@ -102,6 +102,131 @@ def export_detector():
     return jsonify({"weights": weights, "threshold": round(threshold, 4)})
 
 
+# ---------------------------------------------------------------------------
+# Server-side detector file export (ServerFileProcessorExporter)
+# ---------------------------------------------------------------------------
+
+#: Default directory for server-side detector files.
+SERVER_DETECTOR_DIR = Path("data/detectors")
+
+
+@detectors_bp.route("/api/detector/export-server", methods=["POST"])
+def export_detector_server():
+    """Train MLP on current votes and save to a file on the server filesystem.
+
+    Expects JSON body with ``name`` (required) and optionally ``overwrite``
+    (bool, default false).  The detector is saved as
+    ``data/detectors/<name>.json``.  If the file already exists and
+    ``overwrite`` is false, returns ``{"exists": true, "path": ...}`` with
+    status 409 so the client can ask the user whether to overwrite.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtsearch.utils import bad_votes, good_votes
+
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
+    overwrite = data.get("overwrite", False)
+
+    # Sanitise the filename: only allow alphanumeric, hyphen, underscore, space
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_ ")
+    if not safe_name:
+        return jsonify({"error": "name contains no valid characters"}), 400
+
+    SERVER_DETECTOR_DIR.mkdir(parents=True, exist_ok=True)
+    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+
+    # Check for existing file before doing expensive training
+    if filepath.exists() and not overwrite:
+        return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
+
+    if not good_votes or not bad_votes:
+        return jsonify({"error": "need at least one good and one bad vote"}), 400
+
+    # Train the model (same logic as export_detector)
+    X_list = []
+    y_list = []
+    for cid in good_votes:
+        if cid in clips:
+            X_list.append(clips[cid]["embedding"])
+            y_list.append(1.0)
+    for cid in bad_votes:
+        if cid in clips:
+            X_list.append(clips[cid]["embedding"])
+            y_list.append(0.0)
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    input_dim = X.shape[1]
+
+    threshold = calculate_cross_calibration_threshold(
+        X_list,
+        y_list,
+        input_dim,
+        get_inclusion(),
+        calibrate_count=get_calibrate_count(),
+        calibration_fraction=get_calibration_fraction(),
+    )
+    model = train_model(X, y, input_dim, get_inclusion())
+
+    if get_safe_thresholds():
+        all_ids = sorted(clips.keys())
+        all_embs = np.array([clips[cid]["embedding"] for cid in all_ids])
+        X_all = torch.tensor(all_embs, dtype=torch.float32)
+        with torch.no_grad():
+            all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+        threshold = calculate_safe_threshold(threshold, all_scores, len(X_list))
+
+    state_dict = model.state_dict()
+    weights = {}
+    for key, value in state_dict.items():
+        weights[key] = value.tolist()
+
+    # Determine media type from current clips
+    media_type = "audio"
+    if clips:
+        media_type = next(iter(clips.values())).get("type", "audio")
+
+    detector_data = {
+        "weights": weights,
+        "threshold": round(threshold, 4),
+        "media_type": media_type,
+        "name": safe_name,
+    }
+
+    filepath.write_text(json.dumps(detector_data, indent=2), encoding="utf-8")
+
+    return jsonify({
+        "success": True,
+        "name": safe_name,
+        "path": str(filepath.resolve()),
+        "threshold": round(threshold, 4),
+        "media_type": media_type,
+    })
+
+
+@detectors_bp.route("/api/detector/server-files", methods=["GET"])
+def list_server_detector_files():
+    """List detector JSON files saved on the server in data/detectors/."""
+    if not SERVER_DETECTOR_DIR.is_dir():
+        return jsonify({"files": []})
+
+    files = []
+    for p in sorted(SERVER_DETECTOR_DIR.glob("*.json")):
+        files.append({
+            "name": p.stem,
+            "path": str(p.resolve()),
+            "size_bytes": p.stat().st_size,
+        })
+    return jsonify({"files": files})
+
+
 @detectors_bp.route("/api/detector-sort", methods=["POST"])
 def detector_sort():
     """Score all medias using a loaded detector model."""

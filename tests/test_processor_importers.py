@@ -214,13 +214,14 @@ class TestProcessorImporterRegistry:
 
         names = {imp.name for imp in list_processor_importers()}
         assert "detector_file" in names
+        assert "server_detector_file" in names
         assert "label_file" in names
         assert "csv_label_file" in names
 
     def test_get_processor_importer_known(self):
         from vtsearch.processors.importers import get_processor_importer
 
-        for name in ("detector_file", "label_file", "csv_label_file"):
+        for name in ("detector_file", "server_detector_file", "label_file", "csv_label_file"):
             imp = get_processor_importer(name)
             assert imp is not None, f"Processor importer '{name}' not found"
             assert imp.name == name
@@ -256,7 +257,9 @@ class TestProcessorImporterRegistry:
 # ---------------------------------------------------------------------------
 
 
-class TestDetectorFileImporter:
+class TestLocalFileProcessorImporter:
+    """Tests for the LocalFileProcessorImporter (formerly DetectorFileProcessorImporter)."""
+
     def _get_importer(self):
         from vtsearch.processors.importers.detector_file import PROCESSOR_IMPORTER
 
@@ -265,8 +268,14 @@ class TestDetectorFileImporter:
     def test_name(self):
         assert self._get_importer().name == "detector_file"
 
+    def test_class_name(self):
+        from vtsearch.processors.importers.detector_file import LocalFileProcessorImporter
+
+        assert isinstance(self._get_importer(), LocalFileProcessorImporter)
+
     def test_display_name(self):
         assert "detector" in self._get_importer().display_name.lower()
+        assert "local" in self._get_importer().display_name.lower()
 
     def test_icon(self):
         assert self._get_importer().icon
@@ -339,6 +348,129 @@ class TestDetectorFileImporter:
     def test_run_cli_raises_on_empty_path(self):
         with pytest.raises(ValueError, match="--file"):
             self._get_importer().run_cli({"file": ""})
+
+
+# ---------------------------------------------------------------------------
+# Server detector file importer
+# ---------------------------------------------------------------------------
+
+
+class TestServerFileProcessorImporter:
+    def _get_importer(self):
+        from vtsearch.processors.importers.server_detector_file import PROCESSOR_IMPORTER
+
+        return PROCESSOR_IMPORTER
+
+    def test_name(self):
+        assert self._get_importer().name == "server_detector_file"
+
+    def test_class_name(self):
+        from vtsearch.processors.importers.server_detector_file import ServerFileProcessorImporter
+
+        assert isinstance(self._get_importer(), ServerFileProcessorImporter)
+
+    def test_display_name(self):
+        assert "server" in self._get_importer().display_name.lower()
+
+    def test_icon(self):
+        assert self._get_importer().icon
+
+    def test_has_filepath_field(self):
+        fields = {f.key: f for f in self._get_importer().fields}
+        assert "filepath" in fields
+        assert fields["filepath"].field_type == "text"
+
+    def test_run_with_valid_file(self, tmp_path):
+        payload = {
+            "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
+            "threshold": 0.75,
+            "media_type": "image",
+        }
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
+        result = self._get_importer().run({"filepath": str(p)})
+        assert result["media_type"] == "image"
+        assert result["weights"] == payload["weights"]
+        assert result["threshold"] == 0.75
+
+    def test_run_defaults_media_type_to_audio(self, tmp_path):
+        payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
+        result = self._get_importer().run({"filepath": str(p)})
+        assert result["media_type"] == "audio"
+
+    def test_run_includes_suggested_name(self, tmp_path):
+        payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5, "name": "my detector"}
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
+        result = self._get_importer().run({"filepath": str(p)})
+        assert result["name"] == "my detector"
+
+    def test_run_raises_on_invalid_json(self, tmp_path):
+        p = tmp_path / "bad.json"
+        p.write_text("not json")
+        with pytest.raises(ValueError, match="JSON"):
+            self._get_importer().run({"filepath": str(p)})
+
+    def test_run_raises_on_missing_weights(self, tmp_path):
+        p = tmp_path / "bad.json"
+        p.write_text(json.dumps({"threshold": 0.5}))
+        with pytest.raises(ValueError, match="weights"):
+            self._get_importer().run({"filepath": str(p)})
+
+    def test_run_raises_when_no_filepath(self):
+        with pytest.raises(ValueError, match="path"):
+            self._get_importer().run({"filepath": ""})
+
+    def test_run_raises_when_file_not_found(self, tmp_path):
+        with pytest.raises(ValueError, match="not found"):
+            self._get_importer().run({"filepath": str(tmp_path / "nonexistent.json")})
+
+    def test_run_cli_delegates_to_run(self, tmp_path):
+        payload = {"weights": {"0.weight": [[1.0]], "0.bias": [0.1]}, "threshold": 0.6}
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
+        result = self._get_importer().run_cli({"filepath": str(p)})
+        assert result["threshold"] == 0.6
+        assert result["weights"] == payload["weights"]
+
+    def test_registry_contains_server_detector_file(self):
+        from vtsearch.processors.importers import list_processor_importers
+
+        names = {imp.name for imp in list_processor_importers()}
+        assert "server_detector_file" in names
+
+    def test_api_lists_server_detector_file(self, client):
+        res = client.get("/api/processor-importers")
+        assert res.status_code == 200
+        names = {entry["name"] for entry in res.get_json()}
+        assert "server_detector_file" in names
+
+    def test_api_import_from_server_path(self, client, tmp_path):
+        from vtsearch.utils import favorite_detectors
+
+        payload = {
+            "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
+            "threshold": 0.75,
+            "media_type": "image",
+        }
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
+
+        res = client.post(
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p), "name": "server_test_det"},
+        )
+        assert res.status_code == 200
+        result = res.get_json()
+        assert result["success"] is True
+        assert result["name"] == "server_test_det"
+        assert result["media_type"] == "image"
+        assert "server_test_det" in favorite_detectors
+
+        # Clean up
+        favorite_detectors.pop("server_test_det", None)
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +558,7 @@ class TestGetProcessorImportersEndpoint:
         res = client.get("/api/processor-importers")
         names = {entry["name"] for entry in res.get_json()}
         assert "detector_file" in names
+        assert "server_detector_file" in names
         assert "label_file" in names
         assert "csv_label_file" in names
 

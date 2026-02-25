@@ -544,3 +544,125 @@ class TestAutoDetect:
         for result in data["results"].values():
             scores = [h["score"] for h in result["negative_hits"]]
             assert scores == sorted(scores, reverse=True)
+
+
+class TestServerDetectorExport:
+    """Tests for the ServerFileProcessorExporter endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_server_dir(self, tmp_path, monkeypatch):
+        """Point SERVER_DETECTOR_DIR at a temp directory for each test."""
+        from vtsearch.routes import detectors as det_module
+
+        monkeypatch.setattr(det_module, "SERVER_DETECTOR_DIR", tmp_path / "detectors")
+        self._det_dir = tmp_path / "detectors"
+        yield
+
+    def _vote(self):
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+
+    # -- basic success --
+
+    def test_export_server_creates_file(self, client):
+        self._vote()
+        resp = client.post("/api/detector/export-server", json={"name": "my_detector"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["name"] == "my_detector"
+        assert (self._det_dir / "my_detector.json").exists()
+
+    def test_export_server_file_contains_valid_json(self, client):
+        self._vote()
+        client.post("/api/detector/export-server", json={"name": "valid_json"})
+        content = json.loads((self._det_dir / "valid_json.json").read_text())
+        assert "weights" in content
+        assert "threshold" in content
+        assert "media_type" in content
+        assert "name" in content
+
+    def test_export_server_returns_path(self, client):
+        self._vote()
+        resp = client.post("/api/detector/export-server", json={"name": "path_check"})
+        data = resp.get_json()
+        assert "path" in data
+        assert "path_check.json" in data["path"]
+
+    # -- name validation --
+
+    def test_export_server_missing_name_returns_400(self, client):
+        self._vote()
+        resp = client.post("/api/detector/export-server", json={})
+        assert resp.status_code == 400
+        assert "name" in resp.get_json()["error"].lower()
+
+    def test_export_server_empty_name_returns_400(self, client):
+        self._vote()
+        resp = client.post("/api/detector/export-server", json={"name": "  "})
+        assert resp.status_code == 400
+
+    # -- vote validation --
+
+    def test_export_server_no_votes_returns_400(self, client):
+        resp = client.post("/api/detector/export-server", json={"name": "no_votes"})
+        assert resp.status_code == 400
+        assert "vote" in resp.get_json()["error"].lower()
+
+    # -- overwrite logic --
+
+    def test_export_server_returns_409_when_exists(self, client):
+        self._vote()
+        client.post("/api/detector/export-server", json={"name": "dup"})
+        # Second export without overwrite
+        resp = client.post("/api/detector/export-server", json={"name": "dup"})
+        assert resp.status_code == 409
+        data = resp.get_json()
+        assert data["exists"] is True
+        assert "dup" in data["name"]
+
+    def test_export_server_overwrite_succeeds(self, client):
+        self._vote()
+        client.post("/api/detector/export-server", json={"name": "overwrite_me"})
+        resp = client.post(
+            "/api/detector/export-server",
+            json={"name": "overwrite_me", "overwrite": True},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+    # -- list server files --
+
+    def test_list_server_files_empty(self, client):
+        resp = client.get("/api/detector/server-files")
+        assert resp.status_code == 200
+        assert resp.get_json()["files"] == []
+
+    def test_list_server_files_after_export(self, client):
+        self._vote()
+        client.post("/api/detector/export-server", json={"name": "listed"})
+        resp = client.get("/api/detector/server-files")
+        data = resp.get_json()
+        names = [f["name"] for f in data["files"]]
+        assert "listed" in names
+
+    def test_list_server_files_has_path_and_size(self, client):
+        self._vote()
+        client.post("/api/detector/export-server", json={"name": "sized"})
+        resp = client.get("/api/detector/server-files")
+        entry = resp.get_json()["files"][0]
+        assert "path" in entry
+        assert "size_bytes" in entry
+        assert entry["size_bytes"] > 0
+
+    # -- name sanitisation --
+
+    def test_export_server_sanitises_name(self, client):
+        self._vote()
+        resp = client.post("/api/detector/export-server", json={"name": "a/b\\c:d"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Special characters should be stripped
+        assert "/" not in data["name"]
+        assert "\\" not in data["name"]
+        assert ":" not in data["name"]
