@@ -434,78 +434,86 @@
 
 <!-- Settings Modal -->
 <div id="settings-modal" class="modal">
-  <div class="modal-content" style="max-width: 520px;">
+  <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header">
       <h2>Settings</h2>
       <button class="modal-close" id="settings-modal-close">&times;</button>
     </div>
     <div class="modal-body">
-      <!-- Appearance -->
-      <div class="settings-section">
-        <div class="settings-section-title">Appearance</div>
-        <div class="settings-row">
-          <span class="settings-label">Theme</span>
-          <div class="theme-selector">
-            <button class="theme-btn active" data-theme="dark">Dark</button>
-            <button class="theme-btn" data-theme="light">Light</button>
-            <button class="theme-btn" data-theme="highviz">HighViz</button>
+      <div class="settings-columns">
+        <!-- Left column: Appearance + Sorting -->
+        <div>
+          <!-- Appearance -->
+          <div class="settings-section">
+            <div class="settings-section-title">Appearance</div>
+            <div class="settings-row">
+              <span class="settings-label">Theme</span>
+              <div class="theme-selector">
+                <button class="theme-btn active" data-theme="dark">Dark</button>
+                <button class="theme-btn" data-theme="light">Light</button>
+                <button class="theme-btn" data-theme="highviz">HighViz</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label for="swipe-animation-checkbox" class="settings-label">Swipe Animation</label>
+              <input type="checkbox" id="swipe-animation-checkbox" checked style="accent-color:var(--accent)">
+            </div>
+            <div class="settings-row">
+              <label for="show-thumbnails-left-checkbox" class="settings-label">Show Left Thumbnails</label>
+              <input type="checkbox" id="show-thumbnails-left-checkbox" style="accent-color:var(--accent)">
+            </div>
+            <div class="settings-row">
+              <label for="show-thumbnails-right-checkbox" class="settings-label">Show Right Thumbnails</label>
+              <input type="checkbox" id="show-thumbnails-right-checkbox" checked style="accent-color:var(--accent)">
+            </div>
+          </div>
+          <!-- Sorting -->
+          <div class="settings-section">
+            <div class="settings-section-title">Sorting</div>
+            <div class="settings-row">
+              <label for="enrich-descriptions-checkbox" class="settings-label">Enrich Sort Descriptions</label>
+              <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
+            </div>
           </div>
         </div>
-        <div class="settings-row">
-          <label for="swipe-animation-checkbox" class="settings-label">Swipe Animation</label>
-          <input type="checkbox" id="swipe-animation-checkbox" checked style="accent-color:var(--accent)">
-        </div>
-        <div class="settings-row">
-          <label for="show-thumbnails-left-checkbox" class="settings-label">Show Left Thumbnails</label>
-          <input type="checkbox" id="show-thumbnails-left-checkbox" style="accent-color:var(--accent)">
-        </div>
-        <div class="settings-row">
-          <label for="show-thumbnails-right-checkbox" class="settings-label">Show Right Thumbnails</label>
-          <input type="checkbox" id="show-thumbnails-right-checkbox" checked style="accent-color:var(--accent)">
-        </div>
-      </div>
-      <!-- Calibration -->
-      <div class="settings-section">
-        <div class="settings-section-title">Calibration</div>
-        <div class="settings-row">
-          <label for="calibrate-count-input" class="settings-label">Calibrate Count</label>
-          <input type="number" id="calibrate-count-input" min="1" max="100" value="2" step="1" class="settings-number-input">
-        </div>
-        <div class="settings-row">
-          <label for="calibration-fraction-input" class="settings-label">Calibration Fraction</label>
-          <input type="number" id="calibration-fraction-input" min="0" max="1" value="0.5" step="0.05" class="settings-number-input">
-        </div>
-        <div class="settings-row">
-          <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
-          <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
-        </div>
-      </div>
-      <!-- Favorite Media Types -->
-      <div class="settings-section">
-        <div class="settings-section-title">Favorite Media Types</div>
-        <div class="settings-row">
-          <label for="fav-mt-audio" class="settings-label">Audio</label>
-          <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
-        </div>
-        <div class="settings-row">
-          <label for="fav-mt-image" class="settings-label">Image</label>
-          <input type="checkbox" id="fav-mt-image" data-media-type="image" style="accent-color:var(--accent)">
-        </div>
-        <div class="settings-row">
-          <label for="fav-mt-paragraph" class="settings-label">Text</label>
-          <input type="checkbox" id="fav-mt-paragraph" data-media-type="paragraph" style="accent-color:var(--accent)">
-        </div>
-        <div class="settings-row">
-          <label for="fav-mt-video" class="settings-label">Video</label>
-          <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
-        </div>
-      </div>
-      <!-- Sorting -->
-      <div class="settings-section">
-        <div class="settings-section-title">Sorting</div>
-        <div class="settings-row">
-          <label for="enrich-descriptions-checkbox" class="settings-label">Enrich Sort Descriptions</label>
-          <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
+        <!-- Right column: Calibration + Favorite Media Types -->
+        <div>
+          <!-- Calibration -->
+          <div class="settings-section">
+            <div class="settings-section-title">Calibration</div>
+            <div class="settings-row">
+              <label for="calibrate-count-input" class="settings-label">Calibrate Count</label>
+              <input type="number" id="calibrate-count-input" min="1" max="100" value="2" step="1" class="settings-number-input">
+            </div>
+            <div class="settings-row">
+              <label for="calibration-fraction-input" class="settings-label">Calibration Fraction</label>
+              <input type="number" id="calibration-fraction-input" min="0" max="1" value="0.5" step="0.05" class="settings-number-input">
+            </div>
+            <div class="settings-row">
+              <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
+              <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
+            </div>
+          </div>
+          <!-- Favorite Media Types -->
+          <div class="settings-section">
+            <div class="settings-section-title">Favorite Media Types</div>
+            <div class="settings-row">
+              <label for="fav-mt-audio" class="settings-label">Audio</label>
+              <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
+            </div>
+            <div class="settings-row">
+              <label for="fav-mt-image" class="settings-label">Image</label>
+              <input type="checkbox" id="fav-mt-image" data-media-type="image" style="accent-color:var(--accent)">
+            </div>
+            <div class="settings-row">
+              <label for="fav-mt-paragraph" class="settings-label">Text</label>
+              <input type="checkbox" id="fav-mt-paragraph" data-media-type="paragraph" style="accent-color:var(--accent)">
+            </div>
+            <div class="settings-row">
+              <label for="fav-mt-video" class="settings-label">Video</label>
+              <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
+            </div>
+          </div>
         </div>
       </div>
       <!-- Actions -->
