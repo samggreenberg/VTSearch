@@ -41,7 +41,6 @@
   const loadRadio = document.getElementById("load-radio");
   const sortStatus = document.getElementById("sort-status");
   const sortProgress = document.getElementById("sort-progress");
-  const sortProgressLabel = document.getElementById("sort-progress-label");
   const sortProgressFill = document.querySelector(".sort-progress-fill");
   let sortProgressTimer = null;
   let sortEtaState = null;
@@ -149,8 +148,7 @@
   }
 
   function showSortProgress(label) {
-    sortStatus.textContent = "";
-    sortProgressLabel.textContent = label;
+    sortStatus.textContent = label;
     sortProgressFill.style.width = "";
     sortProgressFill.classList.remove("determinate");
     sortProgress.classList.add("active");
@@ -188,12 +186,12 @@
         if (done > 0 && elapsed > 1 && progress.current < progress.total && progress.total >= 20) {
           const rate = done / elapsed;
           const remaining = (progress.total - progress.current) / rate;
-          sortProgressLabel.textContent = `${pct}% — ${formatETA(remaining)}`;
+          sortStatus.textContent = `${pct}% — ${formatETA(remaining)}`;
           return;
         }
       }
       if (progress.message) {
-        sortProgressLabel.textContent = progress.message;
+        sortStatus.textContent = progress.message;
       }
     } catch (_) {
       // ignore polling errors

@@ -218,14 +218,12 @@ header h1 { margin-left: 48px; }
 .sort-bar input[type="text"]:focus { border-color: var(--accent); }
 .sort-bar input[type="text"]::placeholder { color: var(--text-placeholder); }
 .sort-info-text { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sort-bar .sort-status { font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; }
-.sort-progress { display: none; margin-top: 6px; }
-.sort-progress.active { display: block; }
-.sort-progress-bar { width: 100%; height: 6px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; position: relative; }
+.sort-bar .sort-status { font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sort-progress-bar { width: 100%; height: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; position: relative; margin-top: 6px; border-color: transparent; transition: height 0.15s ease, border-color 0.15s ease; }
+.sort-progress.active .sort-progress-bar { height: 6px; border-color: var(--border); }
 .sort-progress-fill { height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); border-radius: 3px; position: absolute; animation: sort-progress-slide 1.2s ease-in-out infinite; transition: width 0.2s; }
 .sort-progress-fill.determinate { animation: none; left: 0; }
 @keyframes sort-progress-slide { 0% { left: -30%; } 100% { left: 100%; } }
-.sort-progress-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #media-list { overflow-y: auto; flex: 1; }
 .media-item { padding: 10px 16px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid var(--border-subtle); transition: background 0.15s; border-left: 3px solid transparent; }
 .media-item:hover { background: var(--bg-subtle); }
