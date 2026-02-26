@@ -114,14 +114,6 @@ class TestDetectorSort:
 class TestFavoriteDetectors:
     """Tests for the favorite-detectors management endpoints."""
 
-    @pytest.fixture(autouse=True)
-    def clear_favorites(self):
-        from vtsearch.utils.state import favorite_detectors
-
-        favorite_detectors.clear()
-        yield
-        favorite_detectors.clear()
-
     def _export_detector(self, client):
         """Helper: vote on some medias and export a valid detector payload."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
@@ -354,14 +346,6 @@ class TestFavoriteDetectors:
 
 class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
-
-    @pytest.fixture(autouse=True)
-    def clear_favorites(self):
-        from vtsearch.utils.state import favorite_detectors
-
-        favorite_detectors.clear()
-        yield
-        favorite_detectors.clear()
 
     def _add_audio_detector(self, client, name="test-detector"):
         """Helper: create and save an audio detector."""

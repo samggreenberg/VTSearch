@@ -266,16 +266,6 @@ class TestEmbedTextQueryEnrich:
 
 
 class TestEnrichDescriptionsSetting:
-    @pytest.fixture(autouse=True)
-    def isolated_settings(self, tmp_path, monkeypatch):
-        from vtsearch import settings as settings_mod
-
-        test_settings_path = tmp_path / "settings.json"
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
-        settings_mod.reset()
-        yield test_settings_path
-        settings_mod.reset()
-
     def test_default_is_false(self):
         from vtsearch import settings as settings_mod
 
@@ -313,16 +303,6 @@ class TestEnrichDescriptionsSetting:
 
 
 class TestEnrichDescriptionsAPI:
-    @pytest.fixture(autouse=True)
-    def isolated_settings(self, tmp_path, monkeypatch):
-        from vtsearch import settings as settings_mod
-
-        test_settings_path = tmp_path / "settings.json"
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
-        settings_mod.reset()
-        yield
-        settings_mod.reset()
-
     @pytest.fixture
     def client(self):
         import app as app_module

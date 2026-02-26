@@ -17,28 +17,6 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch import settings as settings_mod
-
-
-@pytest.fixture(autouse=True)
-def isolated_settings(tmp_path, monkeypatch):
-    """Use a temp file so settings don't leak between tests."""
-    test_settings_path = tmp_path / "settings.json"
-    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
-    settings_mod.reset()
-    yield test_settings_path
-    settings_mod.reset()
-
-
-@pytest.fixture(autouse=True)
-def clear_favorites():
-    from vtsearch.utils.state import favorite_detectors, favorite_extractors
-
-    favorite_detectors.clear()
-    favorite_extractors.clear()
-    yield
-    favorite_detectors.clear()
-    favorite_extractors.clear()
 
 
 # ---------------------------------------------------------------------------

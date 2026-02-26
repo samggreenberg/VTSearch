@@ -119,14 +119,6 @@ class TestTrainAndScoreWithSafeThresholds:
 class TestSafeThresholdsSetting:
     """Tests for the safe_thresholds setting persistence."""
 
-    @pytest.fixture(autouse=True)
-    def reset_setting(self):
-        from vtsearch import settings
-
-        original = settings.get_safe_thresholds()
-        yield
-        settings.set_safe_thresholds(original)
-
     def test_default_is_false(self):
         from vtsearch import settings
 
@@ -159,14 +151,6 @@ class TestSafeThresholdsSetting:
 
 class TestSafeThresholdsAPI:
     """Tests for GET/POST /api/safe-thresholds."""
-
-    @pytest.fixture(autouse=True)
-    def reset_setting(self):
-        from vtsearch import settings
-
-        original = settings.get_safe_thresholds()
-        yield
-        settings.set_safe_thresholds(original)
 
     def test_get_returns_current_value(self, client):
         resp = client.get("/api/safe-thresholds")
@@ -359,14 +343,6 @@ class TestCalibrationFractionTrainAndScore:
 class TestCalibrationFractionSetting:
     """Tests for calibration_fraction setting persistence."""
 
-    @pytest.fixture(autouse=True)
-    def reset_setting(self):
-        from vtsearch import settings
-
-        original = settings.get_calibration_fraction()
-        yield
-        settings.set_calibration_fraction(original)
-
     def test_default_is_half(self):
         from vtsearch import settings
 
@@ -401,14 +377,6 @@ class TestCalibrationFractionSetting:
 
 class TestCalibrationFractionAPI:
     """Tests for calibration_fraction via the settings API."""
-
-    @pytest.fixture(autouse=True)
-    def reset_setting(self):
-        from vtsearch import settings
-
-        original = settings.get_calibration_fraction()
-        yield
-        settings.set_calibration_fraction(original)
 
     def test_get_settings_includes_calibration_fraction(self, client):
         resp = client.get("/api/settings")

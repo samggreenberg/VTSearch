@@ -365,11 +365,6 @@ class TestFaceLocalizer:
 
 
 class TestFavoriteLocalizerState:
-    def setup_method(self):
-        from vtsearch.utils.state import favorite_localizers
-
-        favorite_localizers.clear()
-
     def test_add_and_get(self):
         from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers
 
@@ -412,18 +407,6 @@ class TestFavoriteLocalizerState:
 
 
 class TestPregenProcessorsRoute:
-    def setup_method(self):
-        from vtsearch.utils.state import favorite_extractors, favorite_localizers
-
-        favorite_extractors.clear()
-        favorite_localizers.clear()
-
-    def teardown_method(self):
-        from vtsearch.utils.state import favorite_extractors, favorite_localizers
-
-        favorite_extractors.clear()
-        favorite_localizers.clear()
-
     def test_list_pregen_processors(self, client):
         res = client.get("/api/pregen-processors")
         assert res.status_code == 200

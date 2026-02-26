@@ -184,14 +184,6 @@ class TestImageClassExtractor:
 
 
 class TestFavoriteExtractors:
-    @pytest.fixture(autouse=True)
-    def clear_favorites(self):
-        from vtsearch.utils.state import favorite_extractors
-
-        favorite_extractors.clear()
-        yield
-        favorite_extractors.clear()
-
     def _post_extractor(self, client, name="test-ext"):
         return client.post(
             "/api/favorite-extractors",
@@ -396,14 +388,6 @@ class TestExtractEndpoint:
 
 
 class TestAutoExtract:
-    @pytest.fixture(autouse=True)
-    def clear_favorites(self):
-        from vtsearch.utils.state import favorite_extractors
-
-        favorite_extractors.clear()
-        yield
-        favorite_extractors.clear()
-
     def test_no_clips_returns_400(self, client):
         from vtsearch.utils.state import medias
 
