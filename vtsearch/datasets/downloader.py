@@ -15,6 +15,8 @@ from typing import Callable, Optional
 import requests
 
 from vtsearch.config import (
+    BBC_NEWS_DOWNLOAD_SIZE_MB,
+    BBC_NEWS_URL,
     CALTECH101_DOWNLOAD_SIZE_MB,
     CALTECH101_URL,
     CALTECH256_DOWNLOAD_SIZE_MB,
@@ -436,3 +438,93 @@ def download_20newsgroups(
     ]
 
     return texts, labels, target_names
+
+
+def download_bbc_news(
+    on_progress: Optional[ProgressCallback] = None,
+) -> dict[str, list[str]]:
+    """Download and prepare the BBC News full-text dataset.
+
+    Downloads ``bbc-fulltext.zip`` from the configured ``BBC_NEWS_URL`` into
+    ``DATA_DIR`` if it is not already present, then extracts it.  The zip is
+    deleted after extraction to reclaim disk space.
+
+    The dataset contains ~2225 articles across five topic categories:
+    ``business``, ``entertainment``, ``politics``, ``sport``, and ``tech``.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        A dict mapping category name to a list of article text strings, e.g.
+        ``{"business": ["Article text…", …], "sport": […], …}``.
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    zip_path = DATA_DIR / "bbc-fulltext.zip"
+    extract_dir = DATA_DIR / "bbc-fulltext"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not extract_dir.exists():
+        if not zip_path.exists():
+            on_progress("downloading", "Starting BBC News download...", 0, 0)
+            download_file_with_progress(
+                BBC_NEWS_URL,
+                zip_path,
+                BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            # The zip may contain a top-level folder (e.g. "bbc/"); extract
+            # all members and then locate category directories below.
+            zip_ref.extractall(DATA_DIR / "bbc-fulltext-raw")
+
+        # Find the directory that contains the category subfolders.
+        raw_root = DATA_DIR / "bbc-fulltext-raw"
+        _bbc_root = _find_bbc_root(raw_root)
+        if _bbc_root is None:
+            raise RuntimeError(f"Could not locate BBC News category directories inside {raw_root}")
+
+        import shutil
+
+        shutil.copytree(_bbc_root, extract_dir)
+        shutil.rmtree(raw_root, ignore_errors=True)
+        zip_path.unlink(missing_ok=True)
+
+    # Read articles grouped by category directory name.
+    categories_articles: dict[str, list[str]] = {}
+    for category_dir in sorted(extract_dir.iterdir()):
+        if not category_dir.is_dir():
+            continue
+        articles: list[str] = []
+        for txt_file in sorted(category_dir.glob("*.txt")):
+            try:
+                text = txt_file.read_text(encoding="utf-8", errors="replace").strip()
+            except Exception:
+                continue
+            if text:
+                articles.append(text)
+        if articles:
+            categories_articles[category_dir.name] = articles
+
+    return categories_articles
+
+
+def _find_bbc_root(directory: Path) -> Optional[Path]:
+    """Return the first directory under *directory* that contains BBC category subfolders."""
+    _BBC_CATEGORIES = {"business", "entertainment", "politics", "sport", "tech"}
+    # Check the directory itself first.
+    subdirs = {p.name for p in directory.iterdir() if p.is_dir()}
+    if subdirs & _BBC_CATEGORIES:
+        return directory
+    # One level of nesting (common when the zip has a top-level folder).
+    for child in directory.iterdir():
+        if child.is_dir():
+            grandchildren = {p.name for p in child.iterdir() if p.is_dir()}
+            if grandchildren & _BBC_CATEGORIES:
+                return child
+    return None

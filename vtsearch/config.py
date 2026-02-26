@@ -23,6 +23,7 @@ CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"
 CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
+BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
 
 # Dataset size estimates
 ESC50_DOWNLOAD_SIZE_MB = 600
@@ -31,6 +32,7 @@ CIFAR10_DOWNLOAD_SIZE_MB = 170
 CALTECH101_DOWNLOAD_SIZE_MB = 131
 CALTECH256_DOWNLOAD_SIZE_MB = 1200
 UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
+BBC_NEWS_DOWNLOAD_SIZE_MB = 2
 MEDIAS_PER_CATEGORY = 40
 MEDIAS_PER_VIDEO_CATEGORY = 150
 IMAGES_PER_CIFAR10_CATEGORY = 100

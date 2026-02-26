@@ -210,22 +210,35 @@ class TextMediaType(MediaType):
 
             on_progress = update_progress
 
-        if source != "ag_news_sample":
-            raise ValueError(f"Unsupported text source: {source!r}")
-
-        from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
-
-        texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
-
         selected_texts = []
         selected_categories = []
-        for cat_name in categories:
-            if cat_name in category_names:
-                cat_idx = category_names.index(cat_name)
-                cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
-                for text in cat_texts[slice_start : (slice_end or len(cat_texts))]:
-                    selected_texts.append(text)
+
+        if source == "ag_news_sample":
+            from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
+
+            texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
+
+            for cat_name in categories:
+                if cat_name in category_names:
+                    cat_idx = category_names.index(cat_name)
+                    cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
+                    for text in cat_texts[slice_start : (slice_end or len(cat_texts))]:
+                        selected_texts.append(text)
+                        selected_categories.append(cat_name)
+
+        elif source == "bbc_news":
+            from vtsearch.datasets.downloader import download_bbc_news  # noqa: PLC0415
+
+            categories_articles = download_bbc_news(on_progress=on_progress)
+
+            for cat_name in categories:
+                articles = categories_articles.get(cat_name, [])
+                for article in articles[slice_start : (slice_end or len(articles))]:
+                    selected_texts.append(article)
                     selected_categories.append(cat_name)
+
+        else:
+            raise ValueError(f"Unsupported text source: {source!r}")
 
         if getattr(self, "_model", None) is None:
             on_progress("loading", "Loading text embedding model…", 0, 0)
