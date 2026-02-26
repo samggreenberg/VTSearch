@@ -34,7 +34,7 @@
   const textSortWrap = document.getElementById("text-sort-wrap");
   const loadSortWrap = document.getElementById("load-sort-wrap");
   const loadDetectorBtn = document.getElementById("load-detector-btn");
-  const loadDetectorFile = document.getElementById("load-detector-file");
+  // load-detector-file removed: Load Sort modal handles file picking now
   const learnedRadio = document.getElementById("learned-radio");
   const loadRadio = document.getElementById("load-radio");
   const sortStatus = document.getElementById("sort-status");
@@ -279,6 +279,13 @@
   const processorImporterList = document.getElementById("processor-importer-list");
   const processorImporterFormDiv = document.getElementById("processor-importer-form");
   const processorImporterBack = document.getElementById("processor-importer-back");
+  const loadSortModal = document.getElementById("load-sort-modal");
+  const loadSortModalClose = document.getElementById("load-sort-modal-close");
+  const loadSortDetectorOptions = document.getElementById("load-sort-detector-options");
+  const loadSortExampleOptions = document.getElementById("load-sort-example-options");
+  const loadSortStatus = document.getElementById("load-sort-status");
+  const loadSortDetectorFile = document.getElementById("load-sort-detector-file");
+  const loadSortMediaFile = document.getElementById("load-sort-media-file");
   const menuFavoritesStatus = document.getElementById("menu-favorites-status");
   const favPregenBtn = document.getElementById("fav-pregen-btn");
   const menuFavoritesManage = document.getElementById("menu-favorites-manage");
@@ -1452,12 +1459,12 @@
     });
   }
 
-  // Detector import
-  if (menuDetectorImport && loadDetectorFile && burgerDropdown) {
+  // Detector import — open Load Sort modal
+  if (menuDetectorImport && burgerDropdown) {
     menuDetectorImport.addEventListener("click", () => {
       if (menuDetectorImport.classList.contains("disabled")) return;
-      loadDetectorFile.click();
       closeBurgerMenu();
+      openLoadSortModal();
     });
   }
 
@@ -2690,13 +2697,14 @@
         return;
       }
       if (radio.value === "load") {
-        // Immediately prompt to select a detector file
+        // Open the Load Sort modal to choose detector or example
         sortMode = radio.value;
         textSortWrap.style.display = "none";
         loadSortWrap.style.display = "";
         sortStatus.textContent = "";
-        // Trigger file picker
-        loadDetectorFile.click();
+        if (!loadedDetector) {
+          openLoadSortModal();
+        }
         return;
       }
 
@@ -2937,7 +2945,19 @@
 
   async function fetchLoadedSort(autoSelect = false) {
     if (!loadedDetector) {
-      sortStatus.textContent = "Load a detector first";
+      sortStatus.textContent = "Load a sort first";
+      return;
+    }
+    // Example-based loads already have sortOrder set — no need to re-score
+    if (loadedDetector._example) {
+      if (sortOrder && threshold != null) {
+        sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+        renderMediaList();
+        if (autoSelect) {
+          const nextClip = findNextClip();
+          if (nextClip) selectMedia(nextClip.id);
+        }
+      }
       return;
     }
     showSortProgress("Scoring with loaded detector\u2026");
@@ -2975,50 +2995,7 @@
   // ---- Load detector file ----
 
   loadDetectorBtn.addEventListener("click", () => {
-    loadDetectorFile.click();
-  });
-
-  loadDetectorFile.addEventListener("change", async () => {
-    const file = loadDetectorFile.files[0];
-    if (!file) {
-      // User cancelled - revert to text mode if no detector loaded
-      if (loadedDetector === null) {
-        document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
-        sortMode = "text";
-        textSortWrap.style.display = "";
-        loadSortWrap.style.display = "none";
-        sortStatus.textContent = "";
-      }
-      return;
-    }
-    sortStatus.textContent = "Loading detector\u2026";
-    menuDetectorStatus.textContent = "Loading detector\u2026";
-    const text = await file.text();
-    try {
-      loadedDetector = JSON.parse(text);
-      sortStatus.textContent = "Detector loaded";
-      menuDetectorStatus.textContent = "Detector loaded";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-      updateSortModeAvailability();
-      // Ensure load mode is selected
-      document.querySelector('input[name="sort-mode"][value="load"]').checked = true;
-      sortMode = "load";
-      loadSortWrap.style.display = "";
-      textSortWrap.style.display = "none";
-      fetchLoadedSort(true);
-    } catch (e) {
-      sortStatus.textContent = "Invalid detector file";
-      menuDetectorStatus.textContent = "Invalid detector file";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-      loadedDetector = null;
-      updateSortModeAvailability();
-      // Revert to text mode on error
-      document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
-      sortMode = "text";
-      textSortWrap.style.display = "";
-      loadSortWrap.style.display = "none";
-    }
-    loadDetectorFile.value = "";
+    openLoadSortModal();
   });
 
   // ---- Next Clip Selection ----
@@ -4011,6 +3988,426 @@
       }
     });
   }
+
+  // ---- Load Sort modal ----
+
+  if (loadSortModalClose) {
+    loadSortModalClose.addEventListener("click", () => {
+      loadSortModal.classList.remove("show");
+      // If no detector/example was loaded, revert to text mode
+      if (!loadedDetector) {
+        document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
+        sortMode = "text";
+        textSortWrap.style.display = "";
+        loadSortWrap.style.display = "none";
+      }
+    });
+  }
+
+  /**
+   * Activate load sort mode and show results in the left column.
+   * @param {string} label - Status text describing the loaded sort source.
+   */
+  function activateLoadSort(label) {
+    sortMode = "load";
+    document.querySelector('input[name="sort-mode"][value="load"]').checked = true;
+    textSortWrap.style.display = "none";
+    loadSortWrap.style.display = "";
+    loadDetectorBtn.textContent = label;
+    updateSortModeAvailability();
+  }
+
+  async function openLoadSortModal() {
+    if (!loadSortModal) return;
+    loadSortStatus.textContent = "";
+
+    // Determine current media type for the file accept filter
+    let mediaType = "audio";
+    let acceptExts = ".wav,.mp3,.flac,.ogg,.m4a";
+    if (medias.length > 0 && medias[0].type) {
+      mediaType = medias[0].type;
+    }
+    // Look up file extensions from the mediaTypesMap
+    if (mediaTypesMap[mediaType] && mediaTypesMap[mediaType].file_extensions) {
+      acceptExts = mediaTypesMap[mediaType].file_extensions
+        .map(ext => ext.replace("*", ""))
+        .join(",");
+    }
+    loadSortMediaFile.setAttribute("accept", acceptExts);
+
+    // Build detector options
+    let detectorHtml = `
+      <div class="load-sort-option option-card" id="ls-detector-local" role="button" tabindex="0">
+        <span class="option-card-icon">\uD83D\uDCC1</span>
+        <div>
+          <div class="option-card-title">Load Local Detector</div>
+          <div class="option-card-desc">Choose a detector JSON file from your computer.</div>
+        </div>
+      </div>`;
+
+    // Fetch server detector files
+    let serverDetectors = [];
+    try {
+      const res = await fetch("/api/detector/server-files");
+      if (res.ok) {
+        const data = await res.json();
+        serverDetectors = data.files || [];
+      }
+    } catch (_) { /* ignore */ }
+
+    if (serverDetectors.length > 0) {
+      detectorHtml += `
+        <div class="load-sort-option option-card" id="ls-detector-server" role="button" tabindex="0">
+          <span class="option-card-icon">\uD83D\uDCBE</span>
+          <div>
+            <div class="option-card-title">Load Server Detector</div>
+            <div class="option-card-desc">${serverDetectors.length} detector file${serverDetectors.length !== 1 ? "s" : ""} on the server.</div>
+          </div>
+        </div>`;
+    }
+
+    // Fetch processor importers (label-based detector sources)
+    let procImporters = [];
+    try {
+      const res = await fetch("/api/processor-importers");
+      if (res.ok) procImporters = await res.json();
+    } catch (_) { /* ignore */ }
+
+    for (const imp of procImporters) {
+      detectorHtml += `
+        <div class="load-sort-option option-card" data-proc-importer="${escapeHtml(imp.name)}" role="button" tabindex="0">
+          <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
+          <div>
+            <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(imp.description)}</div>
+          </div>
+        </div>`;
+    }
+
+    loadSortDetectorOptions.innerHTML = detectorHtml;
+
+    // Build example options
+    let exampleHtml = `
+      <div class="load-sort-option option-card" id="ls-example-local" role="button" tabindex="0">
+        <span class="option-card-icon">\uD83D\uDCC1</span>
+        <div>
+          <div class="option-card-title">Load Local Media</div>
+          <div class="option-card-desc">Choose a ${mediaType} file from your computer to sort by similarity.</div>
+        </div>
+      </div>`;
+
+    // Fetch server media files
+    let serverMediaFiles = [];
+    try {
+      const res = await fetch("/api/server-media-files");
+      if (res.ok) {
+        const data = await res.json();
+        serverMediaFiles = data.files || [];
+      }
+    } catch (_) { /* ignore */ }
+
+    if (serverMediaFiles.length > 0) {
+      exampleHtml += `
+        <div class="load-sort-option option-card" id="ls-example-server" role="button" tabindex="0">
+          <span class="option-card-icon">\uD83D\uDCBE</span>
+          <div>
+            <div class="option-card-title">Load Server Media</div>
+            <div class="option-card-desc">${serverMediaFiles.length} media file${serverMediaFiles.length !== 1 ? "s" : ""} on the server.</div>
+          </div>
+        </div>`;
+    }
+
+    loadSortExampleOptions.innerHTML = exampleHtml;
+
+    // --- Wire up click handlers ---
+
+    // Local detector file
+    const lsDetectorLocal = document.getElementById("ls-detector-local");
+    if (lsDetectorLocal) {
+      lsDetectorLocal.addEventListener("click", () => {
+        loadSortModal.classList.remove("show");
+        loadSortDetectorFile.click();
+      });
+    }
+
+    // Server detector file — show sub-list
+    const lsDetectorServer = document.getElementById("ls-detector-server");
+    if (lsDetectorServer && serverDetectors.length > 0) {
+      lsDetectorServer.addEventListener("click", () => {
+        loadSortDetectorOptions.innerHTML = serverDetectors.map(f => `
+          <div class="load-sort-option option-card ls-server-det-item" data-det-name="${escapeHtml(f.name)}" role="button" tabindex="0">
+            <span class="option-card-icon">\uD83D\uDCC4</span>
+            <div>
+              <div class="option-card-title">${escapeHtml(f.name)}</div>
+              <div class="option-card-desc">${(f.size_bytes / 1024).toFixed(1)} KB</div>
+            </div>
+          </div>
+        `).join("");
+        loadSortExampleOptions.style.display = "none";
+        loadSortDetectorOptions.querySelectorAll(".ls-server-det-item").forEach(el => {
+          el.addEventListener("click", async () => {
+            const name = el.dataset.detName;
+            loadSortStatus.textContent = "Loading server detector\u2026";
+            try {
+              const res = await fetch(`/api/detector/server-files/${encodeURIComponent(name)}`);
+              if (!res.ok) throw new Error("Failed to load detector");
+              loadedDetector = await res.json();
+              loadSortModal.classList.remove("show");
+              activateLoadSort("Detector: " + name);
+              fetchLoadedSort(true);
+            } catch (err) {
+              loadSortStatus.textContent = `Error: ${err.message}`;
+            }
+          });
+        });
+      });
+    }
+
+    // Processor importers — open inline form for training a detector
+    loadSortDetectorOptions.querySelectorAll("[data-proc-importer]").forEach(el => {
+      const impName = el.dataset.procImporter;
+      const imp = procImporters.find(i => i.name === impName);
+      el.addEventListener("click", () => {
+        // Show inline form inside the modal
+        showLoadSortProcessorImporterForm(imp);
+      });
+    });
+
+    // Local example media
+    const lsExampleLocal = document.getElementById("ls-example-local");
+    if (lsExampleLocal) {
+      lsExampleLocal.addEventListener("click", () => {
+        loadSortModal.classList.remove("show");
+        loadSortMediaFile.click();
+      });
+    }
+
+    // Server example media — show sub-list
+    const lsExampleServer = document.getElementById("ls-example-server");
+    if (lsExampleServer && serverMediaFiles.length > 0) {
+      lsExampleServer.addEventListener("click", () => {
+        loadSortExampleOptions.innerHTML = serverMediaFiles.map(f => `
+          <div class="load-sort-option option-card ls-server-media-item" data-media-filename="${escapeHtml(f.filename)}" data-media-name="${escapeHtml(f.name)}" role="button" tabindex="0">
+            <span class="option-card-icon">\uD83C\uDFB5</span>
+            <div>
+              <div class="option-card-title">${escapeHtml(f.name)}</div>
+              <div class="option-card-desc">${(f.size_bytes / 1024).toFixed(1)} KB</div>
+            </div>
+          </div>
+        `).join("");
+        loadSortDetectorOptions.style.display = "none";
+        loadSortExampleOptions.querySelectorAll(".ls-server-media-item").forEach(el => {
+          el.addEventListener("click", async () => {
+            const filename = el.dataset.mediaFilename;
+            const name = el.dataset.mediaName;
+            loadSortModal.classList.remove("show");
+            activateLoadSort("Example: " + name);
+            showSortProgress("Scoring with example media\u2026");
+            try {
+              const res = await fetch("/api/example-sort-server", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename }),
+              });
+              if (!res.ok) throw new Error("Failed to sort by example");
+              const data = await res.json();
+              // Normalise key name: example-sort uses "similarity", detector uses "score"
+              sortOrder = data.results.map(r => ({ id: r.id, score: r.similarity ?? r.score }));
+              threshold = data.threshold;
+              // Mark as example-based load (no loadedDetector weights)
+              loadedDetector = { _example: true, _name: name };
+              hideSortProgress();
+              sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+              renderMediaList();
+              const nextClip = findNextClip();
+              if (nextClip) selectMedia(nextClip.id);
+            } catch (err) {
+              hideSortProgress();
+              sortStatus.textContent = `Error: ${err.message}`;
+            }
+          });
+        });
+      });
+    }
+
+    // Reset visibility
+    loadSortDetectorOptions.style.display = "";
+    loadSortExampleOptions.style.display = "";
+
+    loadSortModal.classList.add("show");
+  }
+
+  /**
+   * Show an inline processor-importer form inside the Load Sort modal.
+   * This trains a detector from a label source and loads it for sorting.
+   */
+  function showLoadSortProcessorImporterForm(importer) {
+    // Replace detector options area with the form
+    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
+    html += `<form id="ls-proc-imp-form">`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Detector Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `</div>`;
+    for (const field of importer.fields) {
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        const itype = field.field_type === "password" ? "password" : "text";
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default || "")}" placeholder="${escapeHtml(field.placeholder || field.description)}" class="form-input" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
+      html += `</div>`;
+    }
+    html += `<div id="ls-proc-status" class="status-text compact"></div>`;
+    html += `<div style="display:flex;gap:8px;">`;
+    html += `<button type="button" id="ls-proc-back" class="btn-sm" style="padding:6px 14px;">\u2190 Back</button>`;
+    html += `<button type="submit" class="btn-block-primary" style="flex:1;">Import & Sort</button>`;
+    html += `</div>`;
+    html += `</form>`;
+
+    loadSortDetectorOptions.innerHTML = html;
+    loadSortExampleOptions.style.display = "none";
+
+    // Back button
+    document.getElementById("ls-proc-back").addEventListener("click", () => {
+      openLoadSortModal();
+    });
+
+    // Form submission
+    document.getElementById("ls-proc-imp-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("ls-proc-status");
+      statusEl.textContent = "Importing\u2026";
+      statusEl.style.color = "var(--text-muted)";
+
+      const formEl = e.target;
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = { name: formEl.elements["name"].value };
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+
+      try {
+        const res = await fetch(`/api/processor-importers/import/${encodeURIComponent(importer.name)}`, {
+          method: "POST", headers, body,
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "Import failed");
+
+        // Now load the newly created detector and use it for sorting
+        const detRes = await fetch("/api/favorite-detectors");
+        if (detRes.ok) {
+          const detData = await detRes.json();
+          const det = (detData.detectors || []).find(d => d.name === result.name);
+          if (det) {
+            loadedDetector = { weights: det.weights, threshold: det.threshold, media_type: det.media_type, name: det.name };
+            loadSortModal.classList.remove("show");
+            activateLoadSort("Detector: " + det.name);
+            fetchLoadedSort(true);
+            return;
+          }
+        }
+        statusEl.textContent = "Imported but could not load detector.";
+        statusEl.style.color = "var(--color-bad)";
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+      }
+    });
+  }
+
+  // Handle local detector file selection from Load Sort modal
+  loadSortDetectorFile.addEventListener("change", async () => {
+    const file = loadSortDetectorFile.files[0];
+    loadSortDetectorFile.value = "";
+    if (!file) {
+      // User cancelled — revert to text if no detector loaded
+      if (!loadedDetector) {
+        document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
+        sortMode = "text";
+        textSortWrap.style.display = "";
+        loadSortWrap.style.display = "none";
+      }
+      return;
+    }
+    sortStatus.textContent = "Loading detector\u2026";
+    try {
+      const text = await file.text();
+      loadedDetector = JSON.parse(text);
+      activateLoadSort("Detector: " + (loadedDetector.name || file.name.replace(/\.json$/, "")));
+      fetchLoadedSort(true);
+    } catch (e) {
+      sortStatus.textContent = "Invalid detector file";
+      loadedDetector = null;
+      updateSortModeAvailability();
+      document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
+      sortMode = "text";
+      textSortWrap.style.display = "";
+      loadSortWrap.style.display = "none";
+    }
+  });
+
+  // Handle local example media selection from Load Sort modal
+  loadSortMediaFile.addEventListener("change", async () => {
+    const file = loadSortMediaFile.files[0];
+    loadSortMediaFile.value = "";
+    if (!file) {
+      if (!loadedDetector) {
+        document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
+        sortMode = "text";
+        textSortWrap.style.display = "";
+        loadSortWrap.style.display = "none";
+      }
+      return;
+    }
+    const name = file.name.replace(/\.[^.]+$/, "");
+    activateLoadSort("Example: " + name);
+    showSortProgress("Scoring with example media\u2026");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/example-sort", { method: "POST", body: formData });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to sort by example");
+      }
+      const data = await res.json();
+      sortOrder = data.results.map(r => ({ id: r.id, score: r.similarity ?? r.score }));
+      threshold = data.threshold;
+      loadedDetector = { _example: true, _name: name };
+      hideSortProgress();
+      sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+      renderMediaList();
+      const nextClip = findNextClip();
+      if (nextClip) selectMedia(nextClip.id);
+    } catch (err) {
+      hideSortProgress();
+      sortStatus.textContent = `Error: ${err.message}`;
+      loadedDetector = null;
+      updateSortModeAvailability();
+      document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
+      sortMode = "text";
+      textSortWrap.style.display = "";
+      loadSortWrap.style.display = "none";
+    }
+  });
 
   // ---- Processor importer modal ----
 
