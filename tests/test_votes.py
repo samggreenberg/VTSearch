@@ -263,9 +263,7 @@ class TestStableIndicatorThresholds:
             ]
         )
         result = _compute_stable_status(good=5, bad=5, total=10)
-        assert result["status"] == "yellow", (
-            "Should be yellow: only 4 real entries (None entries excluded)"
-        )
+        assert result["status"] == "yellow", "Should be yellow: only 4 real entries (None entries excluded)"
 
     def test_needs_five_real_entries_for_green(self, client):
         """Green requires at least 5 stability entries."""
