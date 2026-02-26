@@ -34,7 +34,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md)
 - `tests/` — Test suite split by module:
-  - `conftest.py` — Shared fixtures (client, vote reset, model init)
+  - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_audio.py` — WAV generation
   - `test_medias.py` — Media init, listing, audio endpoint, MD5
   - `test_votes.py` — Voting and vote retrieval
@@ -92,6 +92,32 @@ Testing can crash the session. To avoid losing work, follow this workflow:
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
 This ensures work is recoverable if the session crashes during a test run.
+
+## Test Isolation (IMPORTANT)
+
+All mutable global state is reset automatically before each test via two autouse fixtures in `conftest.py`:
+
+1. **`reset_state`** — Clears all mutable state in `vtsearch/utils/state.py`:
+   - `good_votes`, `bad_votes`, `label_history`, `textsort_suggestions`, `vote_click_times`, `last_learned_scores`
+   - `favorite_detectors`, `favorite_extractors`, `favorite_localizers`
+   - `_click_counter`, `inclusion`, `_diversity_tree`
+   - Progress cache
+
+2. **`isolated_settings`** — Redirects `SETTINGS_PATH` to a per-test temp file so settings writes never touch `data/settings.json`. Yields the temp path for tests that need to inspect the file.
+
+**When writing new tests:**
+- Do NOT add per-file or per-class autouse fixtures to clear favorites, reset settings, or reset votes — `conftest.py` handles all of this automatically.
+- Do NOT add inline `.pop()` or `.clear()` cleanup at the end of tests — the conftest fixtures run before each test regardless of whether the previous test passed or failed.
+- If a test needs to temporarily empty `medias`, use the save/restore pattern with try/finally (since `medias` is intentionally NOT reset between tests to avoid expensive re-generation):
+  ```python
+  saved = dict(medias)
+  medias.clear()
+  try:
+      # ... test logic ...
+  finally:
+      medias.update(saved)
+  ```
+- If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors`, `favorite_localizers` are module-level dicts/lists

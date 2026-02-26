@@ -1,10 +1,6 @@
 """Tests for graceful MemoryError handling during dataset loading."""
 
-import gc
 import pickle
-import threading
-import time
-from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -12,7 +8,7 @@ import pytest
 
 import app as app_module
 from vtsearch.datasets.config import DEMO_DATASETS
-from vtsearch.utils import medias, clear_all, get_progress, update_progress
+from vtsearch.utils import medias, get_progress, update_progress
 from vtsearch.utils.state import clear_medias
 
 
@@ -177,7 +173,6 @@ class TestCombineMemoryError:
 
         # Make the second _load_clips_from_pickle call OOM
         call_count = 0
-        real_load = None
 
         def oom_second_load(path):
             nonlocal call_count
@@ -216,10 +211,18 @@ class TestBackgroundImportMemoryError:
         # Reset progress
         update_progress("idle", "")
 
-        _run_importer_in_background(mock_importer, {})
+        # Patch threading.Thread to run synchronously so we don't race
+        with mock.patch("vtsearch.routes.datasets.threading") as mock_threading:
+            captured_target = {}
 
-        # Wait for the background thread to finish
-        time.sleep(0.5)
+            def fake_thread(target, daemon=True):
+                captured_target["fn"] = target
+                thread = mock.MagicMock()
+                thread.start = lambda: target()
+                return thread
+
+            mock_threading.Thread.side_effect = fake_thread
+            _run_importer_in_background(mock_importer, {})
 
         progress = get_progress()
         assert progress["error"] is not None
@@ -233,18 +236,23 @@ class TestBackgroundImportMemoryError:
         """When loading a demo dataset OOMs, the progress shows the error."""
         update_progress("idle", "")
 
+        def sync_thread(target, daemon=True):
+            thread = mock.MagicMock()
+            thread.start = lambda: target()
+            return thread
+
         with mock.patch(
             "vtsearch.routes.datasets.load_demo_dataset",
             side_effect=MemoryError("simulated"),
+        ), mock.patch(
+            "vtsearch.routes.datasets.threading.Thread",
+            side_effect=sync_thread,
         ):
             resp = client.post(
                 "/api/dataset/load-demo",
                 json={"name": list(DEMO_DATASETS.keys())[0]},
             )
             assert resp.status_code == 200
-
-            # Wait for background thread
-            time.sleep(0.5)
 
             progress = get_progress()
             assert progress["error"] is not None

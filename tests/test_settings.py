@@ -19,16 +19,6 @@ import app as app_module  # noqa: F401 — triggers conftest media init
 from vtsearch import settings as settings_mod
 
 
-@pytest.fixture(autouse=True)
-def isolated_settings(tmp_path, monkeypatch):
-    """Use a temp file for each test so tests don't interfere."""
-    test_settings_path = tmp_path / "settings.json"
-    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
-    settings_mod.reset()
-    yield test_settings_path
-    settings_mod.reset()
-
-
 @pytest.fixture
 def client():
     app_module.app.config["TESTING"] = True
@@ -311,9 +301,6 @@ class TestEnsureFavoriteProcessorsImported:
             "threshold": 0.5,
         }))
 
-        # Clear any existing detectors with this name
-        favorite_detectors.pop("settings_test_det", None)
-
         settings_mod.add_favorite_processor(
             "settings_test_det", "detector_file", {"file": str(det_path)}
         )
@@ -322,12 +309,9 @@ class TestEnsureFavoriteProcessorsImported:
         assert "settings_test_det" in imported
         assert "settings_test_det" in favorite_detectors
 
-        # Clean up
-        favorite_detectors.pop("settings_test_det", None)
-
     def test_skips_already_imported(self, tmp_path):
         """If a detector with the same name already exists, skip it."""
-        from vtsearch.utils import add_favorite_detector, favorite_detectors
+        from vtsearch.utils import add_favorite_detector
 
         add_favorite_detector("existing", "audio", {"0.weight": [[0.1]], "0.bias": [0.0]}, 0.5)
 
@@ -337,9 +321,6 @@ class TestEnsureFavoriteProcessorsImported:
 
         imported = settings_mod.ensure_favorite_processors_imported()
         assert imported == []
-
-        # Clean up
-        favorite_detectors.pop("existing", None)
 
     def test_handles_bad_importer_gracefully(self):
         """Unknown importer name should not crash."""

@@ -30,8 +30,13 @@ app_module.init_medias()
 
 
 @pytest.fixture(autouse=True)
-def reset_votes():
-    """Reset vote state and progress cache before each test."""
+def reset_state():
+    """Reset all mutable global state before each test.
+
+    This fixture prevents cross-test contamination by clearing votes,
+    favorites, and all other mutable state that lives in
+    ``vtsearch.utils.state``.  It runs automatically before every test.
+    """
     import vtsearch.utils.state as _state
 
     good_votes.clear()
@@ -43,7 +48,27 @@ def reset_votes():
     _state._click_counter = 0
     _state.inclusion = None  # reset to "not loaded" so it re-reads from settings
     _state._diversity_tree = None
+    _state.favorite_detectors.clear()
+    _state.favorite_extractors.clear()
+    _state.favorite_localizers.clear()
     clear_progress_cache()
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(tmp_path, monkeypatch):
+    """Redirect the settings file to a temp directory for each test.
+
+    Without this, tests that write settings (inclusion, safe_thresholds,
+    volume, etc.) would mutate the shared ``data/settings.json`` on disk,
+    leaking values into subsequent tests that lazy-load from that file.
+    """
+    from vtsearch import settings as settings_mod
+
+    test_settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
+    settings_mod.reset()
+    yield test_settings_path
+    settings_mod.reset()
 
 
 @pytest.fixture

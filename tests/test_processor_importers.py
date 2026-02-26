@@ -469,9 +469,6 @@ class TestServerFileProcessorImporter:
         assert result["media_type"] == "image"
         assert "server_test_det" in favorite_detectors
 
-        # Clean up
-        favorite_detectors.pop("server_test_det", None)
-
 
 # ---------------------------------------------------------------------------
 # Label file importer (mocked embedding/training)
@@ -623,12 +620,7 @@ class TestProcessorImportEndpoint:
         assert result["media_type"] == "image"
         assert "test_detector" in favorite_detectors
 
-        # Clean up
-        favorite_detectors.pop("test_detector", None)
-
     def test_detector_file_defaults_to_audio(self, client):
-        from vtsearch.utils import favorite_detectors
-
         payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
         raw = json.dumps(payload).encode()
         data = {
@@ -642,9 +634,6 @@ class TestProcessorImportEndpoint:
         )
         assert res.status_code == 200
         assert res.get_json()["media_type"] == "audio"
-
-        # Clean up
-        favorite_detectors.pop("audio_det", None)
 
     def test_detector_file_invalid_json_returns_400(self, client):
         data = {
@@ -848,9 +837,6 @@ class TestFromLabelImportEndpoint:
         assert result["name"] == "from_label_import_test"
         assert result["loaded"] >= 2
         assert "from_label_import_test" in favorite_detectors
-
-        # Clean up
-        favorite_detectors.pop("from_label_import_test", None)
 
     def test_no_clips_returns_400(self, client):
         from vtsearch.utils import medias
