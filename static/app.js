@@ -4234,7 +4234,7 @@
       <div class="load-sort-option option-card" id="ls-example-local" role="button" tabindex="0">
         <span class="option-card-icon">\uD83D\uDCC1</span>
         <div>
-          <div class="option-card-title">Load Local Media</div>
+          <div class="option-card-title">Local Example</div>
           <div class="option-card-desc">Choose a ${mediaType} file from your computer to sort by similarity.</div>
         </div>
       </div>`;
@@ -4249,16 +4249,17 @@
       }
     } catch (_) { /* ignore */ }
 
-    if (serverMediaFiles.length > 0) {
-      exampleHtml += `
-        <div class="load-sort-option option-card" id="ls-example-server" role="button" tabindex="0">
-          <span class="option-card-icon">\uD83D\uDCBE</span>
-          <div>
-            <div class="option-card-title">Load Server Media</div>
-            <div class="option-card-desc">${serverMediaFiles.length} media file${serverMediaFiles.length !== 1 ? "s" : ""} on the server.</div>
-          </div>
-        </div>`;
-    }
+    const serverExampleDesc = serverMediaFiles.length > 0
+      ? `${serverMediaFiles.length} media file${serverMediaFiles.length !== 1 ? "s" : ""} on the server.`
+      : "No example media files saved on server yet.";
+    exampleHtml += `
+      <div class="load-sort-option option-card${serverMediaFiles.length === 0 ? " option-card-disabled" : ""}" id="ls-example-server" role="button" tabindex="0">
+        <span class="option-card-icon">\uD83D\uDCBE</span>
+        <div>
+          <div class="option-card-title">Server Example</div>
+          <div class="option-card-desc">${serverExampleDesc}</div>
+        </div>
+      </div>`;
 
     loadSortExampleOptions.innerHTML = exampleHtml;
 
@@ -4325,10 +4326,14 @@
       });
     }
 
-    // Server example media — show sub-list
+    // Server example media — show sub-list (always shown; guard empty case)
     const lsExampleServer = document.getElementById("ls-example-server");
-    if (lsExampleServer && serverMediaFiles.length > 0) {
+    if (lsExampleServer) {
       lsExampleServer.addEventListener("click", () => {
+        if (serverMediaFiles.length === 0) {
+          loadSortStatus.textContent = "No example media files on server. Place files in data/example_media/ to use this option.";
+          return;
+        }
         loadSortExampleOptions.innerHTML = serverMediaFiles.map(f => `
           <div class="load-sort-option option-card ls-server-media-item" data-media-filename="${escapeHtml(f.filename)}" data-media-name="${escapeHtml(f.name)}" role="button" tabindex="0">
             <span class="option-card-icon">\uD83C\uDFB5</span>

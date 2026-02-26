@@ -498,6 +498,8 @@ video { max-width: 100%; }
   display: flex; align-items: center; gap: 12px; transition: background 0.15s;
 }
 .option-card:hover { background: var(--bg-hover); }
+.option-card.option-card-disabled { opacity: 0.45; cursor: default; }
+.option-card.option-card-disabled:hover { background: var(--border); }
 .option-card-icon { font-size: 1.5rem; flex-shrink: 0; }
 .option-card-title { font-weight: bold; color: var(--text-primary); }
 .option-card-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
