@@ -245,31 +245,34 @@ class TestStableIndicatorThresholds:
         for entry in entries:
             _cached_steps.append({"model": None, "threshold": None, "good_ids": [], "bad_ids": [], "stability": entry})
 
-    def test_not_green_with_only_first_zero_entry(self, client):
-        """The first entry always has 0 flips (no prior predictions).
+    def test_no_model_steps_not_counted(self, client):
+        """Steps without a prior model (stability=None) should be excluded.
 
-        Even with a few subsequent low-flip steps, the indicator should
-        stay yellow — the first zero must not count toward stability.
+        When there's no prior model to compare against (first model step
+        or after a gap), stability is None.  These should not count toward
+        the stability assessment.
         """
         self._inject_stability(
             [
-                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},  # always-zero first
-                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
+                None,  # no model yet
+                None,  # no prior model (first model step)
                 {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
                 {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
+                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
+                {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
             ]
         )
         result = _compute_stable_status(good=5, bad=5, total=10)
         assert result["status"] == "yellow", (
-            "Should be yellow: only 3 real entries after dropping the bogus first zero"
+            "Should be yellow: only 4 real entries (None entries excluded)"
         )
 
     def test_needs_five_real_entries_for_green(self, client):
-        """Green requires at least 5 non-trivial stability entries."""
-        # 1 bogus first + 4 real = only 4 usable → yellow
+        """Green requires at least 5 stability entries."""
+        # None (no prior model) + 4 real = only 4 usable → yellow
         self._inject_stability(
             [
-                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},
+                None,  # no prior model
                 {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
                 {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
                 {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
@@ -277,12 +280,12 @@ class TestStableIndicatorThresholds:
             ]
         )
         result = _compute_stable_status(good=5, bad=5, total=10)
-        assert result["status"] == "yellow", "4 real entries (after dropping first) is not enough"
+        assert result["status"] == "yellow", "4 real entries is not enough"
 
         # Add one more → 5 usable → green
         self._inject_stability(
             [
-                {"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 90},
+                None,  # no prior model
                 {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
                 {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
                 {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
@@ -295,7 +298,7 @@ class TestStableIndicatorThresholds:
 
     def test_single_spike_prevents_green(self, client):
         """One spike above the max threshold should keep the indicator yellow."""
-        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 100}]
+        entries: list = [None]  # no prior model
         for i in range(1, 7):
             entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 0, "num_unlabeled": 100 - i})
         # Inject one spike: 6 flips out of 93 unlabeled → ~6.5%, above 1% max threshold
@@ -307,7 +310,7 @@ class TestStableIndicatorThresholds:
 
     def test_low_flip_rate_still_yellow(self, client):
         """Even a modest flip rate (~1.5%) should stay yellow under the tight thresholds."""
-        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 200}]
+        entries: list = [None]  # no prior model
         for i in range(1, 7):
             # 3 flips out of ~194 unlabeled → ~1.5% per step
             entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 3, "num_unlabeled": 200 - i})
@@ -317,7 +320,7 @@ class TestStableIndicatorThresholds:
 
     def test_near_zero_flips_green(self, client):
         """Green requires practically zero flips — only the rare single flip tolerated."""
-        entries = [{"time_index": 0, "num_labels": 10, "num_flips": 0, "num_unlabeled": 500}]
+        entries: list = [None]  # no prior model
         for i in range(1, 7):
             # Mostly 0 flips, one step with 1 flip out of ~496 → 0.2%
             flips = 1 if i == 3 else 0
@@ -325,3 +328,21 @@ class TestStableIndicatorThresholds:
         self._inject_stability(entries)
         result = _compute_stable_status(good=8, bad=8, total=16)
         assert result["status"] == "green", "Near-zero flips with rare single flip on large dataset should be green"
+
+    def test_model_gap_entries_excluded(self, client):
+        """After a model gap, the first step back should also be excluded (no prior model)."""
+        self._inject_stability(
+            [
+                None,  # no prior model (first model step)
+                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
+                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
+                None,  # model lost (gap — user unlabeled all bad)
+                None,  # still no model
+                None,  # first model step after gap — no prior model
+                {"time_index": 6, "num_labels": 16, "num_flips": 0, "num_unlabeled": 84},
+                {"time_index": 7, "num_labels": 17, "num_flips": 0, "num_unlabeled": 83},
+            ]
+        )
+        result = _compute_stable_status(good=5, bad=5, total=10)
+        # Only 4 real entries (indices 1, 2, 6, 7) → yellow
+        assert result["status"] == "yellow", "Gap entries (None) should be excluded, leaving only 4 real entries"

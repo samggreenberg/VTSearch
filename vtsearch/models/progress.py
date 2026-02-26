@@ -139,21 +139,30 @@ def _ensure_cache(
                         cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)
                     }
 
-                    num_flips = 0
                     if _cache_prev_predictions is not None:
+                        num_flips = 0
                         common = predictions.keys() & _cache_prev_predictions.keys()
                         for cid in common:
                             if predictions[cid] != _cache_prev_predictions[cid]:
                                 num_flips += 1
 
-                    stability = {
-                        "time_index": t,
-                        "num_labels": len(good_ids) + len(bad_ids),
-                        "num_flips": num_flips,
-                        "num_unlabeled": len(unlabeled_ids),
-                    }
+                        stability = {
+                            "time_index": t,
+                            "num_labels": len(good_ids) + len(bad_ids),
+                            "num_flips": num_flips,
+                            "num_unlabeled": len(unlabeled_ids),
+                        }
+                    # else: no prior model predictions to compare against —
+                    # a "0 changes" result would be meaningless, so leave
+                    # stability as None for this step.
 
                     _cache_prev_predictions = predictions
+
+        else:
+            # No model at this step — clear previous predictions so the
+            # first step after regaining a model doesn't produce a
+            # misleading flip count.
+            _cache_prev_predictions = None
 
         _cached_steps.append(
             {
@@ -378,12 +387,6 @@ def _compute_stable_status(
         }
 
     stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
-
-    # The first stability entry always reports 0 flips because there are no
-    # prior predictions to compare against.  Drop it so it doesn't
-    # artificially drag the average toward zero.
-    if len(stability) > 1:
-        stability = stability[1:]
 
     MIN_STABLE_ENTRIES = 5
     if len(stability) < MIN_STABLE_ENTRIES:

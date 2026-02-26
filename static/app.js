@@ -4983,8 +4983,7 @@
       return;
     }
 
-    // Extract data (skip first entry since it has no previous to compare)
-    const dataToPlot = stabilityData.slice(1);
+    const dataToPlot = stabilityData;
     if (dataToPlot.length === 0) {
       ctx.fillStyle = themeColor("--text-muted");
       ctx.font = "14px sans-serif";
