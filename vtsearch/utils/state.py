@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import gc
 import json
+import threading
 from typing import Any
+
+# Reentrant lock protecting all mutable state in this module.
+# RLock is used because some public functions call other public functions
+# (e.g. clear_all -> clear_medias + clear_votes).
+_state_lock = threading.RLock()
 
 # Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, media_string, ...}
 medias: dict[int, dict[str, Any]] = {}
@@ -59,14 +65,15 @@ def clear_votes() -> None:
     global _click_counter
     from vtsearch.models.progress import clear_progress_cache
 
-    good_votes.clear()
-    bad_votes.clear()
-    label_history.clear()
-    textsort_suggestions.clear()
-    vote_click_times.clear()
-    _click_counter = 0
-    last_learned_scores.clear()
-    clear_progress_cache()
+    with _state_lock:
+        good_votes.clear()
+        bad_votes.clear()
+        label_history.clear()
+        textsort_suggestions.clear()
+        vote_click_times.clear()
+        _click_counter = 0
+        last_learned_scores.clear()
+        clear_progress_cache()
 
 
 def clear_medias() -> None:
@@ -79,9 +86,10 @@ def clear_medias() -> None:
     global _diversity_tree
     from vtsearch.models.progress import clear_progress_cache
 
-    medias.clear()
-    _diversity_tree = None
-    clear_progress_cache()
+    with _state_lock:
+        medias.clear()
+        _diversity_tree = None
+        clear_progress_cache()
     gc.collect()
 
 
@@ -91,8 +99,9 @@ def clear_all() -> None:
     Convenience wrapper that calls :func:`clear_medias` followed by
     :func:`clear_votes`.
     """
-    clear_medias()
-    clear_votes()
+    with _state_lock:
+        clear_medias()
+        clear_votes()
 
 
 def get_inclusion() -> int:
@@ -107,11 +116,12 @@ def get_inclusion() -> int:
         recall); negative values cause it to include fewer (higher precision).
     """
     global inclusion
-    if inclusion is None:
-        from vtsearch import settings
+    with _state_lock:
+        if inclusion is None:
+            from vtsearch import settings
 
-        inclusion = settings.get_inclusion()
-    return inclusion
+            inclusion = settings.get_inclusion()
+        return inclusion
 
 
 def set_inclusion(value: int) -> None:
@@ -126,11 +136,12 @@ def set_inclusion(value: int) -> None:
             results in model training weight calculations.
     """
     global inclusion
-    if value != inclusion:
-        from vtsearch.models.progress import clear_progress_cache
+    with _state_lock:
+        if value != inclusion:
+            from vtsearch.models.progress import clear_progress_cache
 
-        clear_progress_cache()
-    inclusion = value
+            clear_progress_cache()
+        inclusion = value
 
     from vtsearch import settings
 
@@ -196,30 +207,35 @@ def assign_click_time(media_id: int) -> int:
     monotonically increasing.
     """
     global _click_counter
-    _click_counter += 1
-    vote_click_times[media_id] = _click_counter
-    return _click_counter
+    with _state_lock:
+        _click_counter += 1
+        vote_click_times[media_id] = _click_counter
+        return _click_counter
 
 
 def remove_click_time(media_id: int) -> None:
     """Remove the click-time entry for a media (e.g. when unlabelling)."""
-    vote_click_times.pop(media_id, None)
+    with _state_lock:
+        vote_click_times.pop(media_id, None)
 
 
 def get_vote_click_times() -> dict[int, int]:
     """Return a copy of the click-time mapping."""
-    return vote_click_times.copy()
+    with _state_lock:
+        return vote_click_times.copy()
 
 
 def update_learned_scores(scores: dict[int, float]) -> None:
     """Replace the stored learned-sort scores with *scores*."""
-    last_learned_scores.clear()
-    last_learned_scores.update(scores)
+    with _state_lock:
+        last_learned_scores.clear()
+        last_learned_scores.update(scores)
 
 
 def get_learned_scores() -> dict[int, float]:
     """Return a copy of the last learned-sort scores."""
-    return last_learned_scores.copy()
+    with _state_lock:
+        return last_learned_scores.copy()
 
 
 def add_label_to_history(media_id: int, label: str) -> None:
@@ -231,7 +247,8 @@ def add_label_to_history(media_id: int, label: str) -> None:
     """
     import time
 
-    label_history.append((media_id, label, time.time()))
+    with _state_lock:
+        label_history.append((media_id, label, time.time()))
 
 
 def add_textsort_suggestion(text: str) -> None:
@@ -242,17 +259,19 @@ def add_textsort_suggestion(text: str) -> None:
     Args:
         text: The text-sort query string to store.
     """
-    # Remove existing occurrence so it moves to the end
-    try:
-        textsort_suggestions.remove(text)
-    except ValueError:
-        pass
-    textsort_suggestions.append(text)
+    with _state_lock:
+        # Remove existing occurrence so it moves to the end
+        try:
+            textsort_suggestions.remove(text)
+        except ValueError:
+            pass
+        textsort_suggestions.append(text)
 
 
 def get_textsort_suggestions() -> list[str]:
     """Return stored text-sort suggestions, most recent last."""
-    return list(textsort_suggestions)
+    with _state_lock:
+        return list(textsort_suggestions)
 
 
 def add_favorite_detector(name: str, media_type: str, weights: dict[str, Any], threshold: float) -> None:
@@ -271,13 +290,14 @@ def add_favorite_detector(name: str, media_type: str, weights: dict[str, Any], t
     """
     import time
 
-    favorite_detectors[name] = {
-        "name": name,
-        "media_type": media_type,
-        "weights": weights,
-        "threshold": threshold,
-        "created_at": time.time(),
-    }
+    with _state_lock:
+        favorite_detectors[name] = {
+            "name": name,
+            "media_type": media_type,
+            "weights": weights,
+            "threshold": threshold,
+            "created_at": time.time(),
+        }
 
 
 def remove_favorite_detector(name: str) -> bool:
@@ -290,10 +310,11 @@ def remove_favorite_detector(name: str) -> bool:
         ``True`` if the detector was found and removed; ``False`` if no
         detector with that name exists.
     """
-    if name in favorite_detectors:
-        del favorite_detectors[name]
-        return True
-    return False
+    with _state_lock:
+        if name in favorite_detectors:
+            del favorite_detectors[name]
+            return True
+        return False
 
 
 def rename_favorite_detector(old_name: str, new_name: str) -> bool:
@@ -310,12 +331,13 @@ def rename_favorite_detector(old_name: str, new_name: str) -> bool:
         ``True`` if the rename succeeded (old name existed and new name was not
         already taken); ``False`` otherwise (no changes are made).
     """
-    if old_name in favorite_detectors and new_name not in favorite_detectors:
-        favorite_detectors[new_name] = favorite_detectors[old_name].copy()
-        favorite_detectors[new_name]["name"] = new_name
-        del favorite_detectors[old_name]
-        return True
-    return False
+    with _state_lock:
+        if old_name in favorite_detectors and new_name not in favorite_detectors:
+            favorite_detectors[new_name] = favorite_detectors[old_name].copy()
+            favorite_detectors[new_name]["name"] = new_name
+            del favorite_detectors[old_name]
+            return True
+        return False
 
 
 def get_favorite_detectors() -> dict[str, dict[str, Any]]:
@@ -326,7 +348,8 @@ def get_favorite_detectors() -> dict[str, dict[str, Any]]:
         ``"media_type"``, ``"weights"``, ``"threshold"``, ``"created_at"``).
         The returned dict is a copy; mutations to it do not affect the global store.
     """
-    return favorite_detectors.copy()
+    with _state_lock:
+        return favorite_detectors.copy()
 
 
 def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
@@ -342,7 +365,8 @@ def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]
         The returned dict is a new dict object; mutations do not affect the
         global store.
     """
-    return {name: det for name, det in favorite_detectors.items() if det["media_type"] == media_type}
+    with _state_lock:
+        return {name: det for name, det in favorite_detectors.items() if det["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------
@@ -361,13 +385,14 @@ def add_favorite_extractor(name: str, extractor_type: str, media_type: str, conf
     """
     import time
 
-    favorite_extractors[name] = {
-        "name": name,
-        "extractor_type": extractor_type,
-        "media_type": media_type,
-        "config": config,
-        "created_at": time.time(),
-    }
+    with _state_lock:
+        favorite_extractors[name] = {
+            "name": name,
+            "extractor_type": extractor_type,
+            "media_type": media_type,
+            "config": config,
+            "created_at": time.time(),
+        }
 
 
 def remove_favorite_extractor(name: str) -> bool:
@@ -376,10 +401,11 @@ def remove_favorite_extractor(name: str) -> bool:
     Returns:
         ``True`` if the extractor was found and removed; ``False`` otherwise.
     """
-    if name in favorite_extractors:
-        del favorite_extractors[name]
-        return True
-    return False
+    with _state_lock:
+        if name in favorite_extractors:
+            del favorite_extractors[name]
+            return True
+        return False
 
 
 def rename_favorite_extractor(old_name: str, new_name: str) -> bool:
@@ -388,22 +414,25 @@ def rename_favorite_extractor(old_name: str, new_name: str) -> bool:
     Returns:
         ``True`` if the rename succeeded; ``False`` otherwise.
     """
-    if old_name in favorite_extractors and new_name not in favorite_extractors:
-        favorite_extractors[new_name] = favorite_extractors[old_name].copy()
-        favorite_extractors[new_name]["name"] = new_name
-        del favorite_extractors[old_name]
-        return True
-    return False
+    with _state_lock:
+        if old_name in favorite_extractors and new_name not in favorite_extractors:
+            favorite_extractors[new_name] = favorite_extractors[old_name].copy()
+            favorite_extractors[new_name]["name"] = new_name
+            del favorite_extractors[old_name]
+            return True
+        return False
 
 
 def get_favorite_extractors() -> dict[str, dict[str, Any]]:
     """Return a shallow copy of all favorite extractors."""
-    return favorite_extractors.copy()
+    with _state_lock:
+        return favorite_extractors.copy()
 
 
 def get_favorite_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all favorite extractors matching a given media type."""
-    return {name: ext for name, ext in favorite_extractors.items() if ext["media_type"] == media_type}
+    with _state_lock:
+        return {name: ext for name, ext in favorite_extractors.items() if ext["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------
@@ -415,41 +444,46 @@ def add_favorite_localizer(name: str, localizer_type: str, media_type: str, conf
     """Add or overwrite a named favorite localizer in the global store."""
     import time
 
-    favorite_localizers[name] = {
-        "name": name,
-        "localizer_type": localizer_type,
-        "media_type": media_type,
-        "config": config,
-        "created_at": time.time(),
-    }
+    with _state_lock:
+        favorite_localizers[name] = {
+            "name": name,
+            "localizer_type": localizer_type,
+            "media_type": media_type,
+            "config": config,
+            "created_at": time.time(),
+        }
 
 
 def remove_favorite_localizer(name: str) -> bool:
     """Remove a named favorite localizer. Returns True if found."""
-    if name in favorite_localizers:
-        del favorite_localizers[name]
-        return True
-    return False
+    with _state_lock:
+        if name in favorite_localizers:
+            del favorite_localizers[name]
+            return True
+        return False
 
 
 def rename_favorite_localizer(old_name: str, new_name: str) -> bool:
     """Rename a favorite localizer. Returns True if succeeded."""
-    if old_name in favorite_localizers and new_name not in favorite_localizers:
-        favorite_localizers[new_name] = favorite_localizers[old_name].copy()
-        favorite_localizers[new_name]["name"] = new_name
-        del favorite_localizers[old_name]
-        return True
-    return False
+    with _state_lock:
+        if old_name in favorite_localizers and new_name not in favorite_localizers:
+            favorite_localizers[new_name] = favorite_localizers[old_name].copy()
+            favorite_localizers[new_name]["name"] = new_name
+            del favorite_localizers[old_name]
+            return True
+        return False
 
 
 def get_favorite_localizers() -> dict[str, dict[str, Any]]:
     """Return a shallow copy of all favorite localizers."""
-    return favorite_localizers.copy()
+    with _state_lock:
+        return favorite_localizers.copy()
 
 
 def get_favorite_localizers_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all favorite localizers matching a given media type."""
-    return {name: loc for name, loc in favorite_localizers.items() if loc["media_type"] == media_type}
+    with _state_lock:
+        return {name: loc for name, loc in favorite_localizers.items() if loc["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------
@@ -469,50 +503,55 @@ def build_diversity_tree(media_dict: dict[int, dict[str, Any]] | None = None) ->
 
     from vtsearch.models.diversity_tree import DiversityTree
 
-    source = media_dict if media_dict is not None else medias
-    vectors: dict[int, np.ndarray] = {}
-    for cid, media in source.items():
-        emb = media.get("embedding")
-        if emb is not None:
-            vectors[cid] = np.asarray(emb, dtype=np.float32)
+    with _state_lock:
+        source = media_dict if media_dict is not None else medias
+        vectors: dict[int, np.ndarray] = {}
+        for cid, media in source.items():
+            emb = media.get("embedding")
+            if emb is not None:
+                vectors[cid] = np.asarray(emb, dtype=np.float32)
 
-    if not vectors:
-        _diversity_tree = None
-        return
+        if not vectors:
+            _diversity_tree = None
+            return
 
-    _diversity_tree = DiversityTree(vectors, k=3)
+        _diversity_tree = DiversityTree(vectors, k=3)
 
-    # Replay existing labels so the tree reflects the current vote state.
-    for cid in good_votes:
-        if cid in _diversity_tree.vector_to_leaf:
-            _diversity_tree.label(cid)
-    for cid in bad_votes:
-        if cid in _diversity_tree.vector_to_leaf:
-            _diversity_tree.label(cid)
+        # Replay existing labels so the tree reflects the current vote state.
+        for cid in good_votes:
+            if cid in _diversity_tree.vector_to_leaf:
+                _diversity_tree.label(cid)
+        for cid in bad_votes:
+            if cid in _diversity_tree.vector_to_leaf:
+                _diversity_tree.label(cid)
 
 
 def get_diversity_tree():
     """Return the current DiversityTree instance, or ``None``."""
-    return _diversity_tree
+    with _state_lock:
+        return _diversity_tree
 
 
 def diversity_tree_next_sample() -> int | None:
     """Return the next diverse sample ID, or ``None`` if unavailable."""
-    if _diversity_tree is None:
-        return None
-    return _diversity_tree.next_sample()
+    with _state_lock:
+        if _diversity_tree is None:
+            return None
+        return _diversity_tree.next_sample()
 
 
 def diversity_tree_label(media_id: int) -> None:
     """Mark *media_id* as labeled in the diversity tree."""
-    if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
-        _diversity_tree.label(media_id)
+    with _state_lock:
+        if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
+            _diversity_tree.label(media_id)
 
 
 def diversity_tree_unlabel(media_id: int) -> None:
     """Remove *media_id*'s label from the diversity tree."""
-    if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
-        _diversity_tree.unlabel(media_id)
+    with _state_lock:
+        if _diversity_tree is not None and media_id in _diversity_tree.vector_to_leaf:
+            _diversity_tree.unlabel(media_id)
 
 
 # ---------------------------------------------------------------------------
@@ -610,6 +649,100 @@ def find_missing_entries(
         if not cids:
             missing.append(entry)
     return missing
+
+
+# ---------------------------------------------------------------------------
+# Compound operations (atomic vote toggle / label apply)
+# ---------------------------------------------------------------------------
+
+
+def toggle_vote(media_id: int, vote: str) -> None:
+    """Atomically toggle a good/bad vote for a media item.
+
+    Implements the same toggle semantics as the ``/api/medias/<id>/vote``
+    endpoint: if the media already has the requested vote it is removed
+    (unlabelled); otherwise the vote is applied (overriding any existing
+    opposite vote).
+
+    This function acquires ``_state_lock`` so that the entire check-then-modify
+    sequence is atomic with respect to concurrent requests.
+
+    Args:
+        media_id: Integer ID of the media to vote on.
+        vote: ``"good"`` or ``"bad"``.
+    """
+    with _state_lock:
+        if vote == "good":
+            if media_id in good_votes:
+                good_votes.pop(media_id, None)
+                remove_click_time(media_id)
+                add_label_to_history(media_id, "unlabel")
+                if media_id not in bad_votes:
+                    diversity_tree_unlabel(media_id)
+            else:
+                bad_votes.pop(media_id, None)
+                good_votes[media_id] = None
+                assign_click_time(media_id)
+                add_label_to_history(media_id, "good")
+                diversity_tree_label(media_id)
+        else:
+            if media_id in bad_votes:
+                bad_votes.pop(media_id, None)
+                remove_click_time(media_id)
+                add_label_to_history(media_id, "unlabel")
+                if media_id not in good_votes:
+                    diversity_tree_unlabel(media_id)
+            else:
+                good_votes.pop(media_id, None)
+                bad_votes[media_id] = None
+                assign_click_time(media_id)
+                add_label_to_history(media_id, "bad")
+                diversity_tree_label(media_id)
+
+
+def apply_label(media_id: int, label: str) -> None:
+    """Atomically apply a label to a media (for imports).
+
+    Unlike :func:`toggle_vote`, this always sets the label without toggling.
+    No click-time is assigned (imported labels have no click-time).
+
+    Args:
+        media_id: Integer ID of the media to label.
+        label: ``"good"`` or ``"bad"``.
+    """
+    with _state_lock:
+        if label == "good":
+            bad_votes.pop(media_id, None)
+            good_votes[media_id] = None
+            add_label_to_history(media_id, "good")
+        else:
+            good_votes.pop(media_id, None)
+            bad_votes[media_id] = None
+            add_label_to_history(media_id, "bad")
+        diversity_tree_label(media_id)
+
+
+def apply_label_with_click_time(media_id: int, label: str) -> None:
+    """Atomically apply a label with click-time assignment (for fill-from-sort).
+
+    Same as :func:`apply_label` but also assigns a click-time ordinal so the
+    label appears in the frontend's click-time timeline.
+
+    Args:
+        media_id: Integer ID of the media to label.
+        label: ``"good"`` or ``"bad"``.
+    """
+    with _state_lock:
+        if label == "good":
+            bad_votes.pop(media_id, None)
+            good_votes[media_id] = None
+            add_label_to_history(media_id, "good")
+        else:
+            good_votes.pop(media_id, None)
+            bad_votes[media_id] = None
+            add_label_to_history(media_id, "bad")
+        assign_click_time(media_id)
+        diversity_tree_label(media_id)
 
 
 def next_media_id(media_dict: dict[int, dict[str, Any]]) -> int:

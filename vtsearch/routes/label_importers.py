@@ -36,13 +36,10 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
 from vtsearch.utils import (
-    add_label_to_history,
-    bad_votes,
+    apply_label,
     build_media_lookup,
     medias,
-    diversity_tree_label,
     find_missing_entries,
-    good_votes,
     resolve_media_ids,
 )
 
@@ -72,15 +69,7 @@ def _apply_labels(
             continue
 
         for cid in cids:
-            if label == "good":
-                bad_votes.pop(cid, None)
-                good_votes[cid] = None
-                add_label_to_history(cid, "good")
-            else:
-                good_votes.pop(cid, None)
-                bad_votes[cid] = None
-                add_label_to_history(cid, "bad")
-            diversity_tree_label(cid)
+            apply_label(cid, label)
         applied += 1
 
     return applied, skipped

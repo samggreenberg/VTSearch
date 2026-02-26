@@ -2,11 +2,14 @@
 
 from vtsearch.utils.progress import get_progress, get_sort_progress, update_progress, update_sort_progress
 from vtsearch.utils.state import (
+    _state_lock,
     add_favorite_detector,
     add_favorite_extractor,
     add_favorite_localizer,
     add_label_to_history,
     add_textsort_suggestion,
+    apply_label,
+    apply_label_with_click_time,
     assign_click_time,
     bad_votes,
     build_media_lookup,
@@ -54,6 +57,7 @@ from vtsearch.utils.state import (
     set_inclusion,
     set_safe_thresholds,
     textsort_suggestions,
+    toggle_vote,
     update_learned_scores,
     vote_click_times,
 )
@@ -64,6 +68,8 @@ __all__ = [
     "get_progress",
     "update_sort_progress",
     "get_sort_progress",
+    # State lock
+    "_state_lock",
     # State
     "medias",
     "good_votes",
@@ -114,6 +120,10 @@ __all__ = [
     "resolve_media_ids",
     "find_missing_entries",
     "next_media_id",
+    # Compound operations
+    "toggle_vote",
+    "apply_label",
+    "apply_label_with_click_time",
     # Diversity tree
     "build_diversity_tree",
     "get_diversity_tree",
