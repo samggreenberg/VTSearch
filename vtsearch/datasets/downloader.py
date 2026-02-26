@@ -29,6 +29,8 @@ from vtsearch.config import (
     ESC50_DOWNLOAD_SIZE_MB,
     ESC50_URL,
     IMAGE_DIR,
+    IMDB_DOWNLOAD_SIZE_MB,
+    IMDB_URL,
     UCF101_SUBSET_DOWNLOAD_SIZE_MB,
     UCF101_SUBSET_URL,
     VIDEO_DIR,
@@ -577,6 +579,72 @@ def download_ag_news(
                 categories_articles.setdefault(category, []).append(text)
 
     return categories_articles
+
+
+def download_imdb(
+    on_progress: Optional[ProgressCallback] = None,
+) -> dict[str, list[str]]:
+    """Download and prepare the Stanford IMDB Large Movie Review dataset.
+
+    Downloads ``aclImdb_v1.tar.gz`` from the configured ``IMDB_URL`` into
+    ``DATA_DIR`` if it is not already present, then extracts it.  The archive
+    is deleted after extraction to reclaim disk space.
+
+    The dataset contains 50 000 movie reviews split evenly into positive
+    (``pos``) and negative (``neg``) sentiment categories, with 25 000
+    reviews in each of the ``train`` and ``test`` splits.  Both splits are
+    merged so the caller can slice freely.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        A dict mapping category name to a list of review text strings, e.g.
+        ``{"pos": ["Great film…", …], "neg": ["Terrible…", …]}``.
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "aclImdb_v1.tar.gz"
+    extract_dir = DATA_DIR / "aclImdb"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not extract_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting IMDB download...", 0, 0)
+            download_file_with_progress(
+                IMDB_URL,
+                tar_path,
+                IMDB_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting IMDB dataset...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(DATA_DIR, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    # Read reviews grouped by sentiment category, merging train + test splits.
+    categories_reviews: dict[str, list[str]] = {}
+    for sentiment in ("pos", "neg"):
+        reviews: list[str] = []
+        for split in ("train", "test"):
+            split_dir = extract_dir / split / sentiment
+            if not split_dir.is_dir():
+                continue
+            for txt_file in sorted(split_dir.glob("*.txt")):
+                try:
+                    text = txt_file.read_text(encoding="utf-8", errors="replace").strip()
+                except Exception:
+                    continue
+                if text:
+                    reviews.append(text)
+        if reviews:
+            categories_reviews[sentiment] = reviews
+
+    return categories_reviews
 
 
 def _find_bbc_root(directory: Path) -> Optional[Path]:

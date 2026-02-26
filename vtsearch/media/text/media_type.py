@@ -248,6 +248,17 @@ class TextMediaType(MediaType):
                     selected_texts.append(article)
                     selected_categories.append(cat_name)
 
+        elif source == "imdb":
+            from vtsearch.datasets.downloader import download_imdb  # noqa: PLC0415
+
+            categories_reviews = download_imdb(on_progress=on_progress)
+
+            for cat_name in categories:
+                reviews = categories_reviews.get(cat_name, [])
+                for review in reviews[slice_start : (slice_end or len(reviews))]:
+                    selected_texts.append(review)
+                    selected_categories.append(cat_name)
+
         else:
             raise ValueError(f"Unsupported text source: {source!r}")
 

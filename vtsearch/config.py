@@ -27,6 +27,7 @@ CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectC
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
 BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
 AG_NEWS_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/train.csv"
+IMDB_URL = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
 
 # Dataset size estimates
 ESC50_DOWNLOAD_SIZE_MB = 600
@@ -37,6 +38,7 @@ CALTECH256_DOWNLOAD_SIZE_MB = 1200
 UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
 BBC_NEWS_DOWNLOAD_SIZE_MB = 2
 AG_NEWS_DOWNLOAD_SIZE_MB = 30
+IMDB_DOWNLOAD_SIZE_MB = 84
 MEDIAS_PER_CATEGORY = 40
 MEDIAS_PER_VIDEO_CATEGORY = 150
 IMAGES_PER_CIFAR10_CATEGORY = 100
