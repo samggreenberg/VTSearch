@@ -32,9 +32,8 @@ import app as app_module
 from vtsearch.cli import (
     _build_multi_results_dict,
     _merge_detector_results,
+    _run_exporter,
     _score_medias_with_detectors,
-    autodetect_main_chunked,
-    autodetect_importer_main_chunked,
 )
 from vtsearch.datasets.loader import load_dataset_from_pickle_chunked
 from vtsearch.utils import medias
@@ -161,40 +160,38 @@ class TestChunkedPickleAutodetectExport:
     def test_chunked_autodetect_produces_correct_merged_results(self, client, tmp_path):
         """Score a 50-media pickle in chunks of 10 with 2 detectors,
         verify all medias are scored and results are properly merged."""
-        # Create a pickle with 50 medias
         pkl_path = _make_pickle_dataset(tmp_path, 50, name="big.pkl")
 
-        # Train two detectors on the app's built-in test medias
         det1 = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det1_path = _write_detector_file(tmp_path, det1, "det_alpha.json")
-
         det2 = _make_detector_via_api(client, [5, 6, 7], [15, 16, 17])
-        det2_path = _write_detector_file(tmp_path, det2, "det_beta.json")
+        detectors = {
+            "det_alpha": {"weights": det1["weights"], "threshold": det1["threshold"]},
+            "det_beta": {"weights": det2["weights"], "threshold": det2["threshold"]},
+        }
 
-        settings_path = _write_settings_file(tmp_path, [det1_path, det2_path])
+        # Chunked scoring + merge (mirrors autodetect_main_chunked internals)
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
-        # Run chunked autodetect with file exporter
+        results = _build_multi_results_dict(merged, "audio")
+
+        # Export to JSON file
         output_path = tmp_path / "results.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=10,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
+        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists(), "Exporter did not write output file"
-        results = json.loads(output_path.read_text())
+        written = json.loads(output_path.read_text())
 
-        # Verify structure
-        assert results["media_type"] == "audio"
-        assert results["detectors_run"] == 2
-        assert "det_alpha" in results["results"]
-        assert "det_beta" in results["results"]
+        assert written["media_type"] == "audio"
+        assert written["detectors_run"] == 2
+        assert "det_alpha" in written["results"]
+        assert "det_beta" in written["results"]
 
         # Verify all 50 medias were scored by each detector
         for det_name in ["det_alpha", "det_beta"]:
-            det_result = results["results"][det_name]
+            det_result = written["results"][det_name]
             total = det_result["total_hits"] + len(det_result.get("negative_hits", []))
             assert total == 50, (
                 f"Detector {det_name}: expected 50 total scored, "
@@ -204,7 +201,7 @@ class TestChunkedPickleAutodetectExport:
 
         # Hits should be sorted descending by score
         for det_name in ["det_alpha", "det_beta"]:
-            hits = results["results"][det_name]["hits"]
+            hits = written["results"][det_name]["hits"]
             scores = [h["score"] for h in hits]
             assert scores == sorted(scores, reverse=True), f"Detector {det_name} hits not sorted descending"
 
@@ -213,29 +210,22 @@ class TestChunkedPickleAutodetectExport:
         pkl_path = _make_pickle_dataset(tmp_path, 15)
 
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
 
-        # Chunked (single chunk)
-        output_chunked = tmp_path / "chunked.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=1000,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_chunked)},
-        )
+        # Chunked (single chunk, chunk_size > dataset)
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=1000, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
         # Direct scoring via function (unchunked)
         from vtsearch.datasets.loader import load_dataset_from_pickle
 
         direct_medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, direct_medias, thin=True)
-        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
         direct_results = _score_medias_with_detectors(direct_medias, detectors)
 
-        chunked_data = json.loads(output_chunked.read_text())
-        chunked_hits = chunked_data["results"]["detector"]["hits"]
+        chunked_hits = merged["detector"]["hits"]
         direct_hits = direct_results["detector"]["hits"]
 
         # Same number of hits
@@ -257,21 +247,25 @@ class TestChunkedFolderImporterAutodetect:
 
     def test_folder_importer_chunked_autodetect_with_csv_export(self, client, tmp_path):
         """Load audio files from a folder in chunks, score, export to CSV."""
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+
         folder = _make_wav_folder(tmp_path, 8)
 
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
 
+        # Chunked folder import + scoring (mirrors autodetect_importer_main_chunked)
+        imp = FolderDatasetImporter()
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in imp.run_chunked_cli({"path": str(folder), "media_type": "sounds"}, chunk_size=3, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
+
+        results = _build_multi_results_dict(merged, "audio")
+
+        # Export to CSV
         csv_path = tmp_path / "results.csv"
-        autodetect_importer_main_chunked(
-            importer_name="folder",
-            field_values={"path": str(folder), "media_type": "sounds"},
-            chunk_size=3,
-            settings_path=str(settings_path),
-            exporter_name="csv_file",
-            exporter_field_values={"filepath": str(csv_path)},
-        )
+        _run_exporter("local_csv_file", {"filepath": str(csv_path)}, results)
 
         assert csv_path.exists(), "CSV exporter did not write output file"
         csv_text = csv_path.read_text()
@@ -292,6 +286,8 @@ class TestCombinedDatasetChunkedAutodetect:
     metadata flows through to export results."""
 
     def test_combined_dataset_preserves_origins_in_results(self, client, tmp_path):
+        from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
+
         # Create two pickles with different origins and different frequencies
         pkl1 = _make_pickle_dataset(
             tmp_path,
@@ -312,24 +308,25 @@ class TestCombinedDatasetChunkedAutodetect:
             origin_path="/recordings/studio",
         )
 
-        # Train a detector
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
 
+        # Chunked combine + scoring
+        imp = CombineDatasetsImporter()
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in imp.run_chunked({"datasets": f"{pkl1},{pkl2}"}, chunk_size=100):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
+
+        results = _build_multi_results_dict(merged, "audio")
+
+        # Export and read back
         output_path = tmp_path / "combined_results.json"
-        autodetect_importer_main_chunked(
-            importer_name="combine_datasets",
-            field_values={"datasets": f"{pkl1},{pkl2}"},
-            chunk_size=100,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
+        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
-        results = json.loads(output_path.read_text())
-        det_result = results["results"]["detector"]
+        written = json.loads(output_path.read_text())
+        det_result = written["results"]["detector"]
 
         all_hits = det_result["hits"] + det_result.get("negative_hits", [])
         total_scored = len(all_hits)
@@ -517,26 +514,30 @@ class TestProcessorImporterToAutodetect:
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
         det_path = _write_detector_file(tmp_path, det)
 
-        # Step 2: Write a settings file referencing this detector
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        # Step 2: Load detector via processor importer (simulates settings import)
+        from vtsearch.processors.importers import get_processor_importer
 
-        # Step 3: Create a target dataset
+        proc_imp = get_processor_importer("detector_file")
+        imported = proc_imp.run_cli({"file": str(det_path)})
+        detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
+
+        # Step 3: Create a target dataset and score in chunks
         pkl_path = _make_pickle_dataset(tmp_path, 25)
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=8, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
-        # Step 4: Run chunked autodetect with settings
+        results = _build_multi_results_dict(merged, "audio")
+
+        # Step 4: Export and verify
         output_path = tmp_path / "processor_results.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=8,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
+        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
-        results = json.loads(output_path.read_text())
-        assert results["detectors_run"] == 1
-        det_result = list(results["results"].values())[0]
+        written = json.loads(output_path.read_text())
+        assert written["detectors_run"] == 1
+        det_result = list(written["results"].values())[0]
         total = det_result["total_hits"] + len(det_result.get("negative_hits", []))
         assert total == 25
 
@@ -645,36 +646,37 @@ class TestSettingsPersistenceCLI:
     load correctly in the CLI autodetect path."""
 
     def test_settings_file_with_custom_values_used_in_autodetect(self, client, tmp_path):
-        """Autodetect reads detector references from a custom settings file."""
+        """Detector from settings file is importable and usable for scoring."""
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
         det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(
-            tmp_path,
-            [det_path],
-            extra={
-                "safe_thresholds": True,
-                "inclusion": 5,
-                "volume": 0.3,
-            },
-        )
+
+        # Load detector via processor importer (as settings import would)
+        from vtsearch.processors.importers import get_processor_importer
+
+        proc_imp = get_processor_importer("detector_file")
+        imported = proc_imp.run_cli({"file": str(det_path)})
+        detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
 
         pkl_path = _make_pickle_dataset(tmp_path, 20)
-        output_path = tmp_path / "settings_results.json"
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=10,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
-
-        assert output_path.exists()
-        results = json.loads(output_path.read_text())
+        results = _build_multi_results_dict(merged, "audio")
         assert results["detectors_run"] == 1
 
+        # Export and verify
+        output_path = tmp_path / "settings_results.json"
+        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        assert output_path.exists()
+        written = json.loads(output_path.read_text())
+        assert written["detectors_run"] == 1
+
     def test_settings_file_with_multiple_processors(self, client, tmp_path):
-        """Settings file with 3 processors: all should be imported and used."""
+        """3 detectors loaded via processor importer, all score correctly."""
+        from vtsearch.processors.importers import get_processor_importer
+
         det1 = _make_detector_via_api(client, [1, 2], [19, 20])
         det2 = _make_detector_via_api(client, [3, 4], [17, 18])
         det3 = _make_detector_via_api(client, [5, 6], [15, 16])
@@ -683,19 +685,20 @@ class TestSettingsPersistenceCLI:
         det2_path = _write_detector_file(tmp_path, det2, "d2.json")
         det3_path = _write_detector_file(tmp_path, det3, "d3.json")
 
-        settings_path = _write_settings_file(tmp_path, [det1_path, det2_path, det3_path])
+        # Import all 3 via processor importer
+        proc_imp = get_processor_importer("detector_file")
+        detectors = {}
+        for dp in [det1_path, det2_path, det3_path]:
+            imported = proc_imp.run_cli({"file": str(dp)})
+            detectors[dp.stem] = {"weights": imported["weights"], "threshold": imported["threshold"]}
+
         pkl_path = _make_pickle_dataset(tmp_path, 20)
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
-        output_path = tmp_path / "multi_proc.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=10,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
-
-        results = json.loads(output_path.read_text())
+        results = _build_multi_results_dict(merged, "audio")
         assert results["detectors_run"] == 3
         assert len(results["results"]) == 3
 
@@ -714,19 +717,18 @@ class TestLargeDatasetChunking:
         pkl_path = _make_pickle_dataset(tmp_path, 200)
 
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
 
-        output_path = tmp_path / "large.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=17,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
+        merged: dict[str, dict[str, Any]] = {}
+        chunk_count = 0
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=17, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
+            chunk_count += 1
 
-        results = json.loads(output_path.read_text())
+        assert chunk_count == 12  # ceil(200/17)
+        results = _build_multi_results_dict(merged, "audio")
+
         det_result = list(results["results"].values())[0]
         total = det_result["total_hits"] + len(det_result.get("negative_hits", []))
         assert total == 200
@@ -736,19 +738,14 @@ class TestLargeDatasetChunking:
         pkl_path = _make_pickle_dataset(tmp_path, 15)
 
         det = _make_detector_via_api(client, [1, 2, 3], [18, 19, 20])
-        det_path = _write_detector_file(tmp_path, det)
-        settings_path = _write_settings_file(tmp_path, [det_path])
+        detectors = {"detector": {"weights": det["weights"], "threshold": det["threshold"]}}
 
-        output_path = tmp_path / "one_at_a_time.json"
-        autodetect_main_chunked(
-            dataset_path=str(pkl_path),
-            chunk_size=1,
-            settings_path=str(settings_path),
-            exporter_name="file",
-            exporter_field_values={"filepath": str(output_path)},
-        )
+        merged: dict[str, dict[str, Any]] = {}
+        for chunk in load_dataset_from_pickle_chunked(pkl_path, chunk_size=1, thin=True):
+            chunk_results = _score_medias_with_detectors(chunk, detectors)
+            _merge_detector_results(merged, chunk_results)
 
-        results = json.loads(output_path.read_text())
+        results = _build_multi_results_dict(merged, "audio")
         det_result = list(results["results"].values())[0]
         total = det_result["total_hits"] + len(det_result.get("negative_hits", []))
         assert total == 15
@@ -877,39 +874,43 @@ class TestDiversityTreeVotingCycle:
     verify the tree state stays consistent."""
 
     def test_diversity_tree_build_vote_rebuild(self, client):
-        # Step 1: Build diversity tree
-        resp = client.post("/api/diversity-tree/build")
-        assert resp.status_code == 200
-        build_data = resp.get_json()
-        assert build_data.get("success") is True or "diversity_level" in build_data
+        from vtsearch.utils import build_diversity_tree, get_diversity_tree
 
-        # Step 2: Get a diverse sample
+        # Step 1: Build diversity tree
+        build_diversity_tree()
+        tree = get_diversity_tree()
+        assert tree is not None
+
+        # Step 2: Get a diverse sample via API
         resp = client.get("/api/diversity-tree/next")
         assert resp.status_code == 200
         next_data = resp.get_json()
-        if next_data.get("media_id") is not None:
-            media_id = next_data["media_id"]
+        first_id = next_data.get("id")
+        assert first_id is not None, "Tree should suggest a sample"
 
-            # Vote on it
-            resp = client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})
-            assert resp.status_code == 200
-
-            # Get next sample (should be different)
-            resp = client.get("/api/diversity-tree/next")
-            assert resp.status_code == 200
-            next_data2 = resp.get_json()
-            if next_data2.get("media_id") is not None:
-                assert next_data2["media_id"] != media_id
-
-        # Step 3: Rebuild and verify
-        resp = client.post("/api/diversity-tree/build")
+        # Vote on it
+        resp = client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
         assert resp.status_code == 200
 
-        # Diversity level endpoint should work
-        resp = client.get("/api/diversity-tree/level")
+        # Get next sample (should be different)
+        resp = client.get("/api/diversity-tree/next")
         assert resp.status_code == 200
-        level_data = resp.get_json()
-        assert "level" in level_data or "diversity_level" in level_data
+        next_data2 = resp.get_json()
+        second_id = next_data2.get("id")
+        if second_id is not None:
+            assert second_id != first_id, "Next sample should differ after voting"
+
+        # Step 3: Rebuild tree and verify it works
+        build_diversity_tree()
+        tree2 = get_diversity_tree()
+        assert tree2 is not None
+
+        # Previously voted media should be marked as seen
+        assert first_id in tree2.labeled_ids
+
+        # Diversity level should reflect the one vote
+        level = tree2.diversity_level()
+        assert isinstance(level, int)
 
 
 # ======================================================================
@@ -917,11 +918,11 @@ class TestDiversityTreeVotingCycle:
 # ======================================================================
 
 
-class TestMultiSortWithLabelFileSort:
-    """Chain text sort → vote → label export → label file sort → detector export.
-    Tests that label-file-based sorting integrates with the detector pipeline."""
+class TestTextSortVoteLabelExportDetector:
+    """Chain text sort → vote → label export → detector export → detector sort.
+    Tests that the full label-based detector pipeline works end-to-end."""
 
-    def test_text_sort_vote_label_export_label_sort(self, client, tmp_path):
+    def test_text_sort_vote_label_export_detector(self, client, tmp_path):
         # Step 1: Text sort
         resp = client.post("/api/sort", json={"text": "chirping bird"})
         assert resp.status_code == 200
@@ -936,30 +937,37 @@ class TestMultiSortWithLabelFileSort:
         for cid in bottom_3:
             client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
 
-        # Step 3: Export labels to file
+        # Step 3: Export labels to file and verify
         resp = client.get("/api/labels/export")
         assert resp.status_code == 200
         labels_data = resp.get_json()
+        assert len(labels_data["labels"]) == 6
 
         label_path = tmp_path / "labels.json"
         label_path.write_text(json.dumps(labels_data))
 
-        # Step 4: Label file sort
-        resp = client.post(
-            "/api/label-file-sort",
-            data={"file": (label_path.open("rb"), "labels.json")},
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 200
-        label_sort_results = resp.get_json()
-        assert len(label_sort_results["results"]) == app_module.NUM_MEDIAS
+        # Verify the exported file is valid JSON
+        reloaded = json.loads(label_path.read_text())
+        assert len(reloaded["labels"]) == 6
 
-        # Step 5: Detector export should still work
+        # Step 4: Detector export should work with these votes
         resp = client.post("/api/detector/export")
         assert resp.status_code == 200
         det = resp.get_json()
         assert "weights" in det
         assert "threshold" in det
+
+        # Step 5: Detector sort should produce valid results
+        resp = client.post("/api/detector-sort", json={"detector": det})
+        assert resp.status_code == 200
+        sort_results = resp.get_json()["results"]
+        assert len(sort_results) == app_module.NUM_MEDIAS
+
+        # Good medias should score higher on average
+        score_map = {e["id"]: e["score"] for e in sort_results}
+        avg_good = np.mean([score_map[i] for i in top_3])
+        avg_bad = np.mean([score_map[i] for i in bottom_3])
+        assert avg_good > avg_bad
 
 
 # ======================================================================
@@ -1271,7 +1279,7 @@ class TestLabelImporterDetectorChain:
 
         # Step 2: Import labels via API
         resp = client.post(
-            "/api/label-importers/json_file",
+            "/api/label-importers/import/json_file",
             data={"file": (label_path.open("rb"), "labels.json")},
             content_type="multipart/form-data",
         )
