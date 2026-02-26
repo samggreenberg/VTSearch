@@ -3503,6 +3503,9 @@
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
+    // Size the canvas bitmap to match its CSS-displayed size for sharp rendering
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0) canvas.width = Math.round(rect.width);
     const width = canvas.width;
     const height = canvas.height;
 
