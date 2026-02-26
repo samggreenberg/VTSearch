@@ -66,7 +66,7 @@
         <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
       </div>
       <div id="load-sort-wrap" style="display:none">
-        <button id="load-detector-btn" style="width:100%; padding:6px; background:var(--accent); color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">Load Detector</button>
+        <button id="load-detector-btn" class="btn-block-primary" style="padding:6px;">Load Detector</button>
         <input type="file" id="load-detector-file" accept=".json" style="display:none" aria-label="Detector file">
       </div>
       <span class="sort-label" style="margin-top:8px">Select</span>
@@ -156,9 +156,9 @@
       </button>
     </div>
     <div class="label-sort-bar">
-      <span class="sort-label" style="font-size:0.72rem; color:var(--text-dim);">Sort labels</span>
+      <span class="sort-label" style="font-size:0.7rem; color:var(--text-dim);">Sort labels</span>
       <label for="label-sort-select" class="sr-only">Sort labels</label>
-      <select id="label-sort-select" style="padding:3px 6px; font-size:0.78rem; background:var(--bg-surface); color:var(--text-primary); border:1px solid var(--border); border-radius:4px;">
+      <select id="label-sort-select" class="label-sort-select">
         <option value="time-desc">Newest first</option>
         <option value="time-asc">Oldest first</option>
         <option value="name-asc">Name A–Z</option>
@@ -200,7 +200,7 @@
       <!-- Smart: Error Cost chart -->
       <div id="smart-section" class="progress-chart" style="display:none;">
         <h3>Smart: Error Cost Over Time</h3>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+        <p class="form-text" style="font-size: 0.8rem; margin-bottom: 8px;">
           Lower is better. When the line levels out, the model has converged.
         </p>
         <canvas id="error-cost-chart" width="700" height="250"></canvas>
@@ -208,7 +208,7 @@
       <!-- Stable: Prediction Stability chart -->
       <div id="stable-section" class="progress-chart" style="display:none;">
         <h3>Stable: Prediction Flips Over Time</h3>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+        <p class="form-text" style="font-size: 0.8rem; margin-bottom: 8px;">
           Shows how many unlabeled medias change prediction at each step. Near zero means stable.
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
@@ -216,7 +216,7 @@
       <!-- Span: Diversity tree text info + chart -->
       <div id="span-section" class="progress-chart" style="display:none;">
         <h3>Span: Diversity Tree Coverage</h3>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+        <p class="form-text" style="font-size: 0.8rem; margin-bottom: 8px;">
           Shows how diversity level grows as you label. Higher means broader coverage.
         </p>
         <canvas id="diversity-chart" width="700" height="250"></canvas>
@@ -237,21 +237,21 @@
     </div>
     <div class="modal-body">
       <!-- Add Detector Section -->
-      <div style="background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px;">
-        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px;">Add Detector</div>
+      <div class="modal-section">
+        <div class="section-title-sm">Add Detector</div>
         <div style="margin-bottom: 10px;">
-          <label style="font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Name (optional — defaults to filename)</label>
-          <input type="text" id="fav-add-name" placeholder="e.g. Dog Barks" style="width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; outline: none;">
+          <label class="form-label" style="font-size: 0.75rem; color: var(--text-muted);">Name (optional — defaults to filename)</label>
+          <input type="text" id="fav-add-name" placeholder="e.g. Dog Barks" class="form-input" style="background: var(--bg-surface);">
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button id="fav-add-from-votes-btn" style="flex: 1; padding: 8px 12px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">From Current Labels</button>
-          <button id="fav-pregen-btn" style="padding: 8px 12px; background: var(--bg-secondary-btn); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Pregen Processors</button>
+        <div class="fav-btn-row">
+          <button id="fav-add-from-votes-btn" class="fav-import-btn" style="background: var(--accent); color: #fff; border-color: var(--accent);">From Current Labels</button>
+          <button id="fav-pregen-btn" class="fav-import-btn">Pregen Processors</button>
         </div>
         <div id="fav-importer-buttons" style="margin-top: 4px;"></div>
-        <div id="fav-add-status" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px; min-height: 1.2em;"></div>
+        <div id="fav-add-status" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; min-height: 1.2em;"></div>
       </div>
       <!-- Saved Detectors List -->
-      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px;">Saved Detectors</div>
+      <div class="section-title-sm tight">Saved Detectors</div>
       <div id="favorites-list">
         <p style="color: var(--text-muted);">No favorite detectors saved yet.</p>
       </div>
@@ -272,7 +272,7 @@
       <div id="autodetect-results" style="max-height: 500px; overflow-y: auto;"></div>
       <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <label style="color: var(--text-secondary); font-size: 0.85rem;">Column:
-          <select id="copy-column-select" style="padding: 4px 8px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem; margin-left: 4px;">
+          <select id="copy-column-select" class="form-select-inline" style="margin-left: 4px;">
             <option value="origin+name">origin+name</option>
             <option value="name">name</option>
             <option value="md5">md5</option>
@@ -281,18 +281,18 @@
           </select>
         </label>
         <label style="color: var(--text-secondary); font-size: 0.85rem;">Separator:
-          <select id="copy-separator-select" style="padding: 4px 8px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem; margin-left: 4px;">
+          <select id="copy-separator-select" class="form-select-inline" style="margin-left: 4px;">
             <option value="newline">newline</option>
             <option value=",">,</option>
             <option value="tab">tab</option>
             <option value="space">space</option>
           </select>
         </label>
-        <button id="copy-results-btn" style="padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer;">Copy To Clipboard</button>
+        <button id="copy-results-btn" class="btn-block-primary" style="width: auto; padding: 8px 16px;">Copy To Clipboard</button>
       </div>
       <!-- Export Section -->
       <div id="autodetect-export-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
-        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px;">Export</div>
+        <div class="section-title-sm">Export</div>
         <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;">
           <!-- Left column: options -->
           <div style="flex: 1; min-width: 200px;">
@@ -316,12 +316,12 @@
           <div style="flex: 2; min-width: 280px;">
             <div style="margin-bottom: 10px;">
               <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 4px;">Exporter:</label>
-              <select id="export-exporter-select" style="width: 100%; padding: 6px 8px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem;">
+              <select id="export-exporter-select" class="form-input" style="background: var(--bg-surface);">
               </select>
             </div>
             <div id="export-exporter-fields" style="margin-bottom: 10px;"></div>
-            <div id="export-status" style="font-size: 0.78rem; color: var(--text-muted); min-height: 1.2em; margin-bottom: 8px;"></div>
-            <button id="export-run-btn" style="padding: 8px 20px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Export</button>
+            <div id="export-status" class="status-text" style="min-height: 1.2em; margin-bottom: 8px;"></div>
+            <button id="export-run-btn" class="btn-block-primary" style="width: auto; padding: 8px 20px;">Export</button>
           </div>
         </div>
       </div>
@@ -354,7 +354,7 @@
     <div class="modal-body">
       <div id="label-importer-list"></div>
       <div id="label-importer-form" style="display:none"></div>
-      <button id="label-importer-back" aria-label="Back to importer list" style="display:none; margin-top:12px; padding:6px 14px; background:var(--bg-secondary-btn); color:var(--text-btn-secondary); border:1px solid var(--border-secondary); border-radius:4px; cursor:pointer;">&#8592; Back</button>
+      <button id="label-importer-back" aria-label="Back to importer list" class="btn-sm" style="display:none; margin-top:12px; padding:6px 14px;">&#8592; Back</button>
     </div>
   </div>
 </div>
@@ -395,7 +395,7 @@
     <div class="modal-body">
       <div id="processor-importer-list"></div>
       <div id="processor-importer-form" style="display:none"></div>
-      <button id="processor-importer-back" aria-label="Back to importer list" style="display:none; margin-top:12px; padding:6px 14px; background:var(--bg-secondary-btn); color:var(--text-btn-secondary); border:1px solid var(--border-secondary); border-radius:4px; cursor:pointer;">&#8592; Back</button>
+      <button id="processor-importer-back" aria-label="Back to importer list" class="btn-sm" style="display:none; margin-top:12px; padding:6px 14px;">&#8592; Back</button>
     </div>
   </div>
 </div>

@@ -794,13 +794,13 @@
     // Always render the autodetect toggle last, after all import options
     const autodetectDiv = document.createElement("div");
     autodetectDiv.id = "autodetect-toggle";
-    autodetectDiv.style = "width: 100%; margin-top: 16px; padding: 12px; background: var(--border); border-radius: 4px; box-sizing: border-box;";
+    autodetectDiv.className = "autodetect-toggle-wrap";
     autodetectDiv.innerHTML = `
       <label style="display: flex; align-items: center; color: var(--text-primary); cursor: pointer;">
         <input type="checkbox" id="autodetect-mode-checkbox" style="margin-right: 8px;">
         <span>Run auto-detect after loading (skip manual labeling)</span>
       </label>
-      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 8px 0 0 0;">When checked, automatically runs all favorite detectors and shows positive hits.</p>
+      <p class="form-text" style="margin: 8px 0 0 0;">When checked, automatically runs all favorite detectors and shows positive hits.</p>
     `;
     datasetWelcome.insertBefore(autodetectDiv, backButton);
   }
@@ -809,37 +809,36 @@
     datasetOptions.style.display = "none";
     backButton.style.display = "block";
 
-    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
-    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
-    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">${escapeHtml(importer.display_name)}</h3>`;
+    let html = `<div class="form-container">`;
+    html += `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
     html += `<form id="ext-imp-form">`;
     for (const field of importer.fields) {
-      html += `<div style="margin-bottom:14px;">`;
-      html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
       if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" style="color:var(--text-primary);width:100%;" ${field.required ? "required" : ""}>`;
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
       } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" style="${inputStyle}">`;
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
         }
         html += `</select>`;
       } else if (field.field_type === "folder") {
-        html += `<div style="display:flex;gap:8px;align-items:center;">`;
-        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
-        html += `<button type="button" data-browse-btn="true" style="padding:8px 14px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">Browse…</button>`;
+        html += `<div class="form-row">`;
+        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" class="form-input" style="flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
+        html += `<button type="button" data-browse-btn="true" class="btn-browse">Browse…</button>`;
         html += `</div>`;
         html += `<input type="file" data-folder-picker="true" webkitdirectory style="display:none;">`;
       } else {
         const itype = field.field_type === "url" ? "url" : "text";
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" class="form-input" ${field.required ? "required" : ""}>`;
       }
       if (field.description) {
-        html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">${escapeHtml(field.description)}</div>`;
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
       }
       html += `</div>`;
     }
-    html += `<button type="submit" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Import</button>`;
+    html += `<button type="submit" class="btn-block-primary">Import</button>`;
     html += `</form></div>`;
 
     extendedImporterForm.innerHTML = html;
@@ -908,20 +907,20 @@
     const staged = _combineState;
 
     // --- Build the HTML ---
-    let html = `<div style="max-width:540px;width:100%;margin:0 auto;">`;
-    html += `<h3 style="margin-bottom:8px;color:var(--text-primary);">\uD83D\uDD00 Combine Datasets</h3>`;
-    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">Add two or more datasets, then combine them. All must be the same media type. Duplicates are skipped automatically.</p>`;
+    let html = `<div class="form-container wide">`;
+    html += `<h3 class="form-heading compact">\uD83D\uDD00 Combine Datasets</h3>`;
+    html += `<p class="form-text" style="margin-bottom:16px;">Add two or more datasets, then combine them. All must be the same media type. Duplicates are skipped automatically.</p>`;
 
     // Staged datasets list
     html += `<div id="combine-staged-list" style="margin-bottom:16px;">`;
     if (staged.length === 0) {
-      html += `<p style="color:var(--text-dim);font-size:0.85rem;">No datasets added yet. Use the buttons below to add datasets.</p>`;
+      html += `<p class="form-text">No datasets added yet. Use the buttons below to add datasets.</p>`;
     } else {
       staged.forEach((ds, i) => {
-        html += `<div style="display:flex;align-items:center;padding:8px 10px;margin-bottom:4px;background:var(--bg-hover);border-radius:4px;">`;
-        html += `<span style="flex:1;color:var(--text-primary);font-size:0.9rem;">${escapeHtml(ds.name)}</span>`;
-        html += `<span style="color:var(--text-dim);font-size:0.75rem;margin-right:10px;">${ds.count} medias</span>`;
-        html += `<button type="button" data-combine-remove="${i}" style="background:none;border:none;color:var(--color-bad);cursor:pointer;font-size:1rem;padding:0 4px;" title="Remove">&times;</button>`;
+        html += `<div class="combine-item">`;
+        html += `<span class="combine-item-name">${escapeHtml(ds.name)}</span>`;
+        html += `<span class="combine-item-count">${ds.count} medias</span>`;
+        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&times;</button>`;
         html += `</div>`;
       });
     }
@@ -941,7 +940,7 @@
     html += `</div></div>`;
 
     // Combine button
-    html += `<button type="button" id="combine-submit-btn" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;" disabled>Add at least 2 datasets</button>`;
+    html += `<button type="button" id="combine-submit-btn" class="btn-block-primary" disabled>Add at least 2 datasets</button>`;
     html += `</div>`;
 
     extendedImporterForm.innerHTML = html;
@@ -1052,38 +1051,37 @@
     extendedImporterForm.style.display = "block";
     backButton.style.display = "block";
 
-    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
-    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
-    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">${escapeHtml(importer.display_name)}</h3>`;
-    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">This will be added to the combine list.</p>`;
+    let html = `<div class="form-container">`;
+    html += `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
+    html += `<p class="form-text">This will be added to the combine list.</p>`;
     html += `<form id="combine-stage-form">`;
     for (const field of importer.fields) {
-      html += `<div style="margin-bottom:14px;">`;
-      html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
       if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" style="color:var(--text-primary);width:100%;" ${field.required ? "required" : ""}>`;
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
       } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" style="${inputStyle}">`;
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
         }
         html += `</select>`;
       } else if (field.field_type === "folder") {
-        html += `<div style="display:flex;gap:8px;align-items:center;">`;
-        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
-        html += `<button type="button" data-browse-btn="true" style="padding:8px 14px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">Browse\u2026</button>`;
+        html += `<div class="form-row">`;
+        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" class="form-input" style="flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
+        html += `<button type="button" data-browse-btn="true" class="btn-browse">Browse\u2026</button>`;
         html += `</div>`;
         html += `<input type="file" data-folder-picker="true" webkitdirectory style="display:none;">`;
       } else {
         const itype = field.field_type === "url" ? "url" : "text";
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" class="form-input" ${field.required ? "required" : ""}>`;
       }
       if (field.description) {
-        html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">${escapeHtml(field.description)}</div>`;
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
       }
       html += `</div>`;
     }
-    html += `<button type="submit" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Add to combine list</button>`;
+    html += `<button type="submit" class="btn-block-primary">Add to combine list</button>`;
     html += `</form></div>`;
 
     extendedImporterForm.innerHTML = html;
@@ -1142,9 +1140,9 @@
     extendedImporterForm.style.display = "block";
     backButton.style.display = "block";
 
-    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
-    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">\uD83C\uDFC6 Add Demo Dataset</h3>`;
-    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">Select a demo dataset to add to the combine list.</p>`;
+    let html = `<div class="form-container">`;
+    html += `<h3 class="form-heading">\uD83C\uDFC6 Add Demo Dataset</h3>`;
+    html += `<p class="form-text">Select a demo dataset to add to the combine list.</p>`;
     html += `<div id="combine-demo-list"><p style="color:var(--text-dim);">Loading...</p></div>`;
     html += `</div>`;
     extendedImporterForm.innerHTML = html;
@@ -1350,14 +1348,11 @@
       labelExporterList.innerHTML = '<p style="color:var(--text-muted);">No label exporters available.</p>';
     } else {
       labelExporterList.innerHTML = exporters.map(exp => `
-        <div class="label-exporter-option" data-name="${escapeHtml(exp.name)}" style="
-          background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px;
-          padding:12px 16px; margin-bottom:10px; cursor:pointer;
-          display:flex; align-items:center; gap:12px;">
-          <span style="font-size:1.5rem;">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
+        <div class="label-exporter-option option-card" data-name="${escapeHtml(exp.name)}">
+          <span class="option-card-icon">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
           <div>
-            <div style="font-weight:bold; color:var(--text-primary);">${escapeHtml(exp.display_name)}</div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">${escapeHtml(exp.description)}</div>
+            <div class="option-card-title">${escapeHtml(exp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(exp.description)}</div>
           </div>
         </div>
       `).join("");
@@ -1476,20 +1471,19 @@
   }
 
   function openDetectorExportModal() {
-    const optionStyle = "background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px; padding:12px 16px; margin-bottom:10px; cursor:pointer; display:flex; align-items:center; gap:12px;";
     detectorExportList.innerHTML = `
-      <div id="detector-export-browser-btn" role="button" tabindex="0" style="${optionStyle}">
-        <span style="font-size:1.5rem;">\u2B07\uFE0F</span>
+      <div id="detector-export-browser-btn" class="option-card" role="button" tabindex="0">
+        <span class="option-card-icon">\u2B07\uFE0F</span>
         <div>
-          <div style="font-weight:bold; color:var(--text-primary);">Download (Browser)</div>
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Download the detector file directly to your browser.</div>
+          <div class="option-card-title">Download (Browser)</div>
+          <div class="option-card-desc">Download the detector file directly to your browser.</div>
         </div>
       </div>
-      <div id="detector-export-server-btn" role="button" tabindex="0" style="${optionStyle}">
-        <span style="font-size:1.5rem;">\uD83D\uDCBE</span>
+      <div id="detector-export-server-btn" class="option-card" role="button" tabindex="0">
+        <span class="option-card-icon">\uD83D\uDCBE</span>
         <div>
-          <div style="font-weight:bold; color:var(--text-primary);">Save to Server</div>
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Save the detector file to the server disk.</div>
+          <div class="option-card-title">Save to Server</div>
+          <div class="option-card-desc">Save the detector file to the server disk.</div>
         </div>
       </div>
     `;
@@ -1610,7 +1604,7 @@
 
   function updateFavoritesList() {
     if (favoriteDetectors.length === 0) {
-      favoritesList.innerHTML = '<p style="color: #888;">No favorite detectors saved yet.</p>';
+      favoritesList.innerHTML = '<p style="color:var(--text-muted);">No favorite detectors saved yet.</p>';
       return;
     }
 
@@ -1622,19 +1616,19 @@
         ? new Date(detector.created_at * 1000).toLocaleDateString()
         : "";
       const row = document.createElement("div");
-      row.style.cssText = "background: var(--border); padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px;";
+      row.className = "fav-card";
       row.innerHTML = `
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-weight: bold; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(detector.name)}</div>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; display: flex; align-items: center; gap: 10px;">
-            <span style="background: var(--bg-surface); border: 1px solid var(--bg-secondary-btn); border-radius: 3px; padding: 1px 6px; white-space: nowrap;">${escapeHtml(icon)} ${escapeHtml(detector.media_type)}</span>
+        <div class="fav-card-info">
+          <div class="fav-card-name">${escapeHtml(detector.name)}</div>
+          <div class="fav-card-meta">
+            <span class="fav-badge">${escapeHtml(icon)} ${escapeHtml(detector.media_type)}</span>
             <span>threshold&nbsp;${detector.threshold.toFixed(2)}</span>
             ${created ? `<span>${escapeHtml(created)}</span>` : ""}
           </div>
         </div>
-        <div style="display: flex; gap: 6px; flex-shrink: 0;">
-          <button class="fav-rename-btn" style="padding: 4px 10px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Rename</button>
-          <button class="fav-delete-btn" style="padding: 4px 10px; background: #c0392b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Delete</button>
+        <div class="fav-card-actions">
+          <button class="fav-rename-btn btn-sm">Rename</button>
+          <button class="fav-delete-btn btn-sm-danger">Delete</button>
         </div>`;
       row.querySelector(".fav-rename-btn").addEventListener("click", () => renameDetector(detector.name));
       row.querySelector(".fav-delete-btn").addEventListener("click", () => deleteDetector(detector.name));
@@ -1717,19 +1711,19 @@
   if (favAddFromVotesBtn) {
     favAddFromVotesBtn.addEventListener("click", async () => {
       if (votes.good.length === 0 || votes.bad.length === 0) {
-        setFavAddStatus("Need at least one good and one bad vote first.", "#f44336");
+        setFavAddStatus("Need at least one good and one bad vote first.", "var(--color-bad)");
         return;
       }
       const name = favAddName ? favAddName.value.trim() : "";
       if (!name) {
-        setFavAddStatus("Enter a name first.", "#f44336");
+        setFavAddStatus("Enter a name first.", "var(--color-bad)");
         return;
       }
-      setFavAddStatus("Training detector\u2026", "#aaa");
+      setFavAddStatus("Training detector\u2026", "var(--text-secondary)");
 
       const exportRes = await fetch("/api/detector/export", { method: "POST" });
       if (!exportRes.ok) {
-        setFavAddStatus("Failed to train detector.", "#f44336");
+        setFavAddStatus("Failed to train detector.", "var(--color-bad)");
         return;
       }
       const detectorData = await exportRes.json();
@@ -1747,11 +1741,11 @@
       });
 
       if (saveRes.ok) {
-        setFavAddStatus(`Detector \u201c${name}\u201d saved (${mediaType}).`, "#4caf50");
+        setFavAddStatus(`Detector \u201c${name}\u201d saved (${mediaType}).`, "var(--color-good)");
         if (favAddName) favAddName.value = "";
         await loadFavoriteDetectors();
       } else {
-        setFavAddStatus("Failed to save detector.", "#f44336");
+        setFavAddStatus("Failed to save detector.", "var(--color-bad)");
       }
     });
   }
@@ -1773,20 +1767,15 @@
     // Filter out processor importers that train from labelsets (label_file, csv_label_file)
     const detectorImporters = procImporters.filter((imp) => !imp.name.includes("label"));
 
-    const btnStyle =
-      "flex: 1; min-width: 140px; padding: 8px 12px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.8rem;";
-    const headerStyle =
-      "font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-top: 10px; margin-bottom: 4px;";
-
     // Helper: add a section header + row of buttons
     function addSection(title, buttons) {
       if (buttons.length === 0) return;
       const header = document.createElement("div");
-      header.style.cssText = headerStyle;
+      header.className = "fav-section-header";
       header.textContent = title;
       favImporterButtonsDiv.appendChild(header);
       const row = document.createElement("div");
-      row.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
+      row.className = "fav-btn-row";
       for (const btn of buttons) row.appendChild(btn);
       favImporterButtonsDiv.appendChild(row);
     }
@@ -1795,7 +1784,7 @@
     function makeProcFileButton(imp, fileField) {
       const btn = document.createElement("button");
       btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.style.cssText = btnStyle;
+      btn.className = "fav-import-btn";
       btn.addEventListener("click", () => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1807,7 +1796,7 @@
           if (!file) { input.remove(); return; }
           const defaultName = file.name.replace(/\.[^/.]+$/, "");
           const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "#aaa");
+          setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
           const formData = new FormData();
           formData.append("file", file);
           formData.append("name", detectorName);
@@ -1818,12 +1807,12 @@
           if (res.ok) {
             const data = await res.json();
             const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-            setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+            setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
             if (favAddName) favAddName.value = "";
             await loadFavoriteDetectors();
           } else {
             const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Import failed"}`, "#f44336");
+            setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
           }
           input.remove();
         });
@@ -1836,13 +1825,13 @@
     function makeProcTextButton(imp, textField) {
       const btn = document.createElement("button");
       btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.style.cssText = btnStyle;
+      btn.className = "fav-import-btn";
       btn.addEventListener("click", async () => {
         const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
         if (!value) return;
         const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
         const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "#aaa");
+        setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
         const body = { name: detectorName };
         body[textField.key] = value;
         const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
@@ -1853,12 +1842,12 @@
         if (res.ok) {
           const data = await res.json();
           const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-          setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+          setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
           if (favAddName) favAddName.value = "";
           await loadFavoriteDetectors();
         } else {
           const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Import failed"}`, "#f44336");
+          setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
         }
       });
       return btn;
@@ -1868,7 +1857,7 @@
     function makeLabelFileButton(imp, fileField) {
       const btn = document.createElement("button");
       btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.style.cssText = btnStyle;
+      btn.className = "fav-import-btn";
       btn.addEventListener("click", () => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1880,7 +1869,7 @@
           if (!file) { input.remove(); return; }
           const defaultName = file.name.replace(/\.[^/.]+$/, "");
           const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "#aaa");
+          setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
           const formData = new FormData();
           formData.append("file", file);
           formData.append("name", detectorName);
@@ -1891,12 +1880,12 @@
           if (res.ok) {
             const data = await res.json();
             const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-            setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+            setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
             if (favAddName) favAddName.value = "";
             await loadFavoriteDetectors();
           } else {
             const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Training failed"}`, "#f44336");
+            setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
           }
           input.remove();
         });
@@ -1909,13 +1898,13 @@
     function makeLabelTextButton(imp, textField) {
       const btn = document.createElement("button");
       btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.style.cssText = btnStyle;
+      btn.className = "fav-import-btn";
       btn.addEventListener("click", async () => {
         const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
         if (!value) return;
         const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
         const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "#aaa");
+        setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
         const body = { name: detectorName };
         body[textField.key] = value;
         const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
@@ -1926,12 +1915,12 @@
         if (res.ok) {
           const data = await res.json();
           const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-          setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+          setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
           if (favAddName) favAddName.value = "";
           await loadFavoriteDetectors();
         } else {
           const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Training failed"}`, "#f44336");
+          setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
         }
       });
       return btn;
@@ -2081,23 +2070,23 @@
     if (allHits.length === 0) {
       autodetectResults.innerHTML = '<p style="color: var(--text-muted);">No positive hits found.</p>';
     } else {
-      let tableHtml = `<table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">`;
-      tableHtml += `<thead><tr style="border-bottom: 1px solid var(--bg-secondary-btn);">`;
-      tableHtml += `<th style="text-align: left; padding: 8px; color: var(--accent);">Origin</th>`;
-      tableHtml += `<th style="text-align: left; padding: 8px; color: var(--accent);">Name</th>`;
-      tableHtml += `<th style="text-align: left; padding: 8px; color: var(--accent);">MD5</th>`;
-      tableHtml += `<th style="text-align: left; padding: 8px; color: var(--accent);">Filename</th>`;
+      let tableHtml = `<table class="results-table">`;
+      tableHtml += `<thead><tr>`;
+      tableHtml += `<th>Origin</th>`;
+      tableHtml += `<th>Name</th>`;
+      tableHtml += `<th>MD5</th>`;
+      tableHtml += `<th>Filename</th>`;
       tableHtml += `</tr></thead><tbody>`;
       for (const hit of allHits) {
         const origin = escapeHtml(formatOrigin(hit));
         const name = escapeHtml(hit.origin_name || hit.filename || "");
         const md5 = escapeHtml(hit.md5 || "");
         const filename = escapeHtml(hit.filename || "");
-        tableHtml += `<tr style="border-bottom: 1px solid var(--border);">`;
-        tableHtml += `<td style="padding: 6px 8px; color: var(--text-secondary);">${origin}</td>`;
-        tableHtml += `<td style="padding: 6px 8px; color: var(--text-primary);">${name}</td>`;
-        tableHtml += `<td style="padding: 6px 8px; color: var(--text-muted); font-family: monospace; font-size: 0.75rem;">${md5}</td>`;
-        tableHtml += `<td style="padding: 6px 8px; color: var(--text-secondary);">${filename}</td>`;
+        tableHtml += `<tr>`;
+        tableHtml += `<td class="col-secondary">${origin}</td>`;
+        tableHtml += `<td>${name}</td>`;
+        tableHtml += `<td class="col-muted">${md5}</td>`;
+        tableHtml += `<td class="col-secondary">${filename}</td>`;
         tableHtml += `</tr>`;
       }
       tableHtml += `</tbody></table>`;
@@ -2215,13 +2204,12 @@
       exportExporterFields.innerHTML = "";
       return;
     }
-    const inputStyle = "width:100%;padding:6px 8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;font-size:0.85rem;";
     let html = "";
     for (const field of exp.fields) {
       html += `<div style="margin-bottom:8px;">`;
-      html += `<label style="display:block;margin-bottom:3px;color:var(--text-secondary);font-size:0.8rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      html += `<label class="form-label" style="margin-bottom:3px;font-size:0.8rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
       if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" data-export-field style="${inputStyle}">`;
+        html += `<select name="${escapeHtml(field.key)}" data-export-field class="form-input">`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
         }
@@ -2229,7 +2217,7 @@
       } else {
         const itype = field.field_type === "password" ? "password" : (field.field_type === "email" ? "email" : "text");
         const placeholder = escapeHtml(field.placeholder || field.description || "");
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" data-export-field style="${inputStyle}" ${field.required ? "required" : ""}>`;
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" data-export-field class="form-input" ${field.required ? "required" : ""}>`;
       }
       html += `</div>`;
     }
@@ -2358,7 +2346,7 @@
           }),
         });
         if (!dryRes.ok) {
-          setExportStatus("Failed to compute fill counts.", "#f44336");
+          setExportStatus("Failed to compute fill counts.", "var(--color-bad)");
           return;
         }
         const counts = await dryRes.json();
@@ -2388,7 +2376,7 @@
           }),
         });
         if (!fillRes.ok) {
-          setExportStatus("Failed to fill labels.", "#f44336");
+          setExportStatus("Failed to fill labels.", "var(--color-bad)");
           return;
         }
         const fillData = await fillRes.json();
@@ -2442,12 +2430,12 @@
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setExportStatus(data.message || "Export complete.", "#4caf50");
+        setExportStatus(data.message || "Export complete.", "var(--color-good)");
       } else {
-        setExportStatus(data.error || "Export failed.", "#f44336");
+        setExportStatus(data.error || "Export failed.", "var(--color-bad)");
       }
     } catch (err) {
-      setExportStatus(`Export error: ${err.message}`, "#f44336");
+      setExportStatus(`Export error: ${err.message}`, "var(--color-bad)");
     }
   }
 
@@ -3307,12 +3295,12 @@
     // the generic /api/medias/{id}/media endpoint.
     let playerHTML = '';
     if (mediaType === "video") {
-      playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/video" id="media-video" aria-label="${escapeHtml(c.filename || 'Video media')}" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+      playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/video" id="media-video" aria-label="${escapeHtml(c.filename || 'Video media')}" class="media-player-video"></video>`;
     } else if (mediaType === "image") {
-      playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><img src="/api/medias/${c.id}/image" id="media-image" alt="${escapeHtml(c.filename || 'Image media')}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></div>`;
+      playerHTML = `<div class="media-player-image-wrap"><img src="/api/medias/${c.id}/image" id="media-image" alt="${escapeHtml(c.filename || 'Image media')}" class="media-player-image"></div>`;
     } else if (mediaType === "paragraph") {
       playerHTML = `
-        <div id="media-paragraph" style="max-width: 600px; max-height: 400px; overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); white-space: pre-wrap; line-height: 1.6; text-align: left;">
+        <div id="media-paragraph" class="media-player-text">
           Loading...
         </div>`;
     } else if (mediaType === "audio") {
@@ -3325,9 +3313,9 @@
       // If it loops, use a video element; otherwise use a generic embed.
       const loops = mtInfo && mtInfo.loops;
       if (loops) {
-        playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/media" id="media-video" style="width: 600px; max-height: 400px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);"></video>`;
+        playerHTML = `<video controls loop autoplay src="/api/medias/${c.id}/media" id="media-video" class="media-player-video"></video>`;
       } else {
-        playerHTML = `<div style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;"><object data="/api/medias/${c.id}/media" style="max-width: 100%; max-height: 100%; border: 1px solid var(--border); border-radius: 8px;">${escapeHtml(c.filename || 'Media')}</object></div>`;
+        playerHTML = `<div class="media-player-image-wrap"><object data="/api/medias/${c.id}/media" class="media-player-embed">${escapeHtml(c.filename || 'Media')}</object></div>`;
       }
     }
 
@@ -3782,14 +3770,11 @@
       labelImporterList.innerHTML = '<p style="color:var(--text-muted);">No label importers available.</p>';
     } else {
       labelImporterList.innerHTML = importers.map(imp => `
-        <div class="label-importer-option" data-name="${escapeHtml(imp.name)}" style="
-          background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px;
-          padding:12px 16px; margin-bottom:10px; cursor:pointer;
-          display:flex; align-items:center; gap:12px;">
-          <span style="font-size:1.5rem;">${escapeHtml(imp.icon || '🏷️')}</span>
+        <div class="label-importer-option option-card" data-name="${escapeHtml(imp.name)}">
+          <span class="option-card-icon">${escapeHtml(imp.icon || '🏷️')}</span>
           <div>
-            <div style="font-weight:bold; color:var(--text-primary);">${escapeHtml(imp.display_name)}</div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">${escapeHtml(imp.description)}</div>
+            <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(imp.description)}</div>
           </div>
         </div>
       `).join("");
@@ -3812,17 +3797,17 @@
   function _showMissingElementsPrompt(statusEl, result, formEl) {
     const n = result.missing_count;
     const promptDiv = document.createElement("div");
-    promptDiv.style.cssText = "margin-top:14px;padding:14px;background:var(--border);border:1px solid var(--bg-secondary-btn);border-radius:6px;";
+    promptDiv.className = "missing-prompt";
     promptDiv.innerHTML = `
       <div style="color:var(--text-primary);margin-bottom:10px;font-size:0.9rem;">
         <strong>${n}</strong> element(s) from the labelset were not found in your dataset.
         Import them from their origins?
       </div>
       <div style="display:flex;gap:10px;">
-        <button id="missing-import-btn" style="flex:1;padding:8px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.85rem;">Import medias</button>
-        <button id="missing-skip-btn" style="flex:1;padding:8px;background:var(--bg-secondary-btn);border:none;border-radius:4px;color:var(--text-btn-secondary);cursor:pointer;font-size:0.85rem;">Skip</button>
+        <button id="missing-import-btn" class="btn-block-primary" style="flex:1;width:auto;">Import medias</button>
+        <button id="missing-skip-btn" class="btn-secondary-block">Skip</button>
       </div>
-      <div id="missing-status" style="min-height:1.4em;font-size:0.85rem;color:var(--text-muted);margin-top:8px;"></div>
+      <div id="missing-status" class="status-text" style="margin-top:8px;"></div>
     `;
     // Insert after the status element
     statusEl.parentNode.appendChild(promptDiv);
@@ -3880,16 +3865,15 @@
     labelImporterList.style.display = "none";
     labelImporterBack.style.display = "inline-block";
 
-    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
-    let html = `<h3 style="margin-bottom:14px;color:var(--text-primary);">${escapeHtml(importer.display_name)}</h3>`;
+    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
     html += `<form id="label-imp-form">`;
     for (const field of importer.fields) {
-      html += `<div style="margin-bottom:14px;">`;
-      html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
       if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" style="color:var(--text-primary);width:100%;" ${field.required ? "required" : ""}>`;
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
       } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" style="${inputStyle}">`;
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
         }
@@ -3897,15 +3881,15 @@
       } else {
         const itype = field.field_type === "password" ? "password" : "text";
         const placeholder = escapeHtml(field.placeholder || field.description);
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" class="form-input" ${field.required ? "required" : ""}>`;
       }
       if (field.description) {
-        html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">${escapeHtml(field.description)}</div>`;
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
       }
       html += `</div>`;
     }
-    html += `<div id="label-imp-status" style="min-height:1.4em;font-size:0.85rem;color:var(--text-muted);margin-bottom:10px;"></div>`;
-    html += `<button type="submit" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Import</button>`;
+    html += `<div id="label-imp-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Import</button>`;
     html += `</form>`;
 
     labelImporterFormDiv.innerHTML = html;
@@ -4046,14 +4030,11 @@
       processorImporterList.innerHTML = '<p style="color:var(--text-muted);">No processor importers available.</p>';
     } else {
       processorImporterList.innerHTML = importers.map(imp => `
-        <div class="processor-importer-option" data-name="${escapeHtml(imp.name)}" style="
-          background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px;
-          padding:12px 16px; margin-bottom:10px; cursor:pointer;
-          display:flex; align-items:center; gap:12px;">
-          <span style="font-size:1.5rem;">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
+        <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}">
+          <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
           <div>
-            <div style="font-weight:bold; color:var(--text-primary);">${escapeHtml(imp.display_name)}</div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">${escapeHtml(imp.description)}</div>
+            <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(imp.description)}</div>
           </div>
         </div>
       `).join("");
@@ -4077,22 +4058,21 @@
     processorImporterList.style.display = "none";
     processorImporterBack.style.display = "inline-block";
 
-    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
-    let html = `<h3 style="margin-bottom:14px;color:var(--text-primary);">${escapeHtml(importer.display_name)}</h3>`;
+    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
     html += `<form id="proc-imp-form">`;
     // Name field (always required)
-    html += `<div style="margin-bottom:14px;">`;
-    html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">Detector Name *</label>`;
-    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" style="${inputStyle}" required>`;
-    html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">Name for the imported detector.</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Detector Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">Name for the imported detector.</div>`;
     html += `</div>`;
     for (const field of importer.fields) {
-      html += `<div style="margin-bottom:14px;">`;
-      html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
       if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" style="color:var(--text-primary);width:100%;" ${field.required ? "required" : ""}>`;
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
       } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" style="${inputStyle}">`;
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
         }
@@ -4100,15 +4080,15 @@
       } else {
         const itype = field.field_type === "password" ? "password" : "text";
         const placeholder = escapeHtml(field.placeholder || field.description);
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" class="form-input" ${field.required ? "required" : ""}>`;
       }
       if (field.description) {
-        html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">${escapeHtml(field.description)}</div>`;
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
       }
       html += `</div>`;
     }
-    html += `<div id="proc-imp-status" style="min-height:1.4em;font-size:0.85rem;color:var(--text-muted);margin-bottom:10px;"></div>`;
-    html += `<button type="submit" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Import</button>`;
+    html += `<div id="proc-imp-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Import</button>`;
     html += `</form>`;
 
     processorImporterFormDiv.innerHTML = html;
