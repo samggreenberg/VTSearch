@@ -1524,14 +1524,32 @@
     const procImporters = procRes && procRes.ok ? await procRes.json() : [];
     const labelImporters = labelRes && labelRes.ok ? await labelRes.json() : [];
 
-    // Render a button for each processor importer
-    for (const imp of procImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      if (!fileField) continue;
+    // Filter out processor importers that train from labelsets (label_file, csv_label_file)
+    const detectorImporters = procImporters.filter((imp) => !imp.name.includes("label"));
+
+    const btnStyle =
+      "flex: 1; min-width: 140px; padding: 8px 12px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.8rem;";
+    const headerStyle =
+      "font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-top: 10px; margin-bottom: 4px;";
+
+    // Helper: add a section header + row of buttons
+    function addSection(title, buttons) {
+      if (buttons.length === 0) return;
+      const header = document.createElement("div");
+      header.style.cssText = headerStyle;
+      header.textContent = title;
+      favImporterButtonsDiv.appendChild(header);
+      const row = document.createElement("div");
+      row.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
+      for (const btn of buttons) row.appendChild(btn);
+      favImporterButtonsDiv.appendChild(row);
+    }
+
+    // Helper: create a file-picker button for a processor importer
+    function makeProcFileButton(imp, fileField) {
       const btn = document.createElement("button");
-      btn.textContent = `From ${imp.display_name}`;
-      btn.style.cssText =
-        "flex: 1; padding: 8px 12px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.8rem;";
+      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
+      btn.style.cssText = btnStyle;
       btn.addEventListener("click", () => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1565,17 +1583,46 @@
         });
         input.click();
       });
-      favImporterButtonsDiv.appendChild(btn);
+      return btn;
     }
 
-    // Render a button for each label importer (trains from labelset matched to loaded medias)
-    for (const imp of labelImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      if (!fileField) continue;
+    // Helper: create a text-prompt button for a processor importer (server path)
+    function makeProcTextButton(imp, textField) {
       const btn = document.createElement("button");
-      btn.textContent = `From Labelset ${imp.display_name}`;
-      btn.style.cssText =
-        "flex: 1; padding: 8px 12px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.8rem;";
+      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
+      btn.style.cssText = btnStyle;
+      btn.addEventListener("click", async () => {
+        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
+        if (!value) return;
+        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
+        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
+        setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "#aaa");
+        const body = { name: detectorName };
+        body[textField.key] = value;
+        const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const detail = data.loaded != null ? `, ${data.loaded} files` : "";
+          setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+          if (favAddName) favAddName.value = "";
+          await loadFavoriteDetectors();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setFavAddStatus(`Error: ${err.error || "Import failed"}`, "#f44336");
+        }
+      });
+      return btn;
+    }
+
+    // Helper: create a file-picker button for a label importer (trains detector)
+    function makeLabelFileButton(imp, fileField) {
+      const btn = document.createElement("button");
+      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
+      btn.style.cssText = btnStyle;
       btn.addEventListener("click", () => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1609,8 +1656,67 @@
         });
         input.click();
       });
-      favImporterButtonsDiv.appendChild(btn);
+      return btn;
     }
+
+    // Helper: create a text-prompt button for a label importer (server path, trains detector)
+    function makeLabelTextButton(imp, textField) {
+      const btn = document.createElement("button");
+      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
+      btn.style.cssText = btnStyle;
+      btn.addEventListener("click", async () => {
+        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
+        if (!value) return;
+        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
+        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
+        setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "#aaa");
+        const body = { name: detectorName };
+        body[textField.key] = value;
+        const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
+          setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "#4caf50");
+          if (favAddName) favAddName.value = "";
+          await loadFavoriteDetectors();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setFavAddStatus(`Error: ${err.error || "Training failed"}`, "#f44336");
+        }
+      });
+      return btn;
+    }
+
+    // Build buttons for processor importers (load pre-trained detector)
+    const procButtons = [];
+    for (const imp of detectorImporters) {
+      const fileField = imp.fields.find((f) => f.field_type === "file");
+      const textField = imp.fields.find((f) => f.field_type === "text");
+      if (fileField) {
+        procButtons.push(makeProcFileButton(imp, fileField));
+      } else if (textField) {
+        procButtons.push(makeProcTextButton(imp, textField));
+      }
+    }
+
+    // Build buttons for label importers (train detector from labelset)
+    const labelButtons = [];
+    for (const imp of labelImporters) {
+      const fileField = imp.fields.find((f) => f.field_type === "file");
+      const textField = imp.fields.find((f) => f.field_type === "text");
+      if (fileField) {
+        labelButtons.push(makeLabelFileButton(imp, fileField));
+      } else if (textField) {
+        labelButtons.push(makeLabelTextButton(imp, textField));
+      }
+    }
+
+    addSection("Import Detector", procButtons);
+    addSection("Train from Labelset", labelButtons);
   }
 
   if (menuFavoritesAutodetect) {
