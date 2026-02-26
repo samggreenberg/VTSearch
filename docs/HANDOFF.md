@@ -47,6 +47,7 @@ runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [FEATURE_IDEAS.md](FEATURE_IDEAS.md) | 132 brainstormed feature ideas |
+| [demos.md](demos.md) | Available demo datasets |
 
 ---
 
@@ -146,7 +147,7 @@ argument parsing. Key startup sequence:
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
-| Global state (clips, votes) | `vtsearch/utils/state.py` |
+| Global state (medias, votes) | `vtsearch/utils/state.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
 | ML training and inference | `vtsearch/models/training.py` |
 | Embedding models | `vtsearch/media/{audio,image,text,video}/media_type.py` |

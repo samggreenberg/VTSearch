@@ -42,7 +42,7 @@ VTSearch/
 │
 ├── vtsearch/
 │   ├── config.py                   Constants (paths, model IDs, rates)
-│   ├── clips.py                    Test clip generation & embedding cache
+│   ├── medias.py                   Test media generation & embedding cache
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── settings.py                 Persistent settings & favorite processors
 │   │
@@ -106,7 +106,7 @@ VTSearch/
 │   │   └── voting_iterations.py    Voting-iteration simulation
 │   │
 │   ├── routes/                     Flask blueprints (HTTP layer)
-│   │   ├── clips.py                Clip listing, media serving, voting
+│   │   ├── medias.py               Media listing, serving, voting
 │   │   ├── sorting.py              Text/learned/example sort
 │   │   ├── detectors.py            Detector export/import/run
 │   │   ├── datasets.py             Dataset loading & management
@@ -117,7 +117,7 @@ VTSearch/
 │   │   └── main.py                 Root route
 │   │
 │   ├── utils/
-│   │   ├── state.py                Global state (clips, votes, favorites, history)
+│   │   ├── state.py                Global state (medias, votes, favorites, history)
 │   │   └── progress.py             Thread-safe progress tracking
 │   │
 │   └── audio/                      WAV/tone generation utilities
@@ -287,14 +287,14 @@ result = EXPORTER.export(
 ```python
 from vtsearch.datasets.loader import load_dataset_from_folder
 
-clips = {}
+medias = {}
 load_dataset_from_folder(
     Path("my_audio_folder"),
     media_type="sounds",
-    clips=clips,
+    medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
-# clips is now {1: {"id": 1, "embedding": ..., "clip_bytes": ..., ...}, ...}
+# medias is now {1: {"id": 1, "embedding": ..., "clip_bytes": ..., ...}, ...}
 ```
 
 ### Progress tracking
@@ -337,16 +337,17 @@ dicts:
 
 | Variable | Type | Purpose |
 |----------|------|---------|
-| `clips` | `dict[int, dict]` | All loaded media clips with embeddings |
-| `good_votes` | `dict[int, None]` | Clip IDs voted "good" |
-| `bad_votes` | `dict[int, None]` | Clip IDs voted "bad" |
-| `label_history` | `list[tuple[int, str, float]]` | Ordered labelling events `(clip_id, label, timestamp)` |
-| `vote_click_times` | `dict[int, int]` | Clip ID → click order (1-indexed); tracks voting sequence |
-| `last_learned_scores` | `dict[int, float]` | Clip ID → score from the most recent learned sort |
+| `medias` | `dict[int, dict]` | All loaded media items with embeddings |
+| `good_votes` | `dict[int, None]` | Media IDs voted "good" |
+| `bad_votes` | `dict[int, None]` | Media IDs voted "bad" |
+| `label_history` | `list[tuple[int, str, float]]` | Ordered labelling events `(media_id, label, timestamp)` |
+| `vote_click_times` | `dict[int, int]` | Media ID → click order (1-indexed); tracks voting sequence |
+| `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
 | `favorite_detectors` | `dict` | Saved detector configurations |
 | `favorite_extractors` | `dict` | Saved extractor configurations |
+| `favorite_localizers` | `dict` | Saved localizer configurations |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
@@ -407,10 +408,10 @@ its name within that origin, **and** its label (`"good"` / `"bad"`).
 from vtsearch.datasets.labelset import LabelSet
 
 # Build from current state
-ls = LabelSet.from_clips_and_votes(clips, good_votes, bad_votes)
+ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
 
 # Build from auto-detect results
-ls = LabelSet.from_results(results_dict, clips=clips)
+ls = LabelSet.from_results(results_dict, medias=medias)
 
 # Serialise / deserialise (superset of legacy label format)
 data = ls.to_dict()   # {"labels": [{"md5": ..., "label": ..., "origin": ..., ...}]}

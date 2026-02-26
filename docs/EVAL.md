@@ -226,9 +226,9 @@ from vtsearch.eval.voting_iterations import run_voting_iterations_eval
 datasets_to_eval = ["esc50_s", "caltech101_s"]
 dataset_clips = {}
 for name in datasets_to_eval:
-    clips = {}
-    load_demo_dataset(name, clips)
-    dataset_clips[name] = clips
+    medias = {}
+    load_demo_dataset(name, medias)
+    dataset_clips[name] = medias
 
 # Run the voting iterations eval
 df = run_voting_iterations_eval(
