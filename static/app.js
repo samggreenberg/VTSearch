@@ -3324,25 +3324,7 @@
     center.className = "panel-center";
 
     const mediaType = c.type || "audio";
-    let metaInfo = [];
-    if (c.frequency) {
-      metaInfo.push(`${c.frequency} Hz`);
-    }
-    if (c.category && c.category !== "unknown") {
-      metaInfo.push(c.category);
-    }
-    // Use media type metadata from the registry for duration/details display
     const mtInfo = mediaTypesMap[mediaType];
-    if (c.duration && c.duration > 0) {
-      metaInfo.push(`${c.duration.toFixed(1)}s`);
-    }
-    if (c.width && c.height) {
-      metaInfo.push(`${c.width}×${c.height}`);
-    }
-    if (c.word_count) {
-      metaInfo.push(`${c.word_count} words`);
-    }
-    metaInfo.push(`${(c.file_size / 1024).toFixed(1)} KB`);
 
     // Render media player based on media type.
     // Known types get specialised players; new/unknown types fall back to
@@ -3374,10 +3356,6 @@
     }
 
     center.innerHTML = `
-      <div class="meta">
-        <h2>${escapeHtml(c.filename || 'Media #' + c.id)}</h2>
-        <p>${metaInfo.map(s => escapeHtml(s)).join(' &middot; ')}</p>
-      </div>
       <div class="media-swipe-wrapper" id="media-swipe-wrapper">
         ${playerHTML}
       </div>
@@ -3392,6 +3370,10 @@
         <button class="ivc-btn" id="ivc-reset" title="Reset view" aria-label="Reset image view">Reset</button>
       </div>` : ''}
       <div class="metadata-grid">
+        <div class="metadata-item">
+          <span class="metadata-label">Name</span>
+          <span class="metadata-value">${escapeHtml(c.filename || 'Media #' + c.id)}</span>
+        </div>
         ${c.frequency ? `
         <div class="metadata-item">
           <span class="metadata-label">Frequency</span>
@@ -3428,10 +3410,6 @@
         <div class="metadata-item">
           <span class="metadata-label">File Size</span>
           <span class="metadata-value">${(c.file_size / 1024).toFixed(1)} KB</span>
-        </div>
-        <div class="metadata-item">
-          <span class="metadata-label">Filename</span>
-          <span class="metadata-value">${escapeHtml(c.filename || 'media_' + c.id + '.wav')}</span>
         </div>
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
