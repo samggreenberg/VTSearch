@@ -354,6 +354,7 @@
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
     stripeContainer.innerHTML = "";
+    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.add("disabled");
   }
 
   function showMainUI() {
@@ -367,6 +368,7 @@
       center.innerHTML = '<p>Select a media from the left panel</p>';
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
+    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.remove("disabled");
   }
 
   function showProgress() {
@@ -1721,10 +1723,7 @@
 
   if (menuFavoritesAutodetect) {
     menuFavoritesAutodetect.addEventListener("click", async () => {
-      if (medias.length === 0) {
-        await vtAlert("No dataset loaded. Please load a dataset first.", "warning");
-        return;
-      }
+      if (menuFavoritesAutodetect.classList.contains("disabled")) return;
 
       closeBurgerMenu();
 
