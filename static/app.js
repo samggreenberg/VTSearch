@@ -3084,10 +3084,10 @@
           Loading...
         </div>`;
     } else if (mediaType === "audio") {
-      // Audio/Sound
+      // Audio/Sound – only the waveform canvas goes inside the swipe wrapper;
+      // the <audio> player is placed outside so it stays fixed during the animation.
       playerHTML = `
-        <canvas id="waveform-canvas" width="600" height="120" role="img" aria-label="Audio waveform visualization"></canvas>
-        <audio controls controlslist="nodownload" loop autoplay src="/api/medias/${c.id}/audio" id="media-audio" aria-label="${escapeHtml(c.filename || 'Audio media')}"></audio>`;
+        <canvas id="waveform-canvas" width="600" height="120" role="img" aria-label="Audio waveform visualization"></canvas>`;
     } else {
       // Unknown/new media type: try to render via generic endpoint.
       // If it loops, use a video element; otherwise use a generic embed.
@@ -3107,6 +3107,7 @@
       <div class="media-swipe-wrapper" id="media-swipe-wrapper">
         ${playerHTML}
       </div>
+      ${mediaType === "audio" ? `<audio controls controlslist="nodownload" loop autoplay src="/api/medias/${c.id}/audio" id="media-audio" aria-label="${escapeHtml(c.filename || 'Audio media')}"></audio>` : ''}
       <div class="metadata-grid">
         ${c.frequency ? `
         <div class="metadata-item">
