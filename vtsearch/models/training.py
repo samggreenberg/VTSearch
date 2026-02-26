@@ -150,12 +150,14 @@ def train_model(
     input_dim: int,
     inclusion_value: int = 0,
     seed: int = 42,
+    hidden_dim: int | None = None,
 ) -> nn.Sequential:
     """Train a small MLP classifier and return the trained model.
 
     The hidden-layer width is chosen automatically based on the number of
-    training examples (see :func:`_auto_hidden_dim`) and dropout is applied
-    during training to reduce overfitting.
+    training examples (see :func:`_auto_hidden_dim`) unless explicitly
+    provided via ``hidden_dim``.  Dropout is applied during training to
+    reduce overfitting.
 
     Trains using weighted binary cross-entropy loss with logits
     (``BCEWithLogitsLoss``).  Class weights are adjusted based on
@@ -178,6 +180,9 @@ def train_model(
             - Negative: increase weight for False samples by ``2 ** (-inclusion_value)``,
               causing the model to exclude more items.
         seed: Seed for the local RNG used for weight initialisation (default 42).
+        hidden_dim: Number of neurons in the hidden layer.  When ``None``
+            (default) the width is chosen automatically via
+            :func:`_auto_hidden_dim` based on the training-set size.
 
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
@@ -187,7 +192,8 @@ def train_model(
     import torch.nn as nn  # noqa: PLC0415
 
     n_train = len(X_train)
-    hidden_dim = _auto_hidden_dim(n_train)
+    if hidden_dim is None:
+        hidden_dim = _auto_hidden_dim(n_train)
 
     # Seed both a local Generator (for weight init) and the global RNG
     # (for nn.Dropout during training) so results are reproducible.
@@ -316,6 +322,7 @@ def calculate_cross_calibration_threshold(
     rng: np.random.RandomState | None = None,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    hidden_dim: int | None = None,
 ) -> float:
     """Estimate a decision threshold using k-fold calibration.
 
@@ -348,6 +355,10 @@ def calculate_cross_calibration_threshold(
             cannot be formed (fewer than 2 training or 1 calibration
             examples), returns ``float('inf')`` so that nothing is
             predicted as Good.
+        hidden_dim: Force a specific hidden-layer width for the fold models.
+            When ``None`` (default), each fold model auto-sizes based on its
+            own training-set size.  Pass the full-data hidden dim to ensure
+            fold models match the final model's architecture.
 
     Returns:
         A float threshold. Returns 0.5 if fewer than 4 examples are provided
@@ -382,7 +393,7 @@ def calculate_cross_calibration_threshold(
         y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
         X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
 
-        model = train_model(X_train, y_train, input_dim, inclusion_value)
+        model = train_model(X_train, y_train, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
         with torch.no_grad():
             scores = torch.sigmoid(model(X_cal)).squeeze(1).tolist()
@@ -483,6 +494,12 @@ def train_and_score(
 
     input_dim = X.shape[1]
 
+    # Compute hidden_dim once from the *full* label count so that fold
+    # models use the same architecture as the final model.  This makes
+    # cross-calibration thresholds directly comparable to final-model
+    # scores (same capacity, same score distribution shape).
+    hidden_dim = _auto_hidden_dim(len(X_list))
+
     # Calculate threshold using k-fold calibration
     threshold = calculate_cross_calibration_threshold(
         X_list,
@@ -491,10 +508,11 @@ def train_and_score(
         inclusion_value,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
     )
 
     # Train final model on all data
-    model = train_model(X, y, input_dim, inclusion_value)
+    model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
     # Score every media
     all_ids = sorted(clips_dict.keys())

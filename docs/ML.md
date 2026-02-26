@@ -7,11 +7,11 @@ VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a bin
 The MLP is defined in `vtsearch/models/training.py` via `build_model()`:
 
 ```
-Linear(input_dim, 64) -> ReLU -> Linear(64, 1)
+Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)
 ```
 
 - **Input dimension**: Dynamic, depends on the embedding model for the current media type (see [Embedding Models](#embedding-models) below).
-- **Hidden layer**: 64 neurons with ReLU activation.
+- **Hidden layer**: Width chosen automatically by `_auto_hidden_dim(n_labels)` — `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_labels // 3))`, i.e. 4–32 neurons depending on label count. Dropout (`MLP_DROPOUT=0.5`) is applied after ReLU during training.
 - **Output**: A single logit. `torch.sigmoid` is applied at inference time to produce a probability in [0, 1].
 
 The model outputs raw logits (not probabilities) during training. This allows the use of `BCEWithLogitsLoss`, which fuses the sigmoid and binary cross-entropy computation using the log-sum-exp trick for better numerical stability. At inference time, `torch.sigmoid()` is applied explicitly to convert logits to probabilities.
@@ -23,8 +23,10 @@ The model outputs raw logits (not probabilities) during training. This allows th
 | **Loss function** | `BCEWithLogitsLoss` | Per-sample (unreduced), with manual class weighting |
 | **Optimizer** | Adam | `lr=0.001`, `weight_decay=1e-4` |
 | **Epochs** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` |
+| **Hidden layer** | 4–32 neurons | `max(4, min(32, n_labels // 3))` via `_auto_hidden_dim()` |
+| **Dropout** | 0.5 | Applied after ReLU, active only during training |
 | **Batching** | Full-batch | All labeled data in every forward pass |
-| **Reproducibility** | `torch.manual_seed(42)` | Set before model construction for deterministic weight init |
+| **Reproducibility** | Local `torch.Generator` | Per-model seed (default 42) for thread-safe deterministic init |
 | **Gradient scoping** | `torch.enable_grad()` | Explicitly enabled during training loop |
 
 ### Class Weighting
@@ -39,10 +41,13 @@ Training uses inverse-frequency weighting to balance classes, with an additional
 
 A decision threshold separating "good" from "bad" predictions is computed via **cross-calibration**:
 
-1. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
-2. Train a model on Train, find the optimal threshold by evaluating on Calibrate.
-3. Repeat for `calibrate_count` independent random splits.
-4. Return the mean of all thresholds.
+1. Compute `hidden_dim` once from the **full** label count.
+2. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
+3. Train a fold model on Train **using the full-data `hidden_dim`**, find the optimal threshold by evaluating on Calibrate.
+4. Repeat for `calibrate_count` independent random splits.
+5. Return the mean of all thresholds.
+
+**Why fold models use the full-data hidden_dim:** The hidden-layer width is normally auto-sized from the training-set size (`n_labels // 3`, clamped to 4–32). Without intervention, each fold model would train on fewer examples and therefore get a smaller hidden layer than the final model. A smaller architecture produces a different score distribution, so thresholds found on fold models would not transfer faithfully to the final model. By forcing fold models to use the same `hidden_dim` as the final model, the architectures match: same capacity, same score distribution shape. The only difference is the fold models see less data, which is the whole point — you want held-out calibration data. Existing regularization (dropout 0.5, weight decay 1e-4) and the small max width (32) prevent the slightly "oversized" fold models from overfitting meaningfully.
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
