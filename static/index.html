@@ -50,9 +50,6 @@
 <div class="layout" role="presentation">
   <!-- Left panel -->
   <div class="panel-left" id="left-panel" role="region" aria-label="Media list">
-    <div class="dataset-bar" id="dataset-bar" style="display:none">
-      <span class="dataset-info" id="dataset-info">No dataset loaded</span>
-    </div>
     <div class="sort-bar" id="sort-bar">
       <span class="sort-label">Sort</span>
       <div class="sort-mode">
@@ -92,6 +89,9 @@
           <div class="sort-progress-fill"></div>
         </div>
       </div>
+    </div>
+    <div class="dataset-bar" id="dataset-bar" style="display:none">
+      <span class="dataset-info" id="dataset-info">No dataset loaded</span>
     </div>
     <div id="media-list" role="listbox" aria-label="Medias"></div>
     <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
