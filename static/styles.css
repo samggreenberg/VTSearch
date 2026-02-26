@@ -486,6 +486,7 @@ video { max-width: 100%; }
 }
 .media-swipe-wrapper.swipe-right { animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
 .media-swipe-wrapper.swipe-left  { animation: swipe-left  0.18s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.panel-center:has(.swipe-right, .swipe-left) { overflow: hidden; }
 
 /* ---- Shared component classes ---- */
 
