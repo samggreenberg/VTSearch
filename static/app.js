@@ -3401,22 +3401,26 @@
         });
     }
 
-    // Image view controls: zoom, rotate, reset
+    // Image view controls: zoom, rotate, pan, reset
     if (mediaType === "image") {
       const img = document.getElementById("media-image");
+      const wrap = img ? img.closest(".media-player-image-wrap") : null;
       const zoomSlider = document.getElementById("ivc-zoom");
       const zoomLabel = document.getElementById("ivc-zoom-label");
       const rotateLeftBtn = document.getElementById("ivc-rotate-left");
       const rotateRightBtn = document.getElementById("ivc-rotate-right");
       const resetBtn = document.getElementById("ivc-reset");
-      if (img && zoomSlider) {
-        let ivcZoom = 1, ivcRotation = 0;
+      if (img && zoomSlider && wrap) {
+        let ivcZoom = 1, ivcRotation = 0, ivcPanX = 0, ivcPanY = 0;
         const applyTransform = () => {
-          img.style.transform = `scale(${ivcZoom}) rotate(${ivcRotation}deg)`;
+          img.style.transform = `translate(${ivcPanX}px, ${ivcPanY}px) scale(${ivcZoom}) rotate(${ivcRotation}deg)`;
           zoomLabel.textContent = ivcZoom.toFixed(1) + '×';
+          wrap.style.cursor = ivcZoom > 1 ? 'grab' : '';
         };
+        const clampZoom = (val) => Math.min(parseFloat(zoomSlider.max), Math.max(parseFloat(zoomSlider.min), val));
         zoomSlider.addEventListener("input", () => {
           ivcZoom = parseFloat(zoomSlider.value);
+          if (ivcZoom <= 1) { ivcPanX = 0; ivcPanY = 0; }
           applyTransform();
         });
         rotateLeftBtn.addEventListener("click", () => {
@@ -3428,9 +3432,50 @@
           applyTransform();
         });
         resetBtn.addEventListener("click", () => {
-          ivcZoom = 1; ivcRotation = 0;
+          ivcZoom = 1; ivcRotation = 0; ivcPanX = 0; ivcPanY = 0;
           zoomSlider.value = 1;
           applyTransform();
+        });
+
+        // Mouse wheel zoom — zooms toward cursor position
+        wrap.addEventListener("wheel", (e) => {
+          e.preventDefault();
+          const oldZoom = ivcZoom;
+          const delta = e.deltaY > 0 ? -0.15 : 0.15;
+          ivcZoom = clampZoom(ivcZoom + delta * ivcZoom);
+          zoomSlider.value = ivcZoom;
+          // Adjust pan so the point under the cursor stays fixed
+          const rect = wrap.getBoundingClientRect();
+          const cx = e.clientX - rect.left - rect.width / 2;
+          const cy = e.clientY - rect.top - rect.height / 2;
+          const ratio = ivcZoom / oldZoom;
+          ivcPanX = cx - ratio * (cx - ivcPanX);
+          ivcPanY = cy - ratio * (cy - ivcPanY);
+          if (ivcZoom <= 1) { ivcPanX = 0; ivcPanY = 0; }
+          applyTransform();
+        }, { passive: false });
+
+        // Mouse drag panning
+        let isPanning = false, panStartX = 0, panStartY = 0, panOriginX = 0, panOriginY = 0;
+        wrap.addEventListener("mousedown", (e) => {
+          if (ivcZoom <= 1 || e.button !== 0) return;
+          isPanning = true;
+          panStartX = e.clientX; panStartY = e.clientY;
+          panOriginX = ivcPanX; panOriginY = ivcPanY;
+          wrap.style.cursor = 'grabbing';
+          e.preventDefault();
+        });
+        window.addEventListener("mousemove", (e) => {
+          if (!isPanning) return;
+          ivcPanX = panOriginX + (e.clientX - panStartX);
+          ivcPanY = panOriginY + (e.clientY - panStartY);
+          applyTransform();
+          wrap.style.cursor = 'grabbing';
+        });
+        window.addEventListener("mouseup", () => {
+          if (!isPanning) return;
+          isPanning = false;
+          wrap.style.cursor = ivcZoom > 1 ? 'grab' : '';
         });
       }
     }
