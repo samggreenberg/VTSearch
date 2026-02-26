@@ -437,9 +437,47 @@ def set_safe_thresholds_route():
     return jsonify({"safe_thresholds": get_safe_thresholds()})
 
 
+def _example_sort_from_path(file_path: Path) -> tuple:
+    """Embed a media file and sort all loaded medias by cosine similarity.
+
+    Returns ``(results_list, threshold)`` on success or raises on error.
+    The file at *file_path* is embedded using the media type of the currently
+    loaded dataset.
+    """
+    if not medias:
+        raise ValueError("No medias loaded")
+
+    media_type = next(iter(medias.values())).get("type", "audio")
+    from vtsearch.media import get as media_get
+
+    mt = media_get(media_type)
+    example_embedding = mt.embed_media(file_path)
+
+    if example_embedding is None:
+        raise ValueError("Failed to embed media file")
+
+    # Vectorized cosine similarity with all medias
+    all_ids = list(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    example_norm = np.linalg.norm(example_embedding)
+    emb_norms = np.linalg.norm(all_embs, axis=1)
+    norm_products = emb_norms * example_norm
+    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
+    similarities = np.dot(all_embs, example_embedding) / safe_norms
+    similarities = np.where(norm_products == 0, 0.0, similarities)
+
+    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
+    scores = similarities.tolist()
+
+    # Calculate GMM-based threshold
+    threshold = calculate_gmm_threshold(scores)
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return results, round(threshold, 4)
+
+
 @sorting_bp.route("/api/example-sort", methods=["POST"])
 def example_sort():
-    """Sort medias by similarity to an uploaded example audio file."""
+    """Sort medias by similarity to an uploaded example media file."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -447,46 +485,75 @@ def example_sort():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    clap_model, clap_processor = get_clap_model()
-    if clap_model is None or clap_processor is None:
-        return jsonify({"error": "CLAP model not loaded"}), 500
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
 
     try:
         # Save uploaded file to a unique temp location to avoid race conditions
         import uuid
 
-        temp_path = DATA_DIR / f"temp_example_{uuid.uuid4().hex}.wav"
+        suffix = Path(file.filename).suffix or ".bin"
+        temp_path = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{suffix}"
         DATA_DIR.mkdir(exist_ok=True)
         file.save(temp_path)
 
-        # Embed the example audio file
-        example_embedding = embed_audio_file(temp_path)
+        results, thresh = _example_sort_from_path(temp_path)
 
         # Clean up temp file
         temp_path.unlink(missing_ok=True)
 
-        if example_embedding is None:
-            return jsonify({"error": "Failed to embed audio file"}), 500
+        return jsonify({"results": results, "threshold": thresh})
 
-        # Vectorized cosine similarity with all medias
-        all_ids = list(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-        example_norm = np.linalg.norm(example_embedding)
-        emb_norms = np.linalg.norm(all_embs, axis=1)
-        norm_products = emb_norms * example_norm
-        safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-        similarities = np.dot(all_embs, example_embedding) / safe_norms
-        similarities = np.where(norm_products == 0, 0.0, similarities)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-        results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-        scores = similarities.tolist()
 
-        # Calculate GMM-based threshold
-        threshold = calculate_gmm_threshold(scores)
+#: Default directory for server-side example media files.
+SERVER_MEDIA_DIR = DATA_DIR / "example_media"
 
-        results.sort(key=lambda x: x["similarity"], reverse=True)
-        return jsonify({"results": results, "threshold": round(threshold, 4)})
 
+@sorting_bp.route("/api/server-media-files", methods=["GET"])
+def list_server_media_files():
+    """List media files saved on the server in data/example_media/."""
+    if not SERVER_MEDIA_DIR.is_dir():
+        return jsonify({"files": []})
+
+    files = []
+    for p in sorted(SERVER_MEDIA_DIR.iterdir()):
+        if p.is_file() and not p.name.startswith("."):
+            files.append({
+                "name": p.stem,
+                "filename": p.name,
+                "path": str(p.resolve()),
+                "size_bytes": p.stat().st_size,
+            })
+    return jsonify({"files": files})
+
+
+@sorting_bp.route("/api/example-sort-server", methods=["POST"])
+def example_sort_server():
+    """Sort medias by similarity to a server-side media file."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    filename = data.get("filename", "").strip()
+    if not filename:
+        return jsonify({"error": "filename is required"}), 400
+
+    file_path = SERVER_MEDIA_DIR / filename
+    if not file_path.is_file():
+        return jsonify({"error": f"File not found: {filename}"}), 404
+
+    # Ensure path doesn't escape the server media directory
+    try:
+        file_path.resolve().relative_to(SERVER_MEDIA_DIR.resolve())
+    except ValueError:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    try:
+        results, thresh = _example_sort_from_path(file_path)
+        return jsonify({"results": results, "threshold": thresh})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -53,7 +53,6 @@
     <div class="dataset-bar" id="dataset-bar" style="display:none">
       <span class="dataset-info" id="dataset-info">No dataset loaded</span>
     </div>
-    <h2 id="media-heading">Medias</h2>
     <div class="sort-bar" id="sort-bar">
       <span class="sort-label">Sort</span>
       <div class="sort-mode">
@@ -65,9 +64,11 @@
         <label for="text-sort" class="sr-only">Text sort query</label>
         <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
       </div>
+      <div id="learned-sort-wrap" style="display:none">
+        <div id="learned-sort-desc" class="sort-info-text"></div>
+      </div>
       <div id="load-sort-wrap" style="display:none">
-        <button id="load-detector-btn" class="btn-block-primary" style="padding:6px;">Load Detector</button>
-        <input type="file" id="load-detector-file" accept=".json" style="display:none" aria-label="Detector file">
+        <div id="load-sort-desc" class="sort-info-text">No sort loaded</div>
       </div>
       <span class="sort-label" style="margin-top:8px">Select</span>
       <div class="sort-mode">
@@ -90,7 +91,6 @@
         <div class="sort-progress-bar">
           <div class="sort-progress-fill"></div>
         </div>
-        <div class="sort-progress-label" id="sort-progress-label">Searching and sorting...</div>
       </div>
     </div>
     <div id="media-list" role="listbox" aria-label="Medias"></div>
@@ -399,6 +399,32 @@
     </div>
   </div>
 </div>
+
+<!-- Load Sort Modal -->
+<div id="load-sort-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="load-sort-modal-title">
+  <div class="modal-content" style="max-width: 650px;">
+    <div class="modal-header">
+      <h2 id="load-sort-modal-title">Load Sort</h2>
+      <button class="modal-close" id="load-sort-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- Sort by Detector section -->
+      <div class="load-sort-section">
+        <div class="load-sort-section-title">Sort by Detector</div>
+        <div id="load-sort-detector-options"></div>
+      </div>
+      <!-- Sort by Example section -->
+      <div class="load-sort-section">
+        <div class="load-sort-section-title">Sort by Example</div>
+        <div id="load-sort-example-options"></div>
+      </div>
+      <div id="load-sort-status" class="status-text compact" style="margin-top: 12px;"></div>
+    </div>
+  </div>
+</div>
+<!-- Hidden file inputs for load sort modal -->
+<input type="file" id="load-sort-detector-file" accept=".json" style="display:none" aria-label="Local detector file">
+<input type="file" id="load-sort-media-file" style="display:none" aria-label="Local media file">
 
 <!-- Custom VTSearch Dialog (replaces native alert/confirm/prompt) -->
 <div id="vt-dialog-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="vt-dialog-message">
