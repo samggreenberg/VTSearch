@@ -373,7 +373,7 @@ video { max-width: 100%; }
 .progress-check-bar { padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .progress-check-label { font-size: 0.7rem; color: var(--text-dim); width: 100%; }
 .labeling-indicator {
-  flex: 1; padding: 5px 6px; border-radius: 4px; background: transparent;
+  flex: 1; min-width: 0; padding: 5px 6px; border-radius: 4px; background: transparent;
   font-size: 0.7rem; cursor: pointer; transition: border-color 0.4s, opacity 0.2s;
   display: flex; align-items: center; gap: 4px; border: 1px solid var(--indicator-border); text-align: left;
 }
@@ -384,7 +384,7 @@ video { max-width: 100%; }
   background: var(--indicator-dot); transition: background 0.4s, box-shadow 0.4s;
 }
 .indicator-label { flex-shrink: 0; color: var(--text-secondary); font-size: 0.7rem; transition: color 0.4s; white-space: nowrap; }
-.indicator-subtext { font-size: 0.62rem; color: var(--text-dim); transition: color 0.4s; text-align: right; }
+.indicator-subtext { font-size: 0.62rem; color: var(--text-dim); transition: color 0.4s; text-align: right; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* Red – too few labels */
 .labeling-indicator[data-status="red"] { border-color: var(--status-red-border); }
