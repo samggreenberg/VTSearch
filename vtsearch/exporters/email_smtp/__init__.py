@@ -41,17 +41,21 @@ def _build_plain_text(results: dict[str, Any]) -> str:
 
 def _build_html(results: dict[str, Any]) -> str:
     """Render results as a minimal HTML e-mail body."""
+    from html import escape
+
     rows = ""
     for det_result in results.get("results", {}).values():
         hits_html = ""
         for hit in det_result["hits"]:
             hits_html += (
-                f"<tr><td>Clip #{hit['id']}</td><td>{hit.get('filename', 'N/A')}</td><td>{hit['score']}</td></tr>"
+                f"<tr><td>Clip #{hit['id']}</td>"
+                f"<td>{escape(str(hit.get('filename', 'N/A')))}</td>"
+                f"<td>{hit['score']}</td></tr>"
             )
         if not hits_html:
             hits_html = '<tr><td colspan="3"><em>No positive hits found.</em></td></tr>'
         rows += (
-            f"<h3>{det_result['detector_name']}</h3>"
+            f"<h3>{escape(str(det_result['detector_name']))}</h3>"
             f"<p>Threshold: {det_result['threshold']} &mdash; "
             f"Total Hits: {det_result['total_hits']}</p>"
             f"<table border='1' cellpadding='4' cellspacing='0'>"
@@ -61,7 +65,7 @@ def _build_html(results: dict[str, Any]) -> str:
     return (
         f"<html><body>"
         f"<h2>Auto-Detect Results</h2>"
-        f"<p><strong>Media Type:</strong> {results.get('media_type', 'unknown')}<br>"
+        f"<p><strong>Media Type:</strong> {escape(str(results.get('media_type', 'unknown')))}<br>"
         f"<strong>Detectors Run:</strong> {results.get('detectors_run', 0)}</p>"
         f"{rows}"
         f"</body></html>"
@@ -149,7 +153,7 @@ class EmailLabelsetExporter(LabelsetExporter):
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             server.ehlo()
             server.starttls()
             server.login(from_addr, password)

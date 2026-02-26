@@ -87,6 +87,9 @@ class SpeechExtractor(Extractor):
         if audio_path is None:
             return []
 
+        # Track whether we created a temp file so we can clean it up after
+        is_temp = clip.get("media_path") is None or not Path(clip.get("media_path", "")).exists()
+
         try:
             kwargs: dict[str, Any] = {"fp16": False}
             if self._language:
@@ -95,6 +98,10 @@ class SpeechExtractor(Extractor):
             result = self._model.transcribe(str(audio_path), **kwargs)
         except Exception:
             return []
+        finally:
+            # Clean up temp file if we created one
+            if is_temp and audio_path.exists():
+                audio_path.unlink(missing_ok=True)
 
         hits: list[dict[str, Any]] = []
         segments = result.get("segments", [])

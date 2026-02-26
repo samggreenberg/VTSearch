@@ -397,6 +397,9 @@ def _merge_detector_results(
             accumulated[det_name]["hits"].extend(det_result["hits"])
             accumulated[det_name]["total_hits"] += det_result["total_hits"]
             accumulated[det_name]["hits"].sort(key=lambda x: x["score"], reverse=True)
+            if "negative_hits" in det_result:
+                accumulated[det_name].setdefault("negative_hits", []).extend(det_result["negative_hits"])
+                accumulated[det_name]["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
 
 
 def autodetect_main(

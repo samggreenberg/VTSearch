@@ -91,7 +91,7 @@ def run_processor_import(importer_name: str):
     missing = [
         f.key
         for f in importer.fields
-        if f.required and f.field_type != "file" and not field_values.get(f.key, "").strip()
+        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
     ]
     if missing:
         return (

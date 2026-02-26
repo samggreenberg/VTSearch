@@ -68,9 +68,17 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    """Write *data* to the settings file (creating parent dirs if needed)."""
+    """Write *data* to the settings file (creating parent dirs if needed).
+
+    Uses atomic write (write to temp file, then rename) to prevent
+    data loss if the process crashes or is killed mid-write.
+    """
+    import os
+
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp = SETTINGS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, SETTINGS_PATH)
 
 
 def _ensure_loaded() -> dict[str, Any]:

@@ -658,46 +658,51 @@ def auto_detect():
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     def _run_single_detector(detector_name, detector_data):
-        """Run a single detector and return (name, result_dict)."""
-        weights = detector_data["weights"]
-        threshold = detector_data["threshold"]
+        """Run a single detector and return (name, result_dict) or None on failure."""
+        try:
+            weights = detector_data["weights"]
+            threshold = detector_data["threshold"]
 
-        model = build_model_from_weights(weights)
+            model = build_model_from_weights(weights)
 
-        with torch.no_grad():
-            scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+            with torch.no_grad():
+                scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
-        positive_hits = []
-        negative_hits = []
-        for cid, score in zip(all_ids, scores):
-            clip_info = medias[cid].copy()
-            clip_info.pop("embedding", None)
-            clip_info.pop("media_bytes", None)
-            clip_info.pop("media_string", None)
-            clip_info["score"] = round(score, 4)
-            if score >= threshold:
-                positive_hits.append(clip_info)
-            else:
-                negative_hits.append(clip_info)
+            positive_hits = []
+            negative_hits = []
+            for cid, score in zip(all_ids, scores):
+                clip_info = medias[cid].copy()
+                clip_info.pop("embedding", None)
+                clip_info.pop("media_bytes", None)
+                clip_info.pop("media_string", None)
+                clip_info["score"] = round(score, 4)
+                if score >= threshold:
+                    positive_hits.append(clip_info)
+                else:
+                    negative_hits.append(clip_info)
 
-        positive_hits.sort(key=lambda x: x["score"], reverse=True)
-        negative_hits.sort(key=lambda x: x["score"], reverse=True)
+            positive_hits.sort(key=lambda x: x["score"], reverse=True)
+            negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
-        return detector_name, {
-            "detector_name": detector_name,
-            "threshold": round(threshold, 4),
-            "total_hits": len(positive_hits),
-            "hits": positive_hits,
-            "negative_hits": negative_hits,
-        }
+            return detector_name, {
+                "detector_name": detector_name,
+                "threshold": round(threshold, 4),
+                "total_hits": len(positive_hits),
+                "hits": positive_hits,
+                "negative_hits": negative_hits,
+            }
+        except Exception:
+            return None
 
     # Run all detectors in parallel (PyTorch releases GIL during tensor ops)
     results = {}
     with ThreadPoolExecutor(max_workers=min(len(detectors), 8)) as pool:
         futures = [pool.submit(_run_single_detector, name, data) for name, data in detectors.items()]
         for future in futures:
-            name, result = future.result()
-            results[name] = result
+            outcome = future.result()
+            if outcome is not None:
+                name, result = outcome
+                results[name] = result
 
     response: dict = {
         "media_type": media_type,

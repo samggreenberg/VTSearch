@@ -492,7 +492,11 @@ def import_dataset(importer_name: str):
         for key in file_keys:
             if key not in request.files:
                 return jsonify({"error": f"Missing file field: {key!r}"}), 400
-            field_values[key] = request.files[key]
+            # Read file contents before passing to background thread, since the
+            # Flask FileStorage stream is only valid during the request lifecycle.
+            file_bytes = io.BytesIO(request.files[key].read())
+            file_bytes.name = request.files[key].filename
+            field_values[key] = file_bytes
         # Non-file fields come from form data when using multipart.
         for f in importer.fields:
             if f.field_type != "file":

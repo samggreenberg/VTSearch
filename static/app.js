@@ -587,7 +587,7 @@
       for (const importer of data.importers) {
         const btn = document.createElement("button");
         btn.className = "dataset-option";
-        btn.innerHTML = `<h3>${importer.icon || "🔌"} ${importer.display_name}</h3><p>${importer.description}</p>`;
+        btn.innerHTML = `<h3>${escapeHtml(importer.icon || "🔌")} ${escapeHtml(importer.display_name)}</h3><p>${escapeHtml(importer.description)}</p>`;
         btn.addEventListener("click", () => showExtendedImporterForm(importer));
         datasetGenerateColumn.appendChild(btn);
       }
@@ -678,10 +678,10 @@
             });
             const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "…" : ds.description;
             tr.innerHTML = `
-              <td class="col-name">${ds.label}</td>
+              <td class="col-name">${escapeHtml(ds.label)}</td>
               <td class="col-num">${ds.num_files}</td>
               <td class="col-num">${ds.num_categories}</td>
-              <td class="col-desc" title="${ds.description.replace(/"/g, '&quot;')}">${descShort}</td>
+              <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
               <td class="col-status">${buildStatusBadge(st)}</td>
             `;
             tbody.appendChild(tr);
@@ -786,7 +786,7 @@
           sections[initialTab].style.display = "";
         }
       } catch (e) {
-        demoDatasetsDiv.innerHTML = `<div style="color:var(--color-bad); text-align:center;">Error loading demo datasets: ${e.message}</div>`;
+        demoDatasetsDiv.innerHTML = `<div style="color:var(--color-bad); text-align:center;">Error loading demo datasets: ${escapeHtml(e.message)}</div>`;
       }
     });
     datasetLoadColumn.appendChild(demoBtnEl);
@@ -996,7 +996,7 @@
         for (const imp of data.importers) {
           const btn = document.createElement("button");
           btn.className = "dataset-option";
-          btn.innerHTML = `<h3>${imp.icon || "\uD83D\uDD0C"} ${imp.display_name}</h3><p>${imp.description}</p>`;
+          btn.innerHTML = `<h3>${escapeHtml(imp.icon || "\uD83D\uDD0C")} ${escapeHtml(imp.display_name)}</h3><p>${escapeHtml(imp.description)}</p>`;
           btn.addEventListener("click", () => showCombineStagingImporterForm(imp));
           combineGenCol.appendChild(btn);
         }
@@ -1182,7 +1182,7 @@
         });
       });
     } catch (e) {
-      listDiv.innerHTML = `<p style="color:var(--color-bad);">Error loading demos: ${e.message}</p>`;
+      listDiv.innerHTML = `<p style="color:var(--color-bad);">Error loading demos: ${escapeHtml(e.message)}</p>`;
     }
   }
 
@@ -1615,27 +1615,31 @@
     }
 
     const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
-    favoritesList.innerHTML = favoriteDetectors.map(detector => {
+    favoritesList.innerHTML = "";
+    favoriteDetectors.forEach(detector => {
       const icon = mediaIcons[detector.media_type] || "🔍";
       const created = detector.created_at
         ? new Date(detector.created_at * 1000).toLocaleDateString()
         : "";
-      return `
-      <div style="background: var(--border); padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+      const row = document.createElement("div");
+      row.style.cssText = "background: var(--border); padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px;";
+      row.innerHTML = `
         <div style="flex: 1; min-width: 0;">
           <div style="font-weight: bold; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(detector.name)}</div>
           <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; display: flex; align-items: center; gap: 10px;">
-            <span style="background: var(--bg-surface); border: 1px solid var(--bg-secondary-btn); border-radius: 3px; padding: 1px 6px; white-space: nowrap;">${icon} ${detector.media_type}</span>
+            <span style="background: var(--bg-surface); border: 1px solid var(--bg-secondary-btn); border-radius: 3px; padding: 1px 6px; white-space: nowrap;">${escapeHtml(icon)} ${escapeHtml(detector.media_type)}</span>
             <span>threshold&nbsp;${detector.threshold.toFixed(2)}</span>
-            ${created ? `<span>${created}</span>` : ""}
+            ${created ? `<span>${escapeHtml(created)}</span>` : ""}
           </div>
         </div>
         <div style="display: flex; gap: 6px; flex-shrink: 0;">
-          <button onclick="renameDetector('${escapeHtml(detector.name)}')" style="padding: 4px 10px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Rename</button>
-          <button onclick="deleteDetector('${escapeHtml(detector.name)}')" style="padding: 4px 10px; background: #c0392b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Delete</button>
-        </div>
-      </div>`;
-    }).join('');
+          <button class="fav-rename-btn" style="padding: 4px 10px; background: var(--bg-secondary-btn); color: var(--text-btn-secondary); border: 1px solid var(--border-secondary); border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Rename</button>
+          <button class="fav-delete-btn" style="padding: 4px 10px; background: #c0392b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.78rem;">Delete</button>
+        </div>`;
+      row.querySelector(".fav-rename-btn").addEventListener("click", () => renameDetector(detector.name));
+      row.querySelector(".fav-delete-btn").addEventListener("click", () => deleteDetector(detector.name));
+      favoritesList.appendChild(row);
+    });
   }
 
   function escapeHtml(text) {
@@ -1644,7 +1648,7 @@
     return div.innerHTML.replace(/'/g, '&#39;');
   }
 
-  window.renameDetector = async function(oldName) {
+  async function renameDetector(oldName) {
     const newName = await vtPrompt(`Rename detector "${oldName}" to:`, oldName);
     if (!newName || newName === oldName) return;
 
@@ -1659,9 +1663,9 @@
     } else {
       await vtAlert("Failed to rename detector. Name may already exist.", "error");
     }
-  };
+  }
 
-  window.deleteDetector = async function(name) {
+  async function deleteDetector(name) {
     if (!await vtConfirm(`Are you sure you want to delete detector "${name}"?`)) return;
 
     const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(name)}`, {
@@ -1673,7 +1677,7 @@
     } else {
       await vtAlert("Failed to delete detector.", "error");
     }
-  };
+  }
 
   if (menuFavoritesManage) {
     menuFavoritesManage.addEventListener("click", async () => {
@@ -3215,11 +3219,11 @@
         if (c.type === "video") {
           html += `<video class="media-thumbnail" src="${thumbnailUrl(c)}" muted preload="metadata"${poster}></video>`;
         } else {
-          html += `<img class="media-thumbnail" src="${thumbnailUrl(c)}" alt="${mediaLabel}" loading="lazy">`;
+          html += `<img class="media-thumbnail" src="${thumbnailUrl(c)}" alt="${escapeHtml(mediaLabel)}" loading="lazy">`;
         }
         html += `<div class="media-thumb-info">`;
       }
-      html += `<div style="font-weight: 500;">${mediaLabel}</div>`;
+      html += `<div style="font-weight: 500;">${escapeHtml(mediaLabel)}</div>`;
       if (scoreMap[c.id] !== undefined) {
         html += `<span class="sim">${(scoreMap[c.id] * 100).toFixed(1)}%</span>`;
       }
@@ -3329,8 +3333,8 @@
 
     center.innerHTML = `
       <div class="meta">
-        <h2>${c.filename || 'Media #' + c.id}</h2>
-        <p>${metaInfo.join(' &middot; ')}</p>
+        <h2>${escapeHtml(c.filename || 'Media #' + c.id)}</h2>
+        <p>${metaInfo.map(s => escapeHtml(s)).join(' &middot; ')}</p>
       </div>
       <div class="media-swipe-wrapper" id="media-swipe-wrapper">
         ${playerHTML}
@@ -3345,7 +3349,7 @@
         ${c.category && c.category !== 'unknown' ? `
         <div class="metadata-item">
           <span class="metadata-label">Category</span>
-          <span class="metadata-value">${c.category}</span>
+          <span class="metadata-value">${escapeHtml(c.category)}</span>
         </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">Media Type</span>
@@ -3376,11 +3380,11 @@
         </div>
         <div class="metadata-item">
           <span class="metadata-label">Filename</span>
-          <span class="metadata-value">${c.filename || 'media_' + c.id + '.wav'}</span>
+          <span class="metadata-value">${escapeHtml(c.filename || 'media_' + c.id + '.wav')}</span>
         </div>
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
-          <span class="metadata-value metadata-md5">${c.md5}</span>
+          <span class="metadata-value metadata-md5">${escapeHtml(c.md5)}</span>
         </div>
       </div>
       <div class="vote-buttons">
@@ -4817,7 +4821,8 @@
       const theme = btn.dataset.theme;
       applyTheme(theme);
       saveTheme(theme);
-      announce(`${theme === "light" ? "Light" : "Dark"} mode enabled`);
+      const themeNames = { light: "Light", dark: "Dark", highviz: "High Visibility" };
+      announce(`${themeNames[theme] || theme} mode enabled`);
     });
   });
 
