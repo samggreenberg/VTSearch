@@ -619,7 +619,7 @@
         function buildStatusBadge(st) {
           if (st === "ready") return '<span class="ready-badge">Ready</span>';
           if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
-          return '<span class="download-badge">Download</span>';
+          return '<span class="download-badge">Needs Download</span>';
         }
 
         function renderTable(items, section) {
