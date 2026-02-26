@@ -218,10 +218,14 @@ class TestBackgroundImportMemoryError:
 
         _run_importer_in_background(mock_importer, {})
 
-        # Wait for the background thread to finish
-        time.sleep(0.5)
+        # Poll for the background thread to report the error (up to 5s)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            progress = get_progress()
+            if progress["error"] is not None:
+                break
+            time.sleep(0.1)
 
-        progress = get_progress()
         assert progress["error"] is not None
         assert "Out of memory" in progress["error"]
         assert progress["status"] == "idle"
@@ -243,10 +247,14 @@ class TestBackgroundImportMemoryError:
             )
             assert resp.status_code == 200
 
-            # Wait for background thread
-            time.sleep(0.5)
+            # Poll for the background thread to report the error (up to 5s)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                progress = get_progress()
+                if progress["error"] is not None:
+                    break
+                time.sleep(0.1)
 
-            progress = get_progress()
             assert progress["error"] is not None
             assert "Out of memory" in progress["error"]
 
