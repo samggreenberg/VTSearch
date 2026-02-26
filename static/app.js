@@ -22,6 +22,7 @@
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
+  let _combineState = null;          // When non-null, we are in combine-datasets staging mode
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
@@ -340,6 +341,11 @@
   }
 
   function showWelcomeScreen() {
+    // Clean up combine state if we're returning to the welcome screen.
+    if (_combineState) {
+      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
+      _combineState = null;
+    }
     center.innerHTML = "";
     center.appendChild(datasetWelcome);
     datasetWelcome.classList.remove("wide");
@@ -407,13 +413,32 @@
 
     if (progress.error) {
       stopProgressPolling();
-      showWelcomeScreen();
-      vtAlert(progress.error, "warning");
+      if (_combineState) {
+        showCombineDatasetsForm();
+        vtAlert(progress.error, "warning");
+      } else {
+        showWelcomeScreen();
+        vtAlert(progress.error, "warning");
+      }
       return;
     }
 
     if (progress.status === "idle") {
       stopProgressPolling();
+
+      // If we are in combine-datasets staging mode, handle the staging result
+      // instead of loading the dataset into the main UI.
+      if (_combineState && progress.staging_result) {
+        _combineState.push(progress.staging_result);
+        showCombineDatasetsForm();
+        return;
+      }
+      if (_combineState && !progress.staging_result) {
+        // Staging failed or produced no result – return to the combine form.
+        showCombineDatasetsForm();
+        return;
+      }
+
       await checkDatasetStatus();
       if (datasetLoaded) {
         await fetchMedias();
@@ -872,121 +897,231 @@
   // ---- Combine Existing Datasets UI ----
 
   async function showCombineDatasetsForm() {
+    // Initialise state on first entry; preserved across re-renders.
+    if (!_combineState) _combineState = [];
+
     datasetOptions.style.display = "none";
+    datasetProgress.style.display = "none";
+    demoDatasetsDiv.style.display = "none";
     backButton.style.display = "block";
 
-    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
+    const staged = _combineState;
 
-    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
-    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">\uD83D\uDD00 Combine Existing Datasets</h3>`;
-    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">Select two or more datasets to merge. All must be the same media type. Duplicates are skipped automatically.</p>`;
-    html += `<div id="combine-dataset-list" style="margin-bottom:14px;"><p style="color:var(--text-dim);font-size:0.85rem;">Loading available datasets...</p></div>`;
-    html += `<div style="margin-bottom:14px;">`;
-    html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">Or add a .pkl file path</label>`;
-    html += `<div style="display:flex;gap:8px;">`;
-    html += `<input type="text" id="combine-extra-path" placeholder="/path/to/dataset.pkl" style="${inputStyle}flex:1;">`;
-    html += `<button type="button" id="combine-add-path-btn" style="padding:8px 14px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">Add</button>`;
+    // --- Build the HTML ---
+    let html = `<div style="max-width:540px;width:100%;margin:0 auto;">`;
+    html += `<h3 style="margin-bottom:8px;color:var(--text-primary);">\uD83D\uDD00 Combine Datasets</h3>`;
+    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">Add two or more datasets, then combine them. All must be the same media type. Duplicates are skipped automatically.</p>`;
+
+    // Staged datasets list
+    html += `<div id="combine-staged-list" style="margin-bottom:16px;">`;
+    if (staged.length === 0) {
+      html += `<p style="color:var(--text-dim);font-size:0.85rem;">No datasets added yet. Use the buttons below to add datasets.</p>`;
+    } else {
+      staged.forEach((ds, i) => {
+        html += `<div style="display:flex;align-items:center;padding:8px 10px;margin-bottom:4px;background:var(--bg-hover);border-radius:4px;">`;
+        html += `<span style="flex:1;color:var(--text-primary);font-size:0.9rem;">${escapeHtml(ds.name)}</span>`;
+        html += `<span style="color:var(--text-dim);font-size:0.75rem;margin-right:10px;">${ds.count} medias</span>`;
+        html += `<button type="button" data-combine-remove="${i}" style="background:none;border:none;color:var(--color-bad);cursor:pointer;font-size:1rem;padding:0 4px;" title="Remove">&times;</button>`;
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+
+    // "Add dataset" section – same buttons as the welcome screen
+    html += `<div style="margin-bottom:16px;">`;
+    html += `<div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:8px;font-weight:600;">Add a dataset:</div>`;
+    html += `<div class="dataset-columns" id="combine-add-columns" style="gap:12px;">`;
+    html += `<div class="dataset-column" id="combine-load-column">`;
+    html += `<div class="dataset-column-header">Load</div>`;
+    html += `<button class="dataset-option" id="combine-add-file-btn"><h3>\uD83D\uDCC1 Load from File</h3><p>Upload a saved dataset file (.pkl)</p></button>`;
+    html += `</div>`;
+    html += `<div class="dataset-column" id="combine-generate-column">`;
+    html += `<div class="dataset-column-header">Generate</div>`;
+    html += `</div>`;
     html += `</div></div>`;
-    html += `<div id="combine-extra-paths" style="margin-bottom:14px;"></div>`;
-    html += `<button type="button" id="combine-submit-btn" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;" disabled>Select at least 2 datasets</button>`;
+
+    // Combine button
+    html += `<button type="button" id="combine-submit-btn" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;" disabled>Add at least 2 datasets</button>`;
     html += `</div>`;
 
     extendedImporterForm.innerHTML = html;
     extendedImporterForm.style.display = "block";
 
-    const listDiv = document.getElementById("combine-dataset-list");
-    const submitBtn = document.getElementById("combine-submit-btn");
-    const extraPathInput = document.getElementById("combine-extra-path");
-    const addPathBtn = document.getElementById("combine-add-path-btn");
-    const extraPathsDiv = document.getElementById("combine-extra-paths");
-    const extraPaths = [];
-
-    function updateSubmitState() {
-      const checked = listDiv.querySelectorAll("input[type=checkbox]:checked");
-      const total = checked.length + extraPaths.length;
-      if (total >= 2) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = `Combine ${total} Datasets`;
-      } else {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Select at least 2 datasets";
-      }
-    }
-
-    // Fetch available datasets
-    try {
-      const res = await fetch("/api/dataset/available-files");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-
-      if (data.files.length === 0) {
-        listDiv.innerHTML = `<p style="color:var(--text-dim);font-size:0.85rem;">No saved datasets found. Add file paths below.</p>`;
-      } else {
-        let listHtml = "";
-        for (const file of data.files) {
-          listHtml += `<label style="display:flex;align-items:center;padding:8px;margin-bottom:4px;background:var(--bg-hover);border-radius:4px;cursor:pointer;">`;
-          listHtml += `<input type="checkbox" data-path="${escapeHtml(file.path)}" style="margin-right:10px;">`;
-          listHtml += `<span style="flex:1;color:var(--text-primary);font-size:0.9rem;">${escapeHtml(file.name)}</span>`;
-          listHtml += `<span style="color:var(--text-dim);font-size:0.75rem;">${file.size_mb} MB</span>`;
-          listHtml += `</label>`;
-        }
-        listDiv.innerHTML = listHtml;
-        listDiv.querySelectorAll("input[type=checkbox]").forEach(cb => {
-          cb.addEventListener("change", updateSubmitState);
-        });
-      }
-    } catch (_) {
-      listDiv.innerHTML = `<p style="color:var(--text-dim);font-size:0.85rem;">Could not load available datasets. Add file paths below.</p>`;
-    }
-
-    // Handle adding extra file paths
-    function addExtraPath() {
-      const val = extraPathInput.value.trim();
-      if (!val) return;
-      extraPaths.push(val);
-      extraPathInput.value = "";
-      renderExtraPaths();
-      updateSubmitState();
-    }
-
-    function renderExtraPaths() {
-      let html = "";
-      extraPaths.forEach((p, i) => {
-        html += `<div style="display:flex;align-items:center;padding:6px 8px;margin-bottom:4px;background:var(--bg-hover);border-radius:4px;">`;
-        html += `<span style="flex:1;color:var(--text-primary);font-size:0.85rem;word-break:break-all;">${escapeHtml(p)}</span>`;
-        html += `<button type="button" data-remove-idx="${i}" style="background:none;border:none;color:var(--color-bad);cursor:pointer;font-size:1rem;padding:0 4px;">&times;</button>`;
-        html += `</div>`;
+    // --- Wire up remove buttons ---
+    extendedImporterForm.querySelectorAll("[data-combine-remove]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        staged.splice(parseInt(btn.dataset.combineRemove), 1);
+        showCombineDatasetsForm();
       });
-      extraPathsDiv.innerHTML = html;
-      extraPathsDiv.querySelectorAll("[data-remove-idx]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          extraPaths.splice(parseInt(btn.dataset.removeIdx), 1);
-          renderExtraPaths();
-          updateSubmitState();
-        });
-      });
-    }
-
-    addPathBtn.addEventListener("click", addExtraPath);
-    extraPathInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); addExtraPath(); }
     });
 
-    // Handle submit
+    // --- Wire up "Add from File" button ---
+    const combineFileInput = document.createElement("input");
+    combineFileInput.type = "file";
+    combineFileInput.accept = ".pkl";
+    combineFileInput.style.display = "none";
+    extendedImporterForm.appendChild(combineFileInput);
+
+    document.getElementById("combine-add-file-btn").addEventListener("click", () => {
+      combineFileInput.click();
+    });
+    combineFileInput.addEventListener("change", async () => {
+      const file = combineFileInput.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/dataset/stage-file", { method: "POST", body: formData });
+        if (!res.ok) {
+          const err = await res.json();
+          vtAlert(`Error: ${err.error}`, "warning");
+          return;
+        }
+        const result = await res.json();
+        staged.push(result);
+        showCombineDatasetsForm();
+      } catch (err) {
+        vtAlert(`Error: ${err.message}`, "warning");
+      }
+      combineFileInput.value = "";
+    });
+
+    // --- Populate extended importer buttons ---
+    const combineGenCol = document.getElementById("combine-generate-column");
+    const combineLoadCol = document.getElementById("combine-load-column");
+    try {
+      const res = await fetch("/api/dataset/importers");
+      if (res.ok) {
+        const data = await res.json();
+        for (const imp of data.importers) {
+          const btn = document.createElement("button");
+          btn.className = "dataset-option";
+          btn.innerHTML = `<h3>${imp.icon || "\uD83D\uDD0C"} ${imp.display_name}</h3><p>${imp.description}</p>`;
+          btn.addEventListener("click", () => showCombineStagingImporterForm(imp));
+          combineGenCol.appendChild(btn);
+        }
+      }
+    } catch (_) { /* extended importers are optional */ }
+
+    // "Add Demo Dataset" button
+    const demoBtn = document.createElement("button");
+    demoBtn.className = "dataset-option";
+    demoBtn.innerHTML = `<h3>\uD83C\uDFC6 Load Demo Dataset</h3><p>Stage a demo dataset for combining</p>`;
+    demoBtn.addEventListener("click", () => showCombineStagingDemoList());
+    combineLoadCol.appendChild(demoBtn);
+
+    // --- Update submit button state ---
+    const submitBtn = document.getElementById("combine-submit-btn");
+    if (staged.length >= 2) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = `Combine ${staged.length} Datasets`;
+    }
+
+    // --- Handle combine submit ---
     submitBtn.addEventListener("click", async () => {
-      const checkedPaths = Array.from(listDiv.querySelectorAll("input[type=checkbox]:checked"))
-        .map(cb => cb.dataset.path);
-      const allPaths = [...checkedPaths, ...extraPaths];
-
-      if (allPaths.length < 2) return;
-
+      if (staged.length < 2) return;
+      const paths = staged.map(ds => ds.path);
+      // Leave combine mode so the normal progress handler takes over.
+      _combineState = null;
       startProgressPolling();
       try {
         const res = await fetch("/api/dataset/combine", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ datasets: allPaths }),
+          body: JSON.stringify({ datasets: paths }),
         });
+        if (!res.ok) {
+          const err = await res.json();
+          progressMessage.textContent = `Error: ${err.error}`;
+          progressMessage.style.color = "var(--color-bad)";
+          stopProgressPolling();
+        }
+      } catch (err) {
+        progressMessage.textContent = `Error: ${err.message}`;
+        progressMessage.style.color = "var(--color-bad)";
+        stopProgressPolling();
+      }
+      // Clean up staging files in the background.
+      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
+    });
+  }
+
+  // Show an extended importer form inside the combine flow (staging mode).
+  function showCombineStagingImporterForm(importer) {
+    datasetOptions.style.display = "none";
+    extendedImporterForm.style.display = "block";
+    backButton.style.display = "block";
+
+    const inputStyle = "width:100%;padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);box-sizing:border-box;";
+    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
+    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">${escapeHtml(importer.display_name)}</h3>`;
+    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">This will be added to the combine list.</p>`;
+    html += `<form id="combine-stage-form">`;
+    for (const field of importer.fields) {
+      html += `<div style="margin-bottom:14px;">`;
+      html += `<label style="display:block;margin-bottom:5px;color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" style="color:var(--text-primary);width:100%;" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" style="${inputStyle}">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
+        }
+        html += `</select>`;
+      } else if (field.field_type === "folder") {
+        html += `<div style="display:flex;gap:8px;align-items:center;">`;
+        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
+        html += `<button type="button" data-browse-btn="true" style="padding:8px 14px;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">Browse\u2026</button>`;
+        html += `</div>`;
+        html += `<input type="file" data-folder-picker="true" webkitdirectory style="display:none;">`;
+      } else {
+        const itype = field.field_type === "url" ? "url" : "text";
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" style="${inputStyle}" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) {
+        html += `<div style="margin-top:4px;font-size:0.75rem;color:var(--text-dim);">${escapeHtml(field.description)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<button type="submit" style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:0.9rem;">Add to combine list</button>`;
+    html += `</form></div>`;
+
+    extendedImporterForm.innerHTML = html;
+
+    // Wire up folder browse buttons
+    const browseBtn = extendedImporterForm.querySelector("[data-browse-btn]");
+    const folderPicker = extendedImporterForm.querySelector("[data-folder-picker]");
+    const folderTextInput = extendedImporterForm.querySelector("[data-folder-input]");
+    if (browseBtn && folderPicker && folderTextInput) {
+      browseBtn.addEventListener("click", () => folderPicker.click());
+      folderPicker.addEventListener("change", () => {
+        if (folderPicker.files.length > 0) {
+          const topFolder = folderPicker.files[0].webkitRelativePath.split("/")[0];
+          if (!folderTextInput.value) {
+            folderTextInput.placeholder = `Selected: ${topFolder} \u2014 enter full path below`;
+          }
+        }
+      });
+    }
+
+    document.getElementById("combine-stage-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = {};
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+      startProgressPolling();
+      try {
+        const res = await fetch(`/api/dataset/stage-import/${importer.name}`, { method: "POST", headers, body });
         if (!res.ok) {
           const err = await res.json();
           progressMessage.textContent = `Error: ${err.error}`;
@@ -1001,9 +1136,72 @@
     });
   }
 
+  // Show the demo dataset list inside the combine flow (staging mode).
+  async function showCombineStagingDemoList() {
+    datasetOptions.style.display = "none";
+    extendedImporterForm.style.display = "block";
+    backButton.style.display = "block";
+
+    let html = `<div style="max-width:420px;width:100%;margin:0 auto;">`;
+    html += `<h3 style="margin-bottom:16px;color:var(--text-primary);">\uD83C\uDFC6 Add Demo Dataset</h3>`;
+    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">Select a demo dataset to add to the combine list.</p>`;
+    html += `<div id="combine-demo-list"><p style="color:var(--text-dim);">Loading...</p></div>`;
+    html += `</div>`;
+    extendedImporterForm.innerHTML = html;
+
+    const listDiv = document.getElementById("combine-demo-list");
+    try {
+      const res = await fetch("/api/dataset/demo-list");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      let listHtml = "";
+      for (const ds of data.datasets) {
+        listHtml += `<button class="dataset-option" data-demo-name="${escapeHtml(ds.name)}" style="width:100%;text-align:left;margin-bottom:6px;">`;
+        listHtml += `<h3>${escapeHtml(ds.label)}</h3>`;
+        listHtml += `<p>${escapeHtml(ds.description)} (${ds.num_files} files)</p>`;
+        listHtml += `</button>`;
+      }
+      listDiv.innerHTML = listHtml || `<p style="color:var(--text-dim);">No demo datasets available.</p>`;
+      listDiv.querySelectorAll("[data-demo-name]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const name = btn.dataset.demoName;
+          startProgressPolling();
+          try {
+            const res = await fetch(`/api/dataset/stage-demo/${encodeURIComponent(name)}`, { method: "POST" });
+            if (!res.ok) {
+              const err = await res.json();
+              progressMessage.textContent = `Error: ${err.error}`;
+              progressMessage.style.color = "var(--color-bad)";
+              stopProgressPolling();
+            }
+          } catch (err) {
+            progressMessage.textContent = `Error: ${err.message}`;
+            progressMessage.style.color = "var(--color-bad)";
+            stopProgressPolling();
+          }
+        });
+      });
+    } catch (e) {
+      listDiv.innerHTML = `<p style="color:var(--color-bad);">Error loading demos: ${e.message}</p>`;
+    }
+  }
+
   loadExtendedImporters();
 
   backButton.addEventListener("click", () => {
+    // If we are inside a staging sub-form (importer or demo) within the
+    // combine flow, go back to the combine form instead of the welcome screen.
+    const stageForm = document.getElementById("combine-stage-form");
+    const demoList = document.getElementById("combine-demo-list");
+    if (_combineState && (stageForm || demoList)) {
+      showCombineDatasetsForm();
+      return;
+    }
+    // Leaving the combine flow entirely – clean up state.
+    if (_combineState) {
+      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
+      _combineState = null;
+    }
     showWelcomeScreen();
   });
 

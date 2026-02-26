@@ -10,6 +10,7 @@ Covers:
 - Missing file error handling
 - Available-files endpoint
 - Combine API endpoint
+- Staging endpoints (stage-file, stage-import, staging cleanup)
 - CLI support (run_cli)
 - build_origin method
 """
@@ -399,3 +400,152 @@ class TestCombineEndpoint:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Staging endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestStageFileEndpoint:
+    def test_rejects_missing_file(self, client):
+        resp = client.post("/api/dataset/stage-file")
+        assert resp.status_code == 400
+
+    def test_stages_valid_pkl(self, client, tmp_path):
+        """Uploading a valid .pkl file returns staging metadata."""
+        from io import BytesIO
+
+        ds = {1: _make_audio_clip(1), 2: _make_audio_clip(2)}
+        buf = BytesIO()
+        data = {
+            "medias": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()}
+                for cid, m in ds.items()
+            }
+        }
+        pickle.dump(data, buf)
+        buf.seek(0)
+
+        resp = client.post(
+            "/api/dataset/stage-file",
+            data={"file": (buf, "test_ds.pkl")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        result = resp.get_json()
+        assert "path" in result
+        assert result["name"] == "test_ds.pkl"
+        assert result["count"] == 2
+        assert result["media_type"] == "audio"
+
+        # Clean up the staging file
+        from pathlib import Path
+
+        Path(result["path"]).unlink(missing_ok=True)
+
+    def test_stages_empty_pkl(self, client):
+        """An empty pkl returns count=0."""
+        from io import BytesIO
+
+        buf = BytesIO()
+        pickle.dump({"medias": {}}, buf)
+        buf.seek(0)
+
+        resp = client.post(
+            "/api/dataset/stage-file",
+            data={"file": (buf, "empty.pkl")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        result = resp.get_json()
+        assert result["count"] == 0
+
+        from pathlib import Path
+
+        Path(result["path"]).unlink(missing_ok=True)
+
+
+class TestStageImportEndpoint:
+    def test_rejects_unknown_importer(self, client):
+        resp = client.post("/api/dataset/stage-import/nonexistent")
+        assert resp.status_code == 404
+
+    def test_accepts_valid_importer(self, client, tmp_path):
+        """Staging the pickle importer returns 200 with ok=True."""
+        from io import BytesIO
+
+        ds = {1: _make_audio_clip(1)}
+        buf = BytesIO()
+        data = {
+            "medias": {
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()}
+                for cid, m in ds.items()
+            }
+        }
+        pickle.dump(data, buf)
+        buf.seek(0)
+
+        resp = client.post(
+            "/api/dataset/stage-import/pickle",
+            data={"file": (buf, "staged.pkl")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        result = resp.get_json()
+        assert result["ok"] is True
+
+
+class TestStageDemoEndpoint:
+    def test_rejects_invalid_name(self, client):
+        resp = client.post("/api/dataset/stage-demo/nonexistent_xyz_demo")
+        assert resp.status_code == 400
+
+    def test_accepts_valid_demo(self, client):
+        """If any demo dataset exists, staging it returns 200."""
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets configured")
+        name = next(iter(DEMO_DATASETS))
+        resp = client.post(f"/api/dataset/stage-demo/{name}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+
+
+class TestClearStagingEndpoint:
+    def test_clear_staging(self, client):
+        """DELETE /api/dataset/staging returns ok."""
+        resp = client.delete("/api/dataset/staging")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+
+    def test_clear_staging_removes_files(self, client):
+        """Staging files are actually removed."""
+        from vtsearch.routes.datasets import STAGING_DIR
+
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
+        test_file = STAGING_DIR / "stage_test.pkl"
+        test_file.write_bytes(b"dummy")
+        assert test_file.exists()
+
+        resp = client.delete("/api/dataset/staging")
+        assert resp.status_code == 200
+        assert not test_file.exists()
+
+
+class TestProgressStagingResult:
+    def test_staging_result_in_progress(self):
+        """update_progress stores staging_result and get_progress returns it."""
+        from vtsearch.utils.progress import get_progress, update_progress
+
+        staging = {"path": "/tmp/test.pkl", "name": "test", "count": 5, "media_type": "audio"}
+        update_progress("idle", "done", 100, 100, staging_result=staging)
+        progress = get_progress()
+        assert progress["staging_result"] == staging
+
+        # Clean up
+        update_progress("idle", "", 0, 0)
+        assert get_progress()["staging_result"] is None
