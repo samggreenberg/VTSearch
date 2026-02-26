@@ -650,3 +650,110 @@ class TestServerDetectorExport:
         assert "/" not in data["name"]
         assert "\\" not in data["name"]
         assert ":" not in data["name"]
+
+
+class TestDetectorLabelsetExport:
+    """Test the labelset export flow from the detector export context.
+
+    The frontend Export Detector modal offers labelset exporters alongside
+    the traditional detector weight export.  The flow is:
+      1. GET /api/exporters  (list available exporters)
+      2. GET /api/labels/export  (build labelset from current votes)
+      3. POST /api/exporters/export  (run the chosen exporter on the labelset)
+    """
+
+    def test_exporters_list_available(self, client):
+        """GET /api/exporters returns labelset exporters usable from the detector modal."""
+        resp = client.get("/api/exporters")
+        assert resp.status_code == 200
+        names = {e["name"] for e in resp.get_json()}
+        # At least the JSON-based exporters should be present
+        assert "local_json_file" in names
+        assert "server_json_file" in names
+
+    def test_labelset_export_local_json(self, client):
+        """Full flow: votes -> labelset -> local_json_file exporter -> download content."""
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19]})
+
+        # Step 1: get the labelset
+        labels_resp = client.get("/api/labels/export")
+        assert labels_resp.status_code == 200
+        labels_data = labels_resp.get_json()
+        assert "labels" in labels_data
+        assert len(labels_data["labels"]) == 5
+
+        # Step 2: export through local_json_file exporter
+        export_resp = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "local_json_file",
+                "field_values": {},
+                "results": labels_data,
+            },
+        )
+        assert export_resp.status_code == 200
+        data = export_resp.get_json()
+        assert data["success"] is True
+        assert "download_content" in data
+
+        # The download should contain valid JSON with the labels
+        downloaded = json.loads(data["download_content"])
+        assert "labels" in downloaded
+        assert len(downloaded["labels"]) == 5
+
+    def test_labelset_export_server_json(self, client, tmp_path):
+        """Full flow: votes -> labelset -> server_json_file exporter -> file on disk."""
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3]})
+
+        labels_resp = client.get("/api/labels/export")
+        labels_data = labels_resp.get_json()
+
+        fpath = tmp_path / "detector_labels.json"
+        export_resp = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": str(fpath)},
+                "results": labels_data,
+            },
+        )
+        assert export_resp.status_code == 200
+        assert export_resp.get_json()["success"] is True
+        assert fpath.exists()
+
+        written = json.loads(fpath.read_text())
+        assert "labels" in written
+        assert len(written["labels"]) == 3
+
+    def test_labelset_roundtrip_via_exporter(self, client, tmp_path):
+        """Labels exported through an exporter can be re-imported to restore votes."""
+        app_module.good_votes.update({k: None for k in [1, 3]})
+        app_module.bad_votes.update({k: None for k in [2]})
+
+        # Export labelset
+        labels_resp = client.get("/api/labels/export")
+        labels_data = labels_resp.get_json()
+
+        # Save via server_json_file exporter
+        fpath = tmp_path / "labels_roundtrip.json"
+        client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": str(fpath)},
+                "results": labels_data,
+            },
+        )
+
+        # Clear votes and re-import
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+
+        saved = json.loads(fpath.read_text())
+        resp = client.post("/api/labels/import", json=saved)
+        data = resp.get_json()
+        assert data["applied"] == 3
+        assert set(app_module.good_votes) == {1, 3}
+        assert set(app_module.bad_votes) == {2}
