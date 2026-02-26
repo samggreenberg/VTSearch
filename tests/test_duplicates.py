@@ -146,7 +146,7 @@ class TestGetDupeCount:
         assert get_dupe_count(media_dict) == 1
 
     def test_uses_global_medias_by_default(self):
-        saved = dict(app_module.medias)
+        saved = copy.deepcopy(app_module.medias)
         app_module.medias.clear()
         try:
             app_module.medias[1] = _make_media(1, md5="same")
@@ -167,8 +167,8 @@ class TestDatasetStatusDupes:
         assert data["num_dupes"] == 0
 
     def test_status_reports_dupes_after_collapse(self, client):
-        # Temporarily create a dupe
-        saved = dict(app_module.medias)
+        # Temporarily create a dupe (deepcopy because collapse mutates in place)
+        saved = copy.deepcopy(app_module.medias)
         app_module.medias[999] = copy.deepcopy(app_module.medias[1])
         app_module.medias[999]["id"] = 999
         app_module.medias[999]["filename"] = "dupe.wav"
