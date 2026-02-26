@@ -374,7 +374,8 @@ video { max-width: 100%; }
 .dataset-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Progress indicator buttons */
-.progress-check-bar { padding: 10px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; }
+.progress-check-bar { padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.progress-check-label { font-size: 0.7rem; color: var(--text-dim); width: 100%; }
 .labeling-indicator {
   flex: 1; padding: 5px 6px; border-radius: 4px; background: transparent;
   font-size: 0.7rem; cursor: pointer; transition: border-color 0.4s, opacity 0.2s;
