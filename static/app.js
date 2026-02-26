@@ -2847,6 +2847,12 @@
   }
 
   textSortInput.addEventListener("input", onTextSortInput);
+  textSortInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      textSortInput.blur();
+    }
+  });
 
   // ---- Learned sort ----
 
