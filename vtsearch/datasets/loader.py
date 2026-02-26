@@ -728,7 +728,7 @@ def load_dataset_from_pickle(
                     else:
                         missing_media += 1
 
-            if media_bytes:
+            if media_bytes is not None:
                 fname = media_info.get("filename", f"media_{media_id}.{media_type}")
                 media_data = {
                     "id": media_id,
@@ -931,7 +931,7 @@ def load_dataset_from_pickle_chunked(
                             media_bytes = media_string.encode("utf-8")
                         media_path = str(text_path.resolve())
 
-            if media_bytes:
+            if media_bytes is not None:
                 fname = media_info.get("filename", f"media_{media_id}.{media_type}")
                 media_data = {
                     "id": new_id,

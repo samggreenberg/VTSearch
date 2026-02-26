@@ -80,7 +80,7 @@ def run_export():
     results: dict = data.get("results", {}) or {}
 
     # Validate required fields
-    missing = [f.key for f in exporter.fields if f.required and not field_values.get(f.key, "").strip()]
+    missing = [f.key for f in exporter.fields if f.required and not str(field_values.get(f.key, "")).strip()]
     if missing:
         return (
             jsonify(

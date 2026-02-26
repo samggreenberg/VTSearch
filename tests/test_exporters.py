@@ -480,7 +480,7 @@ class TestEmailLabelsetExporter:
                 },
             )
 
-        mock_smtp_cls.assert_called_once_with("smtp.example.com", 587)
+        mock_smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=30)
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("me@example.com", "secret")
         mock_server.sendmail.assert_called_once()

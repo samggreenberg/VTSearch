@@ -287,7 +287,10 @@ def fill_labels_from_sort():
     thresh = data.get("threshold")
     if thresh is None:
         return jsonify({"error": "threshold is required"}), 400
-    thresh = float(thresh)
+    try:
+        thresh = float(thresh)
+    except (TypeError, ValueError):
+        return jsonify({"error": "threshold must be a number"}), 400
 
     sides = data.get("sides", "good")
     if sides not in ("good", "bad", "both"):
@@ -469,8 +472,10 @@ def example_sort():
         return jsonify({"error": "CLAP model not loaded"}), 500
 
     try:
-        # Save uploaded file to temp location
-        temp_path = DATA_DIR / "temp_example.wav"
+        # Save uploaded file to a unique temp location to avoid race conditions
+        import uuid
+
+        temp_path = DATA_DIR / f"temp_example_{uuid.uuid4().hex}.wav"
         DATA_DIR.mkdir(exist_ok=True)
         file.save(temp_path)
 
@@ -478,7 +483,7 @@ def example_sort():
         example_embedding = embed_audio_file(temp_path)
 
         # Clean up temp file
-        temp_path.unlink()
+        temp_path.unlink(missing_ok=True)
 
         if example_embedding is None:
             return jsonify({"error": "Failed to embed audio file"}), 500

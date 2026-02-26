@@ -428,7 +428,14 @@ def calculate_safe_threshold(
     Returns:
         A blended threshold float.
     """
+    import math  # noqa: PLC0415
+
     gmm_threshold = calculate_gmm_threshold(all_scores)
+
+    # If xcal_threshold is infinite (e.g. due to impossible fold split),
+    # fall back to the GMM threshold entirely.
+    if not math.isfinite(xcal_threshold):
+        return gmm_threshold
 
     # Linear ramp: 0 at 6 labels, 1 at 20 labels
     MIN_LABELS = 6
@@ -488,6 +495,12 @@ def train_and_score(
         if cid in clips_dict:
             X_list.append(clips_dict[cid]["embedding"])
             y_list.append(0.0)
+
+    # Guard against empty or single-class training data after filtering
+    num_good = sum(1 for v in y_list if v == 1.0)
+    num_bad = len(y_list) - num_good
+    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
+        return [], 0.5
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
