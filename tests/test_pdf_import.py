@@ -127,9 +127,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         # 1 regular image + 2 PDF pages = 3 total
@@ -146,9 +144,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["origin"] and m["origin"]["importer"] == "pdf"]
@@ -166,9 +162,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_names = sorted(m["filename"] for m in medias.values() if m["filename"].startswith("slides.pdf-"))
@@ -184,17 +178,13 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         assert len(medias) == 2
 
     def test_pdf_ignored_for_non_image_types(self, tmp_path):
         """PDFs should not be processed when media_type is not 'images'."""
-        from vtsearch.datasets.importers.folder import _load_pdf_images
-
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
@@ -223,7 +213,7 @@ class TestFolderImporterPdf:
         from vtsearch.datasets.importers.folder import IMPORTER
 
         medias: dict = {}
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
 
         # Only the WAV should be loaded, not the PDF
@@ -240,9 +230,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias, thin=True)
 
         pdf_medias = [m for m in medias.values() if m["filename"].endswith(".pdf-1")]
@@ -260,9 +248,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
@@ -278,9 +264,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
@@ -300,9 +284,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
@@ -319,9 +301,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         # 2 + 3 = 5 pages total
@@ -336,9 +316,7 @@ class TestFolderImporterPdf:
         mt = self._make_fake_image_media_type()
         medias: dict = {}
 
-        with mock.patch("vtsearch.datasets.loader.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.datasets.importers.folder.get_by_folder_name", return_value=mt
-        ):
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         m = list(medias.values())[0]
