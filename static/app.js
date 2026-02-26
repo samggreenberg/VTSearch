@@ -33,7 +33,9 @@
   const textSortInput = document.getElementById("text-sort");
   const textSortWrap = document.getElementById("text-sort-wrap");
   const loadSortWrap = document.getElementById("load-sort-wrap");
-  const loadDetectorBtn = document.getElementById("load-detector-btn");
+  const loadSortDesc = document.getElementById("load-sort-desc");
+  const learnedSortWrap = document.getElementById("learned-sort-wrap");
+  const learnedSortDesc = document.getElementById("learned-sort-desc");
   // load-detector-file removed: Load Sort modal handles file picking now
   const learnedRadio = document.getElementById("learned-radio");
   const loadRadio = document.getElementById("load-radio");
@@ -2700,6 +2702,7 @@
         // Open the Load Sort modal to choose detector or example
         sortMode = radio.value;
         textSortWrap.style.display = "none";
+        learnedSortWrap.style.display = "none";
         loadSortWrap.style.display = "";
         sortStatus.textContent = "";
         if (!loadedDetector) {
@@ -2710,12 +2713,14 @@
 
       sortMode = radio.value;
       textSortWrap.style.display = sortMode === "text" ? "" : "none";
+      learnedSortWrap.style.display = sortMode === "learned" ? "" : "none";
       loadSortWrap.style.display = sortMode === "load" ? "" : "none";
       sortStatus.textContent = "";
 
       if (sortMode === "text") {
         onTextSortInput();
       } else if (sortMode === "learned") {
+        updateLearnedSortDesc();
         fetchLearnedSort(true);
       }
     });
@@ -2993,10 +2998,6 @@
   }
 
   // ---- Load detector file ----
-
-  loadDetectorBtn.addEventListener("click", () => {
-    openLoadSortModal();
-  });
 
   // ---- Next Clip Selection ----
 
@@ -4058,6 +4059,7 @@
         document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
         sortMode = "text";
         textSortWrap.style.display = "";
+        learnedSortWrap.style.display = "none";
         loadSortWrap.style.display = "none";
       }
     });
@@ -4071,8 +4073,9 @@
     sortMode = "load";
     document.querySelector('input[name="sort-mode"][value="load"]').checked = true;
     textSortWrap.style.display = "none";
+    learnedSortWrap.style.display = "none";
     loadSortWrap.style.display = "";
-    loadDetectorBtn.textContent = label;
+    loadSortDesc.textContent = label;
     updateSortModeAvailability();
   }
 
@@ -4402,6 +4405,7 @@
         document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
         sortMode = "text";
         textSortWrap.style.display = "";
+        learnedSortWrap.style.display = "none";
         loadSortWrap.style.display = "none";
       }
       return;
@@ -4419,6 +4423,7 @@
       document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
       sortMode = "text";
       textSortWrap.style.display = "";
+      learnedSortWrap.style.display = "none";
       loadSortWrap.style.display = "none";
     }
   });
@@ -4432,6 +4437,7 @@
         document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
         sortMode = "text";
         textSortWrap.style.display = "";
+        learnedSortWrap.style.display = "none";
         loadSortWrap.style.display = "none";
       }
       return;
@@ -4464,6 +4470,7 @@
       document.querySelector('input[name="sort-mode"][value="text"]').checked = true;
       sortMode = "text";
       textSortWrap.style.display = "";
+      learnedSortWrap.style.display = "none";
       loadSortWrap.style.display = "none";
     }
   });
@@ -4632,10 +4639,16 @@
   // Keep latest status data for span info display
   let _lastStatusData = null;
 
+  // Update the learned-sort description with current vote counts
+  function updateLearnedSortDesc() {
+    learnedSortDesc.textContent = `${votes.good.length} G, ${votes.bad.length} B`;
+  }
+
   // Update label counts and schedule an indicator refresh
   function updateLabelCounts() {
     goodCountSpan.textContent = `(${votes.good.length})`;
     badCountSpan.textContent = `(${votes.bad.length})`;
+    updateLearnedSortDesc();
     scheduleLabelingStatusUpdate();
   }
 
