@@ -29,6 +29,7 @@ _cached_steps: list[dict[str, Any]] = []
 _cache_good_ids: set[int] = set()
 _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
+_cache_diversity_tree: Any = None  # DiversityTree | None
 
 
 def clear_progress_cache() -> None:
@@ -37,12 +38,13 @@ def clear_progress_cache() -> None:
     Must be called whenever votes are cleared, medias change, or inclusion
     is altered so that stale models are not reused.
     """
-    global _cache_inclusion, _cache_prev_predictions
+    global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
     _cached_steps.clear()
     _cache_good_ids.clear()
     _cache_bad_ids.clear()
     _cache_prev_predictions = None
     _cache_inclusion = None
+    _cache_diversity_tree = None
 
 
 def _ensure_cache(
@@ -56,7 +58,7 @@ def _ensure_cache(
     differs from the value used for existing cache entries the entire cache
     is rebuilt.
     """
-    global _cache_inclusion, _cache_prev_predictions
+    global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
 
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
         clear_progress_cache()
@@ -70,8 +72,25 @@ def _ensure_cache(
 
     all_media_ids = sorted(clips_dict.keys())
 
+    # Build the diversity tree once when starting from scratch.  On subsequent
+    # calls (warm cache) the tree is already up-to-date through step start-1.
+    if _cache_diversity_tree is None:
+        vectors: dict[int, np.ndarray] = {
+            cid: np.asarray(media["embedding"], dtype=np.float32)
+            for cid, media in clips_dict.items()
+            if media.get("embedding") is not None
+        }
+        if vectors:
+            from vtsearch.models.diversity_tree import DiversityTree  # noqa: PLC0415
+
+            _cache_diversity_tree = DiversityTree(vectors, k=3)
+
     for t in range(start, len(label_history)):
         media_id, label, _ = label_history[t]
+
+        # Track whether this media was labeled *before* the current event so we
+        # can decide whether an "unlabel" event should remove it from the tree.
+        was_labeled = media_id in _cache_good_ids or media_id in _cache_bad_ids
 
         # Incrementally update running label sets
         if label == "unlabel":
@@ -83,6 +102,24 @@ def _ensure_cache(
         else:
             _cache_good_ids.discard(media_id)
             _cache_bad_ids.add(media_id)
+
+        # Mirror label events onto the diversity tree and record the level.
+        diversity_info: Optional[dict[str, Any]] = None
+        if _cache_diversity_tree is not None:
+            if label == "unlabel":
+                # Only call unlabel on the tree when the item is no longer labeled
+                # at all (guards against good→bad re-labels going through "unlabel").
+                if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
+                    if media_id in _cache_diversity_tree.vector_to_leaf:
+                        _cache_diversity_tree.unlabel(media_id)
+            else:
+                if media_id in _cache_diversity_tree.vector_to_leaf:
+                    _cache_diversity_tree.label(media_id)
+            diversity_info = {
+                "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
+                "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
+                "depth": _cache_diversity_tree.depth(),
+            }
 
         good_ids = list(_cache_good_ids)
         bad_ids = list(_cache_bad_ids)
@@ -162,6 +199,7 @@ def _ensure_cache(
                 "good_ids": good_ids,
                 "bad_ids": bad_ids,
                 "stability": stability,
+                "diversity": diversity_info,
             }
         )
 
@@ -493,58 +531,15 @@ def calculate_diversity_level_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
 ) -> list[dict[str, Any]]:
-    """Replay label history against a fresh diversity tree to compute level at each step.
+    """Return cached per-step diversity levels.
 
-    Returns a list of dicts with ``num_labels``, ``diversity_level`` (fractional),
-    and ``depth`` at each label step where the label count changes.
+    Diversity levels are computed and stored by :func:`_ensure_cache` as it
+    processes each label-history step, so this function is just a read of the
+    already-populated cache.  :func:`analyze_labeling_progress` calls
+    ``_ensure_cache`` before calling this function, so the cache is always
+    current by the time we arrive here.
     """
-    from vtsearch.models.diversity_tree import DiversityTree
-
-    vectors: dict[int, np.ndarray] = {}
-    for cid, media in clips_dict.items():
-        emb = media.get("embedding")
-        if emb is not None:
-            vectors[cid] = np.asarray(emb, dtype=np.float32)
-
-    if not vectors:
-        return []
-
-    tree = DiversityTree(vectors, k=3)
-    d = tree.depth()
-
-    good_ids: set[int] = set()
-    bad_ids: set[int] = set()
-    results: list[dict[str, Any]] = []
-
-    for media_id, label, _ in label_history:
-        if media_id not in tree.vector_to_leaf:
-            continue
-
-        if label == "unlabel":
-            was_labeled = media_id in good_ids or media_id in bad_ids
-            good_ids.discard(media_id)
-            bad_ids.discard(media_id)
-            if was_labeled and media_id not in good_ids and media_id not in bad_ids:
-                tree.unlabel(media_id)
-        elif label == "good":
-            bad_ids.discard(media_id)
-            good_ids.add(media_id)
-            tree.label(media_id)
-        else:  # bad
-            good_ids.discard(media_id)
-            bad_ids.add(media_id)
-            tree.label(media_id)
-
-        num_labels = len(good_ids) + len(bad_ids)
-        results.append(
-            {
-                "num_labels": num_labels,
-                "diversity_level": round(tree.fractional_diversity_level(), 4),
-                "depth": d,
-            }
-        )
-
-    return results
+    return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
 
 
 def analyze_labeling_progress(
