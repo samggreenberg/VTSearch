@@ -294,9 +294,11 @@ video { max-width: 600px; max-height: 400px; }
 .vote-buttons { display: flex; gap: 16px; }
 .vote-buttons button { padding: 10px 28px; border: 2px solid; border-radius: 8px; font-size: 1rem; cursor: pointer; background: transparent; transition: all 0.15s; }
 .btn-good { color: var(--color-good); border-color: var(--color-good); }
-.btn-good:hover, .btn-good.voted { background: var(--color-good); color: #fff; }
+.btn-good:hover { font-weight: 700; }
+.btn-good.voted, .btn-good.vote-flash { background: var(--color-good); color: #fff; }
 .btn-bad { color: var(--color-bad); border-color: var(--color-bad); }
-.btn-bad:hover, .btn-bad.voted { background: var(--color-bad); color: #fff; }
+.btn-bad:hover { font-weight: 700; }
+.btn-bad.voted, .btn-bad.vote-flash { background: var(--color-bad); color: #fff; }
 
 /* Right panel – votes */
 .panel-right { width: 200px; border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; background: var(--bg-panel); display: flex; flex-direction: column; }

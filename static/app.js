@@ -3420,6 +3420,19 @@
     if (isVoting) return; // Prevent double-click from toggling the vote off
     isVoting = true;
     try {
+      // Flash the clicked button immediately for tactile feedback.
+      // If the button already has .voted (toggling off), remove it instead.
+      const btnId = vote === "good" ? "vote-good" : "vote-bad";
+      const clickedBtn = document.getElementById(btnId);
+      const wasVoted = clickedBtn && clickedBtn.classList.contains("voted");
+      if (clickedBtn) {
+        if (wasVoted) {
+          clickedBtn.classList.remove("voted");
+        } else {
+          clickedBtn.classList.add("vote-flash");
+        }
+      }
+
       const mediaName = (medias.find(c => c.id === id) || {}).filename || `Clip #${id}`;
       await fetch(`/api/medias/${id}/vote`, {
         method: "POST",
