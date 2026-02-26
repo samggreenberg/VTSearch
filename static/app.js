@@ -435,18 +435,29 @@
       progressFill.style.width = `${percentage}%`;
       progressText.textContent = `${percentage}%`;
 
-      // Calculate ETA
+      // Only calculate ETA during the "embedding" phase.  Earlier phases like
+      // warmup also report a known total (e.g. 1/3, 2/3, 3/3) to drive their
+      // own determinate bar, but their per-step timing must not seed the ETA
+      // for the subsequent, much longer embedding loop.
       const now = Date.now();
-      if (!progressEtaState || progressEtaState.total !== progress.total) {
-        progressEtaState = { startTime: now, startCurrent: progress.current, total: progress.total };
-      }
-      const elapsed = (now - progressEtaState.startTime) / 1000;
-      const done = progress.current - progressEtaState.startCurrent;
-      if (done > 0 && elapsed > 1 && progress.current < progress.total) {
-        const rate = done / elapsed;
-        const remaining = (progress.total - progress.current) / rate;
-        progressEta.textContent = formatETA(remaining);
-      } else if (progress.current >= progress.total) {
+      if (progress.status === "embedding") {
+        if (!progressEtaState || progressEtaState.total !== progress.total) {
+          progressEtaState = { startTime: now, startCurrent: progress.current, total: progress.total };
+        }
+        const elapsed = (now - progressEtaState.startTime) / 1000;
+        const done = progress.current - progressEtaState.startCurrent;
+        if (done > 0 && elapsed > 1 && progress.current < progress.total) {
+          const rate = done / elapsed;
+          const remaining = (progress.total - progress.current) / rate;
+          progressEta.textContent = formatETA(remaining);
+        } else if (progress.current >= progress.total) {
+          progressEta.textContent = "";
+        }
+      } else {
+        // Non-embedding phase with a known total (e.g. warmup): show the
+        // determinate bar but suppress ETA and clear any stale ETA state so
+        // embedding always starts with a fresh timer.
+        progressEtaState = null;
         progressEta.textContent = "";
       }
     } else {
