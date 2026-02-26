@@ -688,6 +688,187 @@ class ImageMediaType(MediaType):
                 clip_id += 1
             return None  # bytes are inline
 
+        elif source == "oxford_flowers_102":
+            from vtsearch.datasets.downloader import download_oxford_flowers  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_oxford_flowers_metadata  # noqa: PLC0415
+
+            flowers_dir = download_oxford_flowers(on_progress=on_progress)
+            metadata = load_oxford_flowers_metadata(flowers_dir, self._OXFORD_FLOWERS_CATEGORIES)
+
+            by_cat: dict[str, list[tuple[Path, str]]] = {}
+            for _fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                if cat in categories:
+                    by_cat.setdefault(cat, []).append((meta["path"], cat))
+
+            selected: list[tuple[Path, str]] = []
+            for cat in categories:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                embedding = self.embed_media(img_path)
+                if embedding is None:
+                    continue
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "media_bytes": image_bytes,
+                    "media_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
+        elif source in ("food101", "eurosat"):
+            if source == "food101":
+                from vtsearch.datasets.downloader import download_food101  # noqa: PLC0415
+
+                img_dir = download_food101(on_progress=on_progress)
+            else:
+                from vtsearch.datasets.downloader import download_eurosat  # noqa: PLC0415
+
+                img_dir = download_eurosat(on_progress=on_progress)
+
+            metadata = load_image_metadata_from_folders(img_dir, categories)
+            by_cat = {}
+            for _fname, meta in sorted(metadata.items()):
+                cat = meta["category"]
+                by_cat.setdefault(cat, []).append((meta["path"], cat))
+
+            selected = []
+            for cat in categories:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                embedding = self.embed_media(img_path)
+                if embedding is None:
+                    continue
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "media_bytes": image_bytes,
+                    "media_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
+        elif source == "stanford_dogs":
+            from vtsearch.datasets.downloader import download_stanford_dogs  # noqa: PLC0415
+
+            images_dir = download_stanford_dogs(on_progress=on_progress)
+
+            # Stanford Dogs folders are named like "n02085620-Chihuahua".
+            # Build a mapping from breed name to folder path.
+            breed_to_folder: dict[str, Path] = {}
+            if images_dir.exists():
+                for folder in images_dir.iterdir():
+                    if folder.is_dir() and "-" in folder.name:
+                        breed_name = folder.name.split("-", 1)[1]
+                        breed_to_folder[breed_name] = folder
+
+            by_cat = {}
+            for cat in categories:
+                folder = breed_to_folder.get(cat)
+                if folder is None:
+                    continue
+                for ext in ["*.jpg", "*.jpeg", "*.png"]:
+                    for img_path in sorted(folder.glob(ext)):
+                        by_cat.setdefault(cat, []).append((img_path, cat))
+
+            selected = []
+            for cat in categories:
+                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+
+            for i, (img_path, category) in enumerate(selected):
+                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                embedding = self.embed_media(img_path)
+                if embedding is None:
+                    continue
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+                try:
+                    img = Image.open(img_path)
+                    width, height = img.width, img.height
+                except Exception:
+                    width, height = None, None
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "media_bytes": image_bytes,
+                    "media_string": None,
+                    "filename": img_path.name,
+                    "category": category,
+                    "width": width,
+                    "height": height,
+                    "origin": demo_origin,
+                    "origin_name": img_path.name,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
         elif source == "cifar10_sample" or not source:
             from vtsearch.datasets.downloader import download_cifar10  # noqa: PLC0415
             from vtsearch.datasets.loader import load_cifar10_batch  # noqa: PLC0415

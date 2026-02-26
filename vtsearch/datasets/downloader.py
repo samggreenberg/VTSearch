@@ -28,11 +28,26 @@ from vtsearch.config import (
     DATA_DIR,
     ESC50_DOWNLOAD_SIZE_MB,
     ESC50_URL,
+    EUROSAT_DOWNLOAD_SIZE_MB,
+    EUROSAT_URL,
+    FOOD101_DOWNLOAD_SIZE_MB,
+    FOOD101_URL,
+    GTZAN_DOWNLOAD_SIZE_MB,
+    GTZAN_URL,
     IMAGE_DIR,
     IMDB_DOWNLOAD_SIZE_MB,
     IMDB_URL,
+    OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+    OXFORD_FLOWERS_LABELS_URL,
+    OXFORD_FLOWERS_URL,
+    SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+    SPEECH_COMMANDS_V2_URL,
+    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+    STANFORD_DOGS_URL,
     UCF101_SUBSET_DOWNLOAD_SIZE_MB,
     UCF101_SUBSET_URL,
+    URBANSOUND8K_DOWNLOAD_SIZE_MB,
+    URBANSOUND8K_URL,
     VIDEO_DIR,
 )
 
@@ -128,6 +143,138 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
         zip_path.unlink(missing_ok=True)
 
     return extract_dir / "audio"
+
+
+def download_gtzan(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the GTZAN Music Genre Classification dataset.
+
+    Downloads ``genres.tar.gz`` from HuggingFace into ``DATA_DIR`` if it is
+    not already present, then extracts it.  The archive is deleted after
+    extraction to reclaim disk space.
+
+    The dataset contains 1000 30-second audio tracks across 10 music genres
+    (100 tracks per genre), stored as ``.wav`` files in genre subdirectories.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``genres/`` directory containing genre subdirectories
+        with ``.wav`` files (e.g. ``data/gtzan/genres``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "genres.tar.gz"
+    extract_dir = DATA_DIR / "gtzan"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    genres_dir = extract_dir / "genres"
+    if not genres_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting GTZAN download...", 0, 0)
+            download_file_with_progress(
+                GTZAN_URL, tar_path, GTZAN_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            )
+
+        on_progress("downloading", "Extracting GTZAN...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_dir, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    return genres_dir
+
+
+def download_speech_commands_v2(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Google Speech Commands v2 dataset.
+
+    Downloads ``speech_commands_v0.02.tar.gz`` from TensorFlow into
+    ``DATA_DIR`` if it is not already present, then extracts it.  The archive
+    is deleted after extraction to reclaim disk space.
+
+    The dataset contains ~105 000 one-second ``.wav`` utterances of 35
+    keywords, each stored in a keyword subdirectory.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``speech_commands_v2/`` directory containing keyword
+        subdirectories with ``.wav`` files (e.g.
+        ``data/speech_commands_v2``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "speech_commands_v0.02.tar.gz"
+    extract_dir = DATA_DIR / "speech_commands_v2"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not extract_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting Speech Commands v2 download...", 0, 0)
+            download_file_with_progress(
+                SPEECH_COMMANDS_V2_URL,
+                tar_path,
+                SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting Speech Commands v2...", 0, 0)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_dir, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    return extract_dir
+
+
+def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the UrbanSound8K dataset.
+
+    Downloads ``UrbanSound8K.tar.gz`` from Zenodo into ``DATA_DIR`` if it is
+    not already present, then extracts it.  The archive is deleted after
+    extraction to reclaim disk space.
+
+    The dataset contains 8732 labeled sound excerpts across 10 urban sound
+    classes, organized in numbered fold directories with a metadata CSV.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``UrbanSound8K/`` directory containing ``audio/`` and
+        ``metadata/`` subdirectories (e.g. ``data/UrbanSound8K``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "UrbanSound8K.tar.gz"
+    extract_dir = DATA_DIR / "UrbanSound8K"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not extract_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting UrbanSound8K download...", 0, 0)
+            download_file_with_progress(
+                URBANSOUND8K_URL,
+                tar_path,
+                URBANSOUND8K_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting UrbanSound8K...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(DATA_DIR, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    return extract_dir
 
 
 def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -270,6 +417,196 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
         tar_path.unlink(missing_ok=True)
 
     return categories_dir
+
+
+def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Oxford Flowers 102 dataset.
+
+    Downloads the image tarball and the labels MAT file from the Oxford VGG
+    website into ``DATA_DIR`` if they are not already present, then extracts
+    the images.  Archives are deleted after extraction to reclaim disk space.
+
+    The dataset contains 8189 images of 102 flower species.  Images are stored
+    in a single flat directory (``jpg/``) with numeric filenames; the class
+    label for each image is provided in a separate MATLAB ``.mat`` file.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``oxford_flowers/`` directory containing ``jpg/`` and
+        ``imagelabels.mat`` (e.g. ``data/oxford_flowers``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tgz_path = DATA_DIR / "102flowers.tgz"
+    extract_dir = DATA_DIR / "oxford_flowers"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    jpg_dir = extract_dir / "jpg"
+    if not jpg_dir.exists():
+        if not tgz_path.exists():
+            on_progress("downloading", "Starting Oxford Flowers download...", 0, 0)
+            download_file_with_progress(
+                OXFORD_FLOWERS_URL,
+                tgz_path,
+                OXFORD_FLOWERS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting Oxford Flowers...", 0, 0)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(tgz_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_dir, filter="data")
+
+        tgz_path.unlink(missing_ok=True)
+
+    # Download labels file if not present.
+    labels_path = extract_dir / "imagelabels.mat"
+    if not labels_path.exists():
+        on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
+        download_file_with_progress(
+            OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress
+        )
+
+    return extract_dir
+
+
+def download_food101(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Food-101 dataset.
+
+    Downloads ``food-101.tar.gz`` from ETH Zurich into ``DATA_DIR`` if it is
+    not already present, then extracts it.  The archive is deleted after
+    extraction to reclaim disk space.
+
+    The dataset contains 101 000 images across 101 food categories (1000
+    images per category), stored in category subdirectories.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``food-101/images/`` directory containing category
+        subdirectories with JPEG images (e.g. ``data/food-101/images``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "food-101.tar.gz"
+    extract_dir = DATA_DIR / "food-101"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    images_dir = extract_dir / "images"
+    if not images_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting Food-101 download...", 0, 0)
+            download_file_with_progress(
+                FOOD101_URL, tar_path, FOOD101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            )
+
+        on_progress("downloading", "Extracting Food-101...", 0, 0)
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(DATA_DIR, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    return images_dir
+
+
+def download_eurosat(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the EuroSAT RGB dataset.
+
+    Downloads ``EuroSAT_RGB.zip`` from HuggingFace into ``DATA_DIR`` if it
+    is not already present, then extracts it.  The archive is deleted after
+    extraction to reclaim disk space.
+
+    The dataset contains 27 000 Sentinel-2 satellite image patches across
+    10 land-use classes, stored in class subdirectories.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``EuroSAT_RGB/`` directory containing class
+        subdirectories with JPEG images (e.g. ``data/EuroSAT_RGB``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    zip_path = DATA_DIR / "EuroSAT_RGB.zip"
+    extract_dir = DATA_DIR / "EuroSAT_RGB"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    if not extract_dir.exists():
+        if not zip_path.exists():
+            on_progress("downloading", "Starting EuroSAT download...", 0, 0)
+            download_file_with_progress(
+                EUROSAT_URL, zip_path, EUROSAT_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            )
+
+        on_progress("downloading", "Extracting EuroSAT...", 0, 0)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(DATA_DIR)
+
+        zip_path.unlink(missing_ok=True)
+
+    return extract_dir
+
+
+def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Stanford Dogs dataset.
+
+    Downloads ``images.tar`` from the Stanford Vision Lab into ``DATA_DIR``
+    if it is not already present, then extracts it.  The archive is deleted
+    after extraction to reclaim disk space.
+
+    The dataset contains ~20 580 images across 120 dog breed classes.  The
+    archive extracts to an ``Images/`` directory with breed subdirectories
+    named like ``n02085620-Chihuahua``.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``stanford_dogs/Images/`` directory containing breed
+        subdirectories with JPEG images (e.g.
+        ``data/stanford_dogs/Images``).
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    tar_path = DATA_DIR / "stanford_dogs_images.tar"
+    extract_dir = DATA_DIR / "stanford_dogs"
+    DATA_DIR.mkdir(exist_ok=True)
+    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    images_dir = extract_dir / "Images"
+    if not images_dir.exists():
+        if not tar_path.exists():
+            on_progress("downloading", "Starting Stanford Dogs download...", 0, 0)
+            download_file_with_progress(
+                STANFORD_DOGS_URL,
+                tar_path,
+                STANFORD_DOGS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+
+        on_progress("downloading", "Extracting Stanford Dogs...", 0, 0)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(tar_path, "r:") as tar_ref:
+            tar_ref.extractall(extract_dir, filter="data")
+
+        tar_path.unlink(missing_ok=True)
+
+    return images_dir
 
 
 def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Path:

@@ -67,6 +67,128 @@ def load_esc50_metadata(esc50_dir: Path) -> dict[str, dict[str, Any]]:
     return metadata
 
 
+def load_audio_metadata_from_folders(audio_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
+    """Scan category subdirectories and collect audio file metadata.
+
+    Iterates over immediate subdirectories of ``audio_dir``, keeping only those
+    whose name appears in ``categories``, and collects paths for all audio files
+    with common extensions (``wav``, ``mp3``, ``flac``, ``ogg``, ``m4a``, ``au``).
+
+    Args:
+        audio_dir: Root directory whose immediate subdirectories represent
+            category folders.
+        categories: List of category folder names to include. Subdirectories
+            not in this list are skipped.
+
+    Returns:
+        A dict mapping ``category/filename`` to a dict with the keys:
+
+        - ``"category"`` (``str``): Name of the category folder.
+        - ``"path"`` (``Path``): Full path to the audio file.
+    """
+    metadata: dict[str, dict[str, Any]] = {}
+
+    for category_folder in audio_dir.iterdir():
+        if not category_folder.is_dir():
+            continue
+
+        category_name = category_folder.name
+        if category_name not in categories:
+            continue
+
+        for ext in ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a", "*.au"]:
+            for audio_path in category_folder.glob(ext):
+                metadata[f"{category_name}/{audio_path.name}"] = {
+                    "category": category_name,
+                    "path": audio_path,
+                }
+
+    return metadata
+
+
+def load_urbansound8k_metadata(us8k_dir: Path) -> dict[str, dict[str, Any]]:
+    """Load metadata from the UrbanSound8K CSV file.
+
+    Reads ``<us8k_dir>/metadata/UrbanSound8K.csv`` and builds a mapping from
+    audio filename to its associated metadata fields.
+
+    Args:
+        us8k_dir: Path to the root UrbanSound8K directory (the directory that
+            contains the ``metadata/`` and ``audio/`` subdirectories).
+
+    Returns:
+        A dict mapping audio filename (e.g. ``"100032-3-0-0.wav"``) to a dict
+        with the keys:
+
+        - ``"category"`` (``str``): Human-readable class label.
+        - ``"fold"`` (``int``): Fold number (1–10).
+        - ``"class_id"`` (``int``): Integer class index.
+        - ``"path"`` (``Path``): Full path to the audio file.
+    """
+    meta_file = us8k_dir / "metadata" / "UrbanSound8K.csv"
+    metadata: dict[str, dict[str, Any]] = {}
+
+    with open(meta_file, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            filename = row["slice_file_name"]
+            fold = int(row["fold"])
+            audio_path = us8k_dir / "audio" / f"fold{fold}" / filename
+            metadata[filename] = {
+                "category": row["class"],
+                "fold": fold,
+                "class_id": int(row["classID"]),
+                "path": audio_path,
+            }
+
+    return metadata
+
+
+def load_oxford_flowers_metadata(flowers_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
+    """Load metadata for the Oxford Flowers 102 dataset.
+
+    Reads the ``imagelabels.mat`` file and maps numeric labels (1–102) to
+    category names using the provided ``categories`` list.  Images are
+    stored in a flat ``jpg/`` directory with filenames ``image_NNNNN.jpg``.
+
+    Args:
+        flowers_dir: Path to the root Oxford Flowers directory (contains
+            ``jpg/`` and ``imagelabels.mat``).
+        categories: Ordered list of 102 flower species names (index 0
+            corresponds to label 1 in the MAT file).
+
+    Returns:
+        A dict mapping image filename to a dict with the keys:
+
+        - ``"category"`` (``str``): Flower species name from *categories*.
+        - ``"path"`` (``Path``): Full path to the image file.
+    """
+    import scipy.io  # noqa: PLC0415
+
+    mat_path = flowers_dir / "imagelabels.mat"
+    mat = scipy.io.loadmat(str(mat_path))
+    labels = mat["labels"][0]  # 1-indexed array of length 8189
+
+    jpg_dir = flowers_dir / "jpg"
+    metadata: dict[str, dict[str, Any]] = {}
+
+    for i, label in enumerate(labels):
+        # Labels are 1-indexed; categories list is 0-indexed.
+        cat_idx = int(label) - 1
+        if cat_idx < 0 or cat_idx >= len(categories):
+            continue
+        cat_name = categories[cat_idx]
+        # Oxford Flowers images are named image_00001.jpg .. image_08189.jpg
+        fname = f"image_{i + 1:05d}.jpg"
+        img_path = jpg_dir / fname
+        metadata[fname] = {
+            "category": cat_name,
+            "path": img_path,
+        }
+
+    return metadata
+
+
 def load_cifar10_batch(file_path: Path) -> tuple[np.ndarray, list[int], list[str]]:
     """Load a CIFAR-10 pickle batch file and return images, labels, and label names.
 
