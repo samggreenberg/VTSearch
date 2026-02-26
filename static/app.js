@@ -257,20 +257,22 @@
   const menuDatasetExport = document.getElementById("menu-dataset-export");
   const menuDatasetChange = document.getElementById("menu-dataset-change");
   const menuLabelsExport = document.getElementById("menu-labels-export");
-  const menuLabelsExportSubmenu = document.getElementById("menu-labels-export-submenu");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
   const menuDetectorImport = document.getElementById("menu-detector-import");
   const menuDetectorExport = document.getElementById("menu-detector-export");
-  const menuDetectorExportSubmenu = document.getElementById("menu-detector-export-submenu");
-  const menuDetectorExportBrowser = document.getElementById("menu-detector-export-browser");
-  const menuDetectorExportServer = document.getElementById("menu-detector-export-server");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
   const labelImporterModal = document.getElementById("label-importer-modal");
   const labelImporterModalClose = document.getElementById("label-importer-modal-close");
   const labelImporterList = document.getElementById("label-importer-list");
   const labelImporterFormDiv = document.getElementById("label-importer-form");
   const labelImporterBack = document.getElementById("label-importer-back");
+  const labelExporterModal = document.getElementById("label-exporter-modal");
+  const labelExporterModalClose = document.getElementById("label-exporter-modal-close");
+  const labelExporterList = document.getElementById("label-exporter-list");
+  const detectorExportModal = document.getElementById("detector-export-modal");
+  const detectorExportModalClose = document.getElementById("detector-export-modal-close");
+  const detectorExportList = document.getElementById("detector-export-list");
   const processorImporterModal = document.getElementById("processor-importer-modal");
   const processorImporterModalClose = document.getElementById("processor-importer-modal-close");
   const processorImporterList = document.getElementById("processor-importer-list");
@@ -1115,32 +1117,50 @@
     });
   }
 
-  // Labels export submenu toggle
-  let labelsExportersList = [];
-
-  async function loadLabelsExportersList() {
+  // Labels export – open modal
+  async function openLabelExporterModal() {
+    let exporters = [];
     try {
       const res = await fetch("/api/exporters");
-      if (res.ok) {
-        labelsExportersList = await res.json();
-        renderLabelsExportSubmenu();
-      }
-    } catch (_) {}
-  }
+      if (res.ok) exporters = await res.json();
+    } catch (_) { /* ignore */ }
 
-  function renderLabelsExportSubmenu() {
-    if (!menuLabelsExportSubmenu) return;
-    menuLabelsExportSubmenu.innerHTML = "";
-    for (const exp of labelsExportersList) {
-      const item = document.createElement("div");
-      item.className = "burger-item burger-subitem";
-      item.setAttribute("role", "menuitem");
-      item.setAttribute("tabindex", "-1");
-      item.dataset.exporterName = exp.name;
-      item.textContent = `${exp.icon} ${exp.display_name}`;
-      item.addEventListener("click", () => runLabelExport(exp));
-      menuLabelsExportSubmenu.appendChild(item);
+    if (exporters.length === 0) {
+      labelExporterList.innerHTML = '<p style="color:var(--text-muted);">No label exporters available.</p>';
+    } else {
+      labelExporterList.innerHTML = exporters.map(exp => `
+        <div class="label-exporter-option" data-name="${escapeHtml(exp.name)}" style="
+          background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px;
+          padding:12px 16px; margin-bottom:10px; cursor:pointer;
+          display:flex; align-items:center; gap:12px;">
+          <span style="font-size:1.5rem;">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
+          <div>
+            <div style="font-weight:bold; color:var(--text-primary);">${escapeHtml(exp.display_name)}</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">${escapeHtml(exp.description)}</div>
+          </div>
+        </div>
+      `).join("");
+
+      labelExporterList.querySelectorAll(".label-exporter-option").forEach(el => {
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        const name = el.dataset.name;
+        const exp = exporters.find(e => e.name === name);
+        el.addEventListener("click", () => {
+          labelExporterModal.classList.remove("show");
+          runLabelExport(exp);
+        });
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            labelExporterModal.classList.remove("show");
+            runLabelExport(exp);
+          }
+        });
+      });
     }
+
+    labelExporterModal.classList.add("show");
   }
 
   async function runLabelExport(exp) {
@@ -1197,27 +1217,13 @@
       menuLabelsStatus.textContent = "Export failed";
       setTimeout(() => { menuLabelsStatus.textContent = ""; }, 3000);
     }
-    closeBurgerMenu();
   }
 
-  if (menuLabelsExport && menuLabelsExportSubmenu) {
-    menuLabelsExport.addEventListener("click", (e) => {
+  if (menuLabelsExport) {
+    menuLabelsExport.addEventListener("click", async () => {
       if (menuLabelsExport.classList.contains("disabled")) return;
-      e.stopPropagation();
-      const isOpen = menuLabelsExportSubmenu.classList.contains("show");
-      // Close any other open submenus
-      document.querySelectorAll(".burger-submenu.show").forEach(s => {
-        s.classList.remove("show");
-        const parent = s.previousElementSibling;
-        if (parent) parent.setAttribute("aria-expanded", "false");
-      });
-      if (!isOpen) {
-        menuLabelsExportSubmenu.classList.add("show");
-        menuLabelsExport.setAttribute("aria-expanded", "true");
-        if (labelsExportersList.length === 0) loadLabelsExportersList();
-      } else {
-        menuLabelsExport.setAttribute("aria-expanded", "false");
-      }
+      closeBurgerMenu();
+      await openLabelExporterModal();
     });
   }
 
@@ -1237,126 +1243,137 @@
     });
   }
 
-  // Detector export submenu toggle
-  if (menuDetectorExport && menuDetectorExportSubmenu) {
-    menuDetectorExport.addEventListener("click", (e) => {
+  // Detector export – open modal
+  if (menuDetectorExport) {
+    menuDetectorExport.addEventListener("click", () => {
       if (menuDetectorExport.classList.contains("disabled")) return;
-      e.stopPropagation();
-      const isOpen = menuDetectorExportSubmenu.classList.contains("show");
-      // Close any other open submenus
-      document.querySelectorAll(".burger-submenu.show").forEach(s => {
-        s.classList.remove("show");
-        const parent = s.previousElementSibling;
-        if (parent) parent.setAttribute("aria-expanded", "false");
-      });
-      if (!isOpen) {
-        menuDetectorExportSubmenu.classList.add("show");
-        menuDetectorExport.setAttribute("aria-expanded", "true");
-      } else {
-        menuDetectorExport.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
-
-  // Detector export – browser download
-  if (menuDetectorExportBrowser && menuDetectorStatus && burgerDropdown) {
-    menuDetectorExportBrowser.addEventListener("click", async () => {
-      menuDetectorStatus.textContent = "";
-      menuDetectorStatus.textContent = "Exporting detector\u2026";
-      const res = await fetch("/api/detector/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!res.ok) {
-        menuDetectorStatus.textContent = "Export failed";
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-        return;
-      }
-      const data = await res.json();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "detector.json";
-      a.click();
-      URL.revokeObjectURL(url);
-      menuDetectorStatus.textContent = "Detector exported (browser)";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
       closeBurgerMenu();
+      openDetectorExportModal();
     });
   }
 
-  // Detector export – save to server
-  if (menuDetectorExportServer && menuDetectorStatus && burgerDropdown) {
-    menuDetectorExportServer.addEventListener("click", async () => {
-      menuDetectorStatus.textContent = "";
+  function openDetectorExportModal() {
+    const optionStyle = "background:var(--border); border:1px solid var(--bg-secondary-btn); border-radius:6px; padding:12px 16px; margin-bottom:10px; cursor:pointer; display:flex; align-items:center; gap:12px;";
+    detectorExportList.innerHTML = `
+      <div id="detector-export-browser-btn" role="button" tabindex="0" style="${optionStyle}">
+        <span style="font-size:1.5rem;">\u2B07\uFE0F</span>
+        <div>
+          <div style="font-weight:bold; color:var(--text-primary);">Download (Browser)</div>
+          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Download the detector file directly to your browser.</div>
+        </div>
+      </div>
+      <div id="detector-export-server-btn" role="button" tabindex="0" style="${optionStyle}">
+        <span style="font-size:1.5rem;">\uD83D\uDCBE</span>
+        <div>
+          <div style="font-weight:bold; color:var(--text-primary);">Save to Server</div>
+          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Save the detector file to the server disk.</div>
+        </div>
+      </div>
+    `;
 
-      const name = await vtPrompt("Enter a name for the detector file (saved on server):");
-      if (!name || !name.trim()) return;
+    const browserBtn = detectorExportList.querySelector("#detector-export-browser-btn");
+    const serverBtn = detectorExportList.querySelector("#detector-export-server-btn");
 
-      menuDetectorStatus.textContent = "Saving detector to server\u2026";
+    browserBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportBrowser(); });
+    browserBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportBrowser(); }
+    });
+    serverBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportServer(); });
+    serverBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportServer(); }
+    });
 
-      const res = await fetch("/api/detector/export-server", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
-      });
+    detectorExportModal.classList.add("show");
+  }
 
-      if (res.status === 409) {
-        const info = await res.json();
-        const overwrite = await vtConfirm(
-          `A detector file "${info.name}.json" already exists on the server.\n\nPath: ${info.path}\n\nOverwrite it?`
-        );
-        if (overwrite) {
-          menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
-          const res2 = await fetch("/api/detector/export-server", {
+  async function runDetectorExportBrowser() {
+    menuDetectorStatus.textContent = "Exporting detector\u2026";
+    const res = await fetch("/api/detector/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      menuDetectorStatus.textContent = "Export failed";
+      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+      return;
+    }
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "detector.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    menuDetectorStatus.textContent = "Detector exported (browser)";
+    setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+  }
+
+  async function runDetectorExportServer() {
+    const name = await vtPrompt("Enter a name for the detector file (saved on server):");
+    if (!name || !name.trim()) return;
+
+    menuDetectorStatus.textContent = "Saving detector to server\u2026";
+
+    const res = await fetch("/api/detector/export-server", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+
+    if (res.status === 409) {
+      const info = await res.json();
+      const overwrite = await vtConfirm(
+        `A detector file "${info.name}.json" already exists on the server.\n\nPath: ${info.path}\n\nOverwrite it?`
+      );
+      if (overwrite) {
+        menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
+        const res2 = await fetch("/api/detector/export-server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim(), overwrite: true }),
+        });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          menuDetectorStatus.textContent = `Saved to server: ${data2.name}.json`;
+          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+        } else {
+          const err = await res2.json().catch(() => ({}));
+          menuDetectorStatus.textContent = err.error || "Server export failed";
+          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+        }
+      } else {
+        const newName = await vtPrompt("Enter a different name:");
+        if (newName && newName.trim()) {
+          menuDetectorStatus.textContent = "Saving detector to server\u2026";
+          const res3 = await fetch("/api/detector/export-server", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: name.trim(), overwrite: true }),
+            body: JSON.stringify({ name: newName.trim() }),
           });
-          if (res2.ok) {
-            const data2 = await res2.json();
-            menuDetectorStatus.textContent = `Saved to server: ${data2.name}.json`;
+          if (res3.ok) {
+            const data3 = await res3.json();
+            menuDetectorStatus.textContent = `Saved to server: ${data3.name}.json`;
             setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
           } else {
-            const err = await res2.json().catch(() => ({}));
+            const err = await res3.json().catch(() => ({}));
             menuDetectorStatus.textContent = err.error || "Server export failed";
             setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
           }
         } else {
-          const newName = await vtPrompt("Enter a different name:");
-          if (newName && newName.trim()) {
-            menuDetectorStatus.textContent = "Saving detector to server\u2026";
-            const res3 = await fetch("/api/detector/export-server", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: newName.trim() }),
-            });
-            if (res3.ok) {
-              const data3 = await res3.json();
-              menuDetectorStatus.textContent = `Saved to server: ${data3.name}.json`;
-              setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
-            } else {
-              const err = await res3.json().catch(() => ({}));
-              menuDetectorStatus.textContent = err.error || "Server export failed";
-              setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-            }
-          } else {
-            menuDetectorStatus.textContent = "Export cancelled";
-            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
-          }
+          menuDetectorStatus.textContent = "Export cancelled";
+          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
         }
-      } else if (res.ok) {
-        const data = await res.json();
-        menuDetectorStatus.textContent = `Saved to server: ${data.name}.json`;
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        menuDetectorStatus.textContent = err.error || "Server export failed";
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
       }
-      closeBurgerMenu();
-    });
+    } else if (res.ok) {
+      const data = await res.json();
+      menuDetectorStatus.textContent = `Saved to server: ${data.name}.json`;
+      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      menuDetectorStatus.textContent = err.error || "Server export failed";
+      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+    }
   }
 
   // ---- Favorite Detectors ----
@@ -2434,9 +2451,6 @@
         menuDetectorExport.classList.remove("disabled");
       } else {
         menuDetectorExport.classList.add("disabled");
-        // Collapse submenu if open
-        if (menuDetectorExportSubmenu) menuDetectorExportSubmenu.classList.remove("show");
-        menuDetectorExport.setAttribute("aria-expanded", "false");
       }
     }
 
@@ -2447,9 +2461,6 @@
         menuLabelsExport.classList.remove("disabled");
       } else {
         menuLabelsExport.classList.add("disabled");
-        // Collapse submenu if open
-        if (menuLabelsExportSubmenu) menuLabelsExportSubmenu.classList.remove("show");
-        menuLabelsExport.setAttribute("aria-expanded", "false");
       }
     }
   }
@@ -3731,6 +3742,18 @@
     });
   }
 
+  if (labelExporterModalClose) {
+    labelExporterModalClose.addEventListener("click", () => {
+      labelExporterModal.classList.remove("show");
+    });
+  }
+
+  if (detectorExportModalClose) {
+    detectorExportModalClose.addEventListener("click", () => {
+      detectorExportModal.classList.remove("show");
+    });
+  }
+
   if (labelImporterBack) {
     labelImporterBack.addEventListener("click", () => {
       labelImporterFormDiv.style.display = "none";
@@ -4643,6 +4666,8 @@
     // Close any open modal on Escape, from most specific to least
     const modalClosePairs = [
       [labelImporterModal, labelImporterModalClose],
+      [labelExporterModal, labelExporterModalClose],
+      [detectorExportModal, detectorExportModalClose],
       [processorImporterModal, processorImporterModalClose],
       [favoritesModal, favoritesModalClose],
       [autodetectModal, autodetectModalClose],

@@ -25,18 +25,13 @@
       <div class="burger-section" role="group" aria-label="Labels">
         <div class="burger-section-title" id="menu-section-labels">Labels</div>
         <div class="burger-item" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
-        <div class="burger-item burger-item-parent" id="menu-labels-export" role="menuitem" tabindex="-1" aria-expanded="false">Export Labels <span class="burger-arrow" aria-hidden="true">&#9656;</span></div>
-        <div class="burger-submenu" id="menu-labels-export-submenu" role="group" aria-label="Export Labels options"></div>
+        <div class="burger-item" id="menu-labels-export" role="menuitem" tabindex="-1">Export Labels</div>
         <div class="burger-status" id="menu-labels-status" aria-live="polite"></div>
       </div>
       <div class="burger-section" role="group" aria-label="Detector">
         <div class="burger-section-title" id="menu-section-detector">Detector</div>
         <div class="burger-item" id="menu-detector-import" role="menuitem" tabindex="-1">Load Sort</div>
-        <div class="burger-item burger-item-parent" id="menu-detector-export" role="menuitem" tabindex="-1" aria-expanded="false">Export Detector <span class="burger-arrow" aria-hidden="true">&#9656;</span></div>
-        <div class="burger-submenu" id="menu-detector-export-submenu" role="group" aria-label="Export Detector options">
-          <div class="burger-item burger-subitem" id="menu-detector-export-browser" role="menuitem" tabindex="-1">Download (Browser)</div>
-          <div class="burger-item burger-subitem" id="menu-detector-export-server" role="menuitem" tabindex="-1">Save to Server</div>
-        </div>
+        <div class="burger-item" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
         <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
       </div>
       <div class="burger-section" role="group" aria-label="Favorite Detectors">
@@ -361,6 +356,32 @@
       <div id="label-importer-list"></div>
       <div id="label-importer-form" style="display:none"></div>
       <button id="label-importer-back" aria-label="Back to importer list" style="display:none; margin-top:12px; padding:6px 14px; background:var(--bg-secondary-btn); color:var(--text-btn-secondary); border:1px solid var(--border-secondary); border-radius:4px; cursor:pointer;">&#8592; Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- Label Exporter Picker Modal -->
+<div id="label-exporter-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="label-exporter-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="label-exporter-modal-title">Export Labels</h2>
+      <button class="modal-close" id="label-exporter-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="label-exporter-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Detector Export Modal -->
+<div id="detector-export-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detector-export-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="detector-export-modal-title">Export Detector</h2>
+      <button class="modal-close" id="detector-export-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="detector-export-list"></div>
     </div>
   </div>
 </div>
