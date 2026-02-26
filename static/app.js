@@ -321,6 +321,10 @@
     const status = await res.json();
     datasetLoaded = status.loaded;
 
+    if (menuDatasetExport) {
+      menuDatasetExport.classList.toggle("disabled", !datasetLoaded);
+    }
+
     if (datasetLoaded) {
       showMainUI();
       const mtInfo = mediaTypesMap[status.media_type];
@@ -1088,6 +1092,7 @@
   // Dataset export
   if (menuDatasetExport && burgerDropdown) {
     menuDatasetExport.addEventListener("click", () => {
+      if (menuDatasetExport.classList.contains("disabled")) return;
       window.location.href = "/api/dataset/export";
       closeBurgerMenu();
     });
@@ -1103,6 +1108,7 @@
             votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
             selected = null;
             datasetLoaded = false;
+            if (menuDatasetExport) menuDatasetExport.classList.add("disabled");
             updateMediaHeading();
             showWelcomeScreen();
             renderVotes();
