@@ -106,14 +106,14 @@ class S3Importer(DatasetImporter):
         ),
     ]
 
-    def run(self, field_values: dict, clips: dict) -> None:
+    def run(self, field_values: dict, medias: dict) -> None:
         """Download files from S3, then load them into the dataset.
 
         Args:
             field_values: Maps each ImporterField.key to the user's input.
                 - "file" fields arrive as werkzeug FileStorage objects.
                 - All other fields arrive as plain strings.
-            clips: The global clips dict.  Populate it **in-place**; do not
+            medias: The global medias dict.  Populate it **in-place**; do not
                 replace the reference.
         """
         import boto3
@@ -139,7 +139,7 @@ class S3Importer(DatasetImporter):
             s3.download_file(bucket, key, str(local_path))
 
         # Delegate to the standard folder loader
-        load_dataset_from_folder(download_dir, media_type, clips)
+        load_dataset_from_folder(download_dir, media_type, medias)
 
 
 # This module-level instance is what the registry discovers.
@@ -772,7 +772,7 @@ additional changes:
 |------------------------|---------------------------------------------------------------|
 | **Model init**         | `load_models()` is called at startup for your type            |
 | **Folder import**      | Files matching your `file_extensions` are found and embedded  |
-| **Generic media route**| `GET /api/clips/<id>/media` delegates to your `clip_response()`|
+| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `clip_response()`|
 | **Text sorting**       | `embed_text()` is called for text-query cosine similarity     |
 | **Demo listing**       | Your `demo_datasets` appear in `GET /api/dataset/demo-list`   |
 | **Dataset export**     | Clip data is serialized to pickle (including your custom fields)|
@@ -816,7 +816,7 @@ function so they survive a round-trip through pickle export/import.
 
 ### Frontend integration
 
-The generic `GET /api/clips/<id>/media` endpoint works for all media types.
+The generic `GET /api/medias/<id>/media` endpoint works for all media types.
 However, if your media type needs a specialized viewer (code highlighting,
 3D rendering, etc.), you will need to add rendering logic in
 `static/index.html`.  Check the clip's `type` field in the frontend JavaScript
@@ -919,7 +919,7 @@ requirements-dev.txt          # Dev tools (pytest)
 
 - [ ] Create `vtsearch/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values, clips)` — populate `clips` in-place
+- [ ] Implement `run(self, field_values, medias)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
 - [ ] Create `vtsearch/datasets/importers/<name>/requirements.txt`
 - [ ] Add `-r` line to `requirements-importers.txt`

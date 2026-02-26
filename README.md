@@ -60,7 +60,7 @@ This runs fast CPU tests only. Additional test modes:
 ├── app.py                          # Flask entry point, registers blueprints, CLI arg parsing
 ├── vtsearch/                       # Main application package
 │   ├── config.py                   # Constants (SAMPLE_RATE, paths, model IDs)
-│   ├── clips.py                    # Test clip generation & embedding cache
+│   ├── medias.py                   # Test media generation & embedding cache
 │   ├── cli.py                      # CLI utilities: autodetect workflow
 │   ├── settings.py                 # Persistent settings & favorite processors
 │   ├── routes/                     # Flask blueprints
@@ -72,7 +72,7 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── labels/importers/           # Label importer plugins
 │   ├── processors/importers/       # Processor importer plugins
 │   ├── audio/                      # Audio generation utility
-│   └── utils/                      # Global state (clips, votes) & progress helpers
+│   └── utils/                      # Global state (medias, votes) & progress helpers
 ├── static/                         # Frontend (HTML, JS, CSS, assets)
 ├── tests/                          # Test suite (pytest)
 ├── docs/                           # Extended documentation
@@ -84,7 +84,8 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
-│   └── FEATURE_IDEAS.md            # Brainstorm of potential features
+│   ├── FEATURE_IDEAS.md            # Brainstorm of potential features
+│   └── demos.md                    # Demo dataset listing
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
 

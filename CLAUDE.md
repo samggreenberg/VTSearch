@@ -32,7 +32,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `vtsearch/media/` — Media type plugins: audio, image, text, video
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
 - `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (ARCHITECTURE.md, EXTENDING.md, EVAL.md, CLI.md, ML.md, SETUP.md, FEATURE_IDEAS.md)
+- `docs/` — Extended docs (ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures (client, vote reset, model init)
   - `test_audio.py` — WAV generation
@@ -69,6 +69,11 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_diversity_tree.py` — DiversityTree: hierarchical k-means clustering, seen tracking, diversity level, next sample
   - `test_diversity_tree_integration.py` — DiversityTree integration with Flask app: build, rebuild, voting, diversity-level endpoint
   - `test_tqdm_progress.py` — tqdm-based progress bar tracking
+  - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
+  - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
+  - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
+  - `test_memory_errors.py` — Graceful MemoryError handling during dataset loading
+  - `test_preload_progress.py` — Console progress output during embedding model preloading
   - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
 
 ## Test Markers
@@ -89,7 +94,7 @@ Testing can crash the session. To avoid losing work, follow this workflow:
 This ensures work is recoverable if the session crashes during a test run.
 
 ## Key Details
-- Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors` are module-level dicts/lists
+- Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors`, `favorite_localizers` are module-level dicts/lists
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_media_types, favorite_processors
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking

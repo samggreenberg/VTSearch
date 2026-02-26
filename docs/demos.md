@@ -2,19 +2,46 @@
 
 When the app is running, click the hamburger menu in the top-left corner to open the dataset panel. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
 
-| Demo | Media type | Description |
-|------|-----------|-------------|
-| **esc50_s** | Audio | ~350 clips across all 50 ESC-50 sound categories — animals, nature, urban, domestic, and human sounds |
-| **esc50_m** | Audio | ~650 clips across all 50 ESC-50 sound categories |
-| **esc50_l** | Audio | ~1000 clips across all 50 ESC-50 sound categories |
-| **caltech101_s** | Image | ~500 photographs across 25 Caltech-101 categories — animals, vehicles, household objects, and nature |
-| **caltech101_m** | Image | ~1,000 photographs across 25 Caltech-101 categories |
-| **caltech256_l** | Image | ~2,000 photographs across 25 Caltech-256 categories — animals, landmarks, vehicles, and everyday objects |
-| **20newsgroups_s** | Text | ~375 articles across 15 topics from 20 Newsgroups — sports, science, politics, religion, and more |
-| **20newsgroups_m** | Text | ~750 articles across 15 topics from 20 Newsgroups |
-| **20newsgroups_l** | Text | ~1875 articles across 15 topics from 20 Newsgroups |
-| **ucf101_s** | Video | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
-| **ucf101_m** | Video | ~250 clips across 10 UCF-101 action categories (manual download) |
-| **ucf101_l** | Video | ~600 clips across 10 UCF-101 action categories (manual download) |
+## Audio
+
+| Demo | Description |
+|------|-------------|
+| **esc50_s** | ~350 clips across all 50 ESC-50 sound categories — animals, nature, urban, domestic, and human sounds |
+| **esc50_m** | ~650 clips across all 50 ESC-50 sound categories |
+| **esc50_l** | ~1000 clips across all 50 ESC-50 sound categories |
+| **gtzan_a** | 30-second music excerpts across 10 GTZAN genres — blues, classical, country, disco, hiphop, jazz, metal, pop, reggae, and rock |
+| **speech_commands_v2_a** | One-second keyword utterances across 35 Google Speech Commands v2 categories |
+| **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories — air conditioner, car horn, children playing, dog bark, and more |
+
+## Image
+
+| Demo | Description |
+|------|-------------|
+| **caltech101_s** | ~500 photographs across 25 Caltech-101 categories — animals, vehicles, household objects, and nature |
+| **caltech101_m** | ~1,000 photographs across 25 Caltech-101 categories |
+| **caltech256_l** | ~2,000 photographs across 25 Caltech-256 categories — animals, landmarks, vehicles, and everyday objects |
+| **oxford_flowers_102_a** | Close-up flower photography across 102 Oxford Flowers species |
+| **food101_a** | Crowd-sourced food photos across 101 Food-101 categories — a deliberately noisy benchmark |
+| **eurosat_a** | Sentinel-2 satellite imagery across 10 EuroSAT land use categories |
+| **stanford_dogs_a** | Fine-grained dog breed photos across 120 Stanford Dogs categories |
+
+## Text
+
+| Demo | Description |
+|------|-------------|
+| **20newsgroups_s** | ~375 articles across 15 topics from 20 Newsgroups — sports, science, politics, religion, and more |
+| **20newsgroups_m** | ~750 articles across 15 topics from 20 Newsgroups |
+| **20newsgroups_l** | ~1875 articles across 15 topics from 20 Newsgroups |
+| **ag_news_a** | Short news summaries across 4 AG News categories — world, sports, business, and sci/tech |
+| **bbc_news_a** | Full BBC news articles across 5 categories — business, entertainment, politics, sport, and tech |
+| **imdb_a** | Long-form user-written movie reviews with binary positive/negative sentiment labels |
+
+## Video
+
+| Demo | Description |
+|------|-------------|
+| **ucf101_s** | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
+| **ucf101_m** | ~250 clips across 10 UCF-101 action categories (manual download) |
+| **ucf101_l** | ~600 clips across 10 UCF-101 action categories (manual download) |
 
 You can also load your own data from pickle files or folders via the same menu.

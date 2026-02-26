@@ -60,11 +60,20 @@ UI. They are **not** downloaded at startup.
 | Dataset | Media type | Source | Approx. size |
 |---------|-----------|--------|-------------|
 | ESC-50 | Audio | GitHub | ~600 MB |
-| CIFAR-10 | Image | U of Toronto | ~170 MB |
+| GTZAN Music Genre | Audio | Internet Archive | ~600 MB |
+| Speech Commands v2 | Audio | Google | ~600 MB |
+| UrbanSound8K | Audio | Zenodo | ~600 MB |
 | Caltech-101 | Image | Caltech Data | ~131 MB |
 | Caltech-256 | Image | Caltech Data | ~1200 MB |
-| UCF-101 subset | Video | HuggingFace Datasets | ~171 MB |
+| Oxford Flowers 102 | Image | Oxford | ~131 MB |
+| Food-101 | Image | ETH Zurich | ~170 MB |
+| EuroSAT | Image | Zenodo | ~170 MB |
+| Stanford Dogs | Image | Stanford | ~170 MB |
 | 20 Newsgroups | Text | scikit-learn | ~14 MB |
+| AG News | Text | HuggingFace | ~15 MB |
+| BBC News | Text | Internet | ~15 MB |
+| IMDB Movie Reviews | Text | Stanford | ~15 MB |
+| UCF-101 subset | Video | HuggingFace Datasets | ~171 MB |
 
 ### User-triggered network operations
 
