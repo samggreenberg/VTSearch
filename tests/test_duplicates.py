@@ -215,12 +215,12 @@ class TestLabelExportExpandsDupes:
             data = resp.get_json()
             labels = data["labels"]
             # Should have 2 entries (one per member), not 1
-            dupe_labels = [l for l in labels if l["md5"] == rep["md5"]]
+            dupe_labels = [el for el in labels if el["md5"] == rep["md5"]]
             assert len(dupe_labels) == 2
-            filenames = {l["filename"] for l in dupe_labels}
+            filenames = {el["filename"] for el in dupe_labels}
             assert filenames == {"a.wav", "b.wav"}
             # Both have the same label
-            assert all(l["label"] == "good" for l in dupe_labels)
+            assert all(el["label"] == "good" for el in dupe_labels)
         finally:
             app_module.medias.clear()
             app_module.medias.update(saved)
@@ -236,7 +236,6 @@ class TestLabelExportExpandsDupes:
     def test_roundtrip_through_dupe_collapse(self, client):
         """Export from dupes, then import back into a dataset with dupes uncollapsed."""
         saved = dict(app_module.medias)
-        md5 = app_module.medias[1]["md5"]
 
         # Create dupe-set representative
         rep = copy.deepcopy(app_module.medias[1])
@@ -317,4 +316,4 @@ class TestCollapseDuplicatesIntegration:
         bad_labels = [e for e in exported["labels"] if e["label"] == "bad"]
         assert len(good_labels) == 2
         assert len(bad_labels) == 1
-        assert {l["filename"] for l in good_labels} == {"x.wav", "y.wav"}
+        assert {el["filename"] for el in good_labels} == {"x.wav", "y.wav"}
