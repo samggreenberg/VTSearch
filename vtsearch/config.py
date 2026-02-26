@@ -14,7 +14,9 @@ VIDEO_DIR = DATA_DIR / "video"
 IMAGE_DIR = DATA_DIR / "images"
 PARAGRAPH_DIR = DATA_DIR / "paragraphs"
 EMBEDDINGS_DIR = DATA_DIR / "embeddings"
-MODELS_CACHE_DIR = Path(os.environ["VTSEARCH_MODELS_DIR"]) if "VTSEARCH_MODELS_DIR" in os.environ else DATA_DIR / "models"
+MODELS_CACHE_DIR = (
+    Path(os.environ["VTSEARCH_MODELS_DIR"]) if "VTSEARCH_MODELS_DIR" in os.environ else DATA_DIR / "models"
+)
 
 # Dataset URLs
 ESC50_URL = "https://github.com/karolpiczak/ESC-50/archive/master.zip"
@@ -24,6 +26,7 @@ CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101
 CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
 BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
+AG_NEWS_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/train.csv"
 
 # Dataset size estimates
 ESC50_DOWNLOAD_SIZE_MB = 600
@@ -33,6 +36,7 @@ CALTECH101_DOWNLOAD_SIZE_MB = 131
 CALTECH256_DOWNLOAD_SIZE_MB = 1200
 UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
 BBC_NEWS_DOWNLOAD_SIZE_MB = 2
+AG_NEWS_DOWNLOAD_SIZE_MB = 30
 MEDIAS_PER_CATEGORY = 40
 MEDIAS_PER_VIDEO_CATEGORY = 150
 IMAGES_PER_CIFAR10_CATEGORY = 100
