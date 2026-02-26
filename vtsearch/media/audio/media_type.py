@@ -395,9 +395,16 @@ class AudioMediaType(MediaType):
         # call runs at the same speed as every subsequent one.  Without this
         # the first embedding stalls inside the progress-bar loop and skews
         # the ETA estimate for all remaining items.
-        self._on_progress("loading", "Warming up audio pipeline…", 0, 0)
+        #
+        # Three explicit steps are reported (1/3, 2/3, 3/3) so the frontend
+        # can show a determinate progress bar for the warmup phase.  The
+        # status remains "loading" so the frontend knows not to include this
+        # phase in its ETA calculation for the subsequent "embedding" phase.
+        self._on_progress("loading", "Warming up audio pipeline: importing libraries…", 1, 3)
+        import librosa  # noqa: PLC0415 — lazy import; pulls in numba, scipy, etc.
         import torch  # noqa: PLC0415
 
+        self._on_progress("loading", "Warming up audio pipeline: preprocessing…", 2, 3)
         dummy_audio = np.zeros(SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
@@ -407,6 +414,7 @@ class AudioMediaType(MediaType):
             max_length=480000,
             truncation=True,
         )
+        self._on_progress("loading", "Warming up audio pipeline: running model…", 3, 3)
         with torch.no_grad():
             outputs = self._model.audio_model(**inputs)
             self._model.audio_projection(outputs.pooler_output)

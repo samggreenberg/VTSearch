@@ -116,7 +116,9 @@ class TestPreloadConsoleOutput:
             mock_mt._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_mt._on_progress("loading", "model.safetensors", 50, 100)
             mock_mt._on_progress("loading", "model.safetensors", 100, 100)
-            mock_mt._on_progress("loading", "Warming up audio pipeline...", 0, 0)
+            mock_mt._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 3)
+            mock_mt._on_progress("loading", "Warming up audio pipeline: preprocessing...", 2, 3)
+            mock_mt._on_progress("loading", "Warming up audio pipeline: running model...", 3, 3)
 
         mock_mt.load_models = fake_load_models
         mock_media_get.return_value = mock_mt
@@ -128,7 +130,7 @@ class TestPreloadConsoleOutput:
         assert "Preloading Audio embedder" in captured.out
         assert "Loading CLAP model weights..." in captured.out
         assert "model.safetensors" in captured.out
-        assert "Warming up audio pipeline..." in captured.out
+        assert "Warming up audio pipeline: importing libraries..." in captured.out
 
     @patch("vtsearch.settings.get_favorite_media_types", return_value=["audio"])
     @patch("vtsearch.media.get")
