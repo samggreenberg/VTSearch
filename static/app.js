@@ -361,6 +361,10 @@
     if (rightPanel) rightPanel.style.display = "none";
     stripeContainer.innerHTML = "";
     if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.add("disabled");
+    if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
+    if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
+    if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
+    if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
   }
 
   function showMainUI() {
@@ -375,6 +379,9 @@
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
     if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.remove("disabled");
+    if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
+    if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
+    // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
   }
 
   function showProgress() {
@@ -1247,6 +1254,7 @@
   // Labels import – open the label importer picker modal
   if (menuLabelsImport && burgerDropdown) {
     menuLabelsImport.addEventListener("click", async () => {
+      if (menuLabelsImport.classList.contains("disabled")) return;
       closeBurgerMenu();
       await openLabelImporterModal();
     });
@@ -1255,6 +1263,7 @@
   // Detector import
   if (menuDetectorImport && loadDetectorFile && burgerDropdown) {
     menuDetectorImport.addEventListener("click", () => {
+      if (menuDetectorImport.classList.contains("disabled")) return;
       loadDetectorFile.click();
       closeBurgerMenu();
     });
