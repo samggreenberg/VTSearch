@@ -337,9 +337,10 @@
     if (datasetLoaded) {
       showMainUI();
       const mtInfo = mediaTypesMap[status.media_type];
+      const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
       datasetInfo.textContent = mtInfo
-        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded`
-        : `${status.num_medias} medias loaded`;
+        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
+        : `${status.num_medias} medias loaded${dupeSuffix}`;
     } else {
       showWelcomeScreen();
     }

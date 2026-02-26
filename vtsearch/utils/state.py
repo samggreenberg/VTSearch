@@ -745,6 +745,75 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         diversity_tree_label(media_id)
 
 
+def collapse_duplicates(media_dict: dict[int, dict[str, Any]]) -> int:
+    """Collapse duplicate medias (same MD5) into single representative items.
+
+    For each group of medias sharing the same MD5, the first media becomes
+    the representative.  Its ``"origin"`` is replaced with a ``"dupe_set"``
+    origin whose ``"members"`` list records the original provenance of every
+    duplicate (including the representative itself).  All other medias in the
+    group are removed from *media_dict*.
+
+    Args:
+        media_dict: The mutable medias dict.  Modified in place.
+
+    Returns:
+        The number of duplicate groups collapsed (i.e. groups of size >= 2).
+    """
+    md5_groups: dict[str, list[int]] = {}
+    for cid, media in media_dict.items():
+        md5 = media.get("md5", "")
+        if md5:
+            md5_groups.setdefault(md5, []).append(cid)
+
+    dupe_count = 0
+    for md5, cids in md5_groups.items():
+        if len(cids) < 2:
+            continue
+        dupe_count += 1
+
+        rep_id = cids[0]
+        rep = media_dict[rep_id]
+
+        # Build members list with each duplicate's provenance
+        members = []
+        for cid in cids:
+            media = media_dict[cid]
+            members.append({
+                "origin": media.get("origin"),
+                "origin_name": media.get("origin_name", ""),
+                "filename": media.get("filename", ""),
+                "category": media.get("category", ""),
+            })
+
+        first_name = rep.get("origin_name", rep.get("filename", ""))
+        rep["origin"] = {
+            "importer": "dupe_set",
+            "params": {"name": first_name},
+            "members": members,
+        }
+        rep["origin_name"] = first_name
+
+        # Remove the other duplicates
+        for cid in cids[1:]:
+            del media_dict[cid]
+
+    return dupe_count
+
+
+def get_dupe_count(media_dict: dict[int, dict[str, Any]] | None = None) -> int:
+    """Return the number of duplicate groups in the media dict.
+
+    Each media whose origin is ``"dupe_set"`` represents one group.
+    """
+    source = media_dict if media_dict is not None else medias
+    return sum(
+        1
+        for m in source.values()
+        if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
+    )
+
+
 def next_media_id(media_dict: dict[int, dict[str, Any]]) -> int:
     """Return the next available media ID (one past the current maximum)."""
     if not media_dict:
