@@ -278,9 +278,8 @@
   const processorImporterList = document.getElementById("processor-importer-list");
   const processorImporterFormDiv = document.getElementById("processor-importer-form");
   const processorImporterBack = document.getElementById("processor-importer-back");
-  const menuFavoritesImport = document.getElementById("menu-favorites-import");
-  const menuFavoritesPregen = document.getElementById("menu-favorites-pregen");
   const menuFavoritesStatus = document.getElementById("menu-favorites-status");
+  const favPregenBtn = document.getElementById("fav-pregen-btn");
   const menuFavoritesManage = document.getElementById("menu-favorites-manage");
   const menuFavoritesAutodetect = document.getElementById("menu-favorites-autodetect");
   const favoritesModal = document.getElementById("favorites-modal");
@@ -3780,50 +3779,44 @@
     });
   }
 
-  // ---- Pregen processors ----
+  // ---- Pregen processors (in favorites modal) ----
 
-  if (menuFavoritesPregen && burgerDropdown) {
-    menuFavoritesPregen.addEventListener("click", async () => {
-      closeBurgerMenu();
-      if (menuFavoritesStatus) {
-        menuFavoritesStatus.textContent = "Adding pregen processors\u2026";
-        menuFavoritesStatus.style.color = "var(--text-muted)";
+  if (favPregenBtn) {
+    favPregenBtn.addEventListener("click", async () => {
+      favPregenBtn.disabled = true;
+      if (favAddStatus) {
+        favAddStatus.textContent = "Adding pregen processors\u2026";
+        favAddStatus.style.color = "var(--text-muted)";
       }
       try {
         const res = await fetch("/api/pregen-processors/add", { method: "POST" });
         const result = await res.json();
         if (res.ok && result.success) {
-          const msg = `Added ${result.added.length} pregen processor(s)`;
-          if (menuFavoritesStatus) {
-            menuFavoritesStatus.textContent = msg;
-            menuFavoritesStatus.style.color = "var(--color-good)";
-            setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+          if (favAddStatus) {
+            favAddStatus.textContent = `Added ${result.added.length} pregen processor(s)`;
+            favAddStatus.style.color = "var(--color-good)";
+            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
           }
         } else {
-          if (menuFavoritesStatus) {
-            menuFavoritesStatus.textContent = result.error || "Failed to add pregen processors";
-            menuFavoritesStatus.style.color = "var(--color-bad)";
-            setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+          if (favAddStatus) {
+            favAddStatus.textContent = result.error || "Failed to add pregen processors";
+            favAddStatus.style.color = "var(--color-bad)";
+            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
           }
         }
       } catch (err) {
-        if (menuFavoritesStatus) {
-          menuFavoritesStatus.textContent = `Error: ${err.message}`;
-          menuFavoritesStatus.style.color = "var(--color-bad)";
-          setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
+        if (favAddStatus) {
+          favAddStatus.textContent = `Error: ${err.message}`;
+          favAddStatus.style.color = "var(--color-bad)";
+          setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
         }
+      } finally {
+        favPregenBtn.disabled = false;
       }
     });
   }
 
   // ---- Processor importer modal ----
-
-  if (menuFavoritesImport && burgerDropdown) {
-    menuFavoritesImport.addEventListener("click", async () => {
-      closeBurgerMenu();
-      await openProcessorImporterModal();
-    });
-  }
 
   async function openProcessorImporterModal() {
     let importers = [];
