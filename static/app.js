@@ -4923,6 +4923,9 @@
     if (_lastStatusData) {
       document.getElementById("stat-total-labels").textContent = _lastStatusData.total_count || 0;
       document.getElementById("stat-total-medias").textContent = "—";
+      const currentType = medias.length > 0 ? medias[0].type : null;
+      const mtInfo = currentType ? mediaTypesMap[currentType] : null;
+      document.getElementById("stat-total-medias-label").textContent = mtInfo ? `Total ${mtInfo.tab_title}` : "Total Medias";
     }
 
     document.getElementById("smart-section").style.display = "none";
@@ -4954,6 +4957,9 @@
     // Update summary stats
     document.getElementById("stat-total-labels").textContent = data.total_labels;
     document.getElementById("stat-total-medias").textContent = data.total_medias;
+    const currentType = medias.length > 0 ? medias[0].type : null;
+    const mtInfo = currentType ? mediaTypesMap[currentType] : null;
+    document.getElementById("stat-total-medias-label").textContent = mtInfo ? `Total ${mtInfo.tab_title}` : "Total Medias";
 
     const ecChart = document.getElementById("error-cost-chart");
     if (ecChart) ecChart.setAttribute("role", "img");
