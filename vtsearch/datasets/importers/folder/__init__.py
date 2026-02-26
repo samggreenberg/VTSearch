@@ -1,11 +1,15 @@
-"""Local-folder importer \u2013 scans a directory of media files and embeds them.
+"""Local-folder importer – scans a directory of media files and embeds them.
 
-No additional pip packages are required; librosa, opencv, and Pillow are
-already in the core requirements.
+When the media type is ``"images"``, PDF files (``*.pdf``) in the folder are
+also included: each page is rendered as a separate image and embedded with
+CLIP.  The origin for PDF-derived images is ``"pdf"`` (not ``"folder"``) so
+that provenance tracks back to the original document.
 """
 
 from __future__ import annotations
 
+import hashlib
+import io
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -13,11 +17,73 @@ from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 
+def _load_pdf_images(
+    folder: Path,
+    medias: dict[int, dict[str, Any]],
+    thin: bool = False,
+) -> None:
+    """Expand all PDFs in *folder* into per-page image medias.
+
+    Each page is rendered at 150 DPI, embedded with CLIP, and appended to
+    *medias* with sequential IDs continuing from the current maximum.  The
+    ``origin`` is set to ``{"importer": "pdf", "params": {"path": ...}}``
+    so the provenance points back to the source document.
+    """
+    pdf_files = sorted(folder.glob("*.pdf"))
+    if not pdf_files:
+        return
+
+    from vtsearch.datasets.pdf import render_pdf_pages  # noqa: PLC0415
+    from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+
+    mt = get_by_folder_name("images")
+    if getattr(mt, "_model", None) is None:
+        mt.load_models()
+
+    media_id = max(medias.keys(), default=0) + 1
+
+    for pdf_path in pdf_files:
+        origin = {"importer": "pdf", "params": {"path": str(pdf_path)}}
+        pages = render_pdf_pages(pdf_path)
+
+        for page_name, pil_image in pages:
+            embedding = mt.embed_pil_image(pil_image)
+            if embedding is None:
+                continue
+
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_bytes = buf.getvalue()
+
+            media_data: dict[str, Any] = {
+                "id": media_id,
+                "type": mt.type_id,
+                "file_size": len(image_bytes),
+                "md5": hashlib.md5(image_bytes).hexdigest(),
+                "embedding": embedding,
+                "filename": page_name,
+                "category": "custom",
+                "origin": origin,
+                "origin_name": page_name,
+                "media_bytes": None if thin else image_bytes,
+                "media_string": None,
+                "media_path": str(pdf_path.resolve()),
+                "duration": 0,
+                "width": pil_image.width,
+                "height": pil_image.height,
+            }
+            medias[media_id] = media_data
+            media_id += 1
+
+
 class FolderDatasetImporter(DatasetImporter):
     """Embed all media files found in a local directory into a dataset.
 
     The user supplies an absolute filesystem path and selects the media type
     so that the correct file extensions are matched during the scan.
+
+    When the media type is ``"images"``, any ``*.pdf`` files in the folder
+    are also processed: each page is rendered as a separate image.
     """
 
     name = "folder"
@@ -44,7 +110,18 @@ class FolderDatasetImporter(DatasetImporter):
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
-        load_dataset_from_folder(folder, media_type, medias, thin=thin)
+        has_regular = True
+        try:
+            load_dataset_from_folder(folder, media_type, medias, thin=thin)
+        except ValueError:
+            # No regular image files found — PDFs may still be present.
+            if media_type != "images":
+                raise
+            has_regular = False
+        if media_type == "images":
+            _load_pdf_images(folder, medias, thin=thin)
+            if not has_regular and not medias:
+                raise ValueError("No images files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
@@ -63,7 +140,16 @@ class FolderDatasetImporter(DatasetImporter):
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
-        yield from load_dataset_from_folder_chunked(folder, media_type, chunk_size, thin=thin)
+        try:
+            yield from load_dataset_from_folder_chunked(folder, media_type, chunk_size, thin=thin)
+        except ValueError:
+            if media_type != "images":
+                raise
+        if media_type == "images":
+            chunk: dict[int, dict[str, Any]] = {}
+            _load_pdf_images(folder, chunk, thin=thin)
+            if chunk:
+                yield chunk
 
     def run_chunked_cli(
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,

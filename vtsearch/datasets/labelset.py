@@ -122,11 +122,11 @@ class LabelSet:
         for cid in good_votes:
             media = medias.get(cid)
             if media:
-                elements.append(_clip_to_element(media, "good"))
+                elements.extend(_clip_to_elements(media, "good"))
         for cid in bad_votes:
             media = medias.get(cid)
             if media:
-                elements.append(_clip_to_element(media, "bad"))
+                elements.extend(_clip_to_elements(media, "bad"))
         return cls(elements)
 
     @classmethod
@@ -205,13 +205,38 @@ class LabelSet:
         return cls(elements)
 
 
-def _clip_to_element(media: dict[str, Any], label: str) -> LabeledElement:
-    """Convert a media dict into a :class:`LabeledElement`."""
-    return LabeledElement(
-        md5=media["md5"],
-        label=label,
-        origin=media.get("origin"),
-        origin_name=media.get("origin_name", media.get("filename", "")),
-        filename=media.get("filename", ""),
-        category=media.get("category", ""),
-    )
+def _clip_to_elements(media: dict[str, Any], label: str) -> list[LabeledElement]:
+    """Convert a media dict into one or more :class:`LabeledElement` instances.
+
+    When the media is a dupe-set representative (origin importer is
+    ``"dupe_set"``), one element is produced for each original member so
+    that an exported labelset reflects the full duplicate set.
+    """
+    origin = media.get("origin")
+    if isinstance(origin, dict) and origin.get("importer") == "dupe_set":
+        members = origin.get("members", [])
+        if members:
+            md5 = media["md5"]
+            return [
+                LabeledElement(
+                    md5=md5,
+                    label=label,
+                    origin=m.get("origin"),
+                    origin_name=m.get("origin_name", m.get("filename", "")),
+                    filename=m.get("filename", ""),
+                    category=m.get("category", ""),
+                )
+                for m in members
+            ]
+
+    # Non-dupe or missing members — single element
+    return [
+        LabeledElement(
+            md5=media["md5"],
+            label=label,
+            origin=origin,
+            origin_name=media.get("origin_name", media.get("filename", "")),
+            filename=media.get("filename", ""),
+            category=media.get("category", ""),
+        )
+    ]

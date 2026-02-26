@@ -207,8 +207,8 @@ header h1 { margin-left: 48px; }
 .theme-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* Left panel – media list */
-.panel-left { width: 240px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-panel); display: flex; flex-direction: column; position: relative; }
-.sort-bar { padding: 8px 28px 12px 16px; border-bottom: 1px solid var(--border); }
+.panel-left { width: 170px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-panel); display: flex; flex-direction: column; position: relative; }
+.sort-bar { padding: 8px 28px 12px 10px; border-bottom: 1px solid var(--border); }
 .sort-mode { display: flex; gap: 10px; margin-bottom: 6px; }
 .sort-mode label { font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 3px; }
 .sort-mode input[type="radio"] { accent-color: var(--accent); margin: 0; }
@@ -224,25 +224,21 @@ header h1 { margin-left: 48px; }
 .sort-progress-fill.determinate { animation: none; left: 0; }
 @keyframes sort-progress-slide { 0% { left: -30%; } 100% { left: 100%; } }
 #media-list { overflow-y: auto; flex: 1; }
-.media-item { padding: 10px 16px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid var(--border-subtle); transition: background 0.15s; border-left: 3px solid transparent; }
+.media-item { padding: 6px 12px; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid var(--border-subtle); transition: background 0.15s; border-left: 3px solid transparent; }
 .media-item:hover { background: var(--bg-subtle); }
 .media-item.active { background: var(--bg-hover); color: var(--accent); }
 .media-item.labeled-good { border-left-color: var(--color-good); background: var(--good-bg); }
 .media-item.labeled-bad { border-left-color: var(--color-bad); background: var(--bad-bg); }
 .media-item.labeled-good.active { background: var(--bg-hover); border-left-color: var(--color-good); }
 .media-item.labeled-bad.active { background: var(--bg-hover); border-left-color: var(--color-bad); }
-.media-item .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
-.media-item .sim { font-size: 0.7rem; color: var(--accent); float: right; margin-top: 2px; }
 .media-threshold-line { height: 2px; background: var(--accent); position: relative; pointer-events: none; flex-shrink: 0; }
 .media-threshold-line::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--accent); }
 .media-threshold-line::after { content: ''; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: 6px solid var(--accent); }
 
 /* Thumbnail mode — media list */
-.media-item.media-item-thumb { display: flex; align-items: center; gap: 10px; padding: 6px 16px; }
+.media-item.media-item-thumb { display: flex; align-items: center; gap: 8px; padding: 4px 12px; }
 .media-item.media-item-thumb .media-thumbnail { width: 60px; height: 45px; object-fit: cover; border-radius: 3px; flex-shrink: 0; background: var(--bg-surface); }
 .media-item.media-item-thumb .media-thumb-info { min-width: 0; flex: 1; overflow: hidden; }
-.media-item.media-item-thumb .sim { float: none; display: block; }
-
 /* Thumbnail mode — vote entries */
 .vote-entry.vote-entry-thumb { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .vote-entry.vote-entry-thumb .vote-thumbnail { width: 48px; height: 36px; object-fit: cover; border-radius: 3px; flex-shrink: 0; background: var(--bg-surface); }
@@ -374,9 +370,10 @@ video { max-width: 100%; }
 .dataset-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Progress indicator buttons */
-.progress-check-bar { padding: 10px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; }
+.progress-check-bar { padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.progress-check-label { font-size: 0.7rem; color: var(--text-dim); width: 100%; }
 .labeling-indicator {
-  flex: 1; padding: 5px 6px; border-radius: 4px; background: transparent;
+  flex: 1; min-width: 0; padding: 5px 6px; border-radius: 4px; background: transparent;
   font-size: 0.7rem; cursor: pointer; transition: border-color 0.4s, opacity 0.2s;
   display: flex; align-items: center; gap: 4px; border: 1px solid var(--indicator-border); text-align: left;
 }
@@ -387,7 +384,7 @@ video { max-width: 100%; }
   background: var(--indicator-dot); transition: background 0.4s, box-shadow 0.4s;
 }
 .indicator-label { flex-shrink: 0; color: var(--text-secondary); font-size: 0.7rem; transition: color 0.4s; white-space: nowrap; }
-.indicator-subtext { font-size: 0.62rem; color: var(--text-dim); transition: color 0.4s; text-align: right; }
+.indicator-subtext { font-size: 0.62rem; color: var(--text-dim); transition: color 0.4s; text-align: right; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* Red – too few labels */
 .labeling-indicator[data-status="red"] { border-color: var(--status-red-border); }
