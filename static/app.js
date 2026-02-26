@@ -3267,26 +3267,6 @@
         html += `<div class="media-thumb-info">`;
       }
       html += `<div style="font-weight: 500;">${escapeHtml(mediaLabel)}</div>`;
-      if (scoreMap[c.id] !== undefined) {
-        html += `<span class="sim">${(scoreMap[c.id] * 100).toFixed(1)}%</span>`;
-      }
-      let subInfo = [];
-      if (c.frequency) {
-        subInfo.push(`${c.frequency} Hz`);
-      }
-      if (c.category && c.category !== "unknown") {
-        subInfo.push(c.category);
-      }
-      if (c.duration && c.duration > 0) {
-        subInfo.push(`${c.duration.toFixed(1)}s`);
-      }
-      if (c.width && c.height) {
-        subInfo.push(`${c.width}×${c.height}`);
-      }
-      if (c.word_count) {
-        subInfo.push(`${c.word_count} words`);
-      }
-      html += `<div class="sub">${subInfo.join(' &middot; ')}</div>`;
       if (useThumbnail) {
         html += `</div>`;
       }
