@@ -15,7 +15,9 @@ from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
     clear_all,
+    collapse_duplicates,
     medias,
+    get_dupe_count,
     get_progress,
     good_votes,
     update_progress,
@@ -121,6 +123,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
             gc.collect()
             importer.run(field_values, medias)
             _set_clip_origins(medias, importer.build_origin(field_values))
+            collapse_duplicates(medias)
             _load_embedder_for_clips()
             build_diversity_tree()
         except MemoryError:
@@ -213,6 +216,7 @@ def dataset_status():
             "num_medias": len(medias),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
+            "num_dupes": get_dupe_count(),
         }
     )
 
@@ -618,6 +622,7 @@ def load_demo_dataset_route():
             load_demo_dataset(dataset_name, medias)
             demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
             _set_clip_origins(medias, demo_origin)
+            collapse_duplicates(medias)
             _load_embedder_for_clips()
             build_diversity_tree()
         except MemoryError:
