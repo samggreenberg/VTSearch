@@ -3305,6 +3305,15 @@
         ${playerHTML}
       </div>
       ${mediaType === "audio" ? `<audio controls controlslist="nodownload" loop autoplay src="/api/medias/${c.id}/audio" id="media-audio" aria-label="${escapeHtml(c.filename || 'Audio media')}"></audio>` : ''}
+      ${mediaType === "image" ? `
+      <div class="image-view-controls" id="image-view-controls">
+        <button class="ivc-btn" id="ivc-rotate-left" title="Rotate left" aria-label="Rotate image left">&#x21BA;</button>
+        <button class="ivc-btn" id="ivc-rotate-right" title="Rotate right" aria-label="Rotate image right">&#x21BB;</button>
+        <label for="ivc-zoom" class="sr-only">Zoom</label>
+        <input type="range" id="ivc-zoom" class="ivc-zoom-slider" min="0.25" max="5" step="0.05" value="1" title="Zoom" aria-label="Zoom level">
+        <span class="ivc-zoom-label" id="ivc-zoom-label">1×</span>
+        <button class="ivc-btn" id="ivc-reset" title="Reset view" aria-label="Reset image view">Reset</button>
+      </div>` : ''}
       <div class="metadata-grid">
         ${c.frequency ? `
         <div class="metadata-item">
@@ -3390,6 +3399,40 @@
           if (err.name === "AbortError") return; // expected when selection changes
           console.error("Error loading paragraph:", err);
         });
+    }
+
+    // Image view controls: zoom, rotate, reset
+    if (mediaType === "image") {
+      const img = document.getElementById("media-image");
+      const zoomSlider = document.getElementById("ivc-zoom");
+      const zoomLabel = document.getElementById("ivc-zoom-label");
+      const rotateLeftBtn = document.getElementById("ivc-rotate-left");
+      const rotateRightBtn = document.getElementById("ivc-rotate-right");
+      const resetBtn = document.getElementById("ivc-reset");
+      if (img && zoomSlider) {
+        let ivcZoom = 1, ivcRotation = 0;
+        const applyTransform = () => {
+          img.style.transform = `scale(${ivcZoom}) rotate(${ivcRotation}deg)`;
+          zoomLabel.textContent = ivcZoom.toFixed(1) + '×';
+        };
+        zoomSlider.addEventListener("input", () => {
+          ivcZoom = parseFloat(zoomSlider.value);
+          applyTransform();
+        });
+        rotateLeftBtn.addEventListener("click", () => {
+          ivcRotation -= 90;
+          applyTransform();
+        });
+        rotateRightBtn.addEventListener("click", () => {
+          ivcRotation += 90;
+          applyTransform();
+        });
+        resetBtn.addEventListener("click", () => {
+          ivcZoom = 1; ivcRotation = 0;
+          zoomSlider.value = 1;
+          applyTransform();
+        });
+      }
     }
   }
 
