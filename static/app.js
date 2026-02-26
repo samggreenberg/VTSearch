@@ -3419,15 +3419,44 @@
       const resetBtn = document.getElementById("ivc-reset");
       if (img && zoomSlider && wrap) {
         let ivcZoom = 1, ivcRotation = 0, ivcPanX = 0, ivcPanY = 0;
+        // Compute how far the image can be panned before showing empty space
+        const getMaxPan = () => {
+          const natW = img.naturalWidth;
+          const natH = img.naturalHeight;
+          if (!natW || !natH) return { x: 0, y: 0 };
+          const wrapW = wrap.clientWidth;
+          const wrapH = wrap.clientHeight;
+          if (!wrapW || !wrapH) return { x: 0, y: 0 };
+          const imgAspect = natW / natH;
+          const wrapAspect = wrapW / wrapH;
+          let rendW, rendH;
+          if (imgAspect > wrapAspect) {
+            rendW = wrapW;
+            rendH = wrapW / imgAspect;
+          } else {
+            rendH = wrapH;
+            rendW = wrapH * imgAspect;
+          }
+          const rot = ((ivcRotation % 360) + 360) % 360;
+          const swapped = (rot === 90 || rot === 270);
+          const effW = swapped ? rendH : rendW;
+          const effH = swapped ? rendW : rendH;
+          return {
+            x: Math.max(0, (effW * ivcZoom - wrapW) / 2),
+            y: Math.max(0, (effH * ivcZoom - wrapH) / 2),
+          };
+        };
         const applyTransform = () => {
+          const max = getMaxPan();
+          ivcPanX = Math.max(-max.x, Math.min(max.x, ivcPanX));
+          ivcPanY = Math.max(-max.y, Math.min(max.y, ivcPanY));
           img.style.transform = `translate(${ivcPanX}px, ${ivcPanY}px) scale(${ivcZoom}) rotate(${ivcRotation}deg)`;
           zoomLabel.textContent = ivcZoom.toFixed(1) + '×';
-          wrap.style.cursor = ivcZoom > 1 ? 'grab' : '';
+          wrap.style.cursor = (max.x > 0 || max.y > 0) ? 'grab' : '';
         };
         const clampZoom = (val) => Math.min(parseFloat(zoomSlider.max), Math.max(parseFloat(zoomSlider.min), val));
         zoomSlider.addEventListener("input", () => {
           ivcZoom = parseFloat(zoomSlider.value);
-          if (ivcZoom <= 1) { ivcPanX = 0; ivcPanY = 0; }
           applyTransform();
         });
         rotateLeftBtn.addEventListener("click", () => {
@@ -3458,14 +3487,14 @@
           const ratio = ivcZoom / oldZoom;
           ivcPanX = cx - ratio * (cx - ivcPanX);
           ivcPanY = cy - ratio * (cy - ivcPanY);
-          if (ivcZoom <= 1) { ivcPanX = 0; ivcPanY = 0; }
           applyTransform();
         }, { passive: false });
 
         // Mouse drag panning
         let isPanning = false, panStartX = 0, panStartY = 0, panOriginX = 0, panOriginY = 0;
         wrap.addEventListener("mousedown", (e) => {
-          if (ivcZoom <= 1 || e.button !== 0) return;
+          const max = getMaxPan();
+          if ((max.x <= 0 && max.y <= 0) || e.button !== 0) return;
           isPanning = true;
           panStartX = e.clientX; panStartY = e.clientY;
           panOriginX = ivcPanX; panOriginY = ivcPanY;
@@ -3482,7 +3511,8 @@
         window.addEventListener("mouseup", () => {
           if (!isPanning) return;
           isPanning = false;
-          wrap.style.cursor = ivcZoom > 1 ? 'grab' : '';
+          const max = getMaxPan();
+          wrap.style.cursor = (max.x > 0 || max.y > 0) ? 'grab' : '';
         });
       }
     }
