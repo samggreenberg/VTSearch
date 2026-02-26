@@ -1333,7 +1333,6 @@
             selected = null;
             datasetLoaded = false;
             if (menuDatasetExport) menuDatasetExport.classList.add("disabled");
-            updateMediaHeading();
             showWelcomeScreen();
             renderVotes();
             updateLabelCounts();
@@ -3182,34 +3181,9 @@
 
   // ---- Rendering ----
 
-  // Map from type_id to plural display name (matches MediaType.folder_import_name)
-  const MEDIA_TYPE_NAMES = {
-    audio: "Sounds",
-    image: "Images",
-    video: "Videos",
-    paragraph: "Paragraphs",
-  };
-
-  function updateMediaHeading() {
-    const heading = document.getElementById("media-heading");
-    if (!heading) return;
-    if (!medias || medias.length === 0) {
-      heading.textContent = "Medias";
-      return;
-    }
-    const types = new Set(medias.map(m => m.type));
-    if (types.size === 1) {
-      const type = types.values().next().value;
-      heading.textContent = MEDIA_TYPE_NAMES[type] || "Medias";
-    } else {
-      heading.textContent = "Medias";
-    }
-  }
-
   async function fetchMedias() {
     const res = await fetch("/api/medias");
     medias = await res.json();
-    updateMediaHeading();
     renderMediaList();
   }
 
