@@ -1331,7 +1331,6 @@
             selected = null;
             datasetLoaded = false;
             if (menuDatasetExport) menuDatasetExport.classList.add("disabled");
-            updateMediaHeading();
             showWelcomeScreen();
             renderVotes();
             updateLabelCounts();
@@ -1470,15 +1469,24 @@
 
   // Detector export – open modal
   if (menuDetectorExport) {
-    menuDetectorExport.addEventListener("click", () => {
+    menuDetectorExport.addEventListener("click", async () => {
       if (menuDetectorExport.classList.contains("disabled")) return;
       closeBurgerMenu();
-      openDetectorExportModal();
+      await openDetectorExportModal();
     });
   }
 
-  function openDetectorExportModal() {
-    detectorExportList.innerHTML = `
+  async function openDetectorExportModal() {
+    // Fetch labelset exporters in parallel with building the modal
+    let labelsetExporters = [];
+    try {
+      const res = await fetch("/api/exporters");
+      if (res.ok) labelsetExporters = await res.json();
+    } catch (_) { /* ignore */ }
+    // Filter out the GUI exporter (not useful for file-based export)
+    labelsetExporters = labelsetExporters.filter(e => e.name !== "gui");
+
+    let html = `
       <div id="detector-export-browser-btn" class="option-card" role="button" tabindex="0">
         <span class="option-card-icon">\u2B07\uFE0F</span>
         <div>
@@ -1495,6 +1503,22 @@
       </div>
     `;
 
+    if (labelsetExporters.length > 0) {
+      html += `<h3 style="margin:1.2em 0 0.3em;font-size:1em;color:var(--text-muted);">Export Labels</h3>
+        <p style="margin:0 0 0.6em;font-size:0.85em;color:var(--text-muted);">Export votes as a label set (sufficient to retrain the detector later).</p>`;
+      html += labelsetExporters.map(exp => `
+        <div class="detector-labelset-export-option option-card" data-name="${escapeHtml(exp.name)}" role="button" tabindex="0">
+          <span class="option-card-icon">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
+          <div>
+            <div class="option-card-title">${escapeHtml(exp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(exp.description)}</div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    detectorExportList.innerHTML = html;
+
     const browserBtn = detectorExportList.querySelector("#detector-export-browser-btn");
     const serverBtn = detectorExportList.querySelector("#detector-export-server-btn");
 
@@ -1507,7 +1531,80 @@
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportServer(); }
     });
 
+    // Wire up labelset exporter options
+    detectorExportList.querySelectorAll(".detector-labelset-export-option").forEach(el => {
+      const name = el.dataset.name;
+      const exp = labelsetExporters.find(e => e.name === name);
+      el.addEventListener("click", () => {
+        detectorExportModal.classList.remove("show");
+        runDetectorLabelExport(exp);
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          detectorExportModal.classList.remove("show");
+          runDetectorLabelExport(exp);
+        }
+      });
+    });
+
     detectorExportModal.classList.add("show");
+  }
+
+  async function runDetectorLabelExport(exp) {
+    menuDetectorStatus.textContent = "";
+    // Collect required field values via prompts
+    const fieldValues = {};
+    for (const field of exp.fields) {
+      if (field.required) {
+        const val = await vtPrompt(field.label + (field.description ? ` (${field.description})` : ""), field.default || "");
+        if (val === null) {
+          menuDetectorStatus.textContent = "Export cancelled";
+          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
+          return;
+        }
+        fieldValues[field.key] = val;
+      } else {
+        fieldValues[field.key] = field.default || "";
+      }
+    }
+
+    menuDetectorStatus.textContent = "Exporting labels\u2026";
+    try {
+      const labelsRes = await fetch("/api/labels/export");
+      const labelsData = await labelsRes.json();
+
+      const exportRes = await fetch("/api/exporters/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exporter_name: exp.name,
+          field_values: fieldValues,
+          results: labelsData,
+        }),
+      });
+      const result = await exportRes.json();
+      if (!exportRes.ok) {
+        menuDetectorStatus.textContent = result.error || "Export failed";
+        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+        return;
+      }
+      // Handle browser download if the exporter returns download_content
+      if (result.download_content) {
+        const blob = new Blob([result.download_content], { type: result.download_content_type || "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = result.download_filename || "labels.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      menuDetectorStatus.textContent = result.message || "Labels exported";
+      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+    } catch (e) {
+      menuDetectorStatus.textContent = "Export failed";
+      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+    }
   }
 
   async function runDetectorExportBrowser() {
@@ -3082,34 +3179,9 @@
 
   // ---- Rendering ----
 
-  // Map from type_id to plural display name (matches MediaType.folder_import_name)
-  const MEDIA_TYPE_NAMES = {
-    audio: "Sounds",
-    image: "Images",
-    video: "Videos",
-    paragraph: "Paragraphs",
-  };
-
-  function updateMediaHeading() {
-    const heading = document.getElementById("media-heading");
-    if (!heading) return;
-    if (!medias || medias.length === 0) {
-      heading.textContent = "Medias";
-      return;
-    }
-    const types = new Set(medias.map(m => m.type));
-    if (types.size === 1) {
-      const type = types.values().next().value;
-      heading.textContent = MEDIA_TYPE_NAMES[type] || "Medias";
-    } else {
-      heading.textContent = "Medias";
-    }
-  }
-
   async function fetchMedias() {
     const res = await fetch("/api/medias");
     medias = await res.json();
-    updateMediaHeading();
     renderMediaList();
   }
 
