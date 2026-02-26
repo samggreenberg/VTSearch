@@ -445,6 +445,7 @@ video { max-width: 600px; max-height: 400px; }
 .vt-dialog-btn.secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Settings modal */
+.settings-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
 .settings-section { margin-bottom: 20px; }
 .settings-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
