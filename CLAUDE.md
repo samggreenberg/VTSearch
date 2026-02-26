@@ -82,7 +82,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 Testing can crash the session. To avoid losing work, follow this workflow:
 
 1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
-2. **Run tests.**
+2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes — this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay. Use a timeout of at least 300000ms (5 minutes).
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
