@@ -8,14 +8,12 @@ favorite detectors.
 import threading
 
 from vtsearch.utils import (
-    _state_lock,
     apply_label,
     apply_label_with_click_time,
     assign_click_time,
     bad_votes,
     good_votes,
     label_history,
-    medias,
     toggle_vote,
     vote_click_times,
 )
