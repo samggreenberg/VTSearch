@@ -20,12 +20,12 @@ from vtsearch.models import (
     train_model,
 )
 from vtsearch.utils import (
-    add_label_to_history,
     add_textsort_suggestion,
+    apply_label,
+    apply_label_with_click_time,
     bad_votes,
     build_media_lookup,
     medias,
-    diversity_tree_label,
     diversity_tree_next_sample,
     get_calibrate_count,
     get_calibration_fraction,
@@ -243,15 +243,7 @@ def import_labels():
             continue
 
         for cid in cids:
-            if label == "good":
-                bad_votes.pop(cid, None)
-                good_votes[cid] = None
-                add_label_to_history(cid, "good")
-            else:
-                good_votes.pop(cid, None)
-                bad_votes[cid] = None
-                add_label_to_history(cid, "bad")
-            diversity_tree_label(cid)
+            apply_label(cid, label)
         applied += 1
 
     return jsonify({"applied": applied, "skipped": skipped})
@@ -328,23 +320,11 @@ def fill_labels_from_sort():
         })
 
     # Apply labels
-    from vtsearch.utils import assign_click_time
-
     for entry in good_candidates:
-        cid = entry["id"]
-        bad_votes.pop(cid, None)
-        good_votes[cid] = None
-        add_label_to_history(cid, "good")
-        assign_click_time(cid)
-        diversity_tree_label(cid)
+        apply_label_with_click_time(entry["id"], "good")
 
     for entry in bad_candidates:
-        cid = entry["id"]
-        good_votes.pop(cid, None)
-        bad_votes[cid] = None
-        add_label_to_history(cid, "bad")
-        assign_click_time(cid)
-        diversity_tree_label(cid)
+        apply_label_with_click_time(entry["id"], "bad")
 
     # Build a results dict compatible with exporters
     good_hits = []

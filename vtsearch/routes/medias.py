@@ -8,14 +8,8 @@ from flask import Blueprint, Response, jsonify, request, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.utils import (
-    add_label_to_history,
-    assign_click_time,
-    bad_votes,
     medias,
-    diversity_tree_label,
-    diversity_tree_unlabel,
-    good_votes,
-    remove_click_time,
+    toggle_vote,
 )
 
 medias_bp = Blueprint("medias", __name__)
@@ -305,33 +299,6 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
     if vote not in ("good", "bad"):
         return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
 
-    if vote == "good":
-        if media_id in good_votes:
-            good_votes.pop(media_id, None)
-            remove_click_time(media_id)
-            add_label_to_history(media_id, "unlabel")
-            # Unlabel in the diversity tree only if the media has no remaining vote.
-            if media_id not in bad_votes:
-                diversity_tree_unlabel(media_id)
-        else:
-            bad_votes.pop(media_id, None)
-            good_votes[media_id] = None
-            assign_click_time(media_id)
-            add_label_to_history(media_id, "good")
-            diversity_tree_label(media_id)
-    else:
-        if media_id in bad_votes:
-            bad_votes.pop(media_id, None)
-            remove_click_time(media_id)
-            add_label_to_history(media_id, "unlabel")
-            # Unlabel in the diversity tree only if the media has no remaining vote.
-            if media_id not in good_votes:
-                diversity_tree_unlabel(media_id)
-        else:
-            good_votes.pop(media_id, None)
-            bad_votes[media_id] = None
-            assign_click_time(media_id)
-            add_label_to_history(media_id, "bad")
-            diversity_tree_label(media_id)
+    toggle_vote(media_id, vote)
 
     return jsonify({"ok": True})
