@@ -2,12 +2,14 @@
 
 import gc
 import io
+import pickle
 import threading
 from pathlib import Path
+from uuid import uuid4
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.utils import (
     bad_votes,
@@ -137,6 +139,64 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Staging – import datasets to temporary pkl files for the combine flow
+# ---------------------------------------------------------------------------
+
+STAGING_DIR = DATA_DIR / "staging"
+
+
+def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> None:
+    """Run *importer*.run() in a daemon thread, saving the result to a staging pkl.
+
+    Unlike ``_run_importer_in_background``, this does **not** modify the global
+    ``medias`` dict.  Instead it writes a temporary ``.pkl`` file to
+    :data:`STAGING_DIR` and sets the ``staging_result`` field on the progress
+    tracker when finished.
+    """
+
+    def stage_task():
+        try:
+            temp_medias: dict = {}
+            importer.run(field_values, temp_medias)
+
+            if not temp_medias:
+                update_progress("idle", "", 0, 0, "Import produced no medias.")
+                return
+
+            first = next(iter(temp_medias.values()))
+            media_type = first.get("type", "audio")
+            count = len(temp_medias)
+            name = label or importer.display_name
+
+            data_bytes = export_dataset_to_file(temp_medias)
+            del temp_medias
+            gc.collect()
+
+            STAGING_DIR.mkdir(parents=True, exist_ok=True)
+            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
+            staging_path.write_bytes(data_bytes)
+            del data_bytes
+            gc.collect()
+
+            update_progress(
+                "idle", f"Staged: {name} ({count} medias)", 100, 100,
+                staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
+            )
+        except MemoryError:
+            gc.collect()
+            update_progress(
+                "idle", "", 0, 0,
+                "Out of memory — this dataset is too large. "
+                "Try a smaller dataset or free up system RAM.",
+            )
+        except Exception as e:
+            update_progress("idle", "", 0, 0, str(e))
+
+    thread = threading.Thread(target=stage_task, daemon=True)
+    thread.start()
+
+
+# ---------------------------------------------------------------------------
 # Status / progress
 # ---------------------------------------------------------------------------
 
@@ -253,6 +313,154 @@ def combine_datasets_route():
 
     _run_importer_in_background(importer, {"datasets": dataset_paths})
     return jsonify({"ok": True, "message": "Combining datasets..."})
+
+
+# ---------------------------------------------------------------------------
+# Staging endpoints (for the combine-datasets UI)
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/dataset/stage-file", methods=["POST"])
+def stage_file():
+    """Upload a ``.pkl`` file and save it to the staging directory.
+
+    Returns basic metadata so the frontend can display the staged dataset
+    in the combine list without loading the full dataset into memory.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
+    file.save(staging_path)
+
+    # Peek inside the pkl to get count and media type.
+    try:
+        with open(staging_path, "rb") as f:
+            data = pickle.load(f)  # noqa: S301
+        if isinstance(data, dict) and "medias" in data:
+            media_dict = data["medias"]
+        elif isinstance(data, dict):
+            media_dict = data
+        else:
+            media_dict = {}
+        count = len(media_dict)
+        if media_dict:
+            first = next(iter(media_dict.values()))
+            media_type = first.get("type", "audio")
+        else:
+            media_type = "unknown"
+        del data, media_dict
+    except Exception:
+        count = 0
+        media_type = "unknown"
+
+    name = file.filename or "Uploaded dataset"
+    return jsonify({"path": str(staging_path), "name": name, "count": count, "media_type": media_type})
+
+
+@datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
+def stage_import(importer_name: str):
+    """Run a registered importer in staging mode.
+
+    Same interface as ``/api/dataset/import/<name>`` but saves the result to
+    a temporary ``.pkl`` file instead of loading it into the app.  Poll
+    ``/api/dataset/progress`` for status; on completion the response will
+    contain a ``staging_result`` object.
+    """
+    importer = get_importer(importer_name)
+    if importer is None:
+        return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
+
+    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
+
+    field_values: dict = {}
+    if file_keys:
+        for key in file_keys:
+            if key not in request.files:
+                return jsonify({"error": f"Missing file field: {key!r}"}), 400
+            # Read file contents before passing to background thread.
+            file_bytes = io.BytesIO(request.files[key].read())
+            file_bytes.name = request.files[key].filename
+            field_values[key] = file_bytes
+        for f in importer.fields:
+            if f.field_type != "file":
+                field_values[f.key] = request.form.get(f.key, f.default)
+    else:
+        body = request.get_json(force=True) or {}
+        for f in importer.fields:
+            if f.key not in body and f.required:
+                return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
+            field_values[f.key] = body.get(f.key, f.default)
+
+    _stage_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Staging started"})
+
+
+@datasets_bp.route("/api/dataset/stage-demo/<name>", methods=["POST"])
+def stage_demo(name: str):
+    """Stage a demo dataset as a temporary ``.pkl`` file.
+
+    Returns immediately; poll ``/api/dataset/progress`` for status.
+    On completion the response will contain a ``staging_result`` object.
+    """
+    if name not in DEMO_DATASETS:
+        return jsonify({"error": "Invalid dataset name"}), 400
+
+    def stage_task():
+        try:
+            temp_medias: dict = {}
+            load_demo_dataset(name, temp_medias)
+
+            if not temp_medias:
+                update_progress("idle", "", 0, 0, "Demo produced no medias.")
+                return
+
+            first = next(iter(temp_medias.values()))
+            media_type = first.get("type", "audio")
+            count = len(temp_medias)
+            label = DEMO_DATASETS[name].get("label", name)
+
+            data_bytes = export_dataset_to_file(temp_medias)
+            del temp_medias
+            gc.collect()
+
+            STAGING_DIR.mkdir(parents=True, exist_ok=True)
+            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
+            staging_path.write_bytes(data_bytes)
+            del data_bytes
+            gc.collect()
+
+            update_progress(
+                "idle", f"Staged: {label} ({count} medias)", 100, 100,
+                staging_result={"path": str(staging_path), "name": label, "count": count, "media_type": media_type},
+            )
+        except MemoryError:
+            gc.collect()
+            update_progress(
+                "idle", "", 0, 0,
+                "Out of memory — this dataset is too large. "
+                "Try a smaller dataset or free up system RAM.",
+            )
+        except Exception as e:
+            update_progress("idle", "", 0, 0, str(e))
+
+    thread = threading.Thread(target=stage_task, daemon=True)
+    thread.start()
+    return jsonify({"ok": True, "message": "Staging demo dataset..."})
+
+
+@datasets_bp.route("/api/dataset/staging", methods=["DELETE"])
+def clear_staging():
+    """Remove all files from the staging directory."""
+    if STAGING_DIR.exists():
+        for f in STAGING_DIR.iterdir():
+            f.unlink(missing_ok=True)
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

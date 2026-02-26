@@ -11,6 +11,7 @@ progress_data = {
     "current": 0,
     "total": 0,
     "error": None,
+    "staging_result": None,
 }
 
 
@@ -20,6 +21,7 @@ def update_progress(
     current: int = 0,
     total: int = 0,
     error: Optional[str] = None,
+    staging_result: Optional[dict] = None,
 ) -> None:
     """Update the global progress tracker in a thread-safe manner.
 
@@ -38,6 +40,9 @@ def update_progress(
             A value of 0 indicates the total is unknown. Defaults to 0.
         error: If the operation failed, a string describing the error;
             otherwise ``None``. Defaults to ``None``.
+        staging_result: When a staging operation completes, a dict with keys
+            ``path``, ``name``, ``count``, ``media_type`` describing the
+            staged dataset.  Otherwise ``None``.
     """
     with progress_lock:
         progress_data["status"] = status
@@ -45,6 +50,7 @@ def update_progress(
         progress_data["current"] = current
         progress_data["total"] = total
         progress_data["error"] = error
+        progress_data["staging_result"] = staging_result
 
 
 def get_progress() -> dict[str, Any]:
