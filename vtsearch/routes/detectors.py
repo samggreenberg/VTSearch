@@ -227,6 +227,29 @@ def list_server_detector_files():
     return jsonify({"files": files})
 
 
+@detectors_bp.route("/api/detector/server-files/<name>", methods=["GET"])
+def get_server_detector_file(name: str):
+    """Return the contents of a server-side detector file by name."""
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_ ")
+    if not safe_name:
+        return jsonify({"error": "Invalid name"}), 400
+
+    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    if not filepath.is_file():
+        return jsonify({"error": "Detector file not found"}), 404
+
+    try:
+        filepath.resolve().relative_to(SERVER_DETECTOR_DIR.resolve())
+    except ValueError:
+        return jsonify({"error": "Invalid name"}), 400
+
+    try:
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @detectors_bp.route("/api/detector-sort", methods=["POST"])
 def detector_sort():
     """Score all medias using a loaded detector model."""

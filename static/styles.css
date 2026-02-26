@@ -543,6 +543,10 @@ video { max-width: 100%; }
 .section-title-sm { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px; }
 .section-title-sm.tight { margin-bottom: 8px; }
 
+/* Load Sort modal sections */
+.load-sort-section { margin-bottom: 18px; }
+.load-sort-section-title { font-size: 0.85rem; font-weight: bold; color: var(--accent); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+
 /* Results table (autodetect) */
 .results-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .results-table th { text-align: left; padding: 8px; color: var(--accent); border-bottom: 1px solid var(--bg-secondary-btn); }
