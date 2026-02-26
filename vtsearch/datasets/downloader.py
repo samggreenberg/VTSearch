@@ -15,6 +15,8 @@ from typing import Callable, Optional
 import requests
 
 from vtsearch.config import (
+    AG_NEWS_DOWNLOAD_SIZE_MB,
+    AG_NEWS_URL,
     BBC_NEWS_DOWNLOAD_SIZE_MB,
     BBC_NEWS_URL,
     CALTECH101_DOWNLOAD_SIZE_MB,
@@ -510,6 +512,69 @@ def download_bbc_news(
                 articles.append(text)
         if articles:
             categories_articles[category_dir.name] = articles
+
+    return categories_articles
+
+
+def download_ag_news(
+    on_progress: Optional[ProgressCallback] = None,
+) -> dict[str, list[str]]:
+    """Download and prepare the AG News text classification dataset.
+
+    Downloads the AG News training CSV into ``DATA_DIR`` if it is not already
+    present.  The CSV has no header row; each line is
+    ``"class_index","title","description"`` where class_index is 1-4:
+
+    1 = World, 2 = Sports, 3 = Business, 4 = Sci/Tech.
+
+    Title and description are concatenated into a single article string.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        A dict mapping category name to a list of article text strings, e.g.
+        ``{"World": ["Article text…", …], "Sports": […], …}``.
+    """
+    import csv  # noqa: PLC0415
+
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    csv_path = DATA_DIR / "ag_news_train.csv"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not csv_path.exists():
+        on_progress("downloading", "Starting AG News download...", 0, 0)
+        download_file_with_progress(
+            AG_NEWS_URL,
+            csv_path,
+            AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+            on_progress,
+        )
+
+    label_to_category = {
+        "1": "World",
+        "2": "Sports",
+        "3": "Business",
+        "4": "Sci/Tech",
+    }
+
+    categories_articles: dict[str, list[str]] = {}
+    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row) < 3:
+                continue
+            class_idx, title, description = row[0], row[1], row[2]
+            category = label_to_category.get(class_idx)
+            if category is None:
+                continue
+            # Combine title and description into one article string.
+            text = f"{title.strip()} {description.strip()}".strip()
+            if text:
+                categories_articles.setdefault(category, []).append(text)
 
     return categories_articles
 

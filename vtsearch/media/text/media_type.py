@@ -226,6 +226,17 @@ class TextMediaType(MediaType):
                         selected_texts.append(text)
                         selected_categories.append(cat_name)
 
+        elif source == "ag_news":
+            from vtsearch.datasets.downloader import download_ag_news  # noqa: PLC0415
+
+            categories_articles = download_ag_news(on_progress=on_progress)
+
+            for cat_name in categories:
+                articles = categories_articles.get(cat_name, [])
+                for article in articles[slice_start : (slice_end or len(articles))]:
+                    selected_texts.append(article)
+                    selected_categories.append(cat_name)
+
         elif source == "bbc_news":
             from vtsearch.datasets.downloader import download_bbc_news  # noqa: PLC0415
 
