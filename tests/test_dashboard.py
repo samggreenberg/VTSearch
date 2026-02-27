@@ -1,6 +1,6 @@
 """Tests for the VTSearch dashboard API endpoint."""
 
-import app as app_module
+import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.utils import medias
 
 
