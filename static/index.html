@@ -74,14 +74,10 @@
         <label><input type="radio" name="select-mode" value="new"> New</label>
       </div>
       <span class="sort-label" style="margin-top:8px">Inclusion</span>
-      <div style="display:flex; align-items:center; gap:8px; margin-top:4px">
-        <span style="font-size:0.7rem; color:var(--text-muted)">-10</span>
+      <div style="display:flex; align-items:center; gap:6px; margin-top:4px">
         <label for="inclusion-slider" class="sr-only">Inclusion</label>
-        <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="flex:1; accent-color:var(--accent)">
-        <span style="font-size:0.7rem; color:var(--text-muted)">+10</span>
-      </div>
-      <div style="text-align:center; font-size:0.75rem; color:var(--text-secondary); margin-top:2px">
-        <span id="inclusion-value">0</span>
+        <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="width:80%; accent-color:var(--accent)">
+        <span id="inclusion-value" style="font-size:0.75rem; color:var(--text-secondary); min-width:1.5em; text-align:right">0</span>
       </div>
       <div id="sort-status" class="sort-status" aria-live="polite"></div>
       <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
