@@ -1,12 +1,9 @@
 """Tests for UCSF Industry Documents demo dataset download and load_demo_source integration."""
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
-
 from PIL import Image
 
 
