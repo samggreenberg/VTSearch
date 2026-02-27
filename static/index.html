@@ -50,48 +50,60 @@
 <div class="layout" role="presentation">
   <!-- Left panel -->
   <div class="panel-left" id="left-panel" role="region" aria-label="Media list">
-    <div class="sort-bar" id="sort-bar">
-      <span class="sort-label">Sort</span>
-      <div class="sort-mode">
-        <label><input type="radio" name="sort-mode" value="text" checked> Text</label>
-        <label><input type="radio" name="sort-mode" value="learned" id="learned-radio"> Learn</label>
-        <label><input type="radio" name="sort-mode" value="load" id="load-radio"> Load</label>
-      </div>
-      <div id="text-sort-wrap">
-        <label for="text-sort" class="sr-only">Text sort query</label>
-        <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
-      </div>
-      <div id="learned-sort-wrap" style="display:none">
-        <div id="learned-sort-desc" class="sort-info-text"></div>
-      </div>
-      <div id="load-sort-wrap" style="display:none">
-        <div id="load-sort-desc" class="sort-info-text">No sort loaded</div>
-      </div>
-      <span class="sort-label" style="margin-top:8px">Select</span>
-      <div class="sort-mode">
-        <label><input type="radio" name="select-mode" value="top" checked> Top</label>
-        <label><input type="radio" name="select-mode" value="hard"> Hard</label>
-        <label><input type="radio" name="select-mode" value="new"> New</label>
-      </div>
-      <span class="sort-label" style="margin-top:8px">Inclusion</span>
-      <div style="display:flex; align-items:center; gap:6px; margin-top:4px">
-        <label for="inclusion-slider" class="sr-only">Inclusion</label>
-        <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="width:80%; accent-color:var(--accent)">
-        <span id="inclusion-value" style="font-size:0.75rem; color:var(--text-secondary); min-width:1.5em; text-align:right">0</span>
-      </div>
-      <div id="sort-status" class="sort-status" aria-live="polite"></div>
-      <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
-        <div class="sort-progress-bar">
-          <div class="sort-progress-fill"></div>
+    <div class="left-tabs" role="tablist" aria-label="Panel mode">
+      <button class="left-tab active" id="tab-manual" role="tab" aria-selected="true" aria-controls="tab-panel-manual">Manual</button>
+      <button class="left-tab" id="tab-autopilot" role="tab" aria-selected="false" aria-controls="tab-panel-autopilot">Autopilot</button>
+    </div>
+    <div id="tab-panel-manual" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-manual">
+      <div class="sort-bar" id="sort-bar">
+        <span class="sort-label">Sort</span>
+        <div class="sort-mode">
+          <label><input type="radio" name="sort-mode" value="text" checked> Text</label>
+          <label><input type="radio" name="sort-mode" value="learned" id="learned-radio"> Learn</label>
+          <label><input type="radio" name="sort-mode" value="load" id="load-radio"> Load</label>
+        </div>
+        <div id="text-sort-wrap">
+          <label for="text-sort" class="sr-only">Text sort query</label>
+          <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
+        </div>
+        <div id="learned-sort-wrap" style="display:none">
+          <div id="learned-sort-desc" class="sort-info-text"></div>
+        </div>
+        <div id="load-sort-wrap" style="display:none">
+          <div id="load-sort-desc" class="sort-info-text">No sort loaded</div>
+        </div>
+        <span class="sort-label" style="margin-top:8px">Select</span>
+        <div class="sort-mode">
+          <label><input type="radio" name="select-mode" value="top" checked> Top</label>
+          <label><input type="radio" name="select-mode" value="hard"> Hard</label>
+          <label><input type="radio" name="select-mode" value="new"> New</label>
+        </div>
+        <span class="sort-label" style="margin-top:8px">Inclusion</span>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:4px">
+          <label for="inclusion-slider" class="sr-only">Inclusion</label>
+          <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="width:80%; accent-color:var(--accent)">
+          <span id="inclusion-value" style="font-size:0.75rem; color:var(--text-secondary); min-width:1.5em; text-align:right">0</span>
+        </div>
+        <div id="sort-status" class="sort-status" aria-live="polite"></div>
+        <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
+          <div class="sort-progress-bar">
+            <div class="sort-progress-fill"></div>
+          </div>
         </div>
       </div>
+      <div class="dataset-bar" id="dataset-bar" style="display:none">
+        <span class="dataset-info" id="dataset-info">No dataset loaded</span>
+      </div>
+      <div id="media-list" role="listbox" aria-label="Medias"></div>
+      <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
+        <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
+      </div>
     </div>
-    <div class="dataset-bar" id="dataset-bar" style="display:none">
-      <span class="dataset-info" id="dataset-info">No dataset loaded</span>
-    </div>
-    <div id="media-list" role="listbox" aria-label="Medias"></div>
-    <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
-      <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
+    <div id="tab-panel-autopilot" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-autopilot" style="display:none">
+      <div class="autopilot-panel">
+        <span class="sort-label">Status</span>
+        <input type="text" id="autopilot-status" class="autopilot-status-input" value="" readonly placeholder="Idle">
+      </div>
     </div>
   </div>
 
@@ -514,6 +526,18 @@
             <div class="settings-row">
               <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
+            </div>
+          </div>
+          <!-- Autopilot -->
+          <div class="settings-section">
+            <div class="settings-section-title">Autopilot</div>
+            <div class="settings-row">
+              <label for="autopilot-top-greens-input" class="settings-label">Top # Greens</label>
+              <input type="number" id="autopilot-top-greens-input" min="1" value="10" step="1" class="settings-number-input">
+            </div>
+            <div class="settings-row">
+              <label for="autopilot-hard-reds-input" class="settings-label">Hard # Reds</label>
+              <input type="number" id="autopilot-hard-reds-input" min="1" value="10" step="1" class="settings-number-input">
             </div>
           </div>
           <!-- Favorite Media Types -->

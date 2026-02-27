@@ -322,6 +322,33 @@
   let showThumbnailsLeft = false;
   let showThumbnailsRight = true;
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
+  const autopilotTopGreensInput = document.getElementById("autopilot-top-greens-input");
+  const autopilotHardRedsInput = document.getElementById("autopilot-hard-reds-input");
+
+  // Left-panel tab switching
+  const tabManual = document.getElementById("tab-manual");
+  const tabAutopilot = document.getElementById("tab-autopilot");
+  const tabPanelManual = document.getElementById("tab-panel-manual");
+  const tabPanelAutopilot = document.getElementById("tab-panel-autopilot");
+
+  if (tabManual && tabAutopilot) {
+    tabManual.addEventListener("click", () => {
+      tabManual.classList.add("active");
+      tabManual.setAttribute("aria-selected", "true");
+      tabAutopilot.classList.remove("active");
+      tabAutopilot.setAttribute("aria-selected", "false");
+      tabPanelManual.style.display = "";
+      tabPanelAutopilot.style.display = "none";
+    });
+    tabAutopilot.addEventListener("click", () => {
+      tabAutopilot.classList.add("active");
+      tabAutopilot.setAttribute("aria-selected", "true");
+      tabManual.classList.remove("active");
+      tabManual.setAttribute("aria-selected", "false");
+      tabPanelAutopilot.style.display = "";
+      tabPanelManual.style.display = "none";
+    });
+  }
 
   // ---- Dataset Management ----
 
@@ -2566,6 +2593,8 @@
       showThumbnailsRightCheckbox.checked = val;
       showThumbnailsRight = val;
     }
+    if (autopilotTopGreensInput) autopilotTopGreensInput.value = data.autopilot_top_greens;
+    if (autopilotHardRedsInput) autopilotHardRedsInput.value = data.autopilot_hard_reds;
     const favList = data.favorite_media_types || [];
     favMtCheckboxes.forEach(cb => {
       cb.checked = favList.includes(cb.dataset.mediaType);
@@ -2705,7 +2734,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right", "autopilot_top_greens", "autopilot_hard_reds"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -2903,6 +2932,32 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ calibration_fraction: val }),
+      }).catch(() => {});
+    });
+  }
+
+  // ---- Autopilot settings ----
+
+  if (autopilotTopGreensInput) {
+    autopilotTopGreensInput.addEventListener("change", () => {
+      const val = Math.max(1, parseInt(autopilotTopGreensInput.value) || 10);
+      autopilotTopGreensInput.value = val;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autopilot_top_greens: val }),
+      }).catch(() => {});
+    });
+  }
+
+  if (autopilotHardRedsInput) {
+    autopilotHardRedsInput.addEventListener("change", () => {
+      const val = Math.max(1, parseInt(autopilotHardRedsInput.value) || 10);
+      autopilotHardRedsInput.value = val;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autopilot_hard_reds: val }),
       }).catch(() => {});
     });
   }
@@ -5434,6 +5489,12 @@
         const val = data.show_thumbnails_right !== undefined ? !!data.show_thumbnails_right : true;
         showThumbnailsRightCheckbox.checked = val;
         showThumbnailsRight = val;
+      }
+      if (autopilotTopGreensInput && typeof data.autopilot_top_greens === "number") {
+        autopilotTopGreensInput.value = data.autopilot_top_greens;
+      }
+      if (autopilotHardRedsInput && typeof data.autopilot_hard_reds === "number") {
+        autopilotHardRedsInput.value = data.autopilot_hard_reds;
       }
     } catch (_) {
       // Settings not available yet; use defaults
