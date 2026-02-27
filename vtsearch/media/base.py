@@ -34,6 +34,7 @@ __all__ = [
     "DemoDataset",
     "Detector",
     "Extractor",
+    "MediaClipper",
     "MediaResponse",
     "MediaType",
     "Processor",
@@ -749,3 +750,75 @@ class Extractor(Processor):
     def process(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         """Run extraction on *media* (delegates to :meth:`extract`)."""
         return self.extract(media)
+
+
+class MediaClipper(ABC):
+    """Abstract base class for media clippers.
+
+    A *MediaClipper* takes a single media item and returns one or more media
+    items of the **same** type.  Each concrete clipper operates on exactly one
+    media type (declared via :attr:`media_type`).
+
+    Unlike :class:`Processor` subclasses which return metadata *about* a media
+    (booleans, bounding boxes, labels), a ``MediaClipper`` returns **new media
+    dicts** that can be used directly in place of the original.
+
+    Examples:
+
+    * ``SoundTilingClipper(2)`` — tiles a 9.5 s audio clip into five 2 s
+      clips equally spaced across the original duration.
+    * ``ImageTilingClipper()`` — covers a tall image with equidistant square
+      tiles using the shorter dimension as the tile size.
+    * ``TextSentenceClipper()`` — splits a paragraph into individual sentences.
+    * Any ``*DefaultClipper`` — returns the media unchanged (single-element
+      list).
+
+    Subclasses must implement:
+
+    * :attr:`name` — unique identifier for this clipper.
+    * :attr:`media_type` — which media ``type_id`` it works on.
+    * :meth:`clip` — split a single media dict into a list of media dicts.
+    """
+
+    # ------------------------------------------------------------------
+    # Identity
+    # ------------------------------------------------------------------
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this clipper, e.g. ``"video_tiling_2s"``."""
+
+    @property
+    @abstractmethod
+    def media_type(self) -> str:
+        """The media ``type_id`` this clipper operates on (e.g. ``"audio"``)."""
+
+    # ------------------------------------------------------------------
+    # Clipping
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Split *media* into one or more media dicts of the same type.
+
+        Each dict in the returned list is a **new** media dict that preserves
+        the structure of the original (``id``, ``type``, ``category``,
+        ``origin``, ``origin_name``, etc.) but contains the clipped content
+        (updated ``media_bytes`` / ``media_string``, ``duration``, and any
+        type-specific fields).
+
+        Returns a list with at least one element.  Default clippers return
+        ``[media]`` unchanged.
+        """
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable summary of this clipper's metadata."""
+        return {
+            "name": self.name,
+            "media_type": self.media_type,
+        }
