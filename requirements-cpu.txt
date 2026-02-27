@@ -29,6 +29,9 @@ ultralytics
 # Text (vtsearch/media/text/requirements.txt)
 sentence-transformers
 
+# Document (vtsearch/media/document/requirements.txt)
+PyMuPDF
+
 # Per-importer dependencies.
 # Each importer declares its own requirements in its subdirectory.
 # To add a new importer, create vtsearch/datasets/importers/<name>/requirements.txt,

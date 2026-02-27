@@ -8,3 +8,4 @@ librosa
 requests
 tqdm
 ultralytics
+PyMuPDF
