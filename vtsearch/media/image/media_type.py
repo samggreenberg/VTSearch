@@ -13,6 +13,7 @@ from vtsearch.config import (
     CIFAR10_DOWNLOAD_SIZE_MB,
     CLIP_MODEL_ID,
     MODELS_CACHE_DIR,
+    UCSF_IDL_DOWNLOAD_SIZE_MB,
 )
 
 if TYPE_CHECKING:
@@ -533,6 +534,16 @@ class ImageMediaType(MediaType):
         "African_hunting_dog",
     ]
 
+    # Categories for UCSF Industry Documents (6 industry types).
+    _UCSF_DOCUMENTS_CATEGORIES = [
+        "Tobacco",
+        "Food",
+        "Drug",
+        "Chemical",
+        "Fossil Fuel",
+        "Opioids",
+    ]
+
     @property
     def demo_datasets(self) -> list:
         cats101 = self._DEMO_CATEGORIES_CALTECH101
@@ -607,6 +618,16 @@ class ImageMediaType(MediaType):
                 slice_start=0,
                 slice_end=171,
                 download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="ucsf_documents_a",
+                label="UCSF Documents (A)",
+                description="Scanned industry document pages from the UCSF Industry Documents Library.",
+                categories=self._UCSF_DOCUMENTS_CATEGORIES,
+                source="ucsf_documents",
+                slice_start=0,
+                slice_end=25,
+                download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
             ),
         ]
 
@@ -865,6 +886,66 @@ class ImageMediaType(MediaType):
                     "height": height,
                     "origin": demo_origin,
                     "origin_name": img_path.name,
+                }
+                clip_id += 1
+            return None  # bytes are inline
+
+        elif source == "ucsf_documents":
+            from vtsearch.datasets.downloader import download_ucsf_documents  # noqa: PLC0415
+            from vtsearch.datasets.pdf import render_pdf_pages  # noqa: PLC0415
+
+            docs_dir = download_ucsf_documents(categories, on_progress=on_progress)
+
+            # Render the first page of each PDF, grouped by category.
+            by_cat: dict[str, list[tuple[str, "Image.Image"]]] = {}
+            for cat in categories:
+                cat_dir = docs_dir / cat
+                if not cat_dir.is_dir():
+                    continue
+                for pdf_path in sorted(cat_dir.glob("*.pdf")):
+                    try:
+                        pages = render_pdf_pages(pdf_path, dpi=150)
+                        if pages:
+                            by_cat.setdefault(cat, []).append(pages[0])
+                    except Exception:
+                        continue
+
+            selected: list[tuple[str, "Image.Image", str]] = []
+            for cat in categories:
+                for page_name, pil_image in by_cat.get(cat, [])[slice_start:slice_end]:
+                    selected.append((page_name, pil_image, cat))
+
+            if getattr(self, "_model", None) is None:
+                on_progress("loading", "Loading image embedding model…", 0, 0)
+                self.load_models()
+
+            clip_id = 1
+            total = len(selected)
+            on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
+
+            for i, (page_name, pil_image, category) in enumerate(selected):
+                on_progress("embedding", f"Embedding {page_name} ({i + 1}/{total})", i + 1, total)
+                embedding = self.embed_pil_image(pil_image)
+                if embedding is None:
+                    continue
+                img_buffer = _io.BytesIO()
+                pil_image.save(img_buffer, format="PNG")
+                image_bytes = img_buffer.getvalue()
+                clips[clip_id] = {
+                    "id": clip_id,
+                    "type": self.type_id,
+                    "duration": 0,
+                    "file_size": len(image_bytes),
+                    "md5": hashlib.md5(image_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "media_bytes": image_bytes,
+                    "media_string": None,
+                    "filename": f"{page_name}.png",
+                    "category": category,
+                    "width": pil_image.width,
+                    "height": pil_image.height,
+                    "origin": demo_origin,
+                    "origin_name": page_name,
                 }
                 clip_id += 1
             return None  # bytes are inline
