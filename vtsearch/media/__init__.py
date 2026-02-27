@@ -120,6 +120,7 @@ def all_demo_datasets() -> dict:
 # The four imports below are the complete list of built-in types.
 
 from vtsearch.media.audio.media_type import AudioMediaType  # noqa: E402
+from vtsearch.media.document.media_type import DocumentMediaType  # noqa: E402
 from vtsearch.media.image.media_type import ImageMediaType  # noqa: E402
 from vtsearch.media.text.media_type import TextMediaType  # noqa: E402
 from vtsearch.media.video.media_type import VideoMediaType  # noqa: E402
@@ -128,6 +129,7 @@ register(AudioMediaType())
 register(VideoMediaType())
 register(ImageMediaType())
 register(TextMediaType())
+register(DocumentMediaType())
 
 
 def set_progress_callback(callback: "ProgressCallback") -> None:
