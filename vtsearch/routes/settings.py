@@ -105,6 +105,24 @@ def update_settings():
     if "show_thumbnails_right" in body:
         settings.set_show_thumbnails_right(bool(body["show_thumbnails_right"]))
 
+    if "autopilot_top_greens" in body:
+        try:
+            val = body["autopilot_top_greens"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "autopilot_top_greens must be a number"}), 400
+            settings.set_autopilot_top_greens(int(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "autopilot_top_greens must be a number"}), 400
+
+    if "autopilot_hard_reds" in body:
+        try:
+            val = body["autopilot_hard_reds"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "autopilot_hard_reds must be a number"}), 400
+            settings.set_autopilot_hard_reds(int(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "autopilot_hard_reds must be a number"}), 400
+
     if "favorite_media_types" in body:
         val = body["favorite_media_types"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):

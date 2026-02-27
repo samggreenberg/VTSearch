@@ -206,6 +206,17 @@ header h1 { margin-left: 48px; }
 .theme-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .theme-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+/* Left panel – tabs */
+.left-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.left-tab { flex: 1; padding: 5px 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.left-tab:hover { color: var(--text-secondary); }
+.left-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.left-tab-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
+/* Autopilot panel */
+.autopilot-panel { padding: 8px 10px; }
+.autopilot-status-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; outline: none; margin-top: 4px; }
+.autopilot-status-input:focus { border-color: var(--accent); }
+
 /* Left panel – media list */
 .panel-left { width: 170px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-panel); display: flex; flex-direction: column; position: relative; }
 .sort-bar { padding: 8px 28px 12px 10px; border-bottom: 1px solid var(--border); }
