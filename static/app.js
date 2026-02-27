@@ -4909,7 +4909,7 @@
     document.getElementById("smart-section").style.display = "none";
     document.getElementById("stable-section").style.display = "none";
     document.getElementById("span-section").style.display = "";
-    document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+    document.getElementById("progress-modal-title").textContent = "Diverse: Diversity Coverage";
 
     pauseActiveMedia();
     progressModal.classList.add("show");
@@ -4975,7 +4975,7 @@
     } else if (metric === "span") {
       spanSec.style.display = "";
       renderDiversityChart(data.diversity_level_over_time);
-      document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+      document.getElementById("progress-modal-title").textContent = "Diverse: Diversity Coverage";
       const dvChart = document.getElementById("diversity-chart");
       if (dvChart) {
         dvChart.setAttribute("role", "img");
