@@ -146,9 +146,9 @@
         <span class="indicator-label">Stable</span>
         <span class="indicator-subtext" id="stable-subtext"></span>
       </button>
-      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Span level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
+      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
         <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Span</span>
+        <span class="indicator-label">Diverse</span>
         <span class="indicator-subtext" id="span-subtext"></span>
       </button>
     </div>
@@ -176,7 +176,7 @@
   </aside>
 </div>
 
-<!-- Progress Modal — shown per-metric when clicking Smart, Stable, or Span -->
+<!-- Progress Modal — shown per-metric when clicking Smart, Stable, or Diverse -->
 <div id="progress-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="progress-modal-title">
   <div class="modal-content">
     <div class="modal-header">
@@ -210,9 +210,9 @@
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
       </div>
-      <!-- Span: Diversity tree text info + chart -->
+      <!-- Diverse: Diversity tree text info + chart -->
       <div id="span-section" class="progress-chart" style="display:none;">
-        <h3>Span: Diversity Tree Coverage</h3>
+        <h3>Diverse: Diversity Tree Coverage</h3>
         <p class="form-text" style="font-size: 0.8rem; margin-bottom: 8px;">
           Shows how diversity level grows as you label. Higher means broader coverage.
         </p>
