@@ -3264,11 +3264,8 @@
         } else {
           html += `<img class="media-thumbnail" src="${thumbnailUrl(c)}" alt="${escapeHtml(mediaLabel)}" loading="lazy">`;
         }
-        html += `<div class="media-thumb-info">`;
-      }
-      html += `<div style="font-weight: 500;">${escapeHtml(mediaLabel)}</div>`;
-      if (useThumbnail) {
-        html += `</div>`;
+      } else {
+        html += `<div style="font-weight: 500;">${escapeHtml(mediaLabel)}</div>`;
       }
       div.innerHTML = html;
       div.onclick = () => selectMedia(c.id);
