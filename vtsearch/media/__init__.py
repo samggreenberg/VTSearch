@@ -20,6 +20,7 @@ from vtsearch.media.base import (
     Detector,
     Extractor,
     Localizer,
+    MediaClipper,
     MediaResponse,
     MediaType,
     Processor,
@@ -144,6 +145,7 @@ def set_progress_callback(callback: "ProgressCallback") -> None:
 
 __all__ = [
     "MediaType",
+    "MediaClipper",
     "MediaResponse",
     "DemoDataset",
     "Processor",
