@@ -40,6 +40,9 @@
         <div class="burger-status" id="menu-favorites-status" aria-live="polite"></div>
       </div>
       <div class="burger-section">
+        <div class="burger-item" id="menu-dashboard">Dashboard</div>
+      </div>
+      <div class="burger-section">
         <div class="burger-item" id="menu-settings">Settings</div>
       </div>
     </div>
@@ -127,6 +130,65 @@
       <div class="demo-datasets" id="demo-datasets" style="display:none"></div>
       <div id="extended-importer-form" style="display:none"></div>
       <button class="back-button" id="back-button" style="display:none" aria-label="Back to dataset options">Back</button>
+    </div>
+    <!-- Dashboard view -->
+    <div id="dashboard-view" style="display:none">
+      <h2>VTSearch Dashboard</h2>
+      <p class="dashboard-subtitle">Manage your datasets and models</p>
+
+      <!-- My Datasets section -->
+      <div class="dashboard-section">
+        <div class="dashboard-section-header">
+          <h3>My Datasets</h3>
+          <div class="dashboard-section-actions">
+            <button id="dashboard-dataset-add" class="btn-sm">Add</button>
+          </div>
+        </div>
+        <div id="dashboard-datasets-empty" class="dashboard-empty">No datasets added yet.</div>
+        <table id="dashboard-datasets-table" class="dashboard-table" style="display:none">
+          <thead>
+            <tr>
+              <th data-col="name">Name<span class="sort-arrow"></span></th>
+              <th data-col="num_medias">#Media<span class="sort-arrow"></span></th>
+              <th data-col="media_type">MediaType<span class="sort-arrow"></span></th>
+              <th data-col="origin">Origin<span class="sort-arrow"></span></th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-datasets-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- My Models section -->
+      <div class="dashboard-section">
+        <div class="dashboard-section-header">
+          <h3>My Models</h3>
+          <div class="dashboard-section-actions">
+            <button id="dashboard-model-add" class="btn-sm">Add</button>
+          </div>
+        </div>
+        <div id="dashboard-models-empty" class="dashboard-empty">No models added yet.</div>
+        <table id="dashboard-models-table" class="dashboard-table" style="display:none">
+          <thead>
+            <tr>
+              <th data-col="name">Name<span class="sort-arrow"></span></th>
+              <th data-col="num_labels">#Labels<span class="sort-arrow"></span></th>
+              <th data-col="media_type">MediaType<span class="sort-arrow"></span></th>
+              <th data-col="text_examples">Text Examples<span class="sort-arrow"></span></th>
+              <th data-col="media_examples">Media Examples<span class="sort-arrow"></span></th>
+              <th data-col="origin">Origin<span class="sort-arrow"></span></th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-models-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="dashboard-actions">
+        <button id="dashboard-train-btn" class="btn-block-primary" disabled>Train</button>
+        <button id="dashboard-run-btn" class="btn-block-primary" disabled>Run</button>
+      </div>
     </div>
   </main>
   <input type="file" id="file-input" accept=".pkl" style="display:none" aria-label="Dataset file">
