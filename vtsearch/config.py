@@ -36,6 +36,8 @@ OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/i
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
 EUROSAT_URL = "https://huggingface.co/datasets/blanchon/EuroSAT_RGB/resolve/main/EuroSAT_RGB.zip"
 STANFORD_DOGS_URL = "http://vision.stanford.edu/aditya86/ImageNetDogDataset/images.tar"
+UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
+UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
 # Dataset size estimates
 ESC50_DOWNLOAD_SIZE_MB = 600
@@ -54,6 +56,7 @@ OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
 STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
+UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 MEDIAS_PER_CATEGORY = 40
 MEDIAS_PER_VIDEO_CATEGORY = 150
 IMAGES_PER_CIFAR10_CATEGORY = 100
