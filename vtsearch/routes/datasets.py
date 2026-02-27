@@ -725,3 +725,48 @@ def clear_dataset_route():
     """Clear the current dataset."""
     clear_dataset()
     return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/dashboard/dataset-info")
+def dashboard_dataset_info():
+    """Return metadata about the currently loaded dataset for the dashboard.
+
+    Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
+    ``origin`` extracted from the first media that has origin info.
+    """
+    if not medias:
+        return jsonify({"error": "No dataset loaded"}), 404
+
+    first = next(iter(medias.values()))
+    media_type = first.get("type", "audio")
+    num_medias = len(medias)
+
+    # Determine origin from the first media that has one
+    origin = None
+    for m in medias.values():
+        o = m.get("origin")
+        if o:
+            importer = o.get("importer", "")
+            params = o.get("params", {})
+            # Build a human-readable origin string
+            if importer == "demo":
+                origin = f"demo:{params.get('name', '')}"
+            elif importer == "pickle":
+                origin = f"file:{params.get('filename', '')}"
+            elif importer == "folder":
+                origin = f"folder:{params.get('path', '')}"
+            elif importer:
+                origin = importer
+            break
+
+    # Determine a sensible name from origin or filenames
+    name = origin or "Untitled"
+    if origin and ":" in origin:
+        name = origin.split(":", 1)[1] or origin
+
+    return jsonify({
+        "name": name,
+        "num_medias": num_medias,
+        "media_type": media_type,
+        "origin": origin or "unknown",
+    })

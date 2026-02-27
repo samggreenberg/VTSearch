@@ -614,3 +614,42 @@ video { max-width: 100%; }
 
 /* Missing elements prompt */
 .missing-prompt { margin-top: 14px; padding: 14px; background: var(--border); border: 1px solid var(--bg-secondary-btn); border-radius: 6px; }
+
+/* ---- Dashboard ---- */
+#dashboard-view {
+  width: 100%; max-width: 900px; margin: 0 auto; padding: 32px 24px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+#dashboard-view h2 { font-size: 1.6rem; color: var(--accent); margin: 0; }
+.dashboard-subtitle { font-size: 0.9rem; color: var(--text-secondary); margin: 0; }
+.dashboard-section {
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.dashboard-section-header {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.dashboard-section-header h3 { font-size: 1rem; color: var(--text-primary); margin: 0; }
+.dashboard-section-actions { display: flex; gap: 6px; }
+.dashboard-empty { font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 16px 0; }
+.dashboard-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.dashboard-table thead th {
+  text-align: left; padding: 6px 8px; color: var(--accent); font-size: 0.72rem;
+  font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-table thead th:hover { color: var(--accent-light); }
+.dashboard-table thead th .sort-arrow { font-size: 0.6rem; display: inline-block; width: 1em; text-align: left; }
+.dashboard-table thead th.col-actions { cursor: default; width: 100px; }
+.dashboard-table tbody td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+}
+.dashboard-table tbody tr { transition: background 0.15s; }
+.dashboard-table tbody tr:hover { background: var(--bg-subtle); }
+.dashboard-table tbody tr.selected { background: var(--accent-highlight-bg); }
+.dashboard-row-actions { display: flex; gap: 4px; }
+.dashboard-actions {
+  display: flex; gap: 12px; justify-content: flex-end; padding-top: 8px;
+}
+.dashboard-actions .btn-block-primary { width: auto; padding: 10px 32px; }

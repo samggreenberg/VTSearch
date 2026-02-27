@@ -476,6 +476,32 @@
 
       await checkDatasetStatus();
       if (datasetLoaded) {
+        // Dashboard add-dataset mode: capture info and return to dashboard
+        if (_dashboardAddDatasetMode) {
+          _dashboardAddDatasetMode = false;
+          try {
+            const infoRes = await fetch("/api/dashboard/dataset-info");
+            if (infoRes.ok) {
+              const info = await infoRes.json();
+              dashboardDatasets.push({
+                id: _dashboardNextId++,
+                name: info.name,
+                num_medias: info.num_medias,
+                media_type: info.media_type,
+                origin: info.origin,
+              });
+            }
+          } catch (_) { /* ignore */ }
+          // Clear the dataset from the backend
+          await fetch("/api/dataset/clear", { method: "POST" });
+          medias = [];
+          votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+          selected = null;
+          datasetLoaded = false;
+          showDashboard();
+          return;
+        }
+
         await fetchMedias();
         await fetchVotes();
 
@@ -1234,6 +1260,12 @@
     if (_combineState) {
       fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
       _combineState = null;
+    }
+    // If we came from the dashboard, go back to dashboard
+    if (_dashboardAddDatasetMode) {
+      _dashboardAddDatasetMode = false;
+      showDashboard();
+      return;
     }
     showWelcomeScreen();
   });
@@ -5389,6 +5421,408 @@
     } catch (_) {
       // Fallback: leave empty, the UI will degrade gracefully.
     }
+  }
+
+  // ---- Dashboard ----
+
+  const dashboardView = document.getElementById("dashboard-view");
+  const dashboardDatasetsTbody = document.getElementById("dashboard-datasets-tbody");
+  const dashboardDatasetsTable = document.getElementById("dashboard-datasets-table");
+  const dashboardDatasetsEmpty = document.getElementById("dashboard-datasets-empty");
+  const dashboardModelsTbody = document.getElementById("dashboard-models-tbody");
+  const dashboardModelsTable = document.getElementById("dashboard-models-table");
+  const dashboardModelsEmpty = document.getElementById("dashboard-models-empty");
+  const dashboardTrainBtn = document.getElementById("dashboard-train-btn");
+  const dashboardRunBtn = document.getElementById("dashboard-run-btn");
+  const dashboardDatasetAdd = document.getElementById("dashboard-dataset-add");
+  const dashboardModelAdd = document.getElementById("dashboard-model-add");
+  const menuDashboard = document.getElementById("menu-dashboard");
+
+  let dashboardDatasets = [];
+  let dashboardModels = [];
+  let dashboardDatasetSort = { key: "name", asc: true };
+  let dashboardModelSort = { key: "name", asc: true };
+  let dashboardSelectedDatasets = {};  // id -> true
+  let dashboardSelectedModels = {};    // id -> true
+  let _dashboardAddDatasetMode = false;
+  let _dashboardNextId = 1;
+
+  function showDashboard() {
+    // Hide left/right panels and welcome screen
+    leftPanel.style.display = "none";
+    if (rightPanel) rightPanel.style.display = "none";
+    sortBar.style.display = "none";
+    datasetBar.style.display = "none";
+    datasetWelcome.style.display = "none";
+    center.className = "panel-center";
+    center.innerHTML = "";
+    center.appendChild(dashboardView);
+    dashboardView.style.display = "flex";
+    renderDashboardDatasets();
+    renderDashboardModels();
+    updateDashboardButtons();
+  }
+
+  function hideDashboard() {
+    dashboardView.style.display = "none";
+  }
+
+  // Sort helper
+  function dashboardSortRows(rows, sortState) {
+    const { key, asc } = sortState;
+    return rows.slice().sort((a, b) => {
+      let va = a[key], vb = b[key];
+      if (typeof va === "number" && typeof vb === "number") {
+        return asc ? va - vb : vb - va;
+      }
+      va = String(va || "").toLowerCase();
+      vb = String(vb || "").toLowerCase();
+      if (va < vb) return asc ? -1 : 1;
+      if (va > vb) return asc ? 1 : -1;
+      return 0;
+    });
+  }
+
+  function renderDashboardDatasets() {
+    if (dashboardDatasets.length === 0) {
+      dashboardDatasetsTable.style.display = "none";
+      dashboardDatasetsEmpty.style.display = "";
+      return;
+    }
+    dashboardDatasetsEmpty.style.display = "none";
+    dashboardDatasetsTable.style.display = "";
+
+    // Update sort arrows
+    dashboardDatasetsTable.querySelectorAll("th[data-col]").forEach(th => {
+      const arrow = th.querySelector(".sort-arrow");
+      arrow.textContent = th.dataset.col === dashboardDatasetSort.key
+        ? (dashboardDatasetSort.asc ? " \u25B2" : " \u25BC") : "";
+    });
+
+    const sorted = dashboardSortRows(dashboardDatasets, dashboardDatasetSort);
+    dashboardDatasetsTbody.innerHTML = sorted.map(ds => {
+      const sel = dashboardSelectedDatasets[ds.id] ? " selected" : "";
+      return `<tr data-id="${ds.id}" class="${sel}">
+        <td title="${escapeHtml(ds.name)}">${escapeHtml(ds.name)}</td>
+        <td>${ds.num_medias}</td>
+        <td>${escapeHtml(ds.media_type)}</td>
+        <td title="${escapeHtml(ds.origin)}">${escapeHtml(ds.origin)}</td>
+        <td><div class="dashboard-row-actions">
+          <button class="btn-sm" data-action="rename" data-id="${ds.id}">Rename</button>
+          <button class="btn-sm-danger" data-action="remove" data-id="${ds.id}">Remove</button>
+        </div></td>
+      </tr>`;
+    }).join("");
+
+    // Wire row click for selection
+    dashboardDatasetsTbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        const id = parseInt(tr.dataset.id);
+        if (dashboardSelectedDatasets[id]) {
+          delete dashboardSelectedDatasets[id];
+        } else {
+          dashboardSelectedDatasets[id] = true;
+        }
+        renderDashboardDatasets();
+        updateDashboardButtons();
+      });
+    });
+
+    // Wire action buttons
+    dashboardDatasetsTbody.querySelectorAll("button[data-action]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.dataset.id);
+        if (btn.dataset.action === "remove") {
+          dashboardDatasets = dashboardDatasets.filter(d => d.id !== id);
+          delete dashboardSelectedDatasets[id];
+          renderDashboardDatasets();
+          updateDashboardButtons();
+        } else if (btn.dataset.action === "rename") {
+          const ds = dashboardDatasets.find(d => d.id === id);
+          if (!ds) return;
+          const newName = await vtPrompt(`Rename dataset "${ds.name}" to:`, ds.name);
+          if (newName && newName !== ds.name) {
+            ds.name = newName;
+            renderDashboardDatasets();
+          }
+        }
+      });
+    });
+  }
+
+  function renderDashboardModels() {
+    if (dashboardModels.length === 0) {
+      dashboardModelsTable.style.display = "none";
+      dashboardModelsEmpty.style.display = "";
+      return;
+    }
+    dashboardModelsEmpty.style.display = "none";
+    dashboardModelsTable.style.display = "";
+
+    // Update sort arrows
+    dashboardModelsTable.querySelectorAll("th[data-col]").forEach(th => {
+      const arrow = th.querySelector(".sort-arrow");
+      arrow.textContent = th.dataset.col === dashboardModelSort.key
+        ? (dashboardModelSort.asc ? " \u25B2" : " \u25BC") : "";
+    });
+
+    const sorted = dashboardSortRows(dashboardModels, dashboardModelSort);
+    dashboardModelsTbody.innerHTML = sorted.map(m => {
+      const sel = dashboardSelectedModels[m.id] ? " selected" : "";
+      return `<tr data-id="${m.id}" class="${sel}">
+        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</td>
+        <td>${m.num_labels}</td>
+        <td>${escapeHtml(m.media_type)}</td>
+        <td title="${escapeHtml(m.text_examples)}">${escapeHtml(m.text_examples)}</td>
+        <td title="${escapeHtml(m.media_examples)}">${escapeHtml(m.media_examples)}</td>
+        <td title="${escapeHtml(m.origin)}">${escapeHtml(m.origin)}</td>
+        <td><div class="dashboard-row-actions">
+          <button class="btn-sm" data-action="rename" data-id="${m.id}">Rename</button>
+          <button class="btn-sm-danger" data-action="remove" data-id="${m.id}">Remove</button>
+        </div></td>
+      </tr>`;
+    }).join("");
+
+    // Wire row click for selection
+    dashboardModelsTbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        const id = parseInt(tr.dataset.id);
+        if (dashboardSelectedModels[id]) {
+          delete dashboardSelectedModels[id];
+        } else {
+          dashboardSelectedModels[id] = true;
+        }
+        renderDashboardModels();
+        updateDashboardButtons();
+      });
+    });
+
+    // Wire action buttons
+    dashboardModelsTbody.querySelectorAll("button[data-action]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.dataset.id);
+        if (btn.dataset.action === "remove") {
+          dashboardModels = dashboardModels.filter(m => m.id !== id);
+          delete dashboardSelectedModels[id];
+          renderDashboardModels();
+          updateDashboardButtons();
+        } else if (btn.dataset.action === "rename") {
+          const m = dashboardModels.find(m => m.id === id);
+          if (!m) return;
+          const newName = await vtPrompt(`Rename model "${m.name}" to:`, m.name);
+          if (newName && newName !== m.name) {
+            m.name = newName;
+            renderDashboardModels();
+          }
+        }
+      });
+    });
+  }
+
+  function updateDashboardButtons() {
+    const numDS = Object.keys(dashboardSelectedDatasets).length;
+    const numMD = Object.keys(dashboardSelectedModels).length;
+    // Train: exactly 1 dataset + exactly 1 model
+    dashboardTrainBtn.disabled = !(numDS === 1 && numMD === 1);
+    // Run: at least 1 dataset + at least 1 model
+    dashboardRunBtn.disabled = !(numDS >= 1 && numMD >= 1);
+  }
+
+  // Wire sortable headers for datasets table
+  if (dashboardDatasetsTable) {
+    dashboardDatasetsTable.querySelectorAll("th[data-col]").forEach(th => {
+      th.addEventListener("click", () => {
+        const col = th.dataset.col;
+        if (dashboardDatasetSort.key === col) {
+          dashboardDatasetSort.asc = !dashboardDatasetSort.asc;
+        } else {
+          dashboardDatasetSort = { key: col, asc: true };
+        }
+        renderDashboardDatasets();
+      });
+    });
+  }
+
+  // Wire sortable headers for models table
+  if (dashboardModelsTable) {
+    dashboardModelsTable.querySelectorAll("th[data-col]").forEach(th => {
+      th.addEventListener("click", () => {
+        const col = th.dataset.col;
+        if (dashboardModelSort.key === col) {
+          dashboardModelSort.asc = !dashboardModelSort.asc;
+        } else {
+          dashboardModelSort = { key: col, asc: true };
+        }
+        renderDashboardModels();
+      });
+    });
+  }
+
+  // Dashboard "Add Dataset" — enters the welcome screen in dashboard mode
+  if (dashboardDatasetAdd) {
+    dashboardDatasetAdd.addEventListener("click", () => {
+      _dashboardAddDatasetMode = true;
+      hideDashboard();
+      // Clear any existing dataset so we can load a fresh one
+      fetch("/api/dataset/clear", { method: "POST" }).then(() => {
+        medias = [];
+        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+        selected = null;
+        datasetLoaded = false;
+        showWelcomeScreen();
+      });
+    });
+  }
+
+  // Dashboard "Add Model" — opens the processor importer modal in dashboard mode
+  if (dashboardModelAdd) {
+    dashboardModelAdd.addEventListener("click", () => {
+      openProcessorImporterModalForDashboard();
+    });
+  }
+
+  async function openProcessorImporterModalForDashboard() {
+    let importers = [];
+    try {
+      const res = await fetch("/api/processor-importers");
+      if (res.ok) importers = await res.json();
+    } catch (_) { /* ignore */ }
+
+    processorImporterFormDiv.style.display = "none";
+    processorImporterFormDiv.innerHTML = "";
+    processorImporterBack.style.display = "none";
+    processorImporterList.style.display = "";
+
+    if (importers.length === 0) {
+      processorImporterList.innerHTML = '<p style="color:var(--text-muted);">No processor importers available.</p>';
+    } else {
+      processorImporterList.innerHTML = importers.map(imp => `
+        <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}">
+          <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
+          <div>
+            <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+            <div class="option-card-desc">${escapeHtml(imp.description)}</div>
+          </div>
+        </div>
+      `).join("");
+
+      processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        const name = el.dataset.name;
+        const imp = importers.find(i => i.name === name);
+        el.addEventListener("click", () => showProcessorImporterFormForDashboard(imp));
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showProcessorImporterFormForDashboard(imp); }
+        });
+      });
+    }
+
+    processorImporterModal.classList.add("show");
+  }
+
+  function showProcessorImporterFormForDashboard(importer) {
+    processorImporterList.style.display = "none";
+    processorImporterBack.style.display = "inline-block";
+
+    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
+    html += `<form id="proc-imp-form">`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Detector Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">Name for the imported detector.</div>`;
+    html += `</div>`;
+    for (const field of importer.fields) {
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        const itype = field.field_type === "password" ? "password" : "text";
+        const placeholder = escapeHtml(field.placeholder || field.description);
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" class="form-input" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) {
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<div id="proc-imp-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Import</button>`;
+    html += `</form>`;
+
+    processorImporterFormDiv.innerHTML = html;
+    processorImporterFormDiv.style.display = "block";
+
+    const statusEl = processorImporterFormDiv.querySelector("#proc-imp-status");
+
+    processorImporterFormDiv.querySelector("#proc-imp-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      statusEl.textContent = "Importing\u2026";
+      statusEl.style.color = "var(--text-muted)";
+
+      const formEl = e.target;
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = { name: formEl.elements["name"].value };
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+
+      try {
+        const res = await fetch(`/api/processor-importers/import/${encodeURIComponent(importer.name)}`, {
+          method: "POST", headers, body,
+        });
+        const result = await res.json();
+        if (res.ok) {
+          const modelEntry = {
+            id: _dashboardNextId++,
+            name: result.name,
+            num_labels: result.loaded || 0,
+            media_type: result.media_type || "unknown",
+            text_examples: "-",
+            media_examples: "-",
+            origin: importer.display_name,
+          };
+          dashboardModels.push(modelEntry);
+          statusEl.textContent = `Imported "${result.name}"`;
+          statusEl.style.color = "var(--color-good)";
+          setTimeout(() => {
+            processorImporterModal.classList.remove("show");
+            showDashboard();
+          }, 1000);
+        } else {
+          statusEl.textContent = result.error || "Import failed";
+          statusEl.style.color = "var(--color-bad)";
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+      }
+    });
+  }
+
+  // Burger menu handler for Dashboard
+  if (menuDashboard) {
+    menuDashboard.addEventListener("click", () => {
+      closeBurgerMenu();
+      showDashboard();
+    });
   }
 
   // Initialize
