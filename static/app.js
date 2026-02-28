@@ -294,7 +294,7 @@
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
-  const menuDatasetChange = document.getElementById("menu-dataset-change");
+
   const menuLabelsExport = document.getElementById("menu-labels-export");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
@@ -373,7 +373,7 @@
   const dashLabelBtn = document.getElementById("dash-label-btn");
   const dashDetectBtn = document.getElementById("dash-detect-btn");
   const dashAddDatasetBtn = document.getElementById("dash-add-dataset-btn");
-  const dashChangeDatasetBtn = document.getElementById("dash-change-dataset-btn");
+
   const dashAddModelBtn = document.getElementById("dash-add-model-btn");
   const datasetImporterModal = document.getElementById("dataset-importer-modal");
   const datasetImporterModalClose = document.getElementById("dataset-importer-modal-close");
@@ -1192,10 +1192,8 @@
         ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
         : `${status.num_medias} medias loaded${dupeSuffix}`;
       dashDatasetStatus.style.display = "";
-      dashChangeDatasetBtn.style.display = "";
     } else {
       dashDatasetStatus.style.display = "none";
-      dashChangeDatasetBtn.style.display = "none";
     }
 
     // Populate grids
@@ -1291,7 +1289,6 @@
             await fetch("/api/dataset/clear", { method: "POST" });
             datasetLoaded = false;
             dashDatasetStatus.style.display = "none";
-            dashChangeDatasetBtn.style.display = "none";
             await renderDashboardDatasets();
             updateDashboardButtons();
           } catch (_) {}
@@ -2548,27 +2545,6 @@
     });
   }
 
-  // Dataset change — clears current dataset and returns to dashboard
-  if (menuDatasetChange && burgerDropdown) {
-    menuDatasetChange.addEventListener("click", async () => {
-      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
-        fetch("/api/dataset/clear", { method: "POST" })
-          .then(() => {
-            medias = [];
-            votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
-            selected = null;
-            datasetLoaded = false;
-            dashSelectedDataset = null;
-            showDashboard();
-            renderVotes();
-            updateLabelCounts();
-            closeBurgerMenu();
-          });
-      } else {
-        closeBurgerMenu();
-      }
-    });
-  }
 
 
   // Labels export – open modal
@@ -6650,21 +6626,6 @@
       // Poll progress
       dashPendingAction = null;
       startDashProgressPolling();
-    });
-  }
-
-  // Dashboard: Change Dataset button
-  if (dashChangeDatasetBtn) {
-    dashChangeDatasetBtn.addEventListener("click", async () => {
-      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
-        await fetch("/api/dataset/clear", { method: "POST" });
-        medias = [];
-        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
-        selected = null;
-        datasetLoaded = false;
-        dashSelectedDataset = null;
-        showDashboard();
-      }
     });
   }
 
