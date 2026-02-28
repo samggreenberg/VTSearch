@@ -277,8 +277,8 @@ def get_textsort_suggestions() -> list[str]:
 def add_favorite_detector(
     name: str,
     media_type: str,
-    weights: dict[str, Any],
-    threshold: float,
+    weights: dict[str, Any] | None = None,
+    threshold: float = 0.5,
     *,
     autodetect: bool = True,
     examples: list[dict[str, str]] | None = None,
@@ -293,8 +293,9 @@ def add_favorite_detector(
             ``"video"``, ``"image"``, or ``"paragraph"``).
         weights: Dict mapping layer-parameter names (e.g. ``"0.weight"``) to
             lists of float values, representing the serialised MLP state dict.
+            May be ``None`` for an untrained detector stub.
         threshold: Decision boundary score in ``[0, 1]``. Clips scoring at or
-            above this value are classified as positive.
+            above this value are classified as positive.  Defaults to ``0.5``.
         autodetect: Whether this detector should be included when running
             autodetect.  Defaults to ``True``.
         examples: Optional list of example dicts, each with ``"type"``
@@ -445,7 +446,7 @@ def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, An
         return {
             name: det
             for name, det in favorite_detectors.items()
-            if det["media_type"] == media_type and det.get("autodetect", True)
+            if det["media_type"] == media_type and det.get("autodetect", True) and det.get("weights")
         }
 
 
