@@ -3,7 +3,8 @@
 Covers:
 - ProcessorImporterField and ProcessorImporter base classes
 - Auto-discovery registry (list_processor_importers, get_processor_importer)
-- Built-in importers: detector_file, label_file
+- Built-in importer: server_detector_file (auto-discovered)
+- Legacy importers in old_io/: detector_file, label_file, csv_label_file
 - Flask API routes: GET /api/processor-importers, POST /api/processor-importers/import/<name>
 """
 
@@ -213,15 +214,12 @@ class TestProcessorImporterRegistry:
         from vtsearch.processors.importers import list_processor_importers
 
         names = {imp.name for imp in list_processor_importers()}
-        assert "detector_file" in names
         assert "server_detector_file" in names
-        assert "label_file" in names
-        assert "csv_label_file" in names
 
     def test_get_processor_importer_known(self):
         from vtsearch.processors.importers import get_processor_importer
 
-        for name in ("detector_file", "server_detector_file", "label_file", "csv_label_file"):
+        for name in ("server_detector_file",):
             imp = get_processor_importer(name)
             assert imp is not None, f"Processor importer '{name}' not found"
             assert imp.name == name
@@ -247,9 +245,7 @@ class TestProcessorImporterRegistry:
             for f in imp.fields:
                 assert f.key, f"{imp.name} has a field without a key"
                 assert f.label, f"{imp.name} field '{f.key}' has no label"
-                assert f.field_type in valid_types, (
-                    f"{imp.name} field '{f.key}' has unknown type '{f.field_type}'"
-                )
+                assert f.field_type in valid_types, f"{imp.name} field '{f.key}' has unknown type '{f.field_type}'"
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +257,7 @@ class TestLocalFileProcessorImporter:
     """Tests for the LocalFileProcessorImporter (formerly DetectorFileProcessorImporter)."""
 
     def _get_importer(self):
-        from vtsearch.processors.importers.detector_file import PROCESSOR_IMPORTER
+        from old_io.processors.importers.detector_file import PROCESSOR_IMPORTER
 
         return PROCESSOR_IMPORTER
 
@@ -269,7 +265,7 @@ class TestLocalFileProcessorImporter:
         assert self._get_importer().name == "detector_file"
 
     def test_class_name(self):
-        from vtsearch.processors.importers.detector_file import LocalFileProcessorImporter
+        from old_io.processors.importers.detector_file import LocalFileProcessorImporter
 
         assert isinstance(self._get_importer(), LocalFileProcessorImporter)
 
@@ -477,7 +473,7 @@ class TestServerFileProcessorImporter:
 
 class TestLabelFileImporter:
     def _get_importer(self):
-        from vtsearch.processors.importers.label_file import PROCESSOR_IMPORTER
+        from old_io.processors.importers.label_file import PROCESSOR_IMPORTER
 
         return PROCESSOR_IMPORTER
 
@@ -525,7 +521,7 @@ class TestLabelFileImporter:
             self._get_importer().run_cli({"file": ""})
 
     def test_media_type_for_path(self):
-        from vtsearch.processors.importers.label_file import _media_type_for_path
+        from old_io.processors.importers.label_file import _media_type_for_path
 
         assert _media_type_for_path(Path("test.wav")) == "audio"
         assert _media_type_for_path(Path("test.mp3")) == "audio"
@@ -554,10 +550,7 @@ class TestGetProcessorImportersEndpoint:
     def test_contains_builtin_importers(self, client):
         res = client.get("/api/processor-importers")
         names = {entry["name"] for entry in res.get_json()}
-        assert "detector_file" in names
         assert "server_detector_file" in names
-        assert "label_file" in names
-        assert "csv_label_file" in names
 
     def test_each_entry_has_required_keys(self, client):
         res = client.get("/api/processor-importers")
@@ -580,22 +573,21 @@ class TestProcessorImportEndpoint:
         assert res.status_code == 404
         assert "no_such_importer" in res.get_json()["error"]
 
-    def test_missing_name_returns_400(self, client):
+    def test_missing_name_returns_400(self, client, tmp_path):
         payload = {
             "weights": {"0.weight": [[1.0]], "0.bias": [0.5]},
             "threshold": 0.5,
         }
-        raw = json.dumps(payload).encode()
-        data = {"file": (io.BytesIO(raw), "detector.json")}
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
         res = client.post(
-            "/api/processor-importers/import/detector_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 400
         assert "name" in res.get_json()["error"].lower()
 
-    def test_detector_file_imports_and_saves(self, client):
+    def test_detector_file_imports_and_saves(self, client, tmp_path):
         from vtsearch.utils import favorite_detectors
 
         payload = {
@@ -603,15 +595,11 @@ class TestProcessorImportEndpoint:
             "threshold": 0.75,
             "media_type": "image",
         }
-        raw = json.dumps(payload).encode()
-        data = {
-            "file": (io.BytesIO(raw), "detector.json"),
-            "name": "test_detector",
-        }
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
         res = client.post(
-            "/api/processor-importers/import/detector_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p), "name": "test_detector"},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -620,44 +608,33 @@ class TestProcessorImportEndpoint:
         assert result["media_type"] == "image"
         assert "test_detector" in favorite_detectors
 
-    def test_detector_file_defaults_to_audio(self, client):
+    def test_detector_file_defaults_to_audio(self, client, tmp_path):
         payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
-        raw = json.dumps(payload).encode()
-        data = {
-            "file": (io.BytesIO(raw), "detector.json"),
-            "name": "audio_det",
-        }
+        p = tmp_path / "detector.json"
+        p.write_text(json.dumps(payload))
         res = client.post(
-            "/api/processor-importers/import/detector_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p), "name": "audio_det"},
         )
         assert res.status_code == 200
         assert res.get_json()["media_type"] == "audio"
 
-    def test_detector_file_invalid_json_returns_400(self, client):
-        data = {
-            "file": (io.BytesIO(b"not json"), "bad.json"),
-            "name": "bad_det",
-        }
+    def test_detector_file_invalid_json_returns_400(self, client, tmp_path):
+        p = tmp_path / "bad.json"
+        p.write_text("not json")
         res = client.post(
-            "/api/processor-importers/import/detector_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p), "name": "bad_det"},
         )
         assert res.status_code == 400
         assert "json" in res.get_json()["error"].lower()
 
-    def test_detector_file_missing_weights_returns_400(self, client):
-        raw = json.dumps({"threshold": 0.5}).encode()
-        data = {
-            "file": (io.BytesIO(raw), "bad.json"),
-            "name": "bad_det",
-        }
+    def test_detector_file_missing_weights_returns_400(self, client, tmp_path):
+        p = tmp_path / "bad.json"
+        p.write_text(json.dumps({"threshold": 0.5}))
         res = client.post(
-            "/api/processor-importers/import/detector_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": str(p), "name": "bad_det"},
         )
         assert res.status_code == 400
 
@@ -669,7 +646,7 @@ class TestProcessorImportEndpoint:
 
 class TestCsvLabelFileImporter:
     def _get_importer(self):
-        from vtsearch.processors.importers.csv_label_file import PROCESSOR_IMPORTER
+        from old_io.processors.importers.csv_label_file import PROCESSOR_IMPORTER
 
         return PROCESSOR_IMPORTER
 
@@ -721,7 +698,7 @@ class TestCsvLabelFileImporter:
             self._get_importer().run_cli({"file": ""})
 
     def test_parse_csv_bytes(self):
-        from vtsearch.processors.importers.csv_label_file import _parse_csv_bytes
+        from old_io.processors.importers.csv_label_file import _parse_csv_bytes
 
         raw = b"path,label\n/data/dog.wav,good\n/data/silence.wav,bad\n"
         entries = _parse_csv_bytes(raw)
@@ -732,7 +709,7 @@ class TestCsvLabelFileImporter:
         assert entries[1]["label"] == "bad"
 
     def test_parse_csv_bytes_file_column(self):
-        from vtsearch.processors.importers.csv_label_file import _parse_csv_bytes
+        from old_io.processors.importers.csv_label_file import _parse_csv_bytes
 
         raw = b"file,label\n/data/dog.wav,good\n"
         entries = _parse_csv_bytes(raw)
@@ -740,7 +717,7 @@ class TestCsvLabelFileImporter:
         assert entries[0]["path"] == "/data/dog.wav"
 
     def test_parse_csv_bytes_filename_column(self):
-        from vtsearch.processors.importers.csv_label_file import _parse_csv_bytes
+        from old_io.processors.importers.csv_label_file import _parse_csv_bytes
 
         raw = b"filename,label\n/data/dog.wav,good\n"
         entries = _parse_csv_bytes(raw)
@@ -748,28 +725,28 @@ class TestCsvLabelFileImporter:
         assert entries[0]["path"] == "/data/dog.wav"
 
     def test_parse_csv_bytes_missing_label_column(self):
-        from vtsearch.processors.importers.csv_label_file import _parse_csv_bytes
+        from old_io.processors.importers.csv_label_file import _parse_csv_bytes
 
         with pytest.raises(ValueError, match="label"):
             _parse_csv_bytes(b"path,status\n/data/dog.wav,good\n")
 
     def test_parse_csv_bytes_missing_path_column(self):
-        from vtsearch.processors.importers.csv_label_file import _parse_csv_bytes
+        from old_io.processors.importers.csv_label_file import _parse_csv_bytes
 
         with pytest.raises(ValueError, match="path"):
             _parse_csv_bytes(b"md5,label\nabc,good\n")
 
-    def test_registry_contains_csv_label_file(self):
+    def test_registry_does_not_contain_csv_label_file(self):
         from vtsearch.processors.importers import list_processor_importers
 
         names = {imp.name for imp in list_processor_importers()}
-        assert "csv_label_file" in names
+        assert "csv_label_file" not in names
 
-    def test_api_lists_csv_label_file(self, client):
+    def test_api_does_not_list_csv_label_file(self, client):
         res = client.get("/api/processor-importers")
         assert res.status_code == 200
         names = {entry["name"] for entry in res.get_json()}
-        assert "csv_label_file" in names
+        assert "csv_label_file" not in names
 
 
 # ---------------------------------------------------------------------------
@@ -782,18 +759,18 @@ class TestFromLabelImportEndpoint:
         res = client.post("/api/favorite-detectors/from-label-import/no_such_importer")
         assert res.status_code == 404
 
-    def test_missing_name_returns_400(self, client):
-        raw = json.dumps({"labels": [{"md5": "abc", "label": "good"}]}).encode()
-        data = {"file": (io.BytesIO(raw), "labels.json")}
+    def test_missing_name_returns_400(self, client, tmp_path):
+        raw = json.dumps({"labels": [{"md5": "abc", "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(raw)
         res = client.post(
-            "/api/favorite-detectors/from-label-import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/favorite-detectors/from-label-import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 400
         assert "name" in res.get_json()["error"].lower()
 
-    def test_trains_from_matched_clips(self, client):
+    def test_trains_from_matched_clips(self, client, tmp_path):
         from vtsearch.utils import medias, favorite_detectors
 
         # Build labels from actual loaded media md5s
@@ -807,10 +784,12 @@ class TestFromLabelImportEndpoint:
         for i, md5 in enumerate(md5s):
             if not md5:
                 continue
-            labels_data["labels"].append({
-                "md5": md5,
-                "label": "good" if i % 2 == 0 else "bad",
-            })
+            labels_data["labels"].append(
+                {
+                    "md5": md5,
+                    "label": "good" if i % 2 == 0 else "bad",
+                }
+            )
 
         if len(labels_data["labels"]) < 2:
             pytest.skip("Need at least 2 medias with md5 for this test")
@@ -821,15 +800,11 @@ class TestFromLabelImportEndpoint:
         if not (has_good and has_bad):
             pytest.skip("Need at least one good and one bad label")
 
-        raw = json.dumps(labels_data).encode()
-        data = {
-            "file": (io.BytesIO(raw), "labels.json"),
-            "name": "from_label_import_test",
-        }
+        p = tmp_path / "labels.json"
+        p.write_text(json.dumps(labels_data))
         res = client.post(
-            "/api/favorite-detectors/from-label-import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/favorite-detectors/from-label-import/server_json_file",
+            json={"filepath": str(p), "name": "from_label_import_test"},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -838,25 +813,19 @@ class TestFromLabelImportEndpoint:
         assert result["loaded"] >= 2
         assert "from_label_import_test" in favorite_detectors
 
-    def test_no_clips_returns_400(self, client):
+    def test_no_clips_returns_400(self, client, tmp_path):
         from vtsearch.utils import medias
 
         saved = dict(medias)
         medias.clear()
         try:
-            raw = json.dumps({"labels": [{"md5": "abc", "label": "good"}]}).encode()
-            data = {
-                "file": (io.BytesIO(raw), "labels.json"),
-                "name": "test",
-            }
+            p = tmp_path / "labels.json"
+            p.write_text(json.dumps({"labels": [{"md5": "abc", "label": "good"}]}))
             res = client.post(
-                "/api/favorite-detectors/from-label-import/local_json_file",
-                data=data,
-                content_type="multipart/form-data",
+                "/api/favorite-detectors/from-label-import/server_json_file",
+                json={"filepath": str(p), "name": "test"},
             )
             assert res.status_code == 400
             assert "no medias" in res.get_json()["error"].lower()
         finally:
             medias.update(saved)
-
-

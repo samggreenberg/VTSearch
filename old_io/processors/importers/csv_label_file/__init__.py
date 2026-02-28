@@ -136,7 +136,7 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
 def _train_from_csv_labels(raw: bytes, media_type_hint: str) -> dict[str, Any]:
     """Parse CSV label file, embed referenced files, and train an MLP detector."""
     # Re-use the training logic from the JSON label_file importer
-    from vtsearch.processors.importers.label_file import _media_type_for_path, _embed
+    from old_io.processors.importers.label_file import _media_type_for_path, _embed
 
     import numpy as np
     import torch

@@ -3,7 +3,8 @@
 Covers:
 - LabelImporterField and LabelImporter base classes
 - Auto-discovery registry (list_label_importers, get_label_importer)
-- Built-in importers: local_json_file, server_json_file, local_csv_file, server_csv_file
+- Built-in importers: server_json_file, server_csv_file
+- Legacy importers (old_io): local_json_file, local_csv_file
 - Flask API routes: GET /api/label-importers, POST /api/label-importers/import/<name>
 """
 
@@ -222,15 +223,13 @@ class TestLabelImporterRegistry:
         from vtsearch.labels.importers import list_label_importers
 
         names = {imp.name for imp in list_label_importers()}
-        assert "local_json_file" in names
         assert "server_json_file" in names
-        assert "local_csv_file" in names
         assert "server_csv_file" in names
 
     def test_get_label_importer_known(self):
         from vtsearch.labels.importers import get_label_importer
 
-        for name in ("local_json_file", "server_json_file", "local_csv_file", "server_csv_file"):
+        for name in ("server_json_file", "server_csv_file"):
             imp = get_label_importer(name)
             assert imp is not None, f"Label importer '{name}' not found"
             assert imp.name == name
@@ -256,9 +255,7 @@ class TestLabelImporterRegistry:
             for f in imp.fields:
                 assert f.key, f"{imp.name} has a field without a key"
                 assert f.label, f"{imp.name} field '{f.key}' has no label"
-                assert f.field_type in valid_types, (
-                    f"{imp.name} field '{f.key}' has unknown type '{f.field_type}'"
-                )
+                assert f.field_type in valid_types, f"{imp.name} field '{f.key}' has unknown type '{f.field_type}'"
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +265,7 @@ class TestLabelImporterRegistry:
 
 class TestLocalJsonLabelImporter:
     def _get_importer(self):
-        from vtsearch.labels.importers.local_json_file import LABEL_IMPORTER
+        from old_io.labels.importers.local_json_file import LABEL_IMPORTER
 
         return LABEL_IMPORTER
 
@@ -351,7 +348,7 @@ class TestLocalJsonLabelImporter:
 
 class TestLocalCsvLabelImporter:
     def _get_importer(self):
-        from vtsearch.labels.importers.local_csv_file import LABEL_IMPORTER
+        from old_io.labels.importers.local_csv_file import LABEL_IMPORTER
 
         return LABEL_IMPORTER
 
@@ -444,35 +441,35 @@ class TestLocalCsvLabelImporter:
 
 class TestParseHelpers:
     def test_parse_json_bytes_valid(self):
-        from vtsearch.labels.importers.local_json_file import _parse_json_bytes
+        from old_io.labels.importers.local_json_file import _parse_json_bytes
 
         raw = json.dumps({"labels": [{"md5": "a", "label": "good"}]}).encode()
         result = _parse_json_bytes(raw)
         assert result == [{"md5": "a", "label": "good"}]
 
     def test_parse_json_bytes_empty_labels(self):
-        from vtsearch.labels.importers.local_json_file import _parse_json_bytes
+        from old_io.labels.importers.local_json_file import _parse_json_bytes
 
         raw = json.dumps({"labels": []}).encode()
         result = _parse_json_bytes(raw)
         assert result == []
 
     def test_parse_json_bytes_non_dict_entries_filtered(self):
-        from vtsearch.labels.importers.local_json_file import _parse_json_bytes
+        from old_io.labels.importers.local_json_file import _parse_json_bytes
 
         raw = json.dumps({"labels": [{"md5": "a", "label": "good"}, "bad_entry", 42]}).encode()
         result = _parse_json_bytes(raw)
         assert len(result) == 1
 
     def test_parse_csv_bytes_valid(self):
-        from vtsearch.labels.importers.local_csv_file import _parse_csv_bytes
+        from old_io.labels.importers.local_csv_file import _parse_csv_bytes
 
         raw = b"md5,label\nabc,good\ndef,bad\n"
         result = _parse_csv_bytes(raw)
         assert len(result) == 2
 
     def test_parse_csv_bytes_case_insensitive_headers(self):
-        from vtsearch.labels.importers.local_csv_file import _parse_csv_bytes
+        from old_io.labels.importers.local_csv_file import _parse_csv_bytes
 
         raw = b"MD5,LABEL\nabc,good\n"
         result = _parse_csv_bytes(raw)
@@ -480,7 +477,7 @@ class TestParseHelpers:
         assert result[0]["md5"] == "abc"
 
     def test_parse_csv_bytes_skips_empty_md5(self):
-        from vtsearch.labels.importers.local_csv_file import _parse_csv_bytes
+        from old_io.labels.importers.local_csv_file import _parse_csv_bytes
 
         raw = b"md5,label\n,good\nabc,bad\n"
         result = _parse_csv_bytes(raw)
@@ -507,9 +504,7 @@ class TestGetLabelImportersEndpoint:
     def test_contains_builtin_importers(self, client):
         res = client.get("/api/label-importers")
         names = {entry["name"] for entry in res.get_json()}
-        assert "local_json_file" in names
         assert "server_json_file" in names
-        assert "local_csv_file" in names
         assert "server_csv_file" in names
 
     def test_each_entry_has_required_keys(self, client):
@@ -533,14 +528,14 @@ class TestLabelImportEndpoint:
         assert res.status_code == 404
         assert "no_such_importer" in res.get_json()["error"]
 
-    def test_json_importer_applies_good_label(self, client):
+    def test_json_importer_applies_good_label(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
-        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -549,25 +544,25 @@ class TestLabelImportEndpoint:
         assert result["missing_count"] == 0
         assert 1 in app_module.good_votes
 
-    def test_json_importer_applies_bad_label(self, client):
+    def test_json_importer_applies_bad_label(self, client, tmp_path):
         md5 = app_module.medias[2]["md5"]
-        payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         assert 2 in app_module.bad_votes
 
-    def test_json_importer_reports_unknown_md5_as_missing(self, client):
-        payload = json.dumps({"labels": [{"md5": "no_such_md5", "label": "good"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+    def test_json_importer_reports_unknown_md5_as_missing(self, client, tmp_path):
+        payload = json.dumps({"labels": [{"md5": "no_such_md5", "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -575,29 +570,29 @@ class TestLabelImportEndpoint:
         assert result["missing_count"] == 1
         assert len(result["missing"]) == 1
 
-    def test_json_importer_skips_invalid_label_value(self, client):
+    def test_json_importer_skips_invalid_label_value(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
-        payload = json.dumps({"labels": [{"md5": md5, "label": "meh"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        payload = json.dumps({"labels": [{"md5": md5, "label": "meh"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
         assert result["skipped"] == 1
 
-    def test_csv_importer_applies_labels(self, client):
+    def test_csv_importer_applies_labels(self, client, tmp_path):
         md5_1 = app_module.medias[1]["md5"]
         md5_2 = app_module.medias[2]["md5"]
-        csv_bytes = f"md5,label\n{md5_1},good\n{md5_2},bad\n".encode()
-        data = {"file": (io.BytesIO(csv_bytes), "labels.csv")}
+        csv_text = f"md5,label\n{md5_1},good\n{md5_2},bad\n"
+        p = tmp_path / "labels.csv"
+        p.write_text(csv_text)
         res = client.post(
-            "/api/label-importers/import/local_csv_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_csv_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -605,44 +600,44 @@ class TestLabelImportEndpoint:
         assert 1 in app_module.good_votes
         assert 2 in app_module.bad_votes
 
-    def test_csv_importer_reports_unknown_md5_as_missing(self, client):
-        csv_bytes = b"md5,label\nunknown_hash,good\n"
-        data = {"file": (io.BytesIO(csv_bytes), "labels.csv")}
+    def test_csv_importer_reports_unknown_md5_as_missing(self, client, tmp_path):
+        csv_text = "md5,label\nunknown_hash,good\n"
+        p = tmp_path / "labels.csv"
+        p.write_text(csv_text)
         res = client.post(
-            "/api/label-importers/import/local_csv_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_csv_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
         assert result["missing_count"] == 1
 
-    def test_import_overrides_existing_label(self, client):
+    def test_import_overrides_existing_label(self, client, tmp_path):
         app_module.good_votes[1] = None
         md5 = app_module.medias[1]["md5"]
-        payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert 1 not in app_module.good_votes
         assert 1 in app_module.bad_votes
 
-    def test_import_response_has_message(self, client):
-        payload = json.dumps({"labels": []}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+    def test_import_response_has_message(self, client, tmp_path):
+        payload = json.dumps({"labels": []})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         assert "message" in res.get_json()
 
-    def test_json_roundtrip_via_importer(self, client):
+    def test_json_roundtrip_via_importer(self, client, tmp_path):
         """Export labels via the old route and re-import via label importer endpoint."""
         app_module.good_votes.update({k: None for k in [1, 3, 5]})
         app_module.bad_votes.update({k: None for k in [2, 4]})
@@ -653,20 +648,19 @@ class TestLabelImportEndpoint:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        raw = json.dumps(exported).encode()
-        data = {"file": (io.BytesIO(raw), "labels.json")}
+        p = tmp_path / "labels.json"
+        p.write_text(json.dumps(exported))
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         result = res.get_json()
         assert result["applied"] == 5
         assert set(app_module.good_votes) == {1, 3, 5}
         assert set(app_module.bad_votes) == {2, 4}
 
-    def test_json_roundtrip(self, client):
-        """Export labels, re-import via local_json_file importer."""
+    def test_json_roundtrip(self, client, tmp_path):
+        """Export labels, re-import via server_json_file importer."""
         app_module.good_votes.update({k: None for k in [1, 3]})
         app_module.bad_votes.update({k: None for k in [2]})
 
@@ -676,19 +670,18 @@ class TestLabelImportEndpoint:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        raw = json.dumps(exported).encode()
-        data = {"file": (io.BytesIO(raw), "labels.json")}
+        p = tmp_path / "labels.json"
+        p.write_text(json.dumps(exported))
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         result = res.get_json()
         assert result["applied"] == 3
         assert set(app_module.good_votes) == {1, 3}
         assert set(app_module.bad_votes) == {2}
 
-    def test_multiple_clips_via_csv(self, client):
+    def test_multiple_clips_via_csv(self, client, tmp_path):
         lines = ["md5,label"]
         good_ids = [1, 2, 3]
         bad_ids = [4, 5]
@@ -696,12 +689,12 @@ class TestLabelImportEndpoint:
             lines.append(f"{app_module.medias[cid]['md5']},good")
         for cid in bad_ids:
             lines.append(f"{app_module.medias[cid]['md5']},bad")
-        csv_bytes = "\n".join(lines).encode()
-        data = {"file": (io.BytesIO(csv_bytes), "labels.csv")}
+        csv_text = "\n".join(lines)
+        p = tmp_path / "labels.csv"
+        p.write_text(csv_text)
         res = client.post(
-            "/api/label-importers/import/local_csv_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_csv_file",
+            json={"filepath": str(p)},
         )
         result = res.get_json()
         assert result["applied"] == 5
@@ -763,7 +756,12 @@ class TestResolveClipIdsUnion:
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
         origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
-        entry = {"md5": "nonexistent", "origin": {"importer": "nope", "params": {}}, "origin_name": "x", "label": "good"}
+        entry = {
+            "md5": "nonexistent",
+            "origin": {"importer": "nope", "params": {}},
+            "origin_name": "x",
+            "label": "good",
+        }
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert cids == []
 
@@ -829,7 +827,7 @@ class TestNextClipId:
 
 
 class TestLabelImportMissingElements:
-    def test_response_includes_missing_entries(self, client):
+    def test_response_includes_missing_entries(self, client, tmp_path):
         """Labels referencing unknown elements should appear in 'missing'."""
         known_md5 = app_module.medias[1]["md5"]
         payload = json.dumps(
@@ -844,12 +842,12 @@ class TestLabelImportMissingElements:
                     },
                 ]
             }
-        ).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        )
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert res.status_code == 200
         result = res.get_json()
@@ -858,14 +856,14 @@ class TestLabelImportMissingElements:
         assert result["missing"][0]["md5"] == "unknown_abc123"
         assert result["missing"][0]["origin"]["importer"] == "folder"
 
-    def test_no_missing_when_all_match(self, client):
+    def test_no_missing_when_all_match(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
-        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]}).encode()
-        data = {"file": (io.BytesIO(payload), "labels.json")}
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
         res = client.post(
-            "/api/label-importers/import/local_json_file",
-            data=data,
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         result = res.get_json()
         assert result["missing_count"] == 0

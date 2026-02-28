@@ -3,7 +3,8 @@
 Covers:
 - ExporterField and LabelsetExporter base classes
 - Auto-discovery registry
-- Built-in exporters: gui, local_json_file, server_json_file, email_smtp
+- Built-in exporters: gui, server_json_file, server_csv_file, email_smtp
+- Old-IO exporters: local_json_file (imported from old_io.exporters)
 - Flask API routes: GET /api/exporters, POST /api/exporters/export
 """
 
@@ -143,16 +144,14 @@ class TestExporterRegistry:
 
         names = {e.name for e in list_exporters()}
         assert "gui" in names
-        assert "local_json_file" in names
         assert "server_json_file" in names
-        assert "local_csv_file" in names
         assert "server_csv_file" in names
         assert "email_smtp" in names
 
     def test_get_exporter_known(self):
         from vtsearch.exporters import get_exporter
 
-        for name in ("gui", "local_json_file", "server_json_file", "local_csv_file", "server_csv_file", "email_smtp"):
+        for name in ("gui", "server_json_file", "server_csv_file", "email_smtp"):
             exp = get_exporter(name)
             assert exp is not None, f"Exporter '{name}' not found"
             assert exp.name == name
@@ -339,10 +338,13 @@ class TestServerJsonLabelsetExporter:
 
 
 class TestLocalJsonLabelsetExporter:
-    def test_export_returns_download_content(self):
-        from vtsearch.exporters import get_exporter
+    def _get_exporter(self):
+        from old_io.exporters.local_json_file import EXPORTER
 
-        exp = get_exporter("local_json_file")
+        return EXPORTER
+
+    def test_export_returns_download_content(self):
+        exp = self._get_exporter()
         result = exp.export(SAMPLE_RESULTS, {})
         assert "message" in result
         assert "download_content" in result
@@ -354,23 +356,17 @@ class TestLocalJsonLabelsetExporter:
         assert parsed["detectors_run"] == 2
 
     def test_export_uses_custom_filename(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("local_json_file")
+        exp = self._get_exporter()
         result = exp.export(SAMPLE_RESULTS, {"filepath": "custom.json"})
         assert result["download_filename"] == "custom.json"
 
     def test_export_default_filename(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("local_json_file")
+        exp = self._get_exporter()
         result = exp.export(SAMPLE_RESULTS, {})
         assert result["download_filename"] == "autodetect_results.json"
 
     def test_export_cli_writes_file(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("local_json_file")
+        exp = self._get_exporter()
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = Path(tmpdir) / "out.json"
             result = exp.export_cli(SAMPLE_RESULTS, {"filepath": str(fpath)})
@@ -380,9 +376,7 @@ class TestLocalJsonLabelsetExporter:
             assert written["media_type"] == "audio"
 
     def test_to_dict(self):
-        from vtsearch.exporters import get_exporter
-
-        d = get_exporter("local_json_file").to_dict()
+        d = self._get_exporter().to_dict()
         assert d["name"] == "local_json_file"
 
 
@@ -539,9 +533,7 @@ class TestGetExportersEndpoint:
         res = client.get("/api/exporters")
         names = {e["name"] for e in res.get_json()}
         assert "gui" in names
-        assert "local_json_file" in names
         assert "server_json_file" in names
-        assert "local_csv_file" in names
         assert "server_csv_file" in names
         assert "email_smtp" in names
 
@@ -636,19 +628,11 @@ class TestExportEndpoint:
         assert "missing_fields" in data
         assert "filepath" in data["missing_fields"]
 
-    def test_local_json_exporter_returns_download(self, client):
-        res = client.post(
-            "/api/exporters/export",
-            json={
-                "exporter_name": "local_json_file",
-                "field_values": {},
-                "results": SAMPLE_RESULTS,
-            },
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["success"] is True
-        assert "download_content" in data
+    def test_local_json_exporter_returns_download(self):
+        from old_io.exporters.local_json_file import EXPORTER
+
+        result = EXPORTER.export(SAMPLE_RESULTS, {})
+        assert "download_content" in result
 
     def test_email_exporter_sends_via_smtp(self, client):
         mock_server = MagicMock()

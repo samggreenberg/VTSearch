@@ -235,7 +235,10 @@ class RSSDatasetImporter(DatasetImporter):
         return download_dir
 
     def run_chunked(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         from vtsearch.datasets.loader import load_dataset_from_folder_chunked
 
@@ -244,7 +247,10 @@ class RSSDatasetImporter(DatasetImporter):
         yield from load_dataset_from_folder_chunked(download_dir, media_type, chunk_size, thin=thin)
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         url = field_values.get("url", "")
         if not url.startswith(("http://", "https://")):

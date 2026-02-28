@@ -129,7 +129,7 @@ class ProcessorImporter:
     Werkzeug ``FileStorage`` rather than a plain file path).
     """
 
-    #: Internal snake_case identifier used in API routes, e.g. ``"detector_file"``.
+    #: Internal snake_case identifier used in API routes, e.g. ``"server_detector_file"``.
     name: str
     #: Human-readable label shown in the UI, e.g. ``"Detector File (.json)"``.
     display_name: str
