@@ -1051,6 +1051,10 @@ class ImageMediaType(MediaType):
             self._model = CLIPModel.from_pretrained(
                 CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
+        # Materialize any tensors left on the ``meta`` device.
+        # ``low_cpu_mem_usage=True`` creates params on ``meta`` first; ignored
+        # checkpoint keys (e.g. position_ids) stay there, causing runtime errors.
+        self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = CLIPProcessor.from_pretrained(
@@ -1082,6 +1086,8 @@ class ImageMediaType(MediaType):
 
             image = image.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.get_image_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
@@ -1099,6 +1105,8 @@ class ImageMediaType(MediaType):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
