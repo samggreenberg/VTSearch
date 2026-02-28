@@ -135,6 +135,15 @@
           <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
           <div class="dashboard-grid-wrap">
             <div id="dash-dataset-grid" class="dashboard-grid"></div>
+            <!-- In-grid progress bar for dataset loading -->
+            <div class="dataset-progress dash-grid-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
+              <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+                <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
+              </div>
+              <div class="progress-message" id="dash-progress-message">Loading...</div>
+              <div class="progress-eta" id="dash-progress-eta"></div>
+            </div>
           </div>
         </div>
         <!-- Model grid -->
@@ -153,15 +162,6 @@
       <div class="dashboard-actions">
         <button class="dashboard-action-btn" id="dash-label-btn" disabled>Label</button>
         <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Detect</button>
-      </div>
-      <!-- Reuse the progress bar for dataset loading within the dashboard -->
-      <div class="dataset-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
-        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
-          <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
-        </div>
-        <div class="progress-message" id="dash-progress-message">Loading...</div>
-        <div class="progress-eta" id="dash-progress-eta"></div>
       </div>
       <input type="file" id="dash-file-input" accept=".pkl" style="display:none">
     </div>
