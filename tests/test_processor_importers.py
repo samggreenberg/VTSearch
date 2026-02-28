@@ -569,8 +569,8 @@ class TestFromLabelImportEndpoint:
         for i, md5 in enumerate(md5s):
             lines.append(f"{md5},{'good' if i % 2 == 0 else 'bad'}")
 
-        has_good = any(l.endswith(",good") for l in lines[1:])
-        has_bad = any(l.endswith(",bad") for l in lines[1:])
+        has_good = any(ln.endswith(",good") for ln in lines[1:])
+        has_bad = any(ln.endswith(",bad") for ln in lines[1:])
         if not (has_good and has_bad):
             pytest.skip("Need at least one good and one bad label")
 
