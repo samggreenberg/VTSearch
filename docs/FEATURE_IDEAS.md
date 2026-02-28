@@ -2,6 +2,12 @@
 
 Brainstorm of potential features organized by category.
 
+**Note:** Some ideas below have been implemented since this list was written.
+Implemented features include: diversity-aware sampling (#8, via DiversityTree),
+document/PDF media type (#76, via the `document` media type and converters),
+high-contrast theme (#124, via "highviz" theme), and face detection (#87 partial,
+via FaceLocalizer).
+
 ---
 
 ## Sorting & Ranking
