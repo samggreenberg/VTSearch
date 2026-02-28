@@ -21,7 +21,6 @@ import json
 import logging
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from vtsearch.config import DATA_DIR

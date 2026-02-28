@@ -887,12 +887,9 @@ def multi_find():
     """
     import gc
     import pickle
-    import threading
 
     import torch
 
-    from vtsearch.datasets import export_dataset_to_file
-    from vtsearch.datasets.loader import load_dataset_from_pickle
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
@@ -1030,7 +1027,6 @@ def multi_find():
                 # Trainable model — train from labelset, then score
                 tm_data = mc["trainable_model_data"]
                 labels = tm_data.get("labelset", {}).get("labels", [])
-                text_query = tm_data.get("text_query", "")
 
                 # Try to match labels to this dataset's medias and train
                 try:
