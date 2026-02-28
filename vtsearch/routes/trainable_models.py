@@ -77,6 +77,8 @@ def _list_all() -> list[dict]:
         models.append({
             "name": data["name"],
             "text_query": data.get("text_query", ""),
+            "media_type": data.get("media_type", "any"),
+            "examples": data.get("examples", []),
             "num_labels": len(labels),
             "created_at": data.get("created_at", 0),
         })
@@ -110,19 +112,28 @@ def create_trainable_model():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("name", "").strip()
     text_query = data.get("text_query", "").strip()
+    media_type = data.get("media_type", "").strip()
+    examples = data.get("examples")
 
     if not name:
         return jsonify({"error": "name is required"}), 400
-    if not text_query:
-        return jsonify({"error": "text_query is required"}), 400
+    if not text_query and not examples:
+        return jsonify({"error": "text_query or examples is required"}), 400
 
     path = _model_path(name)
     if path.exists():
         return jsonify({"error": f"A trainable model named '{name}' already exists"}), 409
 
+    # Build examples list; if text_query provided without explicit examples,
+    # create a single text example from it for backward compatibility.
+    if examples is None and text_query:
+        examples = [{"type": "text", "value": text_query}]
+
     model_data = {
         "name": name,
         "text_query": text_query,
+        "media_type": media_type or "any",
+        "examples": examples or [],
         "created_at": time.time(),
         "labelset": {"labels": []},
     }
@@ -132,6 +143,8 @@ def create_trainable_model():
         "success": True,
         "name": name,
         "text_query": text_query,
+        "media_type": media_type or "any",
+        "examples": examples or [],
         "num_labels": 0,
     }), 201
 
@@ -199,6 +212,39 @@ def rename_trainable_model(name: str):
         old_path.unlink(missing_ok=True)
 
     return jsonify({"success": True, "old_name": name, "new_name": new_name})
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/trainable-models/<name>/examples
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route("/api/trainable-models/<name>/examples", methods=["PUT"])
+def set_trainable_model_examples(name: str):
+    """Set/replace the examples for a trainable model.
+
+    Expects JSON::
+
+        {"examples": [{"type": "text", "value": "dog barking"}]}
+    """
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+
+    body = request.get_json(force=True, silent=True) or {}
+    examples = body.get("examples")
+    if examples is None:
+        return jsonify({"error": "examples is required"}), 400
+
+    data["examples"] = examples
+    # Update text_query from first text example for backward compat
+    text_examples = [e for e in examples if e.get("type") == "text"]
+    if text_examples:
+        data["text_query"] = text_examples[0]["value"]
+    _write_model(path, data)
+
+    return jsonify({"success": True, "name": name, "examples": examples})
 
 
 # ---------------------------------------------------------------------------
