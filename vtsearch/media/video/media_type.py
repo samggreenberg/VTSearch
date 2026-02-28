@@ -261,6 +261,9 @@ class VideoMediaType(MediaType):
 
         from transformers import XCLIPModel, XCLIPProcessor  # noqa: PLC0415
 
+        from vtsearch.models.loader import ensure_torch_configured
+
+        ensure_torch_configured()
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading X-CLIP model weights…", 0, 0)

@@ -1032,6 +1032,9 @@ class ImageMediaType(MediaType):
 
         from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
 
+        from vtsearch.models.loader import ensure_torch_configured
+
+        ensure_torch_configured()
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         # Use total=0 so the frontend shows an indeterminate progress bar.
