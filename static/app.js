@@ -294,12 +294,9 @@
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
-
-  const menuLabelsExport = document.getElementById("menu-labels-export");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
   const menuDetectorImport = document.getElementById("menu-detector-import");
-  const menuDetectorExport = document.getElementById("menu-detector-export");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
   const labelImporterModal = document.getElementById("label-importer-modal");
   const labelImporterModalClose = document.getElementById("label-importer-modal-close");
@@ -1131,9 +1128,7 @@
     stripeContainer.innerHTML = "";
     if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
-    if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
-    if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
   }
 
   function showMainUI() {
@@ -1160,7 +1155,6 @@
     if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
-    // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
   }
 
   // ---- Dashboard view ----
@@ -1176,6 +1170,8 @@
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
+    // Import Labels is only for the labeling interface
+    if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuDashboard) menuDashboard.classList.add("disabled");
 
     // Show dashboard
@@ -1376,7 +1372,7 @@
           <td class="col-num-labels" style="text-align:right">${numLabels > 0 ? numLabels : '<span style="color:var(--text-muted)">0</span>'}</td>
           <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
+          <td class="col-actions"><button class="btn-icon dash-export-btn" title="Export model" aria-label="Export model">&#128230;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `;
         // Inline rename for model
         const renameBtn = tr.querySelector(".dash-rename-btn");
@@ -1425,6 +1421,16 @@
         editExBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           openExamplesEditorModal(det);
+        });
+        // Export model
+        const exportBtn = tr.querySelector(".dash-export-btn");
+        exportBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!det.weights) {
+            await vtAlert("This model has no trained weights to export. Label some data first.");
+            return;
+          }
+          await openDetectorExportModal(det.name);
         });
         // Delete model
         const deleteBtn = tr.querySelector(".dash-delete-btn");
@@ -2562,9 +2568,7 @@
     });
   }
 
-
-
-  // Labels export – open modal
+  // Labels export – open modal (used by detector export modal)
   async function openLabelExporterModal() {
     let exporters = [];
     try {
@@ -2663,14 +2667,6 @@
     }
   }
 
-  if (menuLabelsExport) {
-    menuLabelsExport.addEventListener("click", async () => {
-      if (menuLabelsExport.classList.contains("disabled")) return;
-      closeBurgerMenu();
-      await openLabelExporterModal();
-    });
-  }
-
   // Labels import – open the label importer picker modal
   if (menuLabelsImport && burgerDropdown) {
     menuLabelsImport.addEventListener("click", async () => {
@@ -2689,16 +2685,11 @@
     });
   }
 
-  // Detector export – open modal
-  if (menuDetectorExport) {
-    menuDetectorExport.addEventListener("click", async () => {
-      if (menuDetectorExport.classList.contains("disabled")) return;
-      closeBurgerMenu();
-      await openDetectorExportModal();
-    });
-  }
+  async function openDetectorExportModal(detectorName) {
+    // Update modal title
+    const titleEl = document.getElementById("detector-export-modal-title");
+    if (titleEl) titleEl.textContent = detectorName ? `Export "${detectorName}"` : "Export Detector";
 
-  async function openDetectorExportModal() {
     // Fetch labelset exporters in parallel with building the modal
     let labelsetExporters = [];
     try {
@@ -2744,13 +2735,13 @@
     const browserBtn = detectorExportList.querySelector("#detector-export-browser-btn");
     const serverBtn = detectorExportList.querySelector("#detector-export-server-btn");
 
-    browserBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportBrowser(); });
+    browserBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportBrowser(detectorName); });
     browserBtn.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportBrowser(); }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportBrowser(detectorName); }
     });
-    serverBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportServer(); });
+    serverBtn.addEventListener("click", () => { detectorExportModal.classList.remove("show"); runDetectorExportServer(detectorName); });
     serverBtn.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportServer(); }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); detectorExportModal.classList.remove("show"); runDetectorExportServer(detectorName); }
     });
 
     // Wire up labelset exporter options
@@ -2774,15 +2765,14 @@
   }
 
   async function runDetectorLabelExport(exp) {
-    menuDetectorStatus.textContent = "";
+    if (menuDetectorStatus) menuDetectorStatus.textContent = "";
     // Collect required field values via prompts
     const fieldValues = {};
     for (const field of exp.fields) {
       if (field.required) {
         const val = await vtPrompt(field.label + (field.description ? ` (${field.description})` : ""), field.default || "");
         if (val === null) {
-          menuDetectorStatus.textContent = "Export cancelled";
-          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
+          if (menuDetectorStatus) { menuDetectorStatus.textContent = "Export cancelled"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000); }
           return;
         }
         fieldValues[field.key] = val;
@@ -2791,7 +2781,7 @@
       }
     }
 
-    menuDetectorStatus.textContent = "Exporting labels\u2026";
+    if (menuDetectorStatus) menuDetectorStatus.textContent = "Exporting labels\u2026";
     try {
       const labelsRes = await fetch("/api/labels/export");
       const labelsData = await labelsRes.json();
@@ -2807,11 +2797,9 @@
       });
       const result = await exportRes.json();
       if (!exportRes.ok) {
-        menuDetectorStatus.textContent = result.error || "Export failed";
-        setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+        if (menuDetectorStatus) { menuDetectorStatus.textContent = result.error || "Export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
         return;
       }
-      // Handle browser download if the exporter returns download_content
       if (result.download_content) {
         const blob = new Blob([result.download_content], { type: result.download_content_type || "application/json" });
         const url = URL.createObjectURL(blob);
@@ -2821,47 +2809,45 @@
         a.click();
         URL.revokeObjectURL(url);
       }
-      menuDetectorStatus.textContent = result.message || "Labels exported";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = result.message || "Labels exported"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000); }
     } catch (e) {
-      menuDetectorStatus.textContent = "Export failed";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = "Export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
     }
   }
 
-  async function runDetectorExportBrowser() {
-    menuDetectorStatus.textContent = "Exporting detector\u2026";
-    const res = await fetch("/api/detector/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!res.ok) {
-      menuDetectorStatus.textContent = "Export failed";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
-      return;
+  async function runDetectorExportBrowser(detectorName) {
+    if (menuDetectorStatus) menuDetectorStatus.textContent = "Exporting detector\u2026";
+    try {
+      const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(detectorName)}/export`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
+        return;
+      }
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${detectorName}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = "Detector exported (browser)"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
+    } catch (_) {
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = "Export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
     }
-    const data = await res.json();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "detector.json";
-    a.click();
-    URL.revokeObjectURL(url);
-    menuDetectorStatus.textContent = "Detector exported (browser)";
-    setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
   }
 
-  async function runDetectorExportServer() {
-    const name = await vtPrompt("Enter a name for the detector file (saved on server):");
-    if (!name || !name.trim()) return;
+  async function runDetectorExportServer(detectorName) {
+    const filename = await vtPrompt("Enter a name for the detector file (saved on server):", detectorName);
+    if (!filename || !filename.trim()) return;
 
-    menuDetectorStatus.textContent = "Saving detector to server\u2026";
+    if (menuDetectorStatus) menuDetectorStatus.textContent = "Saving detector to server\u2026";
 
-    const res = await fetch("/api/detector/export-server", {
+    const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(detectorName)}/export-server`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim() }),
+      body: JSON.stringify({ filename: filename.trim() }),
     });
 
     if (res.status === 409) {
@@ -2870,52 +2856,45 @@
         `A detector file "${info.name}.json" already exists on the server.\n\nPath: ${info.path}\n\nOverwrite it?`
       );
       if (overwrite) {
-        menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
-        const res2 = await fetch("/api/detector/export-server", {
+        if (menuDetectorStatus) menuDetectorStatus.textContent = "Overwriting detector on server\u2026";
+        const res2 = await fetch(`/api/autorun-detectors/${encodeURIComponent(detectorName)}/export-server`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), overwrite: true }),
+          body: JSON.stringify({ filename: filename.trim(), overwrite: true }),
         });
         if (res2.ok) {
           const data2 = await res2.json();
-          menuDetectorStatus.textContent = `Saved to server: ${data2.name}.json`;
-          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+          if (menuDetectorStatus) { menuDetectorStatus.textContent = `Saved to server: ${data2.name}.json`; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000); }
         } else {
           const err = await res2.json().catch(() => ({}));
-          menuDetectorStatus.textContent = err.error || "Server export failed";
-          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+          if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Server export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
         }
       } else {
         const newName = await vtPrompt("Enter a different name:");
         if (newName && newName.trim()) {
-          menuDetectorStatus.textContent = "Saving detector to server\u2026";
-          const res3 = await fetch("/api/detector/export-server", {
+          if (menuDetectorStatus) menuDetectorStatus.textContent = "Saving detector to server\u2026";
+          const res3 = await fetch(`/api/autorun-detectors/${encodeURIComponent(detectorName)}/export-server`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: newName.trim() }),
+            body: JSON.stringify({ filename: newName.trim() }),
           });
           if (res3.ok) {
             const data3 = await res3.json();
-            menuDetectorStatus.textContent = `Saved to server: ${data3.name}.json`;
-            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+            if (menuDetectorStatus) { menuDetectorStatus.textContent = `Saved to server: ${data3.name}.json`; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000); }
           } else {
             const err = await res3.json().catch(() => ({}));
-            menuDetectorStatus.textContent = err.error || "Server export failed";
-            setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+            if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Server export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
           }
         } else {
-          menuDetectorStatus.textContent = "Export cancelled";
-          setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000);
+          if (menuDetectorStatus) { menuDetectorStatus.textContent = "Export cancelled"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 2000); }
         }
       }
     } else if (res.ok) {
       const data = await res.json();
-      menuDetectorStatus.textContent = `Saved to server: ${data.name}.json`;
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000);
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = `Saved to server: ${data.name}.json`; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 4000); }
     } else {
       const err = await res.json().catch(() => ({}));
-      menuDetectorStatus.textContent = err.error || "Server export failed";
-      setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000);
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Server export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
     }
   }
 
@@ -3549,24 +3528,6 @@
     loadRadio.parentElement.style.opacity = "1";
     loadRadio.parentElement.style.cursor = "pointer";
 
-    // Disable Export Detector when no detector can be trained (need good AND bad)
-    if (menuDetectorExport) {
-      if (hasGoodAndBad) {
-        menuDetectorExport.classList.remove("disabled");
-      } else {
-        menuDetectorExport.classList.add("disabled");
-      }
-    }
-
-    // Disable Export Labels when no labels exist (need any votes)
-    const hasAnyVotes = votes.good.length > 0 || votes.bad.length > 0;
-    if (menuLabelsExport) {
-      if (hasAnyVotes) {
-        menuLabelsExport.classList.remove("disabled");
-      } else {
-        menuLabelsExport.classList.add("disabled");
-      }
-    }
   }
 
   document.querySelectorAll('input[name="sort-mode"]').forEach(radio => {
