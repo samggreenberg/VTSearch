@@ -11,8 +11,8 @@ Schema (all keys optional, missing keys use defaults)::
         "favorite_processors": [
             {
                 "processor_name": "my detector",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "/path/to/detector.json"}
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "/path/to/detector.json"}
             }
         ]
     }
@@ -346,8 +346,8 @@ def to_settings_json(entry: dict[str, Any]) -> str:
 
     Example output::
 
-        {"processor_name": "my detector", "processor_importer": "detector_file",
-         "field_values": {"file": "detector.json"}}
+        {"processor_name": "my detector", "processor_importer": "server_detector_file",
+         "field_values": {"filepath": "detector.json"}}
     """
     import json
 

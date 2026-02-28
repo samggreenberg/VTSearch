@@ -674,12 +674,11 @@ class TestDetectorLabelsetExport:
         resp = client.get("/api/exporters")
         assert resp.status_code == 200
         names = {e["name"] for e in resp.get_json()}
-        # At least the JSON-based exporters should be present
-        assert "local_json_file" in names
+        # At least the server JSON exporter should be present
         assert "server_json_file" in names
 
-    def test_labelset_export_local_json(self, client):
-        """Full flow: votes -> labelset -> local_json_file exporter -> download content."""
+    def test_labelset_export_server_json_full(self, client, tmp_path):
+        """Full flow: votes -> labelset -> server_json_file exporter -> file on disk."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19]})
 
@@ -690,22 +689,22 @@ class TestDetectorLabelsetExport:
         assert "labels" in labels_data
         assert len(labels_data["labels"]) == 5
 
-        # Step 2: export through local_json_file exporter
+        # Step 2: export through server_json_file exporter
+        fpath = tmp_path / "exported_labels.json"
         export_resp = client.post(
             "/api/exporters/export",
             json={
-                "exporter_name": "local_json_file",
-                "field_values": {},
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": str(fpath)},
                 "results": labels_data,
             },
         )
         assert export_resp.status_code == 200
         data = export_resp.get_json()
         assert data["success"] is True
-        assert "download_content" in data
 
-        # The download should contain valid JSON with the labels
-        downloaded = json.loads(data["download_content"])
+        # The file should contain valid JSON with the labels
+        downloaded = json.loads(fpath.read_text())
         assert "labels" in downloaded
         assert len(downloaded["labels"]) == 5
 
