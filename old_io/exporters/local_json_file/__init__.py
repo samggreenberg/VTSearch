@@ -37,8 +37,7 @@ class LocalJsonLabelsetExporter(LabelsetExporter):
             label="File Path",
             field_type="text",
             description=(
-                "Filename for the downloaded JSON file (used by the CLI; "
-                "the browser uses its own save-as dialog)."
+                "Filename for the downloaded JSON file (used by the CLI; the browser uses its own save-as dialog)."
             ),
             placeholder="autodetect_results.json",
             default="autodetect_results.json",
@@ -50,8 +49,7 @@ class LocalJsonLabelsetExporter(LabelsetExporter):
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {
             "message": (
-                f"Prepared {total_hits} hit(s) across "
-                f"{results.get('detectors_run', 0)} detector(s) for download."
+                f"Prepared {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s) for download."
             ),
             "download_content": json.dumps(results, indent=2),
             "download_filename": field_values.get("filepath", "").strip() or "autodetect_results.json",

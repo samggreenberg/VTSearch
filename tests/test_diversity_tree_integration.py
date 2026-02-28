@@ -292,23 +292,22 @@ class TestSpanLevelProgression:
 
 
 class TestLabelImporterUpdatesTree:
-    def test_label_importer_updates_tree(self, client):
+    def test_label_importer_updates_tree(self, client, tmp_path):
         """Labels imported via /api/label-importers/import should update the tree."""
-        import io
         import json
 
         tree = _build_tree()
         cid = 1
         md5 = medias[cid]["md5"]
 
-        # Import a label via the local_json_file label importer
+        # Import a label via the server_json_file label importer
         labels_data = {"labels": [{"md5": md5, "label": "good"}]}
-        file_content = json.dumps(labels_data).encode()
+        p = tmp_path / "labels.json"
+        p.write_text(json.dumps(labels_data))
 
         resp = client.post(
-            "/api/label-importers/import/local_json_file",
-            data={"file": (io.BytesIO(file_content), "labels.json")},
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
         )
         assert resp.status_code == 200
         assert cid in tree.labeled_ids

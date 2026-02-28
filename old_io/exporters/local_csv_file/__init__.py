@@ -38,8 +38,7 @@ class LocalCsvLabelsetExporter(LabelsetExporter):
             label="File Path",
             field_type="text",
             description=(
-                "Filename for the downloaded CSV file (used by the CLI; "
-                "the browser uses its own save-as dialog)."
+                "Filename for the downloaded CSV file (used by the CLI; the browser uses its own save-as dialog)."
             ),
             placeholder="autodetect_results.csv",
             default="autodetect_results.csv",
@@ -51,8 +50,7 @@ class LocalCsvLabelsetExporter(LabelsetExporter):
         csv_content, total_hits = _build_csv_string(results)
         return {
             "message": (
-                f"Prepared {total_hits} hit(s) across "
-                f"{results.get('detectors_run', 0)} detector(s) for download."
+                f"Prepared {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s) for download."
             ),
             "download_content": csv_content,
             "download_filename": field_values.get("filepath", "").strip() or "autodetect_results.csv",
