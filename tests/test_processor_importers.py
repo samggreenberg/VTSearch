@@ -665,7 +665,7 @@ class TestFromLabelImportEndpoint:
 
     def test_trains_from_csv_label_import(self, client, tmp_path):
         """Verify from-label-import works with the server_csv_file label importer."""
-        from vtsearch.utils import favorite_detectors, medias
+        from vtsearch.utils import autorun_detectors, medias
 
         md5s = []
         for cid in sorted(medias.keys()):
@@ -687,7 +687,7 @@ class TestFromLabelImportEndpoint:
         p = tmp_path / "labels.csv"
         p.write_text("\n".join(lines))
         res = client.post(
-            "/api/favorite-detectors/from-label-import/server_csv_file",
+            "/api/autorun-detectors/from-label-import/server_csv_file",
             json={"filepath": str(p), "name": "csv_label_import_test"},
         )
         assert res.status_code == 200
@@ -695,7 +695,7 @@ class TestFromLabelImportEndpoint:
         assert result["success"] is True
         assert result["name"] == "csv_label_import_test"
         assert result["loaded"] >= 2
-        assert "csv_label_import_test" in favorite_detectors
+        assert "csv_label_import_test" in autorun_detectors
 
 
 # ---------------------------------------------------------------------------

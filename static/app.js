@@ -669,7 +669,7 @@
         }
 
         const url = kind === "label"
-          ? `/api/favorite-detectors/from-label-import/${encodeURIComponent(importer.name)}`
+          ? `/api/autorun-detectors/from-label-import/${encodeURIComponent(importer.name)}`
           : `/api/processor-importers/import/${encodeURIComponent(importer.name)}`;
 
         try {
@@ -680,7 +680,7 @@
             statusEl.style.color = "var(--color-good)";
             // Refresh detectors list so the new one is available
             try {
-              const dRes = await fetch("/api/favorite-detectors");
+              const dRes = await fetch("/api/autorun-detectors");
               if (dRes.ok) { const d = await dRes.json(); favoriteDetectors = d.detectors || []; }
             } catch (_) { /* ignore */ }
             setTimeout(() => {
@@ -5779,7 +5779,7 @@
       }
 
       try {
-        const res = await fetch(`/api/favorite-detectors/from-label-import/${encodeURIComponent(importer.name)}`, {
+        const res = await fetch(`/api/autorun-detectors/from-label-import/${encodeURIComponent(importer.name)}`, {
           method: "POST", headers, body,
         });
         const result = await res.json();
@@ -7120,7 +7120,7 @@
         examplesEditorStatus.style.color = "var(--text-muted)";
       }
       try {
-        const url = `/api/favorite-detectors/${encodeURIComponent(det.name)}/examples`;
+        const url = `/api/autorun-detectors/${encodeURIComponent(det.name)}/examples`;
         const res = await fetch(url, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
