@@ -23,8 +23,19 @@ _EMBEDDING_DIM = 512
 
 
 def _fake_embed_audio(path):
-    """Deterministic fake audio embedding derived from the file path."""
-    rng = np.random.RandomState(hash(str(path)) % 2**31)
+    """Deterministic fake audio embedding derived from the file contents.
+
+    Uses the first 1000 bytes of the file as a seed so that different audio
+    files (even when written to the same temp path) produce distinct vectors.
+    """
+    import hashlib
+
+    try:
+        data = open(path, "rb").read(1000)
+        seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
+    except Exception:
+        seed = hash(str(path)) % 2**31
+    rng = np.random.RandomState(seed)
     return rng.randn(_EMBEDDING_DIM).astype(np.float32)
 
 
@@ -78,13 +89,14 @@ def _stub_embedding_models():
     """Prevent CLAP (and librosa) from loading during individual tests.
 
     Patches ``embed_audio_file``, the audio media-type's ``embed_text``,
-    and ``load_models`` so that any test-time calls (e.g. via ``/api/sort``)
-    return cheap deterministic fake vectors instead of loading a ~600 MB
-    model.
+    ``embed_media``, and ``load_models`` so that any test-time calls
+    (e.g. via ``/api/sort``) return cheap deterministic fake vectors
+    instead of loading a ~600 MB model.
     """
     with (
         patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio),
         patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
+        patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
         patch.object(_audio_mt, "load_models"),
     ):
         yield
