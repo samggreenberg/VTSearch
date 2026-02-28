@@ -359,7 +359,7 @@
     datasetLoaded = status.loaded;
 
     if (datasetLoaded) {
-      showMainUI();
+      showTrainingUI();
       const mtInfo = mediaTypesMap[status.media_type];
       const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
       datasetInfo.textContent = mtInfo
@@ -403,7 +403,7 @@
     if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
   }
 
-  function showMainUI() {
+  function showTrainingUI() {
     datasetWelcome.style.display = "none";
     leftPanel.style.display = "";
     if (rightPanel) rightPanel.style.display = "";
@@ -455,7 +455,7 @@
       stopProgressPolling();
 
       // If we are in combine-datasets staging mode, handle the staging result
-      // instead of loading the dataset into the main UI.
+      // instead of loading the dataset into the training UI.
       if (_combineState && progress.staging_result) {
         _combineState.push(progress.staging_result);
         showCombineDatasetsForm();
@@ -2654,7 +2654,7 @@
         populateSettingsModal(defaults);
         // Apply theme immediately
         applyTheme(defaults.theme || "dark");
-        // Update main UI controls that live outside the modal
+        // Update training UI controls that live outside the modal
         if (inclusionSlider) { inclusionSlider.value = defaults.inclusion || 0; inclusionValue.textContent = defaults.inclusion || 0; inclusion = defaults.inclusion || 0; }
         audioVolume = defaults.volume != null ? defaults.volume : 1.0;
         const audioEl = document.getElementById("media-audio");
