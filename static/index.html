@@ -19,7 +19,6 @@
       <div class="burger-section" role="group" aria-label="Dataset">
         <div class="burger-section-title" id="menu-section-dataset">Dataset</div>
         <div class="burger-item" id="menu-dataset-change" role="menuitem" tabindex="-1">Change Dataset</div>
-        <div class="burger-item disabled" id="menu-dataset-export" role="menuitem" tabindex="-1">Export Dataset</div>
       </div>
       <div class="burger-section" role="group" aria-label="Labels">
         <div class="burger-section-title" id="menu-section-labels">Labels</div>
@@ -33,18 +32,14 @@
         <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
         <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
       </div>
-      <div class="burger-section" role="group" aria-label="Autodetect">
-        <div class="burger-section-title" id="menu-section-favorites">Autodetect</div>
-        <div class="burger-item" id="menu-favorites-manage" role="menuitem" tabindex="-1">Manage Favorites</div>
-        <div class="burger-item disabled" id="menu-favorites-autodetect" role="menuitem" tabindex="-1">Run Auto-Detect</div>
-        <div class="burger-status" id="menu-favorites-status" aria-live="polite"></div>
-      </div>
       <div class="burger-section">
+        <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
         <div class="burger-item" id="menu-settings">Settings</div>
       </div>
     </div>
   </nav>
   <h1>VTSearch</h1>
+  <button class="header-nav-btn" id="header-dashboard-btn" style="display:none">Dashboard</button>
   <img src="/static/logo.png" alt="VTSearch logo" class="header-logo">
 </header>
 <div class="layout" role="presentation">
@@ -97,6 +92,56 @@
 
   <!-- Center panel -->
   <main class="panel-center" id="center">
+    <!-- Dashboard view — select dataset + model, then dispatch to Label or Detect -->
+    <div class="dashboard-view" id="dashboard-view" style="display:none">
+      <div class="dashboard-header">
+        <h2>Dashboard</h2>
+      </div>
+      <div class="dashboard-grids">
+        <!-- Dataset grid -->
+        <div class="dashboard-section">
+          <div class="dashboard-section-header">
+            <span class="dashboard-section-title">Dataset</span>
+            <div class="dashboard-section-actions">
+              <button class="btn-sm" id="dash-load-file-btn">Load File</button>
+              <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
+            </div>
+          </div>
+          <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
+          <div class="dashboard-grid-wrap">
+            <div id="dash-dataset-tabs" class="demo-tab-bar"></div>
+            <div id="dash-dataset-grid" class="dashboard-grid demo-content-area"></div>
+          </div>
+        </div>
+        <!-- Model grid -->
+        <div class="dashboard-section">
+          <div class="dashboard-section-header">
+            <span class="dashboard-section-title">Model</span>
+            <div class="dashboard-section-actions">
+              <button class="btn-sm" id="dash-add-model-btn">Add</button>
+            </div>
+          </div>
+          <div class="dashboard-grid-wrap">
+            <div id="dash-model-grid" class="dashboard-grid"></div>
+          </div>
+        </div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="dashboard-action-btn" id="dash-label-btn" disabled>Label</button>
+        <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Detect</button>
+      </div>
+      <!-- Reuse the progress bar for dataset loading within the dashboard -->
+      <div class="dataset-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
+        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+          <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
+        </div>
+        <div class="progress-message" id="dash-progress-message">Loading...</div>
+        <div class="progress-eta" id="dash-progress-eta"></div>
+      </div>
+      <input type="file" id="dash-file-input" accept=".pkl" style="display:none">
+    </div>
+
     <div class="dataset-welcome" id="dataset-welcome">
       <div>
         <h2>Welcome to VTSearch</h2>

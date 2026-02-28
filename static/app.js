@@ -26,6 +26,12 @@
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
+  // Dashboard state
+  let dashSelectedDataset = null;    // { name, label, ... } from demo list, or null
+  let dashSelectedDetector = null;   // detector name string, or null
+  let dashDemoDatasets = null;       // cached demo dataset list from API
+  let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
+  let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -255,7 +261,6 @@
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
-  const menuDatasetExport = document.getElementById("menu-dataset-export");
   const menuDatasetChange = document.getElementById("menu-dataset-change");
   const menuLabelsExport = document.getElementById("menu-labels-export");
   const menuLabelsImport = document.getElementById("menu-labels-import");
@@ -320,6 +325,26 @@
   const showThumbnailsLeftCheckbox = document.getElementById("show-thumbnails-left-checkbox");
   const showThumbnailsRightCheckbox = document.getElementById("show-thumbnails-right-checkbox");
   let showThumbnailsLeft = false;
+
+  // Dashboard elements
+  const dashboardView = document.getElementById("dashboard-view");
+  const dashDatasetTabs = document.getElementById("dash-dataset-tabs");
+  const dashDatasetGrid = document.getElementById("dash-dataset-grid");
+  const dashModelGrid = document.getElementById("dash-model-grid");
+  const dashDatasetStatus = document.getElementById("dash-dataset-status");
+  const dashLabelBtn = document.getElementById("dash-label-btn");
+  const dashDetectBtn = document.getElementById("dash-detect-btn");
+  const dashLoadFileBtn = document.getElementById("dash-load-file-btn");
+  const dashChangeDatasetBtn = document.getElementById("dash-change-dataset-btn");
+  const dashAddModelBtn = document.getElementById("dash-add-model-btn");
+  const dashFileInput = document.getElementById("dash-file-input");
+  const dashProgress = document.getElementById("dash-progress");
+  const dashProgressFill = document.getElementById("dash-progress-fill");
+  const dashProgressText = document.getElementById("dash-progress-text");
+  const dashProgressMessage = document.getElementById("dash-progress-message");
+  const dashProgressEta = document.getElementById("dash-progress-eta");
+  const headerDashboardBtn = document.getElementById("header-dashboard-btn");
+  const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
 
@@ -330,25 +355,25 @@
     const status = await res.json();
     datasetLoaded = status.loaded;
 
-    if (menuDatasetExport) {
-      menuDatasetExport.classList.toggle("disabled", !datasetLoaded);
-    }
-
     if (datasetLoaded) {
-      showMainUI();
       const mtInfo = mediaTypesMap[status.media_type];
       const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
       datasetInfo.textContent = mtInfo
         ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
         : `${status.num_medias} medias loaded${dupeSuffix}`;
+      // Go to dashboard unless we're already in labeling view
+      if (currentView !== "labeling") {
+        showDashboard();
+      }
     } else {
-      showWelcomeScreen();
+      showDashboard();
     }
 
     return status;
   }
 
   function showWelcomeScreen() {
+    currentView = "welcome";
     // Clean up combine state if we're returning to the welcome screen.
     if (_combineState) {
       fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
@@ -365,6 +390,7 @@
     demoDatasetsDiv.style.display = "none";
     extendedImporterForm.style.display = "none";
     backButton.style.display = "none";
+    if (dashboardView) dashboardView.style.display = "none";
     const autodetectToggle = document.getElementById("autodetect-toggle");
     if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
@@ -372,8 +398,8 @@
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     stripeContainer.innerHTML = "";
-    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.add("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
@@ -381,20 +407,415 @@
   }
 
   function showMainUI() {
+    currentView = "labeling";
     datasetWelcome.style.display = "none";
+    if (dashboardView) dashboardView.style.display = "none";
     leftPanel.style.display = "";
     if (rightPanel) rightPanel.style.display = "";
     sortBar.style.display = "block";
     datasetBar.style.display = "flex";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "";
     if (!selected) {
       center.className = "panel-center empty";
       center.innerHTML = '<p>Select a media from the left panel</p>';
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
-    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
+  }
+
+  // ---- Dashboard view ----
+
+  async function showDashboard() {
+    currentView = "dashboard";
+    // Hide other views
+    datasetWelcome.style.display = "none";
+    leftPanel.style.display = "none";
+    if (rightPanel) rightPanel.style.display = "none";
+    sortBar.style.display = "none";
+    datasetBar.style.display = "none";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
+
+    // Show dashboard
+    center.innerHTML = "";
+    center.appendChild(dashboardView);
+    center.className = "panel-center";
+    dashboardView.style.display = "flex";
+    dashProgress.style.display = "none";
+
+    // Update dataset status bar
+    if (datasetLoaded) {
+      const res = await fetch("/api/dataset/status");
+      const status = await res.json();
+      const mtInfo = mediaTypesMap[status.media_type];
+      const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
+      dashDatasetStatus.textContent = mtInfo
+        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
+        : `${status.num_medias} medias loaded${dupeSuffix}`;
+      dashDatasetStatus.style.display = "";
+      dashChangeDatasetBtn.style.display = "";
+    } else {
+      dashDatasetStatus.style.display = "none";
+      dashChangeDatasetBtn.style.display = "none";
+    }
+
+    // Populate grids
+    await renderDashboardDatasets();
+    await renderDashboardModels();
+    updateDashboardButtons();
+  }
+
+  function updateDashboardButtons() {
+    const hasDataset = datasetLoaded || dashSelectedDataset;
+    if (dashLabelBtn) dashLabelBtn.disabled = !hasDataset;
+    if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
+  }
+
+  async function renderDashboardDatasets() {
+    if (!dashDatasetGrid) return;
+
+    // Fetch demo datasets if not cached
+    if (!dashDemoDatasets) {
+      try {
+        const res = await fetch("/api/dataset/demo-list");
+        if (res.ok) {
+          const data = await res.json();
+          dashDemoDatasets = data.datasets || [];
+        } else {
+          dashDemoDatasets = [];
+        }
+      } catch (_) {
+        dashDemoDatasets = [];
+      }
+    }
+
+    if (dashDemoDatasets.length === 0) {
+      dashDatasetTabs.innerHTML = "";
+      dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No demo datasets available. Use "Load File" to load a .pkl dataset.</p>';
+      return;
+    }
+
+    const grouped = {};
+    dashDemoDatasets.forEach(ds => {
+      const mt = ds.media_type || "audio";
+      if (!grouped[mt]) grouped[mt] = [];
+      grouped[mt].push(ds);
+    });
+    const mediaOrder = Object.keys(mediaTypesMap).filter(mt => (grouped[mt] || []).length > 0);
+
+    const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
+    const sortColumns = [
+      { key: "label",          label: "Name" },
+      { key: "num_files",      label: "# Media" },
+      { key: "num_categories", label: "# Cat." },
+      { key: "description",    label: "Description" },
+      { key: "status",         label: "Readiness" },
+    ];
+
+    function buildStatusBadge(st) {
+      if (st === "ready") return '<span class="ready-badge">Ready</span>';
+      if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
+      return '<span class="download-badge">Needs Download</span>';
+    }
+
+    function renderTable(items, section) {
+      const sortState = section._demoSort || { key: "label", asc: true };
+      const sorted = [...items].sort((a, b) => {
+        let va = a[sortState.key], vb = b[sortState.key];
+        if (sortState.key === "status") { va = statusOrder[va] ?? 3; vb = statusOrder[vb] ?? 3; }
+        if (typeof va === "number" && typeof vb === "number") return sortState.asc ? va - vb : vb - va;
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return sortState.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = section.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(ds => {
+        const st = ds.status || (ds.ready ? "ready" : "needs_download");
+        const tr = document.createElement("tr");
+        const isSelected = dashSelectedDataset && dashSelectedDataset.name === ds.name;
+        tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "") + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+        tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
+        tr.addEventListener("click", () => {
+          dashSelectedDataset = ds;
+          // Re-render all tables to update selection highlight
+          Object.values(dashSections).forEach(sec => renderTable(grouped[sec._mt], sec));
+          updateDashboardButtons();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            tr.click();
+          }
+        });
+        const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "\u2026" : ds.description;
+        tr.innerHTML = `
+          <td class="col-name">${escapeHtml(ds.label)}</td>
+          <td class="col-num">${ds.num_files}</td>
+          <td class="col-num">${ds.num_categories}</td>
+          <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
+          <td class="col-status">${buildStatusBadge(st)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === sortState.key) {
+          arrow.textContent = sortState.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    // Pick initial tab
+    let initialTab = mediaOrder[0] || Object.keys(mediaTypesMap)[0] || "audio";
+    try {
+      const settingsRes = await fetch("/api/settings");
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const favs = settingsData.favorite_media_types || [];
+        const firstFav = favs.find(f => mediaOrder.includes(f));
+        if (firstFav) initialTab = firstFav;
+      }
+    } catch (_) {}
+
+    dashDatasetTabs.innerHTML = "";
+    dashDatasetGrid.innerHTML = "";
+
+    const dashSections = {};
+
+    mediaOrder.forEach(mt => {
+      const items = grouped[mt];
+      const mtInfo = mediaTypesMap[mt] || { icon: "\uD83D\uDCC1", tab_title: mt };
+
+      const tab = document.createElement("button");
+      tab.className = "demo-tab";
+      tab.dataset.mediaType = mt;
+      tab.textContent = `${mtInfo.icon} ${mtInfo.tab_title}`;
+      tab.addEventListener("click", () => {
+        dashDatasetTabs.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        Object.keys(dashSections).forEach(k => {
+          dashSections[k].style.display = k === mt ? "" : "none";
+        });
+      });
+      dashDatasetTabs.appendChild(tab);
+
+      const section = document.createElement("div");
+      section.className = "demo-section";
+      section._demoSort = { key: "num_files", asc: true };
+      section._mt = mt;
+      section.style.display = "none";
+
+      const headerRow = sortColumns.map(col =>
+        `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
+      ).join("");
+      section.innerHTML = `<table class="demo-table"><thead><tr>${headerRow}</tr></thead><tbody></tbody></table>`;
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          if (section._demoSort.key === key) {
+            section._demoSort.asc = !section._demoSort.asc;
+          } else {
+            section._demoSort = { key, asc: true };
+          }
+          renderTable(items, section);
+        });
+      });
+
+      renderTable(items, section);
+      dashSections[mt] = section;
+      dashDatasetGrid.appendChild(section);
+    });
+
+    const initialTabBtn = dashDatasetTabs.querySelector(`.demo-tab[data-media-type="${initialTab}"]`);
+    if (initialTabBtn) {
+      initialTabBtn.classList.add("active");
+      if (dashSections[initialTab]) dashSections[initialTab].style.display = "";
+    }
+  }
+
+  async function renderDashboardModels() {
+    if (!dashModelGrid) return;
+
+    // Fetch fresh favorites
+    try {
+      const res = await fetch("/api/favorite-detectors");
+      const data = await res.json();
+      favoriteDetectors = data.detectors || [];
+    } catch (_) {}
+
+    if (favoriteDetectors.length === 0) {
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors saved yet. Use "Add" to create one.</p>';
+      return;
+    }
+
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
+
+    let html = `<table class="dash-model-table">
+      <thead><tr>
+        <th data-sort="name">Name<span class="sort-arrow"></span></th>
+        <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
+        <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
+        <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+      </tr></thead><tbody></tbody></table>`;
+    dashModelGrid.innerHTML = html;
+
+    const table = dashModelGrid.querySelector(".dash-model-table");
+    let modelSort = { key: "name", asc: true };
+
+    function renderModelRows() {
+      const sorted = [...favoriteDetectors].sort((a, b) => {
+        let va = a[modelSort.key], vb = b[modelSort.key];
+        if (modelSort.key === "threshold") return modelSort.asc ? va - vb : vb - va;
+        if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(det => {
+        const icon = mediaIcons[det.media_type] || "\uD83D\uDD0D";
+        const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
+        const isSelected = dashSelectedDetector === det.name;
+        const tr = document.createElement("tr");
+        tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+        tr.innerHTML = `
+          <td class="col-name">${escapeHtml(det.name)}</td>
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
+          <td class="col-threshold">${det.threshold.toFixed(2)}</td>
+          <td class="col-date">${escapeHtml(created)}</td>
+        `;
+        tr.addEventListener("click", () => {
+          dashSelectedDetector = det.name;
+          renderModelRows();
+          updateDashboardButtons();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === modelSort.key) {
+          arrow.textContent = modelSort.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    table.querySelectorAll("th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sort;
+        if (modelSort.key === key) {
+          modelSort.asc = !modelSort.asc;
+        } else {
+          modelSort = { key, asc: true };
+        }
+        renderModelRows();
+      });
+    });
+
+    renderModelRows();
+  }
+
+  // Dashboard: load a dataset from the selected demo, then run a callback
+  async function dashLoadSelectedDataset(callback) {
+    if (!dashSelectedDataset) return;
+
+    dashProgress.style.display = "block";
+    dashProgressFill.style.width = "0%";
+    dashProgressFill.classList.add("indeterminate");
+    dashProgressText.textContent = "";
+    dashProgressMessage.textContent = "Loading...";
+    dashProgressMessage.style.color = "var(--text-secondary)";
+    dashProgressEta.textContent = "";
+
+    try {
+      const res = await fetch("/api/dataset/load-demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: dashSelectedDataset.name }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        dashProgressMessage.textContent = `Error: ${error.error}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        return;
+      }
+    } catch (e) {
+      dashProgressMessage.textContent = `Error: ${e.message}`;
+      dashProgressMessage.style.color = "var(--color-bad)";
+      return;
+    }
+
+    // Poll progress until done
+    dashPendingAction = callback;
+    startDashProgressPolling();
+  }
+
+  let dashProgressTimer = null;
+
+  function startDashProgressPolling() {
+    if (dashProgressTimer) clearInterval(dashProgressTimer);
+    dashProgressTimer = setInterval(pollDashProgress, 500);
+  }
+
+  function stopDashProgressPolling() {
+    if (dashProgressTimer) { clearInterval(dashProgressTimer); dashProgressTimer = null; }
+  }
+
+  async function pollDashProgress() {
+    try {
+      const res = await fetch("/api/dataset/progress");
+      const progress = await res.json();
+
+      if (progress.error) {
+        stopDashProgressPolling();
+        dashProgressMessage.textContent = `Error: ${progress.error}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        dashProgressFill.classList.remove("indeterminate");
+        return;
+      }
+
+      if (progress.pct != null) {
+        dashProgressFill.classList.remove("indeterminate");
+        dashProgressFill.style.width = `${progress.pct}%`;
+        dashProgressText.textContent = `${progress.pct}%`;
+      }
+      if (progress.message) {
+        dashProgressMessage.textContent = progress.message;
+        dashProgressMessage.style.color = "var(--text-secondary)";
+      }
+
+      if (progress.status === "idle") {
+        stopDashProgressPolling();
+        dashProgress.style.display = "none";
+
+        // Refresh dataset state
+        await checkDatasetStatus();
+        if (datasetLoaded) {
+          await fetchMedias();
+          await fetchVotes();
+
+          const cb = dashPendingAction;
+          dashPendingAction = null;
+          if (typeof cb === "function") cb();
+        }
+      }
+    } catch (_) {}
   }
 
   function showProgress() {
@@ -451,20 +872,8 @@
       if (datasetLoaded) {
         await fetchMedias();
         await fetchVotes();
-
-        // Auto-select first media if none selected
-        if (medias.length > 0 && !selected) {
-          selectMedia(medias[0].id);
-        }
-
-        // Check if auto-detect mode is enabled
-        const autodetectCheckbox = document.getElementById("autodetect-mode-checkbox");
-        if (autodetectCheckbox && autodetectCheckbox.checked) {
-          // Wait a moment for UI to settle
-          setTimeout(async () => {
-            await runAutoDetectAfterLoad();
-          }, 500);
-        }
+        // Dataset loaded — dashboard is now shown via checkDatasetStatus.
+        // Auto-select is deferred until user clicks "Label".
       }
       return;
     }
@@ -1312,16 +1721,7 @@
     });
   }
 
-  // Dataset export
-  if (menuDatasetExport && burgerDropdown) {
-    menuDatasetExport.addEventListener("click", () => {
-      if (menuDatasetExport.classList.contains("disabled")) return;
-      window.location.href = "/api/dataset/export";
-      closeBurgerMenu();
-    });
-  }
-
-  // Dataset change
+  // Dataset change — clears current dataset and returns to dashboard
   if (menuDatasetChange && burgerDropdown) {
     menuDatasetChange.addEventListener("click", async () => {
       if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
@@ -1331,8 +1731,8 @@
             votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
             selected = null;
             datasetLoaded = false;
-            if (menuDatasetExport) menuDatasetExport.classList.add("disabled");
-            showWelcomeScreen();
+            dashSelectedDataset = null;
+            showDashboard();
             renderVotes();
             updateLabelCounts();
             closeBurgerMenu();
@@ -5336,16 +5736,180 @@
     }
   }
 
-  // Initialize
+  // Initialize — go to dashboard; pre-fetch medias/votes if dataset is already loaded
   fetchMediaTypes().then(() => checkDatasetStatus()).then(async () => {
     if (datasetLoaded) {
       await fetchMedias();
       await fetchVotes();
-      if (medias.length > 0 && !selected) {
-        selectMedia(medias[0].id);
-      }
     }
   });
+  // ---- Dashboard event handlers ----
+
+  // Header "Dashboard" button — visible during labeling
+  if (headerDashboardBtn) {
+    headerDashboardBtn.addEventListener("click", () => showDashboard());
+  }
+
+  // Burger menu "Dashboard" item
+  if (menuDashboard) {
+    menuDashboard.addEventListener("click", () => {
+      closeBurgerMenu();
+      showDashboard();
+    });
+  }
+
+  // Dashboard: Load File button
+  if (dashLoadFileBtn && dashFileInput) {
+    dashLoadFileBtn.addEventListener("click", () => dashFileInput.click());
+    dashFileInput.addEventListener("change", async () => {
+      const file = dashFileInput.files[0];
+      if (!file) return;
+
+      dashProgress.style.display = "block";
+      dashProgressFill.style.width = "0%";
+      dashProgressFill.classList.add("indeterminate");
+      dashProgressText.textContent = "";
+      dashProgressMessage.textContent = "Uploading...";
+      dashProgressMessage.style.color = "var(--text-secondary)";
+      dashProgressEta.textContent = "";
+
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/dataset/load-file", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = await res.json();
+          dashProgressMessage.textContent = `Error: ${data.error || "Upload failed"}`;
+          dashProgressMessage.style.color = "var(--color-bad)";
+          dashFileInput.value = "";
+          return;
+        }
+      } catch (e) {
+        dashProgressMessage.textContent = `Error: ${e.message}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        dashFileInput.value = "";
+        return;
+      }
+
+      dashFileInput.value = "";
+      dashSelectedDataset = null;
+      // Poll progress
+      dashPendingAction = null;
+      startDashProgressPolling();
+    });
+  }
+
+  // Dashboard: Change Dataset button
+  if (dashChangeDatasetBtn) {
+    dashChangeDatasetBtn.addEventListener("click", async () => {
+      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
+        await fetch("/api/dataset/clear", { method: "POST" });
+        medias = [];
+        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+        selected = null;
+        datasetLoaded = false;
+        dashSelectedDataset = null;
+        showDashboard();
+      }
+    });
+  }
+
+  // Dashboard: Add Model button — opens the existing Manage Favorites modal
+  if (dashAddModelBtn) {
+    dashAddModelBtn.addEventListener("click", async () => {
+      await loadFavoriteDetectors();
+      loadFavImporterButtons();
+      if (favAddName && !favAddName.value.trim()) {
+        try {
+          const sugRes = await fetch("/api/textsort-suggestions");
+          const sugData = await sugRes.json();
+          if (sugData.suggestions && sugData.suggestions.length > 0) {
+            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
+          }
+        } catch (_) {}
+      }
+      favoritesModal.classList.add("show");
+    });
+  }
+
+  // Re-render dashboard model grid when favorites modal closes (detectors may have changed)
+  if (favoritesModalClose) {
+    const origClose = favoritesModalClose.onclick;
+    favoritesModalClose.addEventListener("click", () => {
+      if (currentView === "dashboard") renderDashboardModels();
+    });
+  }
+
+  // Dashboard: Label button
+  if (dashLabelBtn) {
+    dashLabelBtn.addEventListener("click", async () => {
+      if (datasetLoaded) {
+        // Dataset already loaded — go straight to labeling
+        showMainUI();
+        if (medias.length > 0 && !selected) {
+          selectMedia(medias[0].id);
+        }
+        return;
+      }
+      if (dashSelectedDataset) {
+        // Need to load the selected demo dataset first, then go to labeling
+        dashLoadSelectedDataset(() => {
+          showMainUI();
+          if (medias.length > 0 && !selected) {
+            selectMedia(medias[0].id);
+          }
+        });
+      }
+    });
+  }
+
+  // Dashboard: Detect button
+  if (dashDetectBtn) {
+    dashDetectBtn.addEventListener("click", async () => {
+      async function runDetect() {
+        if (!dashSelectedDetector) {
+          await vtAlert("Select a detector from the Model grid first.", "warning");
+          return;
+        }
+        // Run auto-detect
+        autodetectProgressModal.classList.add("show");
+        autodetectProgressText.textContent = "Running auto-detect...";
+        autodetectProgressBar.style.width = "0%";
+
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress += 5;
+          if (progress > 90) progress = 90;
+          autodetectProgressBar.style.width = `${progress}%`;
+        }, 200);
+
+        const res = await fetch("/api/auto-detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ detector_name: dashSelectedDetector }),
+        });
+
+        clearInterval(progressInterval);
+        autodetectProgressBar.style.width = "100%";
+
+        setTimeout(async () => {
+          autodetectProgressModal.classList.remove("show");
+          if (!res.ok) {
+            await vtAlert("Auto-detect failed. Make sure you have saved a detector for this media type.", "error");
+            return;
+          }
+          res.json().then(data => displayAutodetectResults(data));
+        }, 500);
+      }
+
+      if (datasetLoaded) {
+        await runDetect();
+      } else if (dashSelectedDataset) {
+        dashLoadSelectedDataset(() => runDetect());
+      }
+    });
+  }
+
   // ---- Settings persistence ----
 
   function saveVolume(vol) {
