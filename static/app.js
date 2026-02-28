@@ -394,6 +394,129 @@
     });
   }
 
+  /**
+   * Render a list of examples into containerEl.
+   * Each example is {type, value}. Provides delete buttons; calls onChange(updatedArray) on mutation.
+   */
+  function renderExamplesGrid(containerEl, examples, onChange) {
+    containerEl.innerHTML = "";
+    if (!examples || examples.length === 0) {
+      containerEl.innerHTML = '<div class="examples-empty">No examples yet.</div>';
+      return;
+    }
+    examples.forEach((ex, i) => {
+      const row = document.createElement("div");
+      row.className = "example-row";
+      const badge = document.createElement("span");
+      badge.className = `example-type-badge type-${escapeHtml(ex.type || "text")}`;
+      badge.textContent = ex.type || "text";
+      const val = document.createElement("span");
+      val.className = "example-value";
+      val.title = ex.value || "";
+      val.textContent = ex.value || "";
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "example-remove";
+      removeBtn.setAttribute("aria-label", "Remove example");
+      removeBtn.textContent = "\u00D7";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const updated = examples.filter((_, j) => j !== i);
+        onChange(updated);
+      });
+      row.appendChild(badge);
+      row.appendChild(val);
+      row.appendChild(removeBtn);
+      containerEl.appendChild(row);
+    });
+  }
+
+  /**
+   * Prompt the user for a single example of the given type.
+   * Returns {type, value} or null if cancelled.
+   */
+  async function promptForExample(type) {
+    if (type === "text") {
+      const val = await vtPrompt("Enter a text description for this example:", "");
+      if (val && val.trim()) return { type: "text", value: val.trim() };
+      return null;
+    }
+    if (type === "media") {
+      // Fetch server media files and let user pick one
+      let files = [];
+      try {
+        const res = await fetch("/api/server-media-files");
+        if (res.ok) { const data = await res.json(); files = data.files || []; }
+      } catch (_) { /* ignore */ }
+      if (files.length === 0) {
+        await vtAlert("No example media files found on server. Place files in data/example_media/ to use this option.", "warning");
+        return null;
+      }
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "example-picker-overlay";
+        overlay.innerHTML = `<div class="example-picker-panel">
+          <div class="example-picker-header"><strong>Pick a server media file</strong></div>
+          <div class="example-picker-list">${files.map((f, i) =>
+            `<div class="load-sort-option option-card" data-idx="${i}" role="button" tabindex="0">
+              <span class="option-card-icon">\uD83C\uDFB5</span>
+              <div><div class="option-card-title">${escapeHtml(f.name)}</div>
+              <div class="option-card-desc">${(f.size_bytes / 1024).toFixed(1)} KB</div></div>
+            </div>`).join("")}</div>
+          <button class="btn-sm" id="example-picker-cancel" style="margin-top:8px">Cancel</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelectorAll("[data-idx]").forEach(el => {
+          el.addEventListener("click", () => {
+            const f = files[parseInt(el.dataset.idx, 10)];
+            document.body.removeChild(overlay);
+            resolve({ type: "media", value: f.filename });
+          });
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } });
+        });
+        overlay.querySelector("#example-picker-cancel").addEventListener("click", () => {
+          document.body.removeChild(overlay);
+          resolve(null);
+        });
+      });
+    }
+    if (type === "detector") {
+      // Let user pick from existing favorite detectors
+      const dets = favoriteDetectors || [];
+      if (dets.length === 0) {
+        await vtAlert("No detectors found. Create a detector first.", "warning");
+        return null;
+      }
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "example-picker-overlay";
+        overlay.innerHTML = `<div class="example-picker-panel">
+          <div class="example-picker-header"><strong>Pick a detector</strong></div>
+          <div class="example-picker-list">${dets.map((d, i) =>
+            `<div class="load-sort-option option-card" data-idx="${i}" role="button" tabindex="0">
+              <span class="option-card-icon">\uD83E\uDD16</span>
+              <div><div class="option-card-title">${escapeHtml(d.name)}</div>
+              <div class="option-card-desc">${escapeHtml(d.media_type)}</div></div>
+            </div>`).join("")}</div>
+          <button class="btn-sm" id="example-picker-cancel" style="margin-top:8px">Cancel</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelectorAll("[data-idx]").forEach(el => {
+          el.addEventListener("click", () => {
+            const d = dets[parseInt(el.dataset.idx, 10)];
+            document.body.removeChild(overlay);
+            resolve({ type: "detector", value: d.name });
+          });
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } });
+        });
+        overlay.querySelector("#example-picker-cancel").addEventListener("click", () => {
+          document.body.removeChild(overlay);
+          resolve(null);
+        });
+      });
+    }
+    return null;
+  }
+
   function refreshAutopilotExamples() {
     if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
       if (autopilotExamplesSection) autopilotExamplesSection.style.display = "none";
@@ -915,7 +1038,7 @@
       <thead><tr>
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
-        <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
+        <th data-sort="num_labels" style="text-align:right">#TrainingLabels<span class="sort-arrow"></span></th>
         <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
       </tr></thead><tbody></tbody></table>`;
@@ -927,7 +1050,7 @@
     function renderModelRows() {
       const sorted = [...favoriteDetectors].sort((a, b) => {
         let va = a[modelSort.key], vb = b[modelSort.key];
-        if (modelSort.key === "threshold") return modelSort.asc ? va - vb : vb - va;
+        if (modelSort.key === "num_labels") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
         if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
         if (modelSort.key === "autodetect") {
           va = va ? 1 : 0; vb = vb ? 1 : 0;
@@ -944,6 +1067,7 @@
         const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
         const isSelected = dashSelectedDetector === det.name;
         const isFav = det.autodetect;
+        const numLabels = det.num_labels || 0;
         const tr = document.createElement("tr");
         tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
         tr.setAttribute("role", "button");
@@ -951,7 +1075,7 @@
         tr.innerHTML = `
           <td class="col-name">${escapeHtml(det.name)}</td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
-          <td class="col-threshold">${det.weights ? det.threshold.toFixed(2) : '<span style="color:var(--text-muted)">Untrained</span>'}</td>
+          <td class="col-num-labels" style="text-align:right">${numLabels > 0 ? numLabels : '<span style="color:var(--text-muted)">0</span>'}</td>
           <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
         `;
@@ -6178,14 +6302,62 @@
     html += `</select>`;
     html += `<div class="form-hint">The type of media this model will be trained on.</div>`;
     html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Examples *</label>`;
+    html += `<div id="new-model-examples-grid" class="examples-grid" style="min-height:36px;margin-bottom:6px"></div>`;
+    html += `<div class="examples-add-bar">`;
+    html += `<select id="new-model-example-type" class="form-select-inline">`;
+    html += `<option value="text">Text description</option>`;
+    html += `<option value="media">Server-side example</option>`;
+    html += `<option value="detector">Detector</option>`;
+    html += `</select>`;
+    html += `<button type="button" id="new-model-example-add" class="btn-sm">+ Add</button>`;
+    html += `</div>`;
+    html += `<div class="form-hint">Add at least one example so the model knows what to find.</div>`;
+    html += `</div>`;
     html += `<div id="new-model-status" class="status-text compact"></div>`;
-    html += `<button type="submit" class="btn-block-primary">Create</button>`;
+    html += `<button type="submit" id="new-model-ok-btn" class="btn-block-primary" disabled>Ok</button>`;
     html += `</form>`;
 
     processorImporterFormDiv.innerHTML = html;
     processorImporterFormDiv.style.display = "block";
 
     const statusEl = processorImporterFormDiv.querySelector("#new-model-status");
+    const okBtn = processorImporterFormDiv.querySelector("#new-model-ok-btn");
+    const examplesGrid = processorImporterFormDiv.querySelector("#new-model-examples-grid");
+    const exampleTypeSelect = processorImporterFormDiv.querySelector("#new-model-example-type");
+    const exampleAddBtn = processorImporterFormDiv.querySelector("#new-model-example-add");
+    const nameInput = processorImporterFormDiv.querySelector("input[name='name']");
+
+    // Track examples locally
+    let newModelExamples = [];
+
+    function refreshNewModelGrid() {
+      renderExamplesGrid(examplesGrid, newModelExamples, (updated) => {
+        newModelExamples = updated;
+        refreshNewModelGrid();
+      });
+      updateOkBtn();
+    }
+
+    function updateOkBtn() {
+      const name = nameInput ? nameInput.value.trim() : "";
+      okBtn.disabled = !(name && newModelExamples.length > 0);
+    }
+
+    if (nameInput) nameInput.addEventListener("input", updateOkBtn);
+
+    // Initial render
+    refreshNewModelGrid();
+
+    exampleAddBtn.addEventListener("click", async () => {
+      const type = exampleTypeSelect.value;
+      const ex = await promptForExample(type);
+      if (ex) {
+        newModelExamples = [...newModelExamples, ex];
+        refreshNewModelGrid();
+      }
+    });
 
     processorImporterFormDiv.querySelector("#new-model-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -6198,15 +6370,21 @@
         statusEl.style.color = "var(--color-bad)";
         return;
       }
+      if (newModelExamples.length === 0) {
+        statusEl.textContent = "Add at least one example";
+        statusEl.style.color = "var(--color-bad)";
+        return;
+      }
 
       statusEl.textContent = "Creating\u2026";
       statusEl.style.color = "var(--text-muted)";
+      okBtn.disabled = true;
 
       try {
         const res = await fetch("/api/favorite-detectors", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, media_type }),
+          body: JSON.stringify({ name, media_type, examples: newModelExamples }),
         });
         const result = await res.json();
         if (res.ok) {
@@ -6219,10 +6397,12 @@
         } else {
           statusEl.textContent = result.error || "Failed to create model";
           statusEl.style.color = "var(--color-bad)";
+          okBtn.disabled = false;
         }
       } catch (err) {
         statusEl.textContent = `Error: ${err.message}`;
         statusEl.style.color = "var(--color-bad)";
+        okBtn.disabled = false;
       }
     });
   }

@@ -317,13 +317,14 @@ def add_favorite_detector_route():
     autodetect = data.get("autodetect", False)
 
     examples = data.get("examples")
+    num_labels = int(data.get("num_labels", 0))
 
     if not name:
         return jsonify({"error": "name is required"}), 400
     if not media_type:
         return jsonify({"error": "media_type is required"}), 400
 
-    add_favorite_detector(name, media_type, weights, threshold, autodetect=autodetect, examples=examples)
+    add_favorite_detector(name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels)
     return jsonify({"success": True, "name": name})
 
 
