@@ -1,7 +1,7 @@
 """Command-line interface utilities for VTSearch.
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
-importer), score it against favourite processors from a settings file, and
+importer), score it against autorun processors from a settings file, and
 export the results.  Datasets, detectors, and labelsets are loaded
 indirectly as part of this workflow — there are no standalone CLI commands
 for importing them individually.
@@ -247,7 +247,7 @@ def _score_medias_with_detectors(
     if not medias:
         raise ValueError("No medias loaded from dataset")
     if not detectors:
-        raise ValueError("No favorite processors found for the dataset's media type")
+        raise ValueError("No autorun processors found for the dataset's media type")
 
     import torch  # noqa: PLC0415
 
@@ -352,8 +352,8 @@ def _run_exporter(
     print(result.get("message", "Export complete."))
 
 
-def _import_favorite_processors(settings_path: str | None = None) -> None:
-    """Import favorite processors from settings (if any).
+def _import_autorun_processors(settings_path: str | None = None) -> None:
+    """Import autorun processors from settings (if any).
 
     When *settings_path* is provided the settings module is pointed at that
     file before importing; otherwise the default ``data/settings.json`` is
@@ -367,13 +367,13 @@ def _import_favorite_processors(settings_path: str | None = None) -> None:
 
             set_settings_path(settings_path)
 
-        from vtsearch.settings import ensure_favorite_processors_imported
+        from vtsearch.settings import ensure_autorun_processors_imported
 
-        imported = ensure_favorite_processors_imported()
+        imported = ensure_autorun_processors_imported()
         if imported:
-            print(f"Imported {len(imported)} favorite processor(s) from settings: {', '.join(imported)}")
+            print(f"Imported {len(imported)} autorun processor(s) from settings: {', '.join(imported)}")
     except Exception as exc:
-        print(f"Warning: could not load favorite processors from settings: {exc}", file=sys.stderr)
+        print(f"Warning: could not load autorun processors from settings: {exc}", file=sys.stderr)
 
 
 def _merge_detector_results(
@@ -408,9 +408,9 @@ def autodetect_main(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
 ) -> None:
-    """CLI entry point: run autodetect with all favorite processors and output results.
+    """CLI entry point: run autodetect with all autorun processors and output results.
 
-    Loads favorite processors from the settings file (defaulting to the
+    Loads autorun processors from the settings file (defaulting to the
     normal ``data/settings.json``), scores the dataset against every
     processor matching the dataset's media type, and exports a combined
     result set with one column per processor.
@@ -428,7 +428,7 @@ def autodetect_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_favorite_processors(settings_path)
+        _import_autorun_processors(settings_path)
 
         dataset_file = Path(dataset_path)
         if not dataset_file.exists():
@@ -447,7 +447,7 @@ def autodetect_main(
         detectors = get_autodetect_detectors_by_media(media_type)
         if not detectors:
             raise ValueError(
-                f"No favorite processors found for media type: {media_type}. "
+                f"No autorun processors found for media type: {media_type}. "
                 "Add processors to the settings file or use --settings to specify one."
             )
 
@@ -468,7 +468,7 @@ def autodetect_importer_main(
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results.
 
-    Loads favorite processors from the settings file (defaulting to the
+    Loads autorun processors from the settings file (defaulting to the
     normal ``data/settings.json``), scores the imported dataset against
     every processor matching the dataset's media type, and exports a
     combined result set with one column per processor.
@@ -487,7 +487,7 @@ def autodetect_importer_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_favorite_processors(settings_path)
+        _import_autorun_processors(settings_path)
 
         from vtsearch.datasets.importers import get_importer
 
@@ -511,7 +511,7 @@ def autodetect_importer_main(
         detectors = get_autodetect_detectors_by_media(media_type)
         if not detectors:
             raise ValueError(
-                f"No favorite processors found for media type: {media_type}. "
+                f"No autorun processors found for media type: {media_type}. "
                 "Add processors to the settings file or use --settings to specify one."
             )
 
@@ -544,7 +544,7 @@ def autodetect_main_chunked(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_favorite_processors(settings_path)
+        _import_autorun_processors(settings_path)
 
         from vtsearch.datasets.loader import load_dataset_from_pickle_chunked
 
@@ -573,7 +573,7 @@ def autodetect_main_chunked(
                 detectors = get_autodetect_detectors_by_media(media_type)
                 if not detectors:
                     raise ValueError(
-                        f"No favorite processors found for media type: {media_type}. "
+                        f"No autorun processors found for media type: {media_type}. "
                         "Add processors to the settings file or use --settings to specify one."
                     )
 
@@ -616,7 +616,7 @@ def autodetect_importer_main_chunked(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_favorite_processors(settings_path)
+        _import_autorun_processors(settings_path)
 
         from vtsearch.datasets.importers import get_importer
 
@@ -648,7 +648,7 @@ def autodetect_importer_main_chunked(
                 detectors = get_autodetect_detectors_by_media(media_type)
                 if not detectors:
                     raise ValueError(
-                        f"No favorite processors found for media type: {media_type}. "
+                        f"No autorun processors found for media type: {media_type}. "
                         "Add processors to the settings file or use --settings to specify one."
                     )
 

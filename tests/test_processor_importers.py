@@ -343,7 +343,7 @@ class TestServerFileProcessorImporter:
         assert "server_detector_file" in names
 
     def test_api_import_from_server_path(self, client, tmp_path):
-        from vtsearch.utils import favorite_detectors
+        from vtsearch.utils import autorun_detectors
 
         payload = {
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
@@ -362,7 +362,7 @@ class TestServerFileProcessorImporter:
         assert result["success"] is True
         assert result["name"] == "server_test_det"
         assert result["media_type"] == "image"
-        assert "server_test_det" in favorite_detectors
+        assert "server_test_det" in autorun_detectors
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ class TestProcessorImportEndpoint:
         assert "name" in res.get_json()["error"].lower()
 
     def test_detector_file_imports_and_saves(self, client, tmp_path):
-        from vtsearch.utils import favorite_detectors
+        from vtsearch.utils import autorun_detectors
 
         payload = {
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
@@ -439,7 +439,7 @@ class TestProcessorImportEndpoint:
         assert result["success"] is True
         assert result["name"] == "test_detector"
         assert result["media_type"] == "image"
-        assert "test_detector" in favorite_detectors
+        assert "test_detector" in autorun_detectors
 
     def test_detector_file_defaults_to_audio(self, client, tmp_path):
         payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
@@ -473,13 +473,13 @@ class TestProcessorImportEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# API – POST /api/favorite-detectors/from-label-import/<name>
+# API – POST /api/autorun-detectors/from-label-import/<name>
 # ---------------------------------------------------------------------------
 
 
 class TestFromLabelImportEndpoint:
     def test_unknown_importer_returns_404(self, client):
-        res = client.post("/api/favorite-detectors/from-label-import/no_such_importer")
+        res = client.post("/api/autorun-detectors/from-label-import/no_such_importer")
         assert res.status_code == 404
 
     def test_missing_name_returns_400(self, client, tmp_path):
@@ -487,14 +487,14 @@ class TestFromLabelImportEndpoint:
         p = tmp_path / "labels.json"
         p.write_text(raw)
         res = client.post(
-            "/api/favorite-detectors/from-label-import/server_json_file",
+            "/api/autorun-detectors/from-label-import/server_json_file",
             json={"filepath": str(p)},
         )
         assert res.status_code == 400
         assert "name" in res.get_json()["error"].lower()
 
     def test_trains_from_matched_clips(self, client, tmp_path):
-        from vtsearch.utils import medias, favorite_detectors
+        from vtsearch.utils import medias, autorun_detectors
 
         # Build labels from actual loaded media md5s
         md5s = []
@@ -526,7 +526,7 @@ class TestFromLabelImportEndpoint:
         p = tmp_path / "labels.json"
         p.write_text(json.dumps(labels_data))
         res = client.post(
-            "/api/favorite-detectors/from-label-import/server_json_file",
+            "/api/autorun-detectors/from-label-import/server_json_file",
             json={"filepath": str(p), "name": "from_label_import_test"},
         )
         assert res.status_code == 200
@@ -534,7 +534,7 @@ class TestFromLabelImportEndpoint:
         assert result["success"] is True
         assert result["name"] == "from_label_import_test"
         assert result["loaded"] >= 2
-        assert "from_label_import_test" in favorite_detectors
+        assert "from_label_import_test" in autorun_detectors
 
     def test_no_clips_returns_400(self, client, tmp_path):
         from vtsearch.utils import medias
@@ -545,7 +545,7 @@ class TestFromLabelImportEndpoint:
             p = tmp_path / "labels.json"
             p.write_text(json.dumps({"labels": [{"md5": "abc", "label": "good"}]}))
             res = client.post(
-                "/api/favorite-detectors/from-label-import/server_json_file",
+                "/api/autorun-detectors/from-label-import/server_json_file",
                 json={"filepath": str(p), "name": "test"},
             )
             assert res.status_code == 400

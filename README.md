@@ -62,7 +62,7 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── config.py                   # Constants (SAMPLE_RATE, paths, model IDs)
 │   ├── medias.py                   # Test media generation & embedding cache
 │   ├── cli.py                      # CLI utilities: autodetect workflow
-│   ├── settings.py                 # Persistent settings & favorite processors
+│   ├── settings.py                 # Persistent settings & autorun processors
 │   ├── routes/                     # Flask blueprints
 │   ├── models/                     # ML models (embeddings, training, progress)
 │   ├── media/                      # Media type plugins (audio, image, text, video)

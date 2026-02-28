@@ -4,9 +4,9 @@ VTSearch provides a CLI workflow for running detectors on datasets and exporting
 
 ## Auto-detect (run detectors on a dataset)
 
-Score every item in a dataset with your favorite processors (detectors) and output the items predicted as "Good."
+Score every item in a dataset with your autorun processors (detectors) and output the items predicted as "Good."
 
-Detectors are specified via a **settings file** (`--settings`) that lists favorite processors. Each processor is a recipe referencing a processor importer (e.g. `detector_file` for a pre-trained detector JSON, or `label_file` to train a detector from labeled media). See below for how to create one.
+Detectors are specified via a **settings file** (`--settings`) that lists autorun processors. Each processor is a recipe referencing a processor importer (e.g. `detector_file` for a pre-trained detector JSON, or `label_file` to train a detector from labeled media). See below for how to create one.
 
 **From a pickle file:**
 
@@ -38,11 +38,11 @@ Available exporters: `local_json_file` (JSON to local file), `server_json_file` 
 **How to get the files:**
 
 - **Dataset file** — Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file** — A JSON file listing favorite processors. Each processor references a processor importer and its field values. Example:
+- **Settings file** — A JSON file listing autorun processors. Each processor references a processor importer and its field values. Example:
 
 ```json
 {
-  "favorite_processors": [
+  "autorun_processors": [
     {
       "processor_name": "my detector",
       "processor_importer": "detector_file",
@@ -56,7 +56,7 @@ To use a labelset (labeled media) as a detector, use the `label_file` processor 
 
 ```json
 {
-  "favorite_processors": [
+  "autorun_processors": [
     {
       "processor_name": "trained from labels",
       "processor_importer": "label_file",
@@ -66,7 +66,7 @@ To use a labelset (labeled media) as a detector, use the `label_file` processor 
 }
 ```
 
-- **Detector file** — In the web UI, vote on some items, then export a detector from the sorting panel. Save the returned JSON to a file. You can also use a favorite detector exported via the API (`POST /api/detector/export`).
+- **Detector file** — In the web UI, vote on some items, then export a detector from the sorting panel. Save the returned JSON to a file. You can also use an autorun detector exported via the API (`POST /api/detector/export`).
 
 **Example output:**
 

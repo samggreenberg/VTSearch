@@ -16,27 +16,27 @@ from vtsearch.models import (
     train_model,
 )
 from vtsearch.utils import (
-    add_favorite_detector,
-    add_favorite_extractor,
-    add_favorite_localizer,
+    add_autorun_detector,
+    add_autorun_extractor,
+    add_autorun_localizer,
     get_autodetect_detectors_by_media,
     medias,
     get_calibrate_count,
     get_calibration_fraction,
-    get_favorite_detectors,
-    get_favorite_extractors,
-    get_favorite_extractors_by_media,
-    get_favorite_localizers,
-    get_favorite_localizers_by_media,
+    get_autorun_detectors,
+    get_autorun_extractors,
+    get_autorun_extractors_by_media,
+    get_autorun_localizers,
+    get_autorun_localizers_by_media,
     get_inclusion,
     get_safe_thresholds,
-    remove_favorite_detector,
-    remove_favorite_extractor,
-    remove_favorite_localizer,
-    rename_favorite_detector,
-    rename_favorite_extractor,
-    rename_favorite_localizer,
-    set_favorite_detector_autodetect,
+    remove_autorun_detector,
+    remove_autorun_extractor,
+    remove_autorun_localizer,
+    rename_autorun_detector,
+    rename_autorun_extractor,
+    rename_autorun_localizer,
+    set_autorun_detector_autodetect,
 )
 
 detectors_bp = Blueprint("detectors", __name__)
@@ -288,20 +288,20 @@ def detector_sort():
 
 
 # ---------------------------------------------------------------------------
-# Favorite detectors
+# Autorun detectors
 # ---------------------------------------------------------------------------
 
 
-@detectors_bp.route("/api/favorite-detectors")
-def get_favorite_detectors_route():
-    """Get all favorite detectors."""
-    detectors = get_favorite_detectors()
+@detectors_bp.route("/api/autorun-detectors")
+def get_autorun_detectors_route():
+    """Get all autorun detectors."""
+    detectors = get_autorun_detectors()
     return jsonify({"detectors": list(detectors.values())})
 
 
-@detectors_bp.route("/api/favorite-detectors", methods=["POST"])
-def add_favorite_detector_route():
-    """Add a new favorite detector.
+@detectors_bp.route("/api/autorun-detectors", methods=["POST"])
+def add_autorun_detector_route():
+    """Add a new autorun detector.
 
     Weights are optional: when omitted the detector is created as an untrained
     stub that can be trained later through labeling.
@@ -324,21 +324,21 @@ def add_favorite_detector_route():
     if not media_type:
         return jsonify({"error": "media_type is required"}), 400
 
-    add_favorite_detector(name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels)
+    add_autorun_detector(name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels)
     return jsonify({"success": True, "name": name})
 
 
-@detectors_bp.route("/api/favorite-detectors/<name>", methods=["DELETE"])
-def delete_favorite_detector_route(name):
-    """Delete a favorite detector."""
-    if remove_favorite_detector(name):
+@detectors_bp.route("/api/autorun-detectors/<name>", methods=["DELETE"])
+def delete_autorun_detector_route(name):
+    """Delete a autorun detector."""
+    if remove_autorun_detector(name):
         return jsonify({"success": True})
     return jsonify({"error": "Detector not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-detectors/<name>/rename", methods=["PUT"])
-def rename_favorite_detector_route(name):
-    """Rename a favorite detector."""
+@detectors_bp.route("/api/autorun-detectors/<name>/rename", methods=["PUT"])
+def rename_autorun_detector_route(name):
+    """Rename a autorun detector."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -347,14 +347,14 @@ def rename_favorite_detector_route(name):
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    if rename_favorite_detector(name, new_name):
+    if rename_autorun_detector(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Detector not found or new name already exists"}), 400
 
 
-@detectors_bp.route("/api/favorite-detectors/<name>/autodetect", methods=["PUT"])
-def set_favorite_detector_autodetect_route(name):
-    """Set the autodetect flag on a favorite detector."""
+@detectors_bp.route("/api/autorun-detectors/<name>/autodetect", methods=["PUT"])
+def set_autorun_detector_autodetect_route(name):
+    """Set the autodetect flag on a autorun detector."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -363,24 +363,24 @@ def set_favorite_detector_autodetect_route(name):
     if autodetect is None:
         return jsonify({"error": "autodetect is required"}), 400
 
-    if set_favorite_detector_autodetect(name, bool(autodetect)):
+    if set_autorun_detector_autodetect(name, bool(autodetect)):
         return jsonify({"success": True, "autodetect": bool(autodetect)})
     return jsonify({"error": "Detector not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["GET"])
+@detectors_bp.route("/api/autorun-detectors/<name>/examples", methods=["GET"])
 def get_detector_examples_route(name):
-    """Get the examples for a favorite detector."""
-    from vtsearch.utils import get_favorite_detector_examples
+    """Get the examples for a autorun detector."""
+    from vtsearch.utils import get_autorun_detector_examples
 
-    examples = get_favorite_detector_examples(name)
+    examples = get_autorun_detector_examples(name)
     return jsonify({"name": name, "examples": examples})
 
 
-@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["PUT"])
+@detectors_bp.route("/api/autorun-detectors/<name>/examples", methods=["PUT"])
 def set_detector_examples_route(name):
-    """Set/replace the examples for a favorite detector."""
-    from vtsearch.utils import set_favorite_detector_examples
+    """Set/replace the examples for a autorun detector."""
+    from vtsearch.utils import set_autorun_detector_examples
 
     data = request.get_json(force=True)
     if data is None:
@@ -390,14 +390,14 @@ def set_detector_examples_route(name):
     if examples is None:
         return jsonify({"error": "examples is required"}), 400
 
-    if set_favorite_detector_examples(name, examples):
+    if set_autorun_detector_examples(name, examples):
         return jsonify({"success": True, "name": name, "examples": examples})
     return jsonify({"error": "Detector not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-detectors/import-pkl", methods=["POST"])
+@detectors_bp.route("/api/autorun-detectors/import-pkl", methods=["POST"])
 def import_detector_pkl():
-    """Import a favorite detector from a PKL file."""
+    """Import a autorun detector from a PKL file."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -429,16 +429,16 @@ def import_detector_pkl():
             else:
                 media_type = "audio"
 
-        add_favorite_detector(name, media_type, weights, threshold)
+        add_autorun_detector(name, media_type, weights, threshold)
         return jsonify({"success": True, "name": name, "media_type": media_type})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@detectors_bp.route("/api/favorite-detectors/import-labels", methods=["POST"])
+@detectors_bp.route("/api/autorun-detectors/import-labels", methods=["POST"])
 def import_detector_labels():
-    """Import a favorite detector by training on a label file.
+    """Import a autorun detector by training on a label file.
 
     The label file is a JSON object with a ``"labels"`` list. Each entry has
     ``"path"`` (or ``"file"``/``"filename"``) and ``"label"`` (``"good"`` or
@@ -568,7 +568,7 @@ def import_detector_labels():
             weights[key] = value.tolist()
 
         final_media_type = detected_media_type or "audio"
-        add_favorite_detector(name, final_media_type, weights, threshold)
+        add_autorun_detector(name, final_media_type, weights, threshold)
         return jsonify(
             {
                 "success": True,
@@ -583,13 +583,13 @@ def import_detector_labels():
         return jsonify({"error": str(e)}), 500
 
 
-@detectors_bp.route("/api/favorite-detectors/from-label-import/<importer_name>", methods=["POST"])
+@detectors_bp.route("/api/autorun-detectors/from-label-import/<importer_name>", methods=["POST"])
 def train_from_label_import(importer_name: str):
     """Train a detector from label importer results without modifying votes.
 
     Runs the named label importer to get ``[{md5, label}, ...]``, matches the
     md5s to loaded medias, uses the matched embeddings to train a detector, and
-    saves it as a favorite.  Current votes are *not* modified.
+    saves it as an autorun detector.  Current votes are *not* modified.
     """
     from vtsearch.labels.importers import get_label_importer, list_label_importers
 
@@ -692,7 +692,7 @@ def train_from_label_import(importer_name: str):
         weights[key] = value.tolist()
 
     media_type = next(iter(medias.values())).get("type", "audio")
-    add_favorite_detector(name, media_type, weights, threshold)
+    add_autorun_detector(name, media_type, weights, threshold)
 
     return jsonify(
         {
@@ -707,27 +707,27 @@ def train_from_label_import(importer_name: str):
 
 @detectors_bp.route("/api/auto-detect", methods=["POST"])
 def auto_detect():
-    """Run favorite detectors for the current media type and return positive hits.
+    """Run autorun detectors for the current media type and return positive hits.
 
     Accepts an optional JSON body with ``detector_name`` to run a single
-    detector instead of all favorites.
+    detector instead of all autorun detectors.
     """
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
-    # Import any favorite processors from settings that aren't already loaded
-    from vtsearch.settings import ensure_favorite_processors_imported
+    # Import any autorun processors from settings that aren't already loaded
+    from vtsearch.settings import ensure_autorun_processors_imported
 
-    newly_imported = ensure_favorite_processors_imported()
+    newly_imported = ensure_autorun_processors_imported()
 
     # Determine media type from current medias
     media_type = next(iter(medias.values())).get("type", "audio")
 
-    # Get favorite detectors for this media type (only those with autodetect enabled)
+    # Get autorun detectors for this media type (only those with autodetect enabled)
     detectors = get_autodetect_detectors_by_media(media_type)
 
     if not detectors:
-        return jsonify({"error": f"No favorite detectors found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
     # Optionally filter to a single detector
     body = request.get_json(silent=True) or {}
@@ -837,16 +837,16 @@ def _build_extractor(name: str, extractor_type: str, config: dict):
     return factory(name, config)
 
 
-@detectors_bp.route("/api/favorite-extractors")
-def get_favorite_extractors_route():
-    """Get all favorite extractors."""
-    extractors = get_favorite_extractors()
+@detectors_bp.route("/api/autorun-extractors")
+def get_autorun_extractors_route():
+    """Get all autorun extractors."""
+    extractors = get_autorun_extractors()
     return jsonify({"extractors": list(extractors.values())})
 
 
-@detectors_bp.route("/api/favorite-extractors", methods=["POST"])
-def add_favorite_extractor_route():
-    """Add a new favorite extractor."""
+@detectors_bp.route("/api/autorun-extractors", methods=["POST"])
+def add_autorun_extractor_route():
+    """Add a new autorun extractor."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -871,21 +871,21 @@ def add_favorite_extractor_route():
     except Exception as e:
         return jsonify({"error": f"Invalid extractor config: {e}"}), 400
 
-    add_favorite_extractor(name, extractor_type, media_type, config)
+    add_autorun_extractor(name, extractor_type, media_type, config)
     return jsonify({"success": True, "name": name})
 
 
-@detectors_bp.route("/api/favorite-extractors/<name>", methods=["DELETE"])
-def delete_favorite_extractor_route(name):
-    """Delete a favorite extractor."""
-    if remove_favorite_extractor(name):
+@detectors_bp.route("/api/autorun-extractors/<name>", methods=["DELETE"])
+def delete_autorun_extractor_route(name):
+    """Delete a autorun extractor."""
+    if remove_autorun_extractor(name):
         return jsonify({"success": True})
     return jsonify({"error": "Extractor not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-extractors/<name>/rename", methods=["PUT"])
-def rename_favorite_extractor_route(name):
-    """Rename a favorite extractor."""
+@detectors_bp.route("/api/autorun-extractors/<name>/rename", methods=["PUT"])
+def rename_autorun_extractor_route(name):
+    """Rename a autorun extractor."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -894,7 +894,7 @@ def rename_favorite_extractor_route(name):
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    if rename_favorite_extractor(name, new_name):
+    if rename_autorun_extractor(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Extractor not found or new name already exists"}), 400
 
@@ -955,15 +955,15 @@ def run_extract():
 
 @detectors_bp.route("/api/auto-extract", methods=["POST"])
 def auto_extract():
-    """Run all favorite extractors for the current media type and return extraction results."""
+    """Run all autorun extractors for the current media type and return extraction results."""
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
     media_type = next(iter(medias.values())).get("type", "")
-    extractors = get_favorite_extractors_by_media(media_type)
+    extractors = get_autorun_extractors_by_media(media_type)
 
     if not extractors:
-        return jsonify({"error": f"No favorite extractors found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
 
     sorted_media_ids = sorted(medias.keys())
 
@@ -1038,16 +1038,16 @@ def _build_localizer(name: str, localizer_type: str, config: dict):
     return factory(name, config)
 
 
-@detectors_bp.route("/api/favorite-localizers")
-def get_favorite_localizers_route():
-    """Get all favorite localizers."""
-    localizers = get_favorite_localizers()
+@detectors_bp.route("/api/autorun-localizers")
+def get_autorun_localizers_route():
+    """Get all autorun localizers."""
+    localizers = get_autorun_localizers()
     return jsonify({"localizers": list(localizers.values())})
 
 
-@detectors_bp.route("/api/favorite-localizers", methods=["POST"])
-def add_favorite_localizer_route():
-    """Add a new favorite localizer."""
+@detectors_bp.route("/api/autorun-localizers", methods=["POST"])
+def add_autorun_localizer_route():
+    """Add a new autorun localizer."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -1071,21 +1071,21 @@ def add_favorite_localizer_route():
     except Exception as e:
         return jsonify({"error": f"Invalid localizer config: {e}"}), 400
 
-    add_favorite_localizer(name, localizer_type, media_type, config)
+    add_autorun_localizer(name, localizer_type, media_type, config)
     return jsonify({"success": True, "name": name})
 
 
-@detectors_bp.route("/api/favorite-localizers/<name>", methods=["DELETE"])
-def delete_favorite_localizer_route(name):
-    """Delete a favorite localizer."""
-    if remove_favorite_localizer(name):
+@detectors_bp.route("/api/autorun-localizers/<name>", methods=["DELETE"])
+def delete_autorun_localizer_route(name):
+    """Delete a autorun localizer."""
+    if remove_autorun_localizer(name):
         return jsonify({"success": True})
     return jsonify({"error": "Localizer not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-localizers/<name>/rename", methods=["PUT"])
-def rename_favorite_localizer_route(name):
-    """Rename a favorite localizer."""
+@detectors_bp.route("/api/autorun-localizers/<name>/rename", methods=["PUT"])
+def rename_autorun_localizer_route(name):
+    """Rename a autorun localizer."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -1094,7 +1094,7 @@ def rename_favorite_localizer_route(name):
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    if rename_favorite_localizer(name, new_name):
+    if rename_autorun_localizer(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Localizer not found or new name already exists"}), 400
 
@@ -1151,15 +1151,15 @@ def run_localize():
 
 @detectors_bp.route("/api/auto-localize", methods=["POST"])
 def auto_localize():
-    """Run all favorite localizers for the current media type."""
+    """Run all autorun localizers for the current media type."""
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
     media_type = next(iter(medias.values())).get("type", "")
-    localizers = get_favorite_localizers_by_media(media_type)
+    localizers = get_autorun_localizers_by_media(media_type)
 
     if not localizers:
-        return jsonify({"error": f"No favorite localizers found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
 
     sorted_media_ids = sorted(medias.keys())
 
@@ -1241,10 +1241,10 @@ def list_pregen_processors():
 
 @detectors_bp.route("/api/pregen-processors/add", methods=["POST"])
 def add_pregen_processors():
-    """Add all pregen processors as favorites.
+    """Add all pregen processors as autorun entries.
 
     Registers the OCR extractor, Speech extractor, and Face localizer
-    into the favorite extractors and localizers stores.
+    into the autorun extractors and localizers stores.
     """
     added = []
     for proc in _PREGEN_PROCESSORS:
@@ -1255,9 +1255,9 @@ def add_pregen_processors():
         processor_type = proc["processor_type"]
 
         if kind == "extractor":
-            add_favorite_extractor(name, processor_type, media_type, config)
+            add_autorun_extractor(name, processor_type, media_type, config)
         elif kind == "localizer":
-            add_favorite_localizer(name, processor_type, media_type, config)
+            add_autorun_localizer(name, processor_type, media_type, config)
         added.append(name)
 
     return jsonify({"success": True, "added": added})

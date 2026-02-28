@@ -44,7 +44,7 @@ VTSearch/
 │   ├── config.py                   Constants (paths, model IDs, rates)
 │   ├── medias.py                   Test media generation & embedding cache
 │   ├── cli.py                      CLI autodetect workflow
-│   ├── settings.py                 Persistent settings & favorite processors
+│   ├── settings.py                 Persistent settings & autorun processors
 │   │
 │   ├── media/                      Media type registry + plugins
 │   │   ├── base.py                 MediaType ABC, MediaResponse, Processor, Detector, Localizer, Extractor, MediaClipper
@@ -122,7 +122,7 @@ VTSearch/
 │   │   └── main.py                 Root route
 │   │
 │   ├── utils/
-│   │   ├── state.py                Global state (medias, votes, favorites, history)
+│   │   ├── state.py                Global state (medias, votes, autorun config, history)
 │   │   └── progress.py             Thread-safe progress tracking
 │   │
 │   └── audio/                      WAV/tone generation utilities
@@ -350,14 +350,14 @@ dicts:
 | `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
-| `favorite_detectors` | `dict` | Saved detector configurations |
-| `favorite_extractors` | `dict` | Saved extractor configurations |
-| `favorite_localizers` | `dict` | Saved localizer configurations |
+| `autorun_detectors` | `dict` | Saved detector configurations |
+| `autorun_extractors` | `dict` | Saved extractor configurations |
+| `autorun_localizers` | `dict` | Saved localizer configurations |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
 `swipe_animation`, `show_thumbnails_left`, `show_thumbnails_right`,
-favorite processor recipes) live
+autorun processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).

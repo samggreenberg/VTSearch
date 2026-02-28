@@ -14,7 +14,7 @@ from vtsearch.models.loader import (
     get_e5_model,
     get_xclip_model,
     initialize_models,
-    preload_favorite_media_types,
+    preload_autoload_media_types,
 )
 from vtsearch.models.progress import analyze_labeling_progress, clear_progress_cache, compute_labeling_status
 from vtsearch.models.training import (
@@ -39,7 +39,7 @@ __all__ = [
     "embed_text_query",
     # Loader
     "initialize_models",
-    "preload_favorite_media_types",
+    "preload_autoload_media_types",
     "get_clap_model",
     "get_xclip_model",
     "get_clip_model",

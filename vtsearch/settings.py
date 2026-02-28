@@ -8,7 +8,7 @@ Schema (all keys optional, missing keys use defaults)::
     {
         "volume": 1.0,
         "inclusion": 0,
-        "favorite_processors": [
+        "autorun_processors": [
             {
                 "processor_name": "my detector",
                 "processor_importer": "server_detector_file",
@@ -17,9 +17,9 @@ Schema (all keys optional, missing keys use defaults)::
         ]
     }
 
-Favorite processors store the *recipe* for importing a processor (the importer
+Autorun processors store the *recipe* for importing a processor (the importer
 name, field values, and desired detector name).  They are only materialised
-into favorite detectors on demand — during autodetect.
+into autorun detectors on demand — during autodetect.
 """
 
 from __future__ import annotations
@@ -46,8 +46,8 @@ _DEFAULTS: dict[str, Any] = {
     "swipe_animation": True,
     "show_thumbnails_left": False,
     "show_thumbnails_right": True,
-    "favorite_media_types": [],
-    "favorite_processors": [],
+    "autoload_media_types": [],
+    "autorun_processors": [],
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
 }
@@ -87,7 +87,6 @@ def _ensure_loaded() -> dict[str, Any]:
     global _settings
     if _settings is None:
         _settings = _load()
-        _migrate_favorite_media_type(_settings)
     return _settings
 
 
@@ -96,16 +95,9 @@ def _ensure_loaded() -> dict[str, Any]:
 # -------------------------------------------------------------------
 
 
-def _migrate_favorite_media_type(data: dict[str, Any]) -> None:
-    """Migrate legacy ``favorite_media_type`` (string) to ``favorite_media_types`` (list)."""
-    if "favorite_media_type" in data and "favorite_media_types" not in data:
-        old = data.pop("favorite_media_type")
-        data["favorite_media_types"] = [old] if old else []
-
-
 def get_defaults() -> dict[str, Any]:
-    """Return a copy of the default settings (excluding favorite_processors)."""
-    return {k: v for k, v in _DEFAULTS.items() if k != "favorite_processors"}
+    """Return a copy of the default settings (excluding autorun_processors)."""
+    return {k: v for k, v in _DEFAULTS.items() if k != "autorun_processors"}
 
 
 def get_all() -> dict[str, Any]:
@@ -268,50 +260,50 @@ def set_autopilot_hard_reds(value: int) -> None:
 VALID_MEDIA_TYPES = ("audio", "image", "paragraph", "video")
 
 
-def get_favorite_media_types() -> list[str]:
-    """Return the list of favorite media type IDs (empty list if none set)."""
-    raw = _ensure_loaded().get("favorite_media_types", _DEFAULTS["favorite_media_types"])
+def get_autoload_media_types() -> list[str]:
+    """Return the list of autoload media type IDs (empty list if none set)."""
+    raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
     if isinstance(raw, list):
         return [v for v in raw if v in VALID_MEDIA_TYPES]
     return []
 
 
-def set_favorite_media_types(value: list[str]) -> None:
-    """Set and persist the full list of favorite media types."""
+def set_autoload_media_types(value: list[str]) -> None:
+    """Set and persist the full list of autoload media types."""
     for v in value:
         if v not in VALID_MEDIA_TYPES:
             raise ValueError(f"Invalid media type: {v!r}")
     s = _ensure_loaded()
-    s["favorite_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
+    s["autoload_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
     _save(s)
 
 
-def toggle_favorite_media_type(type_id: str) -> list[str]:
-    """Toggle a single media type's favorite status.  Returns the updated list."""
+def toggle_autoload_media_type(type_id: str) -> list[str]:
+    """Toggle a single media type's autoload status.  Returns the updated list."""
     if type_id not in VALID_MEDIA_TYPES:
         raise ValueError(f"Invalid media type: {type_id!r}")
-    current = get_favorite_media_types()
+    current = get_autoload_media_types()
     if type_id in current:
         current.remove(type_id)
     else:
         current.append(type_id)
-    set_favorite_media_types(current)
+    set_autoload_media_types(current)
     return current
 
 
-def get_favorite_processors() -> list[dict[str, Any]]:
-    """Return the list of favorite processor recipes."""
-    return list(_ensure_loaded().get("favorite_processors", []))
+def get_autorun_processors() -> list[dict[str, Any]]:
+    """Return the list of autorun processor recipes."""
+    return list(_ensure_loaded().get("autorun_processors", []))
 
 
-def add_favorite_processor(
+def add_autorun_processor(
     processor_name: str,
     processor_importer: str,
     field_values: dict[str, Any],
 ) -> None:
-    """Add a favorite processor recipe (or overwrite one with the same name)."""
+    """Add a autorun processor recipe (or overwrite one with the same name)."""
     s = _ensure_loaded()
-    procs: list[dict[str, Any]] = s.setdefault("favorite_processors", [])
+    procs: list[dict[str, Any]] = s.setdefault("autorun_processors", [])
     # Remove existing entry with same name
     procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
     procs.append(
@@ -324,24 +316,24 @@ def add_favorite_processor(
     _save(s)
 
 
-def remove_favorite_processor(processor_name: str) -> bool:
-    """Remove a favorite processor by name.  Returns True if found."""
+def remove_autorun_processor(processor_name: str) -> bool:
+    """Remove a autorun processor by name.  Returns True if found."""
     s = _ensure_loaded()
-    procs: list[dict[str, Any]] = s.get("favorite_processors", [])
+    procs: list[dict[str, Any]] = s.get("autorun_processors", [])
     before = len(procs)
     procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
     if len(procs) < before:
-        s["favorite_processors"] = procs
+        s["autorun_processors"] = procs
         _save(s)
         return True
     return False
 
 
 def to_settings_json(entry: dict[str, Any]) -> str:
-    """Build the JSON snippet for a favorite processor entry.
+    """Build the JSON snippet for a autorun processor entry.
 
     Returns the JSON object that would appear inside the
-    ``favorite_processors`` array in a settings file.  Useful for showing
+    ``autorun_processors`` array in a settings file.  Useful for showing
     users how to recreate this processor configuration.
 
     Example output::
@@ -359,23 +351,23 @@ def to_settings_json(entry: dict[str, Any]) -> str:
     return json.dumps(snippet)
 
 
-def ensure_favorite_processors_imported() -> list[str]:
-    """Import any favorite processors that are not already loaded as favorite detectors.
+def ensure_autorun_processors_imported() -> list[str]:
+    """Import any autorun processors that are not already loaded as autorun detectors.
 
-    This is the lazy-load mechanism: favorite processor recipes are materialised
-    into real favorite detectors only when this function is called (typically
+    This is the lazy-load mechanism: autorun processor recipes are materialised
+    into real autorun detectors only when this function is called (typically
     right before autodetect).
 
     Returns:
         A list of processor names that were newly imported.
     """
     from vtsearch.processors.importers import get_processor_importer
-    from vtsearch.utils import add_favorite_detector, get_favorite_detectors
+    from vtsearch.utils import add_autorun_detector, get_autorun_detectors
 
-    existing = get_favorite_detectors()
+    existing = get_autorun_detectors()
     imported: list[str] = []
 
-    for entry in get_favorite_processors():
+    for entry in get_autorun_processors():
         name = entry.get("processor_name", "")
         if not name or name in existing:
             continue
@@ -383,7 +375,7 @@ def ensure_favorite_processors_imported() -> list[str]:
         importer_name = entry.get("processor_importer", "")
         importer = get_processor_importer(importer_name)
         if importer is None:
-            logger.warning("Favorite processor '%s': unknown importer '%s'", name, importer_name)
+            logger.warning("Autorun processor '%s': unknown importer '%s'", name, importer_name)
             continue
 
         field_values = dict(entry.get("field_values", {}))
@@ -393,10 +385,10 @@ def ensure_favorite_processors_imported() -> list[str]:
             result = importer.run_cli(field_values)
 
             if not isinstance(result, dict) or not result.get("weights"):
-                logger.warning("Favorite processor '%s': importer returned invalid result", name)
+                logger.warning("Autorun processor '%s': importer returned invalid result", name)
                 continue
 
-            add_favorite_detector(
+            add_autorun_detector(
                 name,
                 result.get("media_type", "audio"),
                 result["weights"],
@@ -405,7 +397,7 @@ def ensure_favorite_processors_imported() -> list[str]:
             )
             imported.append(name)
         except Exception as exc:
-            logger.warning("Favorite processor '%s': import failed: %s", name, exc)
+            logger.warning("Autorun processor '%s': import failed: %s", name, exc)
 
     return imported
 
@@ -413,8 +405,8 @@ def ensure_favorite_processors_imported() -> list[str]:
 def set_settings_path(path: str | Path) -> None:
     """Override the settings file path and reset the in-memory cache.
 
-    Call this before :func:`ensure_favorite_processors_imported` to load
-    favorite processors from a custom settings file (e.g. the ``--settings``
+    Call this before :func:`ensure_autorun_processors_imported` to load
+    autorun processors from a custom settings file (e.g. the ``--settings``
     CLI flag).
     """
     global SETTINGS_PATH, _settings

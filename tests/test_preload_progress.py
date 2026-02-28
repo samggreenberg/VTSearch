@@ -1,13 +1,13 @@
 """Tests for console progress output during embedding model preloading.
 
-Verifies that ``preload_favorite_media_types`` prints intermediate status
+Verifies that ``preload_autoload_media_types`` prints intermediate status
 messages and download progress bars to stdout so the user can see what is
 happening during the (potentially long) startup phase.
 """
 
 from unittest.mock import MagicMock, patch
 
-from vtsearch.models.loader import _make_console_progress, preload_favorite_media_types
+from vtsearch.models.loader import _make_console_progress, preload_autoload_media_types
 
 
 class TestMakeConsoleProgress:
@@ -101,12 +101,12 @@ class TestMakeConsoleProgress:
 
 
 class TestPreloadConsoleOutput:
-    """Integration-style tests for console output during preload_favorite_media_types."""
+    """Integration-style tests for console output during preload_autoload_media_types."""
 
-    @patch("vtsearch.settings.get_favorite_media_types", return_value=["audio"])
+    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
     @patch("vtsearch.media.get")
     def test_prints_preloading_banner_and_progress(self, mock_media_get, mock_favs, capsys):
-        """preload_favorite_media_types should print the banner and forward progress to console."""
+        """preload_autoload_media_types should print the banner and forward progress to console."""
         mock_mt = MagicMock()
         mock_mt.name = "Audio"
         mock_mt._on_progress = lambda *a, **kw: None
@@ -123,7 +123,7 @@ class TestPreloadConsoleOutput:
         mock_mt.load_models = fake_load_models
         mock_media_get.return_value = mock_mt
 
-        result = preload_favorite_media_types()
+        result = preload_autoload_media_types()
 
         captured = capsys.readouterr()
         assert result == ["audio"]
@@ -132,7 +132,7 @@ class TestPreloadConsoleOutput:
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
-    @patch("vtsearch.settings.get_favorite_media_types", return_value=["audio"])
+    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
     @patch("vtsearch.media.get")
     def test_restores_original_callback_after_load(self, mock_media_get, mock_favs):
         """The original _on_progress callback should be restored after load_models."""
@@ -143,11 +143,11 @@ class TestPreloadConsoleOutput:
         mock_mt.load_models = MagicMock()
         mock_media_get.return_value = mock_mt
 
-        preload_favorite_media_types()
+        preload_autoload_media_types()
 
         assert mock_mt._on_progress is original_cb
 
-    @patch("vtsearch.settings.get_favorite_media_types", return_value=["audio"])
+    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
     @patch("vtsearch.media.get")
     def test_restores_callback_on_exception(self, mock_media_get, mock_favs, capsys):
         """The original callback should be restored even when load_models raises."""
@@ -158,17 +158,17 @@ class TestPreloadConsoleOutput:
         mock_mt.load_models.side_effect = RuntimeError("boom")
         mock_media_get.return_value = mock_mt
 
-        result = preload_favorite_media_types()
+        result = preload_autoload_media_types()
 
         assert mock_mt._on_progress is original_cb
         assert result == []  # failed, so not in preloaded list
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
-    @patch("vtsearch.settings.get_favorite_media_types", return_value=[])
-    def test_no_favorites_produces_no_output(self, mock_favs, capsys):
-        """When there are no favorite media types, nothing should be printed."""
-        result = preload_favorite_media_types()
+    @patch("vtsearch.settings.get_autoload_media_types", return_value=[])
+    def test_no_autoload_types_produces_no_output(self, mock_favs, capsys):
+        """When there are no autoload media types, nothing should be printed."""
+        result = preload_autoload_media_types()
 
         assert result == []
         captured = capsys.readouterr()

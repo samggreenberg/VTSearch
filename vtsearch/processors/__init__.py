@@ -1,1 +1,1 @@
-"""Processor modules: importers for creating favorite processors (detectors, extractors)."""
+"""Processor modules: importers for creating autorun processors (detectors, extractors)."""

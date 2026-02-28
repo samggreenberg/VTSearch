@@ -117,7 +117,7 @@ def reset_state():
     """Reset all mutable global state before each test.
 
     This fixture prevents cross-test contamination by clearing votes,
-    favorites, and all other mutable state that lives in
+    autorun entries, and all other mutable state that lives in
     ``vtsearch.utils.state``.  It runs automatically before every test.
     """
     import vtsearch.utils.state as _state
@@ -132,9 +132,9 @@ def reset_state():
     _state.inclusion = None  # reset to "not loaded" so it re-reads from settings
     _state._dataset_display_name = None
     _state._diversity_tree = None
-    _state.favorite_detectors.clear()
-    _state.favorite_extractors.clear()
-    _state.favorite_localizers.clear()
+    _state.autorun_detectors.clear()
+    _state.autorun_extractors.clear()
+    _state.autorun_localizers.clear()
     clear_progress_cache()
 
 

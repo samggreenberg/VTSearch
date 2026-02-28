@@ -49,14 +49,14 @@ inclusion: int | None = None
 # Text-sort suggestions: text queries that received a Good vote, most recent last.
 textsort_suggestions: list[str] = []
 
-# Favorite detectors: name -> {name, media_type, weights, threshold, created_at}
-favorite_detectors: dict[str, dict[str, Any]] = {}
+# Autorun detectors: name -> {name, media_type, weights, threshold, created_at}
+autorun_detectors: dict[str, dict[str, Any]] = {}
 
-# Favorite extractors: name -> {name, extractor_type, media_type, config, created_at}
-favorite_extractors: dict[str, dict[str, Any]] = {}
+# Autorun extractors: name -> {name, extractor_type, media_type, config, created_at}
+autorun_extractors: dict[str, dict[str, Any]] = {}
 
-# Favorite localizers: name -> {name, localizer_type, media_type, config, created_at}
-favorite_localizers: dict[str, dict[str, Any]] = {}
+# Autorun localizers: name -> {name, localizer_type, media_type, config, created_at}
+autorun_localizers: dict[str, dict[str, Any]] = {}
 
 
 def clear_votes() -> None:
@@ -293,7 +293,7 @@ def get_textsort_suggestions() -> list[str]:
         return list(textsort_suggestions)
 
 
-def add_favorite_detector(
+def add_autorun_detector(
     name: str,
     media_type: str,
     weights: dict[str, Any] | None = None,
@@ -303,7 +303,7 @@ def add_favorite_detector(
     examples: list[dict[str, str]] | None = None,
     num_labels: int = 0,
 ) -> None:
-    """Add or overwrite a named favorite detector in the global store.
+    """Add or overwrite a named autorun detector in the global store.
 
     If a detector with the same ``name`` already exists it is replaced.
 
@@ -316,8 +316,8 @@ def add_favorite_detector(
             May be ``None`` for an untrained detector stub.
         threshold: Decision boundary score in ``[0, 1]``. Clips scoring at or
             above this value are classified as positive.  Defaults to ``0.5``.
-        autodetect: Whether this detector is a "favorite" included when
-            running autodetect.  Defaults to ``False``.
+        autodetect: Whether this detector is included when running
+            autodetect.  Defaults to ``False``.
         examples: Optional list of example dicts, each with ``"type"``
             (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
         num_labels: Number of training labels used when this detector was last
@@ -326,7 +326,7 @@ def add_favorite_detector(
     import time
 
     with _state_lock:
-        favorite_detectors[name] = {
+        autorun_detectors[name] = {
             "name": name,
             "media_type": media_type,
             "weights": weights,
@@ -338,8 +338,8 @@ def add_favorite_detector(
         }
 
 
-def remove_favorite_detector(name: str) -> bool:
-    """Remove a named favorite detector from the global store.
+def remove_autorun_detector(name: str) -> bool:
+    """Remove a named autorun detector from the global store.
 
     Args:
         name: Name of the detector to remove.
@@ -349,14 +349,14 @@ def remove_favorite_detector(name: str) -> bool:
         detector with that name exists.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            del favorite_detectors[name]
+        if name in autorun_detectors:
+            del autorun_detectors[name]
             return True
         return False
 
 
-def rename_favorite_detector(old_name: str, new_name: str) -> bool:
-    """Rename a favorite detector, updating its internal ``"name"`` field.
+def rename_autorun_detector(old_name: str, new_name: str) -> bool:
+    """Rename a autorun detector, updating its internal ``"name"`` field.
 
     The operation is atomic with respect to the dict: the old entry is removed
     and a new entry is created in a single step (no window where neither exists).
@@ -370,16 +370,16 @@ def rename_favorite_detector(old_name: str, new_name: str) -> bool:
         already taken); ``False`` otherwise (no changes are made).
     """
     with _state_lock:
-        if old_name in favorite_detectors and new_name not in favorite_detectors:
-            favorite_detectors[new_name] = favorite_detectors[old_name].copy()
-            favorite_detectors[new_name]["name"] = new_name
-            del favorite_detectors[old_name]
+        if old_name in autorun_detectors and new_name not in autorun_detectors:
+            autorun_detectors[new_name] = autorun_detectors[old_name].copy()
+            autorun_detectors[new_name]["name"] = new_name
+            del autorun_detectors[old_name]
             return True
         return False
 
 
-def get_favorite_detectors() -> dict[str, dict[str, Any]]:
-    """Return a shallow copy of all favorite detectors.
+def get_autorun_detectors() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of all autorun detectors.
 
     Returns:
         A dict mapping detector name to its data dict (with keys ``"name"``,
@@ -387,11 +387,11 @@ def get_favorite_detectors() -> dict[str, dict[str, Any]]:
         The returned dict is a copy; mutations to it do not affect the global store.
     """
     with _state_lock:
-        return favorite_detectors.copy()
+        return autorun_detectors.copy()
 
 
-def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return all favorite detectors matching a given media type.
+def get_autorun_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return all autorun detectors matching a given media type.
 
     Args:
         media_type: Media type to filter by (``"audio"``, ``"video"``,
@@ -404,11 +404,11 @@ def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]
         global store.
     """
     with _state_lock:
-        return {name: det for name, det in favorite_detectors.items() if det["media_type"] == media_type}
+        return {name: det for name, det in autorun_detectors.items() if det["media_type"] == media_type}
 
 
-def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
-    """Set the autodetect flag on a named favorite detector.
+def set_autorun_detector_autodetect(name: str, autodetect: bool) -> bool:
+    """Set the autodetect flag on a named autorun detector.
 
     Args:
         name: Name of the detector to update.
@@ -418,14 +418,14 @@ def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
         ``True`` if the detector was found and updated; ``False`` otherwise.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            favorite_detectors[name]["autodetect"] = autodetect
+        if name in autorun_detectors:
+            autorun_detectors[name]["autodetect"] = autodetect
             return True
         return False
 
 
-def set_favorite_detector_examples(name: str, examples: list[dict[str, str]]) -> bool:
-    """Set the examples list on a named favorite detector.
+def set_autorun_detector_examples(name: str, examples: list[dict[str, str]]) -> bool:
+    """Set the examples list on a named autorun detector.
 
     Args:
         name: Name of the detector to update.
@@ -435,28 +435,28 @@ def set_favorite_detector_examples(name: str, examples: list[dict[str, str]]) ->
         ``True`` if the detector was found and updated; ``False`` otherwise.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            favorite_detectors[name]["examples"] = examples
+        if name in autorun_detectors:
+            autorun_detectors[name]["examples"] = examples
             return True
         return False
 
 
-def get_favorite_detector_examples(name: str) -> list[dict[str, str]]:
-    """Return the examples list for a named favorite detector.
+def get_autorun_detector_examples(name: str) -> list[dict[str, str]]:
+    """Return the examples list for a named autorun detector.
 
     Returns an empty list if the detector is not found or has no examples.
     """
     with _state_lock:
-        det = favorite_detectors.get(name)
+        det = autorun_detectors.get(name)
         if det is None:
             return []
         return list(det.get("examples") or [])
 
 
 def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return favorite detectors matching a media type with autodetect enabled.
+    """Return autorun detectors matching a media type with autodetect enabled.
 
-    Like :func:`get_favorite_detectors_by_media` but also filters to only
+    Like :func:`get_autorun_detectors_by_media` but also filters to only
     include detectors whose ``"autodetect"`` flag is ``True``.
 
     Args:
@@ -468,18 +468,18 @@ def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, An
     with _state_lock:
         return {
             name: det
-            for name, det in favorite_detectors.items()
+            for name, det in autorun_detectors.items()
             if det["media_type"] == media_type and det.get("autodetect", True) and det.get("weights")
         }
 
 
 # ---------------------------------------------------------------------------
-# Favorite Extractors
+# Extractors
 # ---------------------------------------------------------------------------
 
 
-def add_favorite_extractor(name: str, extractor_type: str, media_type: str, config: dict[str, Any]) -> None:
-    """Add or overwrite a named favorite extractor in the global store.
+def add_autorun_extractor(name: str, extractor_type: str, media_type: str, config: dict[str, Any]) -> None:
+    """Add or overwrite a named autorun extractor in the global store.
 
     Args:
         name: Unique human-readable name for the extractor (e.g. ``"license plates"``).
@@ -490,7 +490,7 @@ def add_favorite_extractor(name: str, extractor_type: str, media_type: str, conf
     import time
 
     with _state_lock:
-        favorite_extractors[name] = {
+        autorun_extractors[name] = {
             "name": name,
             "extractor_type": extractor_type,
             "media_type": media_type,
@@ -499,57 +499,57 @@ def add_favorite_extractor(name: str, extractor_type: str, media_type: str, conf
         }
 
 
-def remove_favorite_extractor(name: str) -> bool:
-    """Remove a named favorite extractor from the global store.
+def remove_autorun_extractor(name: str) -> bool:
+    """Remove a named autorun extractor from the global store.
 
     Returns:
         ``True`` if the extractor was found and removed; ``False`` otherwise.
     """
     with _state_lock:
-        if name in favorite_extractors:
-            del favorite_extractors[name]
+        if name in autorun_extractors:
+            del autorun_extractors[name]
             return True
         return False
 
 
-def rename_favorite_extractor(old_name: str, new_name: str) -> bool:
-    """Rename a favorite extractor.
+def rename_autorun_extractor(old_name: str, new_name: str) -> bool:
+    """Rename a autorun extractor.
 
     Returns:
         ``True`` if the rename succeeded; ``False`` otherwise.
     """
     with _state_lock:
-        if old_name in favorite_extractors and new_name not in favorite_extractors:
-            favorite_extractors[new_name] = favorite_extractors[old_name].copy()
-            favorite_extractors[new_name]["name"] = new_name
-            del favorite_extractors[old_name]
+        if old_name in autorun_extractors and new_name not in autorun_extractors:
+            autorun_extractors[new_name] = autorun_extractors[old_name].copy()
+            autorun_extractors[new_name]["name"] = new_name
+            del autorun_extractors[old_name]
             return True
         return False
 
 
-def get_favorite_extractors() -> dict[str, dict[str, Any]]:
-    """Return a shallow copy of all favorite extractors."""
+def get_autorun_extractors() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of all autorun extractors."""
     with _state_lock:
-        return favorite_extractors.copy()
+        return autorun_extractors.copy()
 
 
-def get_favorite_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return all favorite extractors matching a given media type."""
+def get_autorun_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return all autorun extractors matching a given media type."""
     with _state_lock:
-        return {name: ext for name, ext in favorite_extractors.items() if ext["media_type"] == media_type}
+        return {name: ext for name, ext in autorun_extractors.items() if ext["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------
-# Favorite Localizers
+# Localizers
 # ---------------------------------------------------------------------------
 
 
-def add_favorite_localizer(name: str, localizer_type: str, media_type: str, config: dict[str, Any]) -> None:
-    """Add or overwrite a named favorite localizer in the global store."""
+def add_autorun_localizer(name: str, localizer_type: str, media_type: str, config: dict[str, Any]) -> None:
+    """Add or overwrite a named autorun localizer in the global store."""
     import time
 
     with _state_lock:
-        favorite_localizers[name] = {
+        autorun_localizers[name] = {
             "name": name,
             "localizer_type": localizer_type,
             "media_type": media_type,
@@ -558,36 +558,36 @@ def add_favorite_localizer(name: str, localizer_type: str, media_type: str, conf
         }
 
 
-def remove_favorite_localizer(name: str) -> bool:
-    """Remove a named favorite localizer. Returns True if found."""
+def remove_autorun_localizer(name: str) -> bool:
+    """Remove a named autorun localizer. Returns True if found."""
     with _state_lock:
-        if name in favorite_localizers:
-            del favorite_localizers[name]
+        if name in autorun_localizers:
+            del autorun_localizers[name]
             return True
         return False
 
 
-def rename_favorite_localizer(old_name: str, new_name: str) -> bool:
-    """Rename a favorite localizer. Returns True if succeeded."""
+def rename_autorun_localizer(old_name: str, new_name: str) -> bool:
+    """Rename a autorun localizer. Returns True if succeeded."""
     with _state_lock:
-        if old_name in favorite_localizers and new_name not in favorite_localizers:
-            favorite_localizers[new_name] = favorite_localizers[old_name].copy()
-            favorite_localizers[new_name]["name"] = new_name
-            del favorite_localizers[old_name]
+        if old_name in autorun_localizers and new_name not in autorun_localizers:
+            autorun_localizers[new_name] = autorun_localizers[old_name].copy()
+            autorun_localizers[new_name]["name"] = new_name
+            del autorun_localizers[old_name]
             return True
         return False
 
 
-def get_favorite_localizers() -> dict[str, dict[str, Any]]:
-    """Return a shallow copy of all favorite localizers."""
+def get_autorun_localizers() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of all autorun localizers."""
     with _state_lock:
-        return favorite_localizers.copy()
+        return autorun_localizers.copy()
 
 
-def get_favorite_localizers_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return all favorite localizers matching a given media type."""
+def get_autorun_localizers_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return all autorun localizers matching a given media type."""
     with _state_lock:
-        return {name: loc for name, loc in favorite_localizers.items() if loc["media_type"] == media_type}
+        return {name: loc for name, loc in autorun_localizers.items() if loc["media_type"] == media_type}
 
 
 # ---------------------------------------------------------------------------

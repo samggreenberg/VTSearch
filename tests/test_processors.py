@@ -360,43 +360,43 @@ class TestFaceLocalizer:
 
 
 # ---------------------------------------------------------------------------
-# Favorite localizer state management
+# Autorun localizer state management
 # ---------------------------------------------------------------------------
 
 
-class TestFavoriteLocalizerState:
+class TestAutorunLocalizerState:
     def test_add_and_get(self):
-        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers
+        from vtsearch.utils.state import add_autorun_localizer, get_autorun_localizers
 
-        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
-        locs = get_favorite_localizers()
+        add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
+        locs = get_autorun_localizers()
         assert "face1" in locs
         assert locs["face1"]["localizer_type"] == "face"
         assert locs["face1"]["media_type"] == "image"
 
     def test_remove(self):
-        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers, remove_favorite_localizer
+        from vtsearch.utils.state import add_autorun_localizer, get_autorun_localizers, remove_autorun_localizer
 
-        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
-        assert remove_favorite_localizer("face1") is True
-        assert remove_favorite_localizer("face1") is False
-        assert get_favorite_localizers() == {}
+        add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
+        assert remove_autorun_localizer("face1") is True
+        assert remove_autorun_localizer("face1") is False
+        assert get_autorun_localizers() == {}
 
     def test_rename(self):
-        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers, rename_favorite_localizer
+        from vtsearch.utils.state import add_autorun_localizer, get_autorun_localizers, rename_autorun_localizer
 
-        add_favorite_localizer("old", "face", "image", {"threshold": 0.5})
-        assert rename_favorite_localizer("old", "new") is True
-        locs = get_favorite_localizers()
+        add_autorun_localizer("old", "face", "image", {"threshold": 0.5})
+        assert rename_autorun_localizer("old", "new") is True
+        locs = get_autorun_localizers()
         assert "new" in locs
         assert "old" not in locs
 
     def test_get_by_media(self):
-        from vtsearch.utils.state import add_favorite_localizer, get_favorite_localizers_by_media
+        from vtsearch.utils.state import add_autorun_localizer, get_autorun_localizers_by_media
 
-        add_favorite_localizer("face1", "face", "image", {"threshold": 0.5})
-        add_favorite_localizer("audio_loc", "face", "audio", {"threshold": 0.5})
-        image_locs = get_favorite_localizers_by_media("image")
+        add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
+        add_autorun_localizer("audio_loc", "face", "audio", {"threshold": 0.5})
+        image_locs = get_autorun_localizers_by_media("image")
         assert "face1" in image_locs
         assert "audio_loc" not in image_locs
 
@@ -427,13 +427,13 @@ class TestPregenProcessorsRoute:
         assert "Speech (Whisper Tiny)" in data["added"]
         assert "Face (MediaPipe)" in data["added"]
 
-    def test_pregen_adds_to_favorites(self, client):
-        from vtsearch.utils.state import favorite_extractors, favorite_localizers
+    def test_pregen_adds_to_autorun(self, client):
+        from vtsearch.utils.state import autorun_extractors, autorun_localizers
 
         client.post("/api/pregen-processors/add")
-        assert "OCR (PaddleOCR)" in favorite_extractors
-        assert "Speech (Whisper Tiny)" in favorite_extractors
-        assert "Face (MediaPipe)" in favorite_localizers
+        assert "OCR (PaddleOCR)" in autorun_extractors
+        assert "Speech (Whisper Tiny)" in autorun_extractors
+        assert "Face (MediaPipe)" in autorun_localizers
 
 
 # ---------------------------------------------------------------------------

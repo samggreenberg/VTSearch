@@ -51,9 +51,9 @@ def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json
 
 
 def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
-    """Create a settings JSON file with favorite_processors pointing to detector files.
+    """Create a settings JSON file with autorun_processors pointing to detector files.
 
-    Each detector file becomes a favorite processor recipe using the
+    Each detector file becomes an autorun processor recipe using the
     ``server_detector_file`` processor importer.
     """
     processors = []
@@ -67,7 +67,7 @@ def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
                 "field_values": {"filepath": str(det_path)},
             }
         )
-    settings = {"favorite_processors": processors}
+    settings = {"autorun_processors": processors}
     settings_path = tmp_path / name
     settings_path.write_text(json.dumps(settings))
     return settings_path
@@ -354,7 +354,7 @@ class TestScoreClipsWithDetectors:
             _score_medias_with_detectors({}, detectors)
 
     def test_empty_detectors_raises_error(self):
-        with pytest.raises(ValueError, match="No favorite processors"):
+        with pytest.raises(ValueError, match="No autorun processors"):
             _score_medias_with_detectors(app_module.medias, {})
 
     def test_threshold_zero_returns_all_clips(self, client, tmp_path):
@@ -543,7 +543,7 @@ class TestAutodetectCLI:
         """Autodetect with an empty settings file should fail (no processors)."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
-        empty_settings.write_text(json.dumps({"favorite_processors": []}))
+        empty_settings.write_text(json.dumps({"autorun_processors": []}))
 
         result = subprocess.run(
             [
@@ -561,7 +561,7 @@ class TestAutodetectCLI:
             timeout=120,
         )
         assert result.returncode == 1
-        assert "No favorite processors" in result.stderr
+        assert "No autorun processors" in result.stderr
 
     def test_autodetect_nonexistent_dataset(self, client, tmp_path):
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
@@ -737,7 +737,7 @@ class TestAutodetectImporterCLI:
         """Autodetect with importer but no processors should fail."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
-        empty_settings.write_text(json.dumps({"favorite_processors": []}))
+        empty_settings.write_text(json.dumps({"autorun_processors": []}))
 
         result = subprocess.run(
             [
