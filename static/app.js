@@ -251,6 +251,10 @@
   const leftPanel = document.getElementById("left-panel");
   const rightPanel = document.querySelector(".panel-right");
   const sortBar = document.getElementById("sort-bar");
+  const trainDatasetBar = document.getElementById("train-dataset-bar");
+  const trainDatasetName = document.getElementById("train-dataset-name");
+  const trainDetectorBar = document.getElementById("train-detector-bar");
+  const trainDetectorName = document.getElementById("train-detector-name");
 
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
@@ -390,6 +394,8 @@
     if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
+    trainDatasetBar.style.display = "none";
+    trainDetectorBar.style.display = "none";
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
@@ -5526,6 +5532,8 @@
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     datasetWelcome.style.display = "none";
+    trainDatasetBar.style.display = "none";
+    trainDetectorBar.style.display = "none";
     center.className = "panel-center";
     center.innerHTML = "";
     center.appendChild(dashboardView);
@@ -5738,6 +5746,11 @@
       // Enter training mode
       _dashboardTrainMode = { model, dataset };
       hideDashboard();
+      // Show dataset/detector context bars
+      trainDatasetName.textContent = dataset.name;
+      trainDatasetBar.style.display = "";
+      trainDetectorName.textContent = model.name;
+      trainDetectorBar.style.display = "";
 
       // Kick off dataset reload from the stored source
       try {
