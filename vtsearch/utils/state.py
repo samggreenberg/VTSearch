@@ -15,6 +15,10 @@ _state_lock = threading.RLock()
 # Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, media_string, ...}
 medias: dict[int, dict[str, Any]] = {}
 
+# Optional display-name override for the loaded dataset.  When set, the
+# dashboard shows this instead of the name derived from origin info.
+_dataset_display_name: str | None = None
+
 # Diversity tree: built from media embeddings after a dataset loads.
 # ``None`` until a dataset is loaded and the tree is constructed.
 _diversity_tree: Any = None  # DiversityTree | None
@@ -81,14 +85,16 @@ def clear_medias() -> None:
 
     Removes all entries from the ``medias`` dict in place. Does not affect
     votes or label history. Also clears the progress model cache since
-    cached models reference media embeddings.  Also clears the diversity tree.
+    cached models reference media embeddings.  Also clears the diversity tree
+    and the dataset display name override.
     """
-    global _diversity_tree
+    global _diversity_tree, _dataset_display_name
     from vtsearch.models.progress import clear_progress_cache
 
     with _state_lock:
         medias.clear()
         _diversity_tree = None
+        _dataset_display_name = None
         clear_progress_cache()
     gc.collect()
 
@@ -146,6 +152,19 @@ def set_inclusion(value: int) -> None:
     from vtsearch import settings
 
     settings.set_inclusion(value)
+
+
+def get_dataset_display_name() -> str | None:
+    """Return the current dataset display name override, or ``None``."""
+    with _state_lock:
+        return _dataset_display_name
+
+
+def set_dataset_display_name(name: str | None) -> None:
+    """Set (or clear) the dataset display name override."""
+    global _dataset_display_name
+    with _state_lock:
+        _dataset_display_name = name
 
 
 def get_calibrate_count() -> int:
