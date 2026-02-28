@@ -211,8 +211,8 @@ class TestSettingsModule:
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
         assert defaults["favorite_media_types"] == []
-        assert defaults["autopilot_top_greens"] == 10
-        assert defaults["autopilot_hard_reds"] == 10
+        assert defaults["autopilot_top_greens"] == 3
+        assert defaults["autopilot_hard_reds"] == 4
         assert "favorite_processors" not in defaults
 
     def test_get_set_favorite_media_types(self, isolated_settings):
@@ -286,7 +286,7 @@ class TestSettingsModule:
         assert settings_mod.get_autopilot_top_greens() == 1
 
     def test_autopilot_top_greens_default(self):
-        assert settings_mod.get_autopilot_top_greens() == 10
+        assert settings_mod.get_autopilot_top_greens() == 3
 
     def test_autopilot_top_greens_persists_across_reset(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(25)
@@ -308,7 +308,7 @@ class TestSettingsModule:
         assert settings_mod.get_autopilot_hard_reds() == 1
 
     def test_autopilot_hard_reds_default(self):
-        assert settings_mod.get_autopilot_hard_reds() == 10
+        assert settings_mod.get_autopilot_hard_reds() == 4
 
     def test_autopilot_hard_reds_persists_across_reset(self, isolated_settings):
         settings_mod.set_autopilot_hard_reds(30)
@@ -691,5 +691,5 @@ class TestSettingsAPI:
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200
         data = res.get_json()
-        assert data["autopilot_top_greens"] == 10
-        assert data["autopilot_hard_reds"] == 10
+        assert data["autopilot_top_greens"] == 3
+        assert data["autopilot_hard_reds"] == 4

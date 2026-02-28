@@ -48,8 +48,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_thumbnails_right": True,
     "favorite_media_types": [],
     "favorite_processors": [],
-    "autopilot_top_greens": 10,
-    "autopilot_hard_reds": 10,
+    "autopilot_top_greens": 3,
+    "autopilot_hard_reds": 4,
 }
 
 # In-memory cache — loaded once, written on every mutation.

@@ -22,6 +22,9 @@
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
   let _combineState = null;          // When non-null, we are in combine-datasets staging mode
+  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart}
+  // phase: "top" | "hard" | "learn"
+  let _autopilotState = null;
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
@@ -311,6 +314,7 @@
   const autopilotExamplesGrid = document.getElementById("autopilot-examples-grid");
   const autopilotExampleType = document.getElementById("autopilot-example-type");
   const autopilotExampleAdd = document.getElementById("autopilot-example-add");
+  const autopilotStatusInput = document.getElementById("autopilot-status");
 
   // Settings modal elements
   const menuSettings = document.getElementById("menu-settings");
@@ -345,6 +349,7 @@
       tabAutopilot.setAttribute("aria-selected", "false");
       tabPanelManual.style.display = "";
       tabPanelAutopilot.style.display = "none";
+      stopAutopilot();
     });
     tabAutopilot.addEventListener("click", () => {
       tabAutopilot.classList.add("active");
@@ -354,6 +359,7 @@
       tabPanelAutopilot.style.display = "";
       tabPanelManual.style.display = "none";
       refreshAutopilotExamples();
+      startAutopilot();
     });
   }
 
@@ -397,6 +403,159 @@
         saveAutopilotExamples(model);
       }
     });
+  }
+
+  // ---- Autopilot state machine ----
+
+  function setAutopilotStatus(text) {
+    if (autopilotStatusInput) autopilotStatusInput.value = text;
+  }
+
+  /**
+   * Start the autopilot workflow.  Reads the first example from the current
+   * model, triggers the appropriate sort, sets select-mode to Top, and enters
+   * the "top" phase of the state machine.
+   */
+  async function startAutopilot() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
+      setAutopilotStatus("No model selected");
+      return;
+    }
+    const model = _dashboardTrainMode.model;
+    const examples = model.examples || [];
+    if (examples.length === 0) {
+      setAutopilotStatus("No examples — add one first");
+      return;
+    }
+
+    // Read settings for phase thresholds
+    let goodToStart = 3;
+    let badToStart = 4;
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const s = await res.json();
+        if (typeof s.autopilot_top_greens === "number") goodToStart = s.autopilot_top_greens;
+        if (typeof s.autopilot_hard_reds === "number") badToStart = s.autopilot_hard_reds;
+      }
+    } catch (_) { /* use defaults */ }
+
+    _autopilotState = { phase: "top", goodToStart, badToStart };
+
+    // Sort by the first example
+    const firstExample = examples[0];
+
+    // Set select mode to Top
+    selectMode = "top";
+    document.querySelectorAll('input[name="select-mode"]').forEach(r => {
+      r.checked = r.value === "top";
+    });
+
+    if (firstExample.type === "text") {
+      // Text sort
+      sortMode = "text";
+      document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+        r.checked = r.value === "text";
+      });
+      textSortWrap.style.display = "";
+      learnedSortWrap.style.display = "none";
+      loadSortWrap.style.display = "none";
+      textSortInput.value = firstExample.value;
+      setAutopilotStatus("Top — sorting by text");
+      await fetchTextSort(firstExample.value);
+    } else if (firstExample.type === "media") {
+      // Example sort via server media file
+      activateLoadSort("Example: " + firstExample.value);
+      setAutopilotStatus("Top — sorting by example");
+      showSortProgress("Scoring with example media\u2026");
+      try {
+        const res = await fetch("/api/example-sort-server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: firstExample.value }),
+        });
+        if (!res.ok) throw new Error("Failed to sort by example");
+        const data = await res.json();
+        sortOrder = data.results.map(r => ({ id: r.id, score: r.similarity ?? r.score }));
+        threshold = data.threshold;
+        loadedDetector = { _example: true, _name: firstExample.value };
+        hideSortProgress();
+        sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+        renderMediaList();
+        const nextClip = findNextClip();
+        if (nextClip) selectMedia(nextClip.id);
+      } catch (err) {
+        hideSortProgress();
+        sortStatus.textContent = `Error: ${err.message}`;
+      }
+    } else if (firstExample.type === "detector") {
+      // Load detector sort — fetch the named favorite detector
+      setAutopilotStatus("Top — sorting by detector");
+      try {
+        const res = await fetch("/api/favorite-detectors");
+        if (!res.ok) throw new Error("Failed to fetch detectors");
+        const data = await res.json();
+        const det = (data.detectors || []).find(d => d.name === firstExample.value);
+        if (!det) throw new Error(`Detector "${firstExample.value}" not found`);
+        loadedDetector = det;
+        activateLoadSort("Detector: " + det.name);
+        await fetchLoadedSort(true);
+      } catch (err) {
+        sortStatus.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    // Check if we already satisfy the first phase (e.g. from imported labels)
+    checkAutopilotPhase();
+  }
+
+  /**
+   * Check whether the autopilot should advance to the next phase based on
+   * the current vote counts.  Called after every vote.
+   */
+  function checkAutopilotPhase() {
+    if (!_autopilotState) return;
+
+    const { phase, goodToStart, badToStart } = _autopilotState;
+
+    if (phase === "top") {
+      if (votes.good.length >= goodToStart) {
+        // Transition to Hard phase
+        _autopilotState.phase = "hard";
+        selectMode = "hard";
+        document.querySelectorAll('input[name="select-mode"]').forEach(r => {
+          r.checked = r.value === "hard";
+        });
+        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
+        // Re-check in case we also satisfy the hard threshold
+        checkAutopilotPhase();
+      } else {
+        setAutopilotStatus(`Top — need ${goodToStart} goods (${votes.good.length} so far)`);
+      }
+    } else if (phase === "hard") {
+      if (votes.bad.length >= badToStart) {
+        // Transition to Learn phase
+        _autopilotState.phase = "learn";
+        sortMode = "learned";
+        document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+          r.checked = r.value === "learned";
+        });
+        textSortWrap.style.display = "none";
+        learnedSortWrap.style.display = "";
+        loadSortWrap.style.display = "none";
+        setAutopilotStatus("Learn");
+        updateLearnedSortDesc();
+        fetchLearnedSort(true);
+      } else {
+        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
+      }
+    }
+    // phase === "learn" — nothing to do, stay in learn mode
+  }
+
+  function stopAutopilot() {
+    _autopilotState = null;
+    setAutopilotStatus("");
   }
 
   // ---- Dataset Management ----
@@ -3272,6 +3431,9 @@
         }
       }
 
+      // Autopilot: check if the phase should advance (may change selectMode/sortMode).
+      checkAutopilotPhase();
+
       // Auto-advance to next media.  When swipe animation is enabled, play a
       // fast swipe-out before switching; otherwise advance immediately.
       // In "new" select mode, use the diversity tree for the next media.
@@ -5057,6 +5219,7 @@
   }
 
   function showDashboard() {
+    stopAutopilot();
     // If leaving a training session, save labels first
     if (_dashboardTrainMode) {
       saveTrainableModelLabels();
