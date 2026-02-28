@@ -130,6 +130,7 @@ def reset_state():
     last_learned_scores.clear()
     _state._click_counter = 0
     _state.inclusion = None  # reset to "not loaded" so it re-reads from settings
+    _state._dataset_display_name = None
     _state._diversity_tree = None
     _state.autorun_detectors.clear()
     _state.autorun_extractors.clear()

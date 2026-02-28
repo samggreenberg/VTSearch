@@ -15,6 +15,10 @@ _state_lock = threading.RLock()
 # Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, media_string, ...}
 medias: dict[int, dict[str, Any]] = {}
 
+# Optional display-name override for the loaded dataset.  When set, the
+# dashboard shows this instead of the name derived from origin info.
+_dataset_display_name: str | None = None
+
 # Diversity tree: built from media embeddings after a dataset loads.
 # ``None`` until a dataset is loaded and the tree is constructed.
 _diversity_tree: Any = None  # DiversityTree | None
@@ -81,14 +85,16 @@ def clear_medias() -> None:
 
     Removes all entries from the ``medias`` dict in place. Does not affect
     votes or label history. Also clears the progress model cache since
-    cached models reference media embeddings.  Also clears the diversity tree.
+    cached models reference media embeddings.  Also clears the diversity tree
+    and the dataset display name override.
     """
-    global _diversity_tree
+    global _diversity_tree, _dataset_display_name
     from vtsearch.models.progress import clear_progress_cache
 
     with _state_lock:
         medias.clear()
         _diversity_tree = None
+        _dataset_display_name = None
         clear_progress_cache()
     gc.collect()
 
@@ -146,6 +152,19 @@ def set_inclusion(value: int) -> None:
     from vtsearch import settings
 
     settings.set_inclusion(value)
+
+
+def get_dataset_display_name() -> str | None:
+    """Return the current dataset display name override, or ``None``."""
+    with _state_lock:
+        return _dataset_display_name
+
+
+def set_dataset_display_name(name: str | None) -> None:
+    """Set (or clear) the dataset display name override."""
+    global _dataset_display_name
+    with _state_lock:
+        _dataset_display_name = name
 
 
 def get_calibrate_count() -> int:
@@ -277,11 +296,12 @@ def get_textsort_suggestions() -> list[str]:
 def add_autorun_detector(
     name: str,
     media_type: str,
-    weights: dict[str, Any],
-    threshold: float,
+    weights: dict[str, Any] | None = None,
+    threshold: float = 0.5,
     *,
-    autodetect: bool = True,
+    autodetect: bool = False,
     examples: list[dict[str, str]] | None = None,
+    num_labels: int = 0,
 ) -> None:
     """Add or overwrite a named autorun detector in the global store.
 
@@ -293,12 +313,15 @@ def add_autorun_detector(
             ``"video"``, ``"image"``, or ``"paragraph"``).
         weights: Dict mapping layer-parameter names (e.g. ``"0.weight"``) to
             lists of float values, representing the serialised MLP state dict.
+            May be ``None`` for an untrained detector stub.
         threshold: Decision boundary score in ``[0, 1]``. Clips scoring at or
-            above this value are classified as positive.
-        autodetect: Whether this detector should be included when running
-            autodetect.  Defaults to ``True``.
+            above this value are classified as positive.  Defaults to ``0.5``.
+        autodetect: Whether this detector is included when running
+            autodetect.  Defaults to ``False``.
         examples: Optional list of example dicts, each with ``"type"``
             (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
+        num_labels: Number of training labels used when this detector was last
+            trained.  Defaults to ``0`` for untrained stubs.
     """
     import time
 
@@ -311,6 +334,7 @@ def add_autorun_detector(
             "created_at": time.time(),
             "autodetect": autodetect,
             "examples": examples or [],
+            "num_labels": num_labels,
         }
 
 
@@ -445,7 +469,7 @@ def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, An
         return {
             name: det
             for name, det in autorun_detectors.items()
-            if det["media_type"] == media_type and det.get("autodetect", True)
+            if det["media_type"] == media_type and det.get("autodetect", True) and det.get("weights")
         }
 
 

@@ -53,8 +53,8 @@ def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json
 def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
     """Create a settings JSON file with autorun_processors pointing to detector files.
 
-    Each detector file becomes a autorun processor recipe using the
-    ``detector_file`` processor importer.
+    Each detector file becomes an autorun processor recipe using the
+    ``server_detector_file`` processor importer.
     """
     processors = []
     for i, det_path in enumerate(detector_paths):
@@ -63,8 +63,8 @@ def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
         processors.append(
             {
                 "processor_name": proc_name,
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(det_path)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(det_path)},
             }
         )
     settings = {"autorun_processors": processors}

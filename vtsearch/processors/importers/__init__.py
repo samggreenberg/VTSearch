@@ -8,7 +8,7 @@ Usage::
 
     from vtsearch.processors.importers import get_processor_importer, list_processor_importers
 
-    importer = get_processor_importer("detector_file")
+    importer = get_processor_importer("server_detector_file")
     for imp in list_processor_importers():
         print(imp.name, imp.display_name)
 """

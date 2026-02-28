@@ -76,24 +76,22 @@ class TestSettingsModule:
         assert settings_mod.get_inclusion() == 7
 
     def test_add_autorun_processor(self, isolated_settings):
-        settings_mod.add_autorun_processor(
-            "my det", "detector_file", {"file": "/tmp/det.json"}
-        )
+        settings_mod.add_autorun_processor("my det", "server_detector_file", {"filepath": "/tmp/det.json"})
         procs = settings_mod.get_autorun_processors()
         assert len(procs) == 1
         assert procs[0]["processor_name"] == "my det"
-        assert procs[0]["processor_importer"] == "detector_file"
-        assert procs[0]["field_values"]["file"] == "/tmp/det.json"
+        assert procs[0]["processor_importer"] == "server_detector_file"
+        assert procs[0]["field_values"]["filepath"] == "/tmp/det.json"
 
     def test_add_overwrites_same_name(self):
-        settings_mod.add_autorun_processor("a", "detector_file", {"file": "1.json"})
-        settings_mod.add_autorun_processor("a", "detector_file", {"file": "2.json"})
+        settings_mod.add_autorun_processor("a", "server_detector_file", {"filepath": "1.json"})
+        settings_mod.add_autorun_processor("a", "server_detector_file", {"filepath": "2.json"})
         procs = settings_mod.get_autorun_processors()
         assert len(procs) == 1
-        assert procs[0]["field_values"]["file"] == "2.json"
+        assert procs[0]["field_values"]["filepath"] == "2.json"
 
     def test_remove_autorun_processor(self):
-        settings_mod.add_autorun_processor("x", "detector_file", {"file": "x.json"})
+        settings_mod.add_autorun_processor("x", "server_detector_file", {"filepath": "x.json"})
         assert settings_mod.remove_autorun_processor("x") is True
         assert settings_mod.get_autorun_processors() == []
 
@@ -103,32 +101,32 @@ class TestSettingsModule:
     def test_to_settings_json(self):
         entry = {
             "processor_name": "my detector",
-            "processor_importer": "detector_file",
-            "field_values": {"file": "/path/to/det.json"},
+            "processor_importer": "server_detector_file",
+            "field_values": {"filepath": "/path/to/det.json"},
         }
         snippet = settings_mod.to_settings_json(entry)
         import json
 
         parsed = json.loads(snippet)
         assert parsed["processor_name"] == "my detector"
-        assert parsed["processor_importer"] == "detector_file"
-        assert parsed["field_values"]["file"] == "/path/to/det.json"
+        assert parsed["processor_importer"] == "server_detector_file"
+        assert parsed["field_values"]["filepath"] == "/path/to/det.json"
 
     def test_to_settings_json_with_spaces(self):
         entry = {
             "processor_name": "det",
-            "processor_importer": "detector_file",
-            "field_values": {"file": "/my path/det.json"},
+            "processor_importer": "server_detector_file",
+            "field_values": {"filepath": "/my path/det.json"},
         }
         snippet = settings_mod.to_settings_json(entry)
         import json
 
         parsed = json.loads(snippet)
-        assert parsed["field_values"]["file"] == "/my path/det.json"
+        assert parsed["field_values"]["filepath"] == "/my path/det.json"
 
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
-        settings_mod.add_autorun_processor("p", "detector_file", {"file": "p.json"})
+        settings_mod.add_autorun_processor("p", "server_detector_file", {"filepath": "p.json"})
 
         # Simulate restart
         settings_mod.reset()
@@ -329,15 +327,17 @@ class TestEnsureAutorunProcessorsImported:
             "2.bias": [0.1],
         }
         det_path = tmp_path / "test_det.json"
-        det_path.write_text(json.dumps({
-            "media_type": "audio",
-            "weights": det_weights,
-            "threshold": 0.5,
-        }))
-
-        settings_mod.add_autorun_processor(
-            "settings_test_det", "detector_file", {"file": str(det_path)}
+        det_path.write_text(
+            json.dumps(
+                {
+                    "media_type": "audio",
+                    "weights": det_weights,
+                    "threshold": 0.5,
+                }
+            )
         )
+
+        settings_mod.add_autorun_processor("settings_test_det", "server_detector_file", {"filepath": str(det_path)})
 
         imported = settings_mod.ensure_autorun_processors_imported()
         assert "settings_test_det" in imported
@@ -349,18 +349,14 @@ class TestEnsureAutorunProcessorsImported:
 
         add_autorun_detector("existing", "audio", {"0.weight": [[0.1]], "0.bias": [0.0]}, 0.5)
 
-        settings_mod.add_autorun_processor(
-            "existing", "detector_file", {"file": "/nonexistent.json"}
-        )
+        settings_mod.add_autorun_processor("existing", "server_detector_file", {"filepath": "/nonexistent.json"})
 
         imported = settings_mod.ensure_autorun_processors_imported()
         assert imported == []
 
     def test_handles_bad_importer_gracefully(self):
         """Unknown importer name should not crash."""
-        settings_mod.add_autorun_processor(
-            "bad_proc", "totally_fake_importer", {"file": "x.json"}
-        )
+        settings_mod.add_autorun_processor("bad_proc", "totally_fake_importer", {"filepath": "x.json"})
 
         imported = settings_mod.ensure_autorun_processors_imported()
         assert imported == []
@@ -456,8 +452,8 @@ class TestSettingsAPI:
             "/api/settings/autorun-processors",
             json={
                 "processor_name": "api_test",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "/tmp/det.json"},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "/tmp/det.json"},
             },
         )
         assert res.status_code == 200
@@ -469,7 +465,7 @@ class TestSettingsAPI:
     def test_add_autorun_processor_missing_name(self, client):
         res = client.post(
             "/api/settings/autorun-processors",
-            json={"processor_importer": "detector_file", "field_values": {}},
+            json={"processor_importer": "server_detector_file", "field_values": {}},
         )
         assert res.status_code == 400
 
@@ -486,8 +482,8 @@ class TestSettingsAPI:
             "/api/settings/autorun-processors",
             json={
                 "processor_name": "list_test",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "x.json"},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "x.json"},
             },
         )
 
@@ -501,8 +497,8 @@ class TestSettingsAPI:
             "/api/settings/autorun-processors",
             json={
                 "processor_name": "del_test",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "x.json"},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "x.json"},
             },
         )
 
@@ -523,8 +519,8 @@ class TestSettingsAPI:
             "/api/settings/autorun-processors",
             json={
                 "processor_name": "cmd_test",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "det.json"},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "det.json"},
             },
         )
 
@@ -535,7 +531,7 @@ class TestSettingsAPI:
 
         parsed = json.loads(proc["settings_json"])
         assert parsed["processor_name"] == "cmd_test"
-        assert parsed["processor_importer"] == "detector_file"
+        assert parsed["processor_importer"] == "server_detector_file"
 
     def test_get_defaults(self, client):
         res = client.get("/api/settings/defaults")

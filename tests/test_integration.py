@@ -44,8 +44,8 @@ def _export_detector(client):
     return data
 
 
-def _save_autorun_detector(client, name, detector):
-    """Save an autorun detector."""
+def _save_autorun_detector(client, name, detector, *, autodetect=True):
+    """Save an autorun detector with autodetect enabled by default."""
     resp = client.post(
         "/api/autorun-detectors",
         json={
@@ -53,6 +53,7 @@ def _save_autorun_detector(client, name, detector):
             "media_type": "audio",
             "weights": detector["weights"],
             "threshold": detector["threshold"],
+            "autodetect": autodetect,
         },
     )
     assert resp.status_code == 200, f"Save autorun detector failed: {resp.get_json()}"
@@ -311,10 +312,7 @@ class TestInclusionAffectsLearning:
         # in ordering, but the scores should be different
         neutral_scores = {e["id"]: e["score"] for e in neutral_results}
         inclusive_scores = {e["id"]: e["score"] for e in inclusive_results}
-        scores_differ = any(
-            abs(neutral_scores[i] - inclusive_scores[i]) > 1e-6
-            for i in neutral_scores
-        )
+        scores_differ = any(abs(neutral_scores[i] - inclusive_scores[i]) > 1e-6 for i in neutral_scores)
         assert scores_differ or neutral_order != inclusive_order, (
             "Changing inclusion from 0 to 10 should affect learned sort"
         )
@@ -421,9 +419,7 @@ class TestIterativeVotingWorkflow:
         second_scores = {e["id"]: e["score"] for e in resp.get_json()["results"]}
 
         # Step 6: Clip 3's score should decrease (was good, now bad)
-        assert second_scores[3] < first_scores[3], (
-            "Clip 3 score should decrease after switching from good to bad"
-        )
+        assert second_scores[3] < first_scores[3], "Clip 3 score should decrease after switching from good to bad"
 
 
 # ---------------------------------------------------------------------------
@@ -636,19 +632,23 @@ class TestAutorunProcessorWorkflow:
 
         # Step 2: Write detector to a JSON file (simulates user saving it)
         det_path = tmp_path / "my_detector.json"
-        det_path.write_text(json.dumps({
-            "media_type": "audio",
-            "weights": detector["weights"],
-            "threshold": detector["threshold"],
-        }))
+        det_path.write_text(
+            json.dumps(
+                {
+                    "media_type": "audio",
+                    "weights": detector["weights"],
+                    "threshold": detector["threshold"],
+                }
+            )
+        )
 
         # Step 3: Add as a autorun processor in settings
         resp = client.post(
             "/api/settings/autorun-processors",
             json={
                 "processor_name": "my-saved-detector",
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(det_path)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(det_path)},
             },
         )
         assert resp.status_code == 200

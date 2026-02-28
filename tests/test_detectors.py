@@ -176,12 +176,17 @@ class TestAutorunDetectors:
         )
         assert resp.status_code == 400
 
-    def test_add_missing_weights_returns_400(self, client):
+    def test_add_without_weights_creates_untrained(self, client):
         resp = client.post(
             "/api/autorun-detectors",
             json={"name": "test", "media_type": "audio"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+
+        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
+        det = [d for d in detectors if d["name"] == "test"][0]
+        assert det["weights"] is None
+        assert det["autodetect"] is False
 
     def test_add_multiple_detectors(self, client):
         det = self._export_detector(client)
@@ -348,7 +353,7 @@ class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
 
     def _add_audio_detector(self, client, name="test-detector"):
-        """Helper: create and save an audio detector."""
+        """Helper: create and save an audio detector with autodetect enabled."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         export_resp = client.post("/api/detector/export")
@@ -362,6 +367,7 @@ class TestAutoDetect:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert save_resp.status_code == 200
@@ -384,7 +390,7 @@ class TestAutoDetect:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Save as "image" type — medias are audio, so it won't match
+        # Save as "image" type with autodetect — medias are audio, so it won't match
         client.post(
             "/api/autorun-detectors",
             json={
@@ -392,6 +398,7 @@ class TestAutoDetect:
                 "media_type": "image",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         resp = client.post("/api/auto-detect")
@@ -667,12 +674,11 @@ class TestDetectorLabelsetExport:
         resp = client.get("/api/exporters")
         assert resp.status_code == 200
         names = {e["name"] for e in resp.get_json()}
-        # At least the JSON-based exporters should be present
-        assert "local_json_file" in names
+        # At least the server JSON exporter should be present
         assert "server_json_file" in names
 
-    def test_labelset_export_local_json(self, client):
-        """Full flow: votes -> labelset -> local_json_file exporter -> download content."""
+    def test_labelset_export_server_json_full(self, client, tmp_path):
+        """Full flow: votes -> labelset -> server_json_file exporter -> file on disk."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19]})
 
@@ -683,22 +689,22 @@ class TestDetectorLabelsetExport:
         assert "labels" in labels_data
         assert len(labels_data["labels"]) == 5
 
-        # Step 2: export through local_json_file exporter
+        # Step 2: export through server_json_file exporter
+        fpath = tmp_path / "exported_labels.json"
         export_resp = client.post(
             "/api/exporters/export",
             json={
-                "exporter_name": "local_json_file",
-                "field_values": {},
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": str(fpath)},
                 "results": labels_data,
             },
         )
         assert export_resp.status_code == 200
         data = export_resp.get_json()
         assert data["success"] is True
-        assert "download_content" in data
 
-        # The download should contain valid JSON with the labels
-        downloaded = json.loads(data["download_content"])
+        # The file should contain valid JSON with the labels
+        downloaded = json.loads(fpath.read_text())
         assert "labels" in downloaded
         assert len(downloaded["labels"]) == 5
 

@@ -99,18 +99,38 @@
         vtDialogInput.style.display = "none";
       }
 
+      function closeWith(value) {
+        document.removeEventListener("keydown", keyHandler);
+        vtDialogModal.classList.remove("show");
+        resolve(value);
+      }
+
+      function keyHandler(e) {
+        if (!vtDialogModal.classList.contains("show")) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const primaryBtn = buttons.find((b) => b.primary);
+          if (primaryBtn) closeWith(primaryBtn.value === "input" ? vtDialogInput.value : primaryBtn.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          const cancelBtn = buttons.find((b) => !b.primary);
+          if (cancelBtn) closeWith(cancelBtn.value === "input" ? vtDialogInput.value : cancelBtn.value);
+          else closeWith(buttons[0].value === "input" ? vtDialogInput.value : buttons[0].value);
+        }
+      }
+
       vtDialogActions.innerHTML = "";
       buttons.forEach((btn) => {
         const el = document.createElement("button");
         el.className = "vt-dialog-btn " + (btn.primary ? "primary" : "secondary");
         el.textContent = btn.label;
         el.addEventListener("click", () => {
-          vtDialogModal.classList.remove("show");
-          resolve(btn.value === "input" ? vtDialogInput.value : btn.value);
+          closeWith(btn.value === "input" ? vtDialogInput.value : btn.value);
         });
         vtDialogActions.appendChild(el);
       });
 
+      document.addEventListener("keydown", keyHandler);
       vtDialogModal.classList.add("show");
       if (showInput) {
         setTimeout(() => vtDialogInput.focus(), 50);
@@ -392,6 +412,129 @@
       refreshAutopilotExamples();
       startAutopilot();
     });
+  }
+
+  /**
+   * Render a list of examples into containerEl.
+   * Each example is {type, value}. Provides delete buttons; calls onChange(updatedArray) on mutation.
+   */
+  function renderExamplesGrid(containerEl, examples, onChange) {
+    containerEl.innerHTML = "";
+    if (!examples || examples.length === 0) {
+      containerEl.innerHTML = '<div class="examples-empty">No examples yet.</div>';
+      return;
+    }
+    examples.forEach((ex, i) => {
+      const row = document.createElement("div");
+      row.className = "example-row";
+      const badge = document.createElement("span");
+      badge.className = `example-type-badge type-${escapeHtml(ex.type || "text")}`;
+      badge.textContent = ex.type || "text";
+      const val = document.createElement("span");
+      val.className = "example-value";
+      val.title = ex.value || "";
+      val.textContent = ex.value || "";
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "example-remove";
+      removeBtn.setAttribute("aria-label", "Remove example");
+      removeBtn.textContent = "\u00D7";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const updated = examples.filter((_, j) => j !== i);
+        onChange(updated);
+      });
+      row.appendChild(badge);
+      row.appendChild(val);
+      row.appendChild(removeBtn);
+      containerEl.appendChild(row);
+    });
+  }
+
+  /**
+   * Prompt the user for a single example of the given type.
+   * Returns {type, value} or null if cancelled.
+   */
+  async function promptForExample(type) {
+    if (type === "text") {
+      const val = await vtPrompt("Enter a text description for this example:", "");
+      if (val && val.trim()) return { type: "text", value: val.trim() };
+      return null;
+    }
+    if (type === "media") {
+      // Fetch server media files and let user pick one
+      let files = [];
+      try {
+        const res = await fetch("/api/server-media-files");
+        if (res.ok) { const data = await res.json(); files = data.files || []; }
+      } catch (_) { /* ignore */ }
+      if (files.length === 0) {
+        await vtAlert("No example media files found on server. Place files in data/example_media/ to use this option.", "warning");
+        return null;
+      }
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "example-picker-overlay";
+        overlay.innerHTML = `<div class="example-picker-panel">
+          <div class="example-picker-header"><strong>Pick a server media file</strong></div>
+          <div class="example-picker-list">${files.map((f, i) =>
+            `<div class="load-sort-option option-card" data-idx="${i}" role="button" tabindex="0">
+              <span class="option-card-icon">\uD83C\uDFB5</span>
+              <div><div class="option-card-title">${escapeHtml(f.name)}</div>
+              <div class="option-card-desc">${(f.size_bytes / 1024).toFixed(1)} KB</div></div>
+            </div>`).join("")}</div>
+          <button class="btn-sm" id="example-picker-cancel" style="margin-top:8px">Cancel</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelectorAll("[data-idx]").forEach(el => {
+          el.addEventListener("click", () => {
+            const f = files[parseInt(el.dataset.idx, 10)];
+            document.body.removeChild(overlay);
+            resolve({ type: "media", value: f.filename });
+          });
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } });
+        });
+        overlay.querySelector("#example-picker-cancel").addEventListener("click", () => {
+          document.body.removeChild(overlay);
+          resolve(null);
+        });
+      });
+    }
+    if (type === "detector") {
+      // Let user pick from existing autorun detectors
+      const dets = autorunDetectors || [];
+      if (dets.length === 0) {
+        await vtAlert("No detectors found. Create a detector first.", "warning");
+        return null;
+      }
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "example-picker-overlay";
+        overlay.innerHTML = `<div class="example-picker-panel">
+          <div class="example-picker-header"><strong>Pick a detector</strong></div>
+          <div class="example-picker-list">${dets.map((d, i) =>
+            `<div class="load-sort-option option-card" data-idx="${i}" role="button" tabindex="0">
+              <span class="option-card-icon">\uD83E\uDD16</span>
+              <div><div class="option-card-title">${escapeHtml(d.name)}</div>
+              <div class="option-card-desc">${escapeHtml(d.media_type)}</div></div>
+            </div>`).join("")}</div>
+          <button class="btn-sm" id="example-picker-cancel" style="margin-top:8px">Cancel</button>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelectorAll("[data-idx]").forEach(el => {
+          el.addEventListener("click", () => {
+            const d = dets[parseInt(el.dataset.idx, 10)];
+            document.body.removeChild(overlay);
+            resolve({ type: "detector", value: d.name });
+          });
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } });
+        });
+        overlay.querySelector("#example-picker-cancel").addEventListener("click", () => {
+          document.body.removeChild(overlay);
+          resolve(null);
+        });
+      });
+    }
+    return null;
   }
 
   function refreshAutopilotExamples() {
@@ -847,7 +990,7 @@
     }
 
     // Populate grids
-    renderDashboardDatasets();
+    await renderDashboardDatasets();
     await renderDashboardModels();
     updateDashboardButtons();
   }
@@ -858,16 +1001,101 @@
     if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
   }
 
-  function renderDashboardDatasets() {
+  async function renderDashboardDatasets() {
     if (!dashDatasetGrid) return;
 
     if (datasetLoaded) {
-      // Dataset is already loaded — status bar shows the info; grid can be minimal
-      dashDatasetGrid.innerHTML = "";
+      // Fetch dataset info and display it in the grid
+      try {
+        const res = await fetch("/api/dashboard/dataset-info");
+        const info = await res.json();
+        const mtInfo = mediaTypesMap[info.media_type];
+        const icon = mtInfo ? mtInfo.icon : "";
+        const typeName = mtInfo ? mtInfo.name : info.media_type || "media";
+        const dupeSuffix = info.num_dupes ? ` (${info.num_dupes} dupes)` : "";
+        dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
+          <thead><tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Items</th>
+            <th>Origin</th>
+            <th class="col-actions-header"></th>
+          </tr></thead>
+          <tbody></tbody></table>`;
+        const tr = document.createElement("tr");
+        tr.className = "dash-dataset-row dash-selected";
+        const nameTd = document.createElement("td");
+        nameTd.className = "col-name";
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(info.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        tr.appendChild(nameTd);
+        tr.insertAdjacentHTML("beforeend", `
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
+          <td class="col-count">${info.num_medias}${escapeHtml(dupeSuffix)}</td>
+          <td class="col-origin">${escapeHtml(info.origin)}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+        `);
+
+        // Inline rename for dataset
+        const renameBtn = tr.querySelector(".dash-rename-btn");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const nameSpan = nameTd.querySelector(".dash-name-text");
+          const current = nameSpan.textContent;
+          nameSpan.style.display = "none";
+          renameBtn.style.display = "none";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "dash-rename-input";
+          input.value = current;
+          nameTd.insertBefore(input, nameSpan);
+          input.focus();
+          input.select();
+          const commit = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== current) {
+              try {
+                await fetch("/api/dashboard/dataset-rename", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: newName }),
+                });
+                nameSpan.textContent = newName;
+              } catch (_) {}
+            }
+            input.remove();
+            nameSpan.style.display = "";
+            renameBtn.style.display = "";
+          };
+          input.addEventListener("blur", commit);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+            if (ev.key === "Escape") { input.value = current; input.blur(); }
+          });
+        });
+
+        // Delete dataset
+        const deleteBtn = tr.querySelector(".dash-delete-btn");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm("Remove this dataset? All votes and labels will be cleared.")) return;
+          try {
+            await fetch("/api/dataset/clear", { method: "POST" });
+            datasetLoaded = false;
+            dashDatasetStatus.style.display = "none";
+            dashChangeDatasetBtn.style.display = "none";
+            await renderDashboardDatasets();
+            updateDashboardButtons();
+          } catch (_) {}
+        });
+
+        dashDatasetGrid.querySelector("tbody").appendChild(tr);
+      } catch (_) {
+        dashDatasetGrid.innerHTML = "";
+      }
       return;
     }
 
-    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "Add" to load one.</p>';
+    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "+" to load one.</p>';
   }
 
   async function renderDashboardModels() {
@@ -881,7 +1109,7 @@
     } catch (_) {}
 
     if (autorunDetectors.length === 0) {
-      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "Add" to create one.</p>';
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
       return;
     }
 
@@ -891,8 +1119,10 @@
       <thead><tr>
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
-        <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
+        <th data-sort="num_labels" style="text-align:right">#TrainingLabels<span class="sort-arrow"></span></th>
+        <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+        <th class="col-actions-header"></th>
       </tr></thead><tbody></tbody></table>`;
     dashModelGrid.innerHTML = html;
 
@@ -902,8 +1132,12 @@
     function renderModelRows() {
       const sorted = [...autorunDetectors].sort((a, b) => {
         let va = a[modelSort.key], vb = b[modelSort.key];
-        if (modelSort.key === "threshold") return modelSort.asc ? va - vb : vb - va;
+        if (modelSort.key === "num_labels") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
         if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+        if (modelSort.key === "autodetect") {
+          va = va ? 1 : 0; vb = vb ? 1 : 0;
+          return modelSort.asc ? va - vb : vb - va;
+        }
         va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
         return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
       });
@@ -914,16 +1148,96 @@
         const icon = mediaIcons[det.media_type] || "\uD83D\uDD0D";
         const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
         const isSelected = dashSelectedDetector === det.name;
+        const isFav = det.autodetect;
+        const numLabels = det.num_labels || 0;
         const tr = document.createElement("tr");
         tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
         tr.setAttribute("role", "button");
         tr.setAttribute("tabindex", "0");
         tr.innerHTML = `
-          <td class="col-name">${escapeHtml(det.name)}</td>
+          <td class="col-name"><span class="dash-name-text">${escapeHtml(det.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button></td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
-          <td class="col-threshold">${det.threshold.toFixed(2)}</td>
+          <td class="col-num-labels" style="text-align:right">${numLabels > 0 ? numLabels : '<span style="color:var(--text-muted)">0</span>'}</td>
+          <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `;
+        // Inline rename for model
+        const renameBtn = tr.querySelector(".dash-rename-btn");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const nameTd = tr.querySelector(".col-name");
+          const nameSpan = nameTd.querySelector(".dash-name-text");
+          const current = nameSpan.textContent;
+          nameSpan.style.display = "none";
+          renameBtn.style.display = "none";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "dash-rename-input";
+          input.value = current;
+          nameTd.insertBefore(input, nameSpan);
+          input.focus();
+          input.select();
+          const commit = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== current) {
+              try {
+                const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(current)}/rename`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ new_name: newName }),
+                });
+                if (res.ok) {
+                  det.name = newName;
+                  if (dashSelectedDetector === current) dashSelectedDetector = newName;
+                  nameSpan.textContent = newName;
+                }
+              } catch (_) {}
+            }
+            input.remove();
+            nameSpan.style.display = "";
+            renameBtn.style.display = "";
+          };
+          input.addEventListener("blur", commit);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+            if (ev.key === "Escape") { input.value = current; input.blur(); }
+          });
+        });
+        // Delete model
+        const deleteBtn = tr.querySelector(".dash-delete-btn");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete model "${det.name}"? This cannot be undone.`)) return;
+          try {
+            const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(det.name)}`, { method: "DELETE" });
+            if (res.ok) {
+              autorunDetectors = autorunDetectors.filter(d => d.name !== det.name);
+              if (dashSelectedDetector === det.name) dashSelectedDetector = null;
+              renderModelRows();
+              updateDashboardButtons();
+              if (autorunDetectors.length === 0) {
+                dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
+              }
+            }
+          } catch (_) {}
+        });
+        // Favorite checkbox toggle
+        const checkbox = tr.querySelector(".fav-checkbox");
+        checkbox.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const newVal = checkbox.checked;
+          try {
+            await fetch(`/api/autorun-detectors/${encodeURIComponent(det.name)}/autodetect`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ autodetect: newVal }),
+            });
+            det.autodetect = newVal;
+          } catch (_) {
+            checkbox.checked = !newVal; // revert on failure
+          }
+        });
         tr.addEventListener("click", () => {
           dashSelectedDetector = det.name;
           renderModelRows();
@@ -4855,6 +5169,8 @@
     processorImporterFormDiv.innerHTML = "";
     processorImporterBack.style.display = "none";
     processorImporterList.style.display = "";
+    const modalTitle = document.getElementById("processor-importer-modal-title");
+    if (modalTitle) modalTitle.textContent = "Import Detector";
 
     if (importers.length === 0) {
       processorImporterList.innerHTML = '<p style="color:var(--text-muted);">No processor importers available.</p>';
@@ -4958,6 +5274,7 @@
           statusEl.style.color = "var(--color-good)";
           setTimeout(() => {
             processorImporterModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
           }, 1500);
         } else {
           statusEl.textContent = result.error || "Import failed";
@@ -4973,6 +5290,7 @@
   if (processorImporterModalClose) {
     processorImporterModalClose.addEventListener("click", () => {
       processorImporterModal.classList.remove("show");
+      if (currentView === "dashboard") renderDashboardModels();
     });
   }
 
@@ -6040,29 +6358,195 @@
     });
   }
 
-  // Dashboard: Add Model button — opens the existing Manage Autorun modal
+  // Dashboard: Add Model button — opens a picker with New Model + processor importers
   if (dashAddModelBtn) {
-    dashAddModelBtn.addEventListener("click", async () => {
-      await loadAutorunDetectors();
-      loadFavImporterButtons();
-      if (favAddName && !favAddName.value.trim()) {
-        try {
-          const sugRes = await fetch("/api/textsort-suggestions");
-          const sugData = await sugRes.json();
-          if (sugData.suggestions && sugData.suggestions.length > 0) {
-            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
-          }
-        } catch (_) {}
-      }
-      favoritesModal.classList.add("show");
-    });
+    dashAddModelBtn.addEventListener("click", () => openAddModelPicker());
   }
 
-  // Re-render dashboard model grid when autorun modal closes (detectors may have changed)
-  if (favoritesModalClose) {
-    const origClose = favoritesModalClose.onclick;
-    favoritesModalClose.addEventListener("click", () => {
-      if (currentView === "dashboard") renderDashboardModels();
+  async function openAddModelPicker() {
+    // Fetch processor importers for the importer options
+    let importers = [];
+    try {
+      const res = await fetch("/api/processor-importers");
+      if (res.ok) importers = await res.json();
+    } catch (_) { /* ignore */ }
+
+    // Reset modal to list view
+    processorImporterFormDiv.style.display = "none";
+    processorImporterFormDiv.innerHTML = "";
+    processorImporterBack.style.display = "none";
+    processorImporterList.style.display = "";
+
+    // Update modal title
+    const modalTitle = document.getElementById("processor-importer-modal-title");
+    if (modalTitle) modalTitle.textContent = "Add Model";
+
+    // Build options: New Model first, then processor importers
+    let html = `
+      <div class="processor-importer-option option-card" data-name="__new_model__" role="button" tabindex="0">
+        <span class="option-card-icon">\u2795</span>
+        <div>
+          <div class="option-card-title">New Model</div>
+          <div class="option-card-desc">Create a new model with a name and media type.</div>
+        </div>
+      </div>`;
+
+    html += importers.map(imp => `
+      <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}" role="button" tabindex="0">
+        <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
+        <div>
+          <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+          <div class="option-card-desc">${escapeHtml(imp.description)}</div>
+        </div>
+      </div>
+    `).join("");
+
+    processorImporterList.innerHTML = html;
+
+    // Wire up click handlers
+    processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
+      const name = el.dataset.name;
+      el.addEventListener("click", () => {
+        if (name === "__new_model__") {
+          showNewModelForm();
+        } else {
+          const imp = importers.find(i => i.name === name);
+          if (imp) showProcessorImporterForm(imp);
+        }
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); }
+      });
+    });
+
+    processorImporterModal.classList.add("show");
+  }
+
+  function showNewModelForm() {
+    processorImporterList.style.display = "none";
+    processorImporterBack.style.display = "inline-block";
+
+    // Build media type options from the registry
+    const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
+      `<option value="${escapeHtml(id)}">${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
+    ).join("");
+
+    let html = `<h3 class="form-heading">New Model</h3>`;
+    html += `<form id="new-model-form">`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Model Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">A short name for this model.</div>`;
+    html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Media Type *</label>`;
+    html += `<select name="media_type" class="form-input" required>`;
+    html += mtOptions || `<option value="audio">Audio</option><option value="image">Image</option><option value="paragraph">Text</option><option value="video">Video</option>`;
+    html += `</select>`;
+    html += `<div class="form-hint">The type of media this model will be trained on.</div>`;
+    html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Examples *</label>`;
+    html += `<div id="new-model-examples-grid" class="examples-grid" style="min-height:36px;margin-bottom:6px"></div>`;
+    html += `<div class="examples-add-bar">`;
+    html += `<select id="new-model-example-type" class="form-select-inline">`;
+    html += `<option value="text">Text description</option>`;
+    html += `<option value="media">Server-side example</option>`;
+    html += `<option value="detector">Detector</option>`;
+    html += `</select>`;
+    html += `<button type="button" id="new-model-example-add" class="btn-sm">+ Add</button>`;
+    html += `</div>`;
+    html += `<div class="form-hint">Add at least one example so the model knows what to find.</div>`;
+    html += `</div>`;
+    html += `<div id="new-model-status" class="status-text compact"></div>`;
+    html += `<button type="submit" id="new-model-ok-btn" class="btn-block-primary" disabled>Ok</button>`;
+    html += `</form>`;
+
+    processorImporterFormDiv.innerHTML = html;
+    processorImporterFormDiv.style.display = "block";
+
+    const statusEl = processorImporterFormDiv.querySelector("#new-model-status");
+    const okBtn = processorImporterFormDiv.querySelector("#new-model-ok-btn");
+    const examplesGrid = processorImporterFormDiv.querySelector("#new-model-examples-grid");
+    const exampleTypeSelect = processorImporterFormDiv.querySelector("#new-model-example-type");
+    const exampleAddBtn = processorImporterFormDiv.querySelector("#new-model-example-add");
+    const nameInput = processorImporterFormDiv.querySelector("input[name='name']");
+
+    // Track examples locally
+    let newModelExamples = [];
+
+    function refreshNewModelGrid() {
+      renderExamplesGrid(examplesGrid, newModelExamples, (updated) => {
+        newModelExamples = updated;
+        refreshNewModelGrid();
+      });
+      updateOkBtn();
+    }
+
+    function updateOkBtn() {
+      const name = nameInput ? nameInput.value.trim() : "";
+      okBtn.disabled = !(name && newModelExamples.length > 0);
+    }
+
+    if (nameInput) nameInput.addEventListener("input", updateOkBtn);
+
+    // Initial render
+    refreshNewModelGrid();
+
+    exampleAddBtn.addEventListener("click", async () => {
+      const type = exampleTypeSelect.value;
+      const ex = await promptForExample(type);
+      if (ex) {
+        newModelExamples = [...newModelExamples, ex];
+        refreshNewModelGrid();
+      }
+    });
+
+    processorImporterFormDiv.querySelector("#new-model-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const name = formEl.elements["name"].value.trim();
+      const media_type = formEl.elements["media_type"].value;
+
+      if (!name) {
+        statusEl.textContent = "Name is required";
+        statusEl.style.color = "var(--color-bad)";
+        return;
+      }
+      if (newModelExamples.length === 0) {
+        statusEl.textContent = "Add at least one example";
+        statusEl.style.color = "var(--color-bad)";
+        return;
+      }
+
+      statusEl.textContent = "Creating\u2026";
+      statusEl.style.color = "var(--text-muted)";
+      okBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/autorun-detectors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, media_type, examples: newModelExamples }),
+        });
+        const result = await res.json();
+        if (res.ok) {
+          statusEl.textContent = `Created "${name}"`;
+          statusEl.style.color = "var(--color-good)";
+          setTimeout(() => {
+            processorImporterModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
+          }, 800);
+        } else {
+          statusEl.textContent = result.error || "Failed to create model";
+          statusEl.style.color = "var(--color-bad)";
+          okBtn.disabled = false;
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+        okBtn.disabled = false;
+      }
     });
   }
 
@@ -6255,6 +6739,9 @@
       [detectorExportModal, detectorExportModalClose],
       [processorImporterModal, processorImporterModalClose],
       [autodetectModal, autodetectModalClose],
+      [datasetImporterModal, datasetImporterModalClose],
+      [loadSortModal, loadSortModalClose],
+      [settingsModal, settingsModalClose],
       [progressModal, modalClose],
     ];
     for (const [modal, closeBtn] of modalClosePairs) {

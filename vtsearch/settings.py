@@ -11,8 +11,8 @@ Schema (all keys optional, missing keys use defaults)::
         "autorun_processors": [
             {
                 "processor_name": "my detector",
-                "processor_importer": "detector_file",
-                "field_values": {"file": "/path/to/detector.json"}
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": "/path/to/detector.json"}
             }
         ]
     }
@@ -338,8 +338,8 @@ def to_settings_json(entry: dict[str, Any]) -> str:
 
     Example output::
 
-        {"processor_name": "my detector", "processor_importer": "detector_file",
-         "field_values": {"file": "detector.json"}}
+        {"processor_name": "my detector", "processor_importer": "server_detector_file",
+         "field_values": {"filepath": "detector.json"}}
     """
     import json
 
@@ -393,6 +393,7 @@ def ensure_autorun_processors_imported() -> list[str]:
                 result.get("media_type", "audio"),
                 result["weights"],
                 result.get("threshold", 0.5),
+                autodetect=True,
             )
             imported.append(name)
         except Exception as exc:

@@ -123,8 +123,8 @@ def _write_settings_file(
         processors.append(
             {
                 "processor_name": dp.stem,
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(dp)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(dp)},
             }
         )
     settings: dict[str, Any] = {"autorun_processors": processors}
@@ -179,7 +179,7 @@ class TestChunkedPickleAutodetectExport:
 
         # Export to JSON file
         output_path = tmp_path / "results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists(), "Exporter did not write output file"
         written = json.loads(output_path.read_text())
@@ -266,7 +266,7 @@ class TestChunkedFolderImporterAutodetect:
 
         # Export to CSV
         csv_path = tmp_path / "results.csv"
-        _run_exporter("local_csv_file", {"filepath": str(csv_path)}, results)
+        _run_exporter("server_csv_file", {"filepath": str(csv_path)}, results)
 
         assert csv_path.exists(), "CSV exporter did not write output file"
         csv_text = csv_path.read_text()
@@ -329,7 +329,7 @@ class TestCombinedDatasetChunkedAutodetect:
 
         # Export and read back
         output_path = tmp_path / "combined_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
         written = json.loads(output_path.read_text())
@@ -524,8 +524,8 @@ class TestProcessorImporterToAutodetect:
         # Step 2: Load detector via processor importer (simulates settings import)
         from vtsearch.processors.importers import get_processor_importer
 
-        proc_imp = get_processor_importer("detector_file")
-        imported = proc_imp.run_cli({"file": str(det_path)})
+        proc_imp = get_processor_importer("server_detector_file")
+        imported = proc_imp.run_cli({"filepath": str(det_path)})
         detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
 
         # Step 3: Create a target dataset and score in chunks
@@ -539,7 +539,7 @@ class TestProcessorImporterToAutodetect:
 
         # Step 4: Export and verify
         output_path = tmp_path / "processor_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
         written = json.loads(output_path.read_text())
@@ -660,8 +660,8 @@ class TestSettingsPersistenceCLI:
         # Load detector via processor importer (as settings import would)
         from vtsearch.processors.importers import get_processor_importer
 
-        proc_imp = get_processor_importer("detector_file")
-        imported = proc_imp.run_cli({"file": str(det_path)})
+        proc_imp = get_processor_importer("server_detector_file")
+        imported = proc_imp.run_cli({"filepath": str(det_path)})
         detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
 
         pkl_path = _make_pickle_dataset(tmp_path, 20)
@@ -675,7 +675,7 @@ class TestSettingsPersistenceCLI:
 
         # Export and verify
         output_path = tmp_path / "settings_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
         assert output_path.exists()
         written = json.loads(output_path.read_text())
         assert written["detectors_run"] == 1
@@ -693,10 +693,10 @@ class TestSettingsPersistenceCLI:
         det3_path = _write_detector_file(tmp_path, det3, "d3.json")
 
         # Import all 3 via processor importer
-        proc_imp = get_processor_importer("detector_file")
+        proc_imp = get_processor_importer("server_detector_file")
         detectors = {}
         for dp in [det1_path, det2_path, det3_path]:
-            imported = proc_imp.run_cli({"file": str(dp)})
+            imported = proc_imp.run_cli({"filepath": str(dp)})
             detectors[dp.stem] = {"weights": imported["weights"], "threshold": imported["threshold"]}
 
         pkl_path = _make_pickle_dataset(tmp_path, 20)
@@ -775,7 +775,7 @@ class TestDetectorAutorunRoundTrip:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 2: Save as autorun detector
+        # Step 2: Save as autorun detector with autodetect
         resp = client.post(
             "/api/autorun-detectors",
             json={
@@ -783,6 +783,7 @@ class TestDetectorAutorunRoundTrip:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -1068,6 +1069,7 @@ class TestAutoDetectExporterLabelRoundTrip:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -1287,9 +1289,8 @@ class TestLabelImporterDetectorChain:
 
         # Step 2: Import labels via label importer API
         resp = client.post(
-            "/api/label-importers/import/local_json_file",
-            data={"file": (label_path.open("rb"), "labels.json")},
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(label_path)},
         )
         assert resp.status_code == 200
         import_data = resp.get_json()
@@ -1306,7 +1307,7 @@ class TestLabelImporterDetectorChain:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 5: Save as autorun detector
+        # Step 5: Save as autorun detector with autodetect
         resp = client.post(
             "/api/autorun-detectors",
             json={
@@ -1314,6 +1315,7 @@ class TestLabelImporterDetectorChain:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200

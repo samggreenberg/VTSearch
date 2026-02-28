@@ -301,7 +301,11 @@ def get_autorun_detectors_route():
 
 @detectors_bp.route("/api/autorun-detectors", methods=["POST"])
 def add_autorun_detector_route():
-    """Add a new autorun detector."""
+    """Add a new autorun detector.
+
+    Weights are optional: when omitted the detector is created as an untrained
+    stub that can be trained later through labeling.
+    """
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -310,17 +314,17 @@ def add_autorun_detector_route():
     media_type = data.get("media_type", "").strip()
     weights = data.get("weights")
     threshold = data.get("threshold", 0.5)
+    autodetect = data.get("autodetect", False)
 
     examples = data.get("examples")
+    num_labels = int(data.get("num_labels", 0))
 
     if not name:
         return jsonify({"error": "name is required"}), 400
     if not media_type:
         return jsonify({"error": "media_type is required"}), 400
-    if not weights:
-        return jsonify({"error": "weights are required"}), 400
 
-    add_autorun_detector(name, media_type, weights, threshold, examples=examples)
+    add_autorun_detector(name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels)
     return jsonify({"success": True, "name": name})
 
 
