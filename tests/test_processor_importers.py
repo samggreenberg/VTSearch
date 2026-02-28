@@ -552,3 +552,58 @@ class TestFromLabelImportEndpoint:
             assert "no medias" in res.get_json()["error"].lower()
         finally:
             medias.update(saved)
+
+    def test_trains_from_csv_label_import(self, client, tmp_path):
+        """Verify from-label-import works with the server_csv_file label importer."""
+        from vtsearch.utils import favorite_detectors, medias
+
+        md5s = []
+        for cid in sorted(medias.keys()):
+            md5s.append(medias[cid].get("md5", ""))
+        md5s = [m for m in md5s if m]
+        if len(md5s) < 2:
+            pytest.skip("Need at least 2 medias with md5 for this test")
+
+        # Build CSV content
+        lines = ["md5,label"]
+        for i, md5 in enumerate(md5s):
+            lines.append(f"{md5},{'good' if i % 2 == 0 else 'bad'}")
+
+        has_good = any(ln.endswith(",good") for ln in lines[1:])
+        has_bad = any(ln.endswith(",bad") for ln in lines[1:])
+        if not (has_good and has_bad):
+            pytest.skip("Need at least one good and one bad label")
+
+        p = tmp_path / "labels.csv"
+        p.write_text("\n".join(lines))
+        res = client.post(
+            "/api/favorite-detectors/from-label-import/server_csv_file",
+            json={"filepath": str(p), "name": "csv_label_import_test"},
+        )
+        assert res.status_code == 200
+        result = res.get_json()
+        assert result["success"] is True
+        assert result["name"] == "csv_label_import_test"
+        assert result["loaded"] >= 2
+        assert "csv_label_import_test" in favorite_detectors
+
+
+# ---------------------------------------------------------------------------
+# Label importers have field_type metadata (required by frontend form builder)
+# ---------------------------------------------------------------------------
+
+
+class TestLabelImporterFieldMetadata:
+    def test_label_importers_fields_include_field_type(self, client):
+        """All label importers should expose field_type in their field metadata
+        so the frontend Add Model picker can build forms dynamically."""
+        res = client.get("/api/label-importers")
+        assert res.status_code == 200
+        for entry in res.get_json():
+            for field in entry.get("fields", []):
+                assert "field_type" in field, (
+                    f"Label importer '{entry['name']}' field '{field.get('key', '?')}' missing field_type"
+                )
+                assert field["field_type"] in ("file", "text", "password", "select"), (
+                    f"Label importer '{entry['name']}' field '{field.get('key', '?')}' has unknown field_type"
+                )

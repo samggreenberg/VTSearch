@@ -453,6 +453,11 @@
   /**
    * Prompt the user for a single example of the given type.
    * Returns {type, value} or null if cancelled.
+   *
+   * Standard types: "text", "media", "detector".
+   * Importer types: "proc_imp:<name>" runs a processor importer,
+   *                 "label_imp:<name>" runs a label importer (train a detector).
+   * Importer types create a detector and return {type: "detector", value: name}.
    */
   async function promptForExample(type) {
     if (type === "text") {
@@ -534,7 +539,146 @@
         });
       });
     }
+    // Processor importer: run the importer, create a detector, return as detector example
+    if (type.startsWith("proc_imp:")) {
+      const impName = type.slice("proc_imp:".length);
+      return await promptForImporterExample("processor", impName);
+    }
+    // Label importer: run the label importer + train, create a detector, return as detector example
+    if (type.startsWith("label_imp:")) {
+      const impName = type.slice("label_imp:".length);
+      return await promptForImporterExample("label", impName);
+    }
     return null;
+  }
+
+  /**
+   * Show a mini-form overlay for a processor or label importer, run the import,
+   * and return {type: "detector", value: detectorName} on success, or null.
+   *
+   * @param {"processor"|"label"} kind
+   * @param {string} importerName
+   */
+  async function promptForImporterExample(kind, importerName) {
+    // Fetch the importer metadata
+    let importer = null;
+    try {
+      const endpoint = kind === "label" ? "/api/label-importers" : "/api/processor-importers";
+      const res = await fetch(endpoint);
+      if (res.ok) {
+        const list = await res.json();
+        importer = list.find(i => i.name === importerName);
+      }
+    } catch (_) { /* ignore */ }
+    if (!importer) {
+      await vtAlert(`Importer "${importerName}" not found.`, "warning");
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "example-picker-overlay";
+
+      const title = kind === "label"
+        ? `Import Labels: ${escapeHtml(importer.display_name)}`
+        : escapeHtml(importer.display_name);
+      const submitLabel = kind === "label" ? "Import & Train" : "Import";
+
+      let fieldsHtml = `<div class="form-group">
+        <label class="form-label">Detector Name *</label>
+        <input type="text" name="name" placeholder="e.g. My Detector" class="form-input" required>
+      </div>`;
+      for (const field of importer.fields) {
+        fieldsHtml += `<div class="form-group">`;
+        fieldsHtml += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+        if (field.field_type === "file") {
+          fieldsHtml += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
+        } else if (field.field_type === "select") {
+          fieldsHtml += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+          for (const opt of field.options) {
+            fieldsHtml += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
+          }
+          fieldsHtml += `</select>`;
+        } else {
+          const itype = field.field_type === "password" ? "password" : "text";
+          const ph = escapeHtml(field.placeholder || field.description);
+          fieldsHtml += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${ph}" class="form-input" ${field.required ? "required" : ""}>`;
+        }
+        if (field.description) fieldsHtml += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
+        fieldsHtml += `</div>`;
+      }
+
+      overlay.innerHTML = `<div class="example-picker-panel" style="max-width:420px">
+        <div class="example-picker-header"><strong>${title}</strong></div>
+        <form id="example-imp-form" style="padding:8px 0">
+          ${fieldsHtml}
+          <div id="example-imp-status" class="status-text compact"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="submit" class="btn-sm" style="flex:1">${submitLabel}</button>
+            <button type="button" class="btn-sm" id="example-imp-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>`;
+      document.body.appendChild(overlay);
+
+      const statusEl = overlay.querySelector("#example-imp-status");
+
+      overlay.querySelector("#example-imp-cancel").addEventListener("click", () => {
+        document.body.removeChild(overlay);
+        resolve(null);
+      });
+
+      overlay.querySelector("#example-imp-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formEl = e.target;
+        const detName = formEl.elements["name"].value.trim();
+        if (!detName) { statusEl.textContent = "Name is required"; statusEl.style.color = "var(--color-bad)"; return; }
+
+        statusEl.textContent = kind === "label" ? "Importing & training\u2026" : "Importing\u2026";
+        statusEl.style.color = "var(--text-muted)";
+
+        const hasFiles = importer.fields.some(f => f.field_type === "file");
+        let body, headers = {};
+        if (hasFiles) {
+          body = new FormData(formEl);
+        } else {
+          const obj = { name: detName };
+          for (const field of importer.fields) {
+            obj[field.key] = formEl.elements[field.key].value;
+          }
+          body = JSON.stringify(obj);
+          headers["Content-Type"] = "application/json";
+        }
+
+        const url = kind === "label"
+          ? `/api/favorite-detectors/from-label-import/${encodeURIComponent(importer.name)}`
+          : `/api/processor-importers/import/${encodeURIComponent(importer.name)}`;
+
+        try {
+          const res = await fetch(url, { method: "POST", headers, body });
+          const result = await res.json();
+          if (res.ok) {
+            statusEl.textContent = `Created "${result.name || detName}"`;
+            statusEl.style.color = "var(--color-good)";
+            // Refresh detectors list so the new one is available
+            try {
+              const dRes = await fetch("/api/favorite-detectors");
+              if (dRes.ok) { const d = await dRes.json(); favoriteDetectors = d.detectors || []; }
+            } catch (_) { /* ignore */ }
+            setTimeout(() => {
+              document.body.removeChild(overlay);
+              resolve({ type: "detector", value: result.name || detName });
+            }, 600);
+          } else {
+            statusEl.textContent = result.error || "Import failed";
+            statusEl.style.color = "var(--color-bad)";
+          }
+        } catch (err) {
+          statusEl.textContent = `Error: ${err.message}`;
+          statusEl.style.color = "var(--color-bad)";
+        }
+      });
+    });
   }
 
   function refreshAutopilotExamples() {
@@ -548,6 +692,27 @@
       renderExamplesGrid(autopilotExamplesGrid, model.examples || [], (updated) => {
         model.examples = updated;
         saveAutopilotExamples(model);
+      });
+    }
+    // Populate autopilot example type dropdown with importer options (once)
+    if (autopilotExampleType && !autopilotExampleType._importersLoaded) {
+      autopilotExampleType._importersLoaded = true;
+      Promise.all([
+        fetch("/api/processor-importers").then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/label-importers").then(r => r.ok ? r.json() : []).catch(() => []),
+      ]).then(([procImps, lblImps]) => {
+        for (const imp of procImps) {
+          const opt = document.createElement("option");
+          opt.value = `proc_imp:${imp.name}`;
+          opt.textContent = `${imp.icon || '\u{1F9E9}'} ${imp.display_name}`;
+          autopilotExampleType.appendChild(opt);
+        }
+        for (const imp of lblImps) {
+          const opt = document.createElement("option");
+          opt.value = `label_imp:${imp.name}`;
+          opt.textContent = `${imp.icon || '\uD83C\uDFF7\uFE0F'} ${imp.display_name}`;
+          autopilotExampleType.appendChild(opt);
+        }
       });
     }
   }
@@ -5287,6 +5452,95 @@
     });
   }
 
+  function showLabelImporterForm(importer) {
+    processorImporterList.style.display = "none";
+    processorImporterBack.style.display = "inline-block";
+
+    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
+    html += `<p class="form-hint" style="margin-bottom:12px">Import labels and train a detector model.</p>`;
+    html += `<form id="label-imp-form">`;
+    // Name field (always required)
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Model Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">Name for the trained detector.</div>`;
+    html += `</div>`;
+    for (const field of importer.fields) {
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        const itype = field.field_type === "password" ? "password" : "text";
+        const placeholder = escapeHtml(field.placeholder || field.description);
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" class="form-input" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) {
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<div id="label-imp-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Import & Train</button>`;
+    html += `</form>`;
+
+    processorImporterFormDiv.innerHTML = html;
+    processorImporterFormDiv.style.display = "block";
+
+    const statusEl = processorImporterFormDiv.querySelector("#label-imp-status");
+
+    processorImporterFormDiv.querySelector("#label-imp-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      statusEl.textContent = "Importing labels & training\u2026";
+      statusEl.style.color = "var(--text-muted)";
+
+      const formEl = e.target;
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = { name: formEl.elements["name"].value };
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+
+      try {
+        const res = await fetch(`/api/favorite-detectors/from-label-import/${encodeURIComponent(importer.name)}`, {
+          method: "POST", headers, body,
+        });
+        const result = await res.json();
+        if (res.ok) {
+          let msg = `Trained "${result.name}" (${result.media_type})`;
+          if (result.loaded) msg += `, ${result.loaded} labels matched`;
+          if (result.skipped) msg += `, ${result.skipped} skipped`;
+          statusEl.textContent = msg;
+          statusEl.style.color = "var(--color-good)";
+          setTimeout(() => {
+            processorImporterModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
+          }, 1500);
+        } else {
+          statusEl.textContent = result.error || "Import failed";
+          statusEl.style.color = "var(--color-bad)";
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+      }
+    });
+  }
+
   if (processorImporterModalClose) {
     processorImporterModalClose.addEventListener("click", () => {
       processorImporterModal.classList.remove("show");
@@ -6364,11 +6618,16 @@
   }
 
   async function openAddModelPicker() {
-    // Fetch processor importers for the importer options
+    // Fetch processor importers and label importers for the importer options
     let importers = [];
+    let labelImporters = [];
     try {
-      const res = await fetch("/api/processor-importers");
-      if (res.ok) importers = await res.json();
+      const [procRes, labelRes] = await Promise.all([
+        fetch("/api/processor-importers"),
+        fetch("/api/label-importers"),
+      ]);
+      if (procRes.ok) importers = await procRes.json();
+      if (labelRes.ok) labelImporters = await labelRes.json();
     } catch (_) { /* ignore */ }
 
     // Reset modal to list view
@@ -6381,7 +6640,7 @@
     const modalTitle = document.getElementById("processor-importer-modal-title");
     if (modalTitle) modalTitle.textContent = "Add Model";
 
-    // Build options: New Model first, then processor importers
+    // Build options: New Model first, then processor importers, then label importers
     let html = `
       <div class="processor-importer-option option-card" data-name="__new_model__" role="button" tabindex="0">
         <span class="option-card-icon">\u2795</span>
@@ -6401,6 +6660,16 @@
       </div>
     `).join("");
 
+    html += labelImporters.map(imp => `
+      <div class="processor-importer-option option-card" data-name="__label_imp__${escapeHtml(imp.name)}" role="button" tabindex="0">
+        <span class="option-card-icon">${escapeHtml(imp.icon || '\uD83C\uDFF7\uFE0F')}</span>
+        <div>
+          <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+          <div class="option-card-desc">Train model from labels: ${escapeHtml(imp.description)}</div>
+        </div>
+      </div>
+    `).join("");
+
     processorImporterList.innerHTML = html;
 
     // Wire up click handlers
@@ -6409,6 +6678,10 @@
       el.addEventListener("click", () => {
         if (name === "__new_model__") {
           showNewModelForm();
+        } else if (name.startsWith("__label_imp__")) {
+          const impName = name.slice("__label_imp__".length);
+          const imp = labelImporters.find(i => i.name === impName);
+          if (imp) showLabelImporterForm(imp);
         } else {
           const imp = importers.find(i => i.name === name);
           if (imp) showProcessorImporterForm(imp);
@@ -6422,14 +6695,37 @@
     processorImporterModal.classList.add("show");
   }
 
-  function showNewModelForm() {
+  async function showNewModelForm() {
     processorImporterList.style.display = "none";
     processorImporterBack.style.display = "inline-block";
+
+    // Fetch importers for the example type dropdown
+    let procImporters = [];
+    let lblImporters = [];
+    try {
+      const [procRes, lblRes] = await Promise.all([
+        fetch("/api/processor-importers"),
+        fetch("/api/label-importers"),
+      ]);
+      if (procRes.ok) procImporters = await procRes.json();
+      if (lblRes.ok) lblImporters = await lblRes.json();
+    } catch (_) { /* ignore */ }
 
     // Build media type options from the registry
     const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
       `<option value="${escapeHtml(id)}">${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
     ).join("");
+
+    // Build example type options: built-in + importers
+    let exTypeOptions = `<option value="text">Text description</option>`;
+    exTypeOptions += `<option value="media">Server-side example</option>`;
+    exTypeOptions += `<option value="detector">Detector</option>`;
+    for (const imp of procImporters) {
+      exTypeOptions += `<option value="proc_imp:${escapeHtml(imp.name)}">${escapeHtml(imp.icon || '\u{1F9E9}')} ${escapeHtml(imp.display_name)}</option>`;
+    }
+    for (const imp of lblImporters) {
+      exTypeOptions += `<option value="label_imp:${escapeHtml(imp.name)}">${escapeHtml(imp.icon || '\uD83C\uDFF7\uFE0F')} ${escapeHtml(imp.display_name)}</option>`;
+    }
 
     let html = `<h3 class="form-heading">New Model</h3>`;
     html += `<form id="new-model-form">`;
@@ -6450,9 +6746,7 @@
     html += `<div id="new-model-examples-grid" class="examples-grid" style="min-height:36px;margin-bottom:6px"></div>`;
     html += `<div class="examples-add-bar">`;
     html += `<select id="new-model-example-type" class="form-select-inline">`;
-    html += `<option value="text">Text description</option>`;
-    html += `<option value="media">Server-side example</option>`;
-    html += `<option value="detector">Detector</option>`;
+    html += exTypeOptions;
     html += `</select>`;
     html += `<button type="button" id="new-model-example-add" class="btn-sm">+ Add</button>`;
     html += `</div>`;
