@@ -22,8 +22,8 @@
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
   let _combineState = null;          // When non-null, we are in combine-datasets staging mode
-  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart}
-  // phase: "top" | "hard" | "learn"
+  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart, hardLabels, ...}
+  // phase: "good" | "bad" | "hard" | "new" | "done"
   let _autopilotState = null;
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
@@ -321,7 +321,7 @@
   const autopilotExamplesGrid = document.getElementById("autopilot-examples-grid");
   const autopilotExampleType = document.getElementById("autopilot-example-type");
   const autopilotExampleAdd = document.getElementById("autopilot-example-add");
-  const autopilotStatusInput = document.getElementById("autopilot-status");
+  const autopilotStepsDiv = document.getElementById("autopilot-steps");
 
   // Settings modal elements
   const menuSettings = document.getElementById("menu-settings");
@@ -434,24 +434,125 @@
 
   // ---- Autopilot state machine ----
 
-  function setAutopilotStatus(text) {
-    if (autopilotStatusInput) autopilotStatusInput.value = text;
+  const _apSteps = [
+    { id: "good", label: "Find Good labels from examples." },
+    { id: "bad",  label: "Find Bad labels." },
+    { id: "hard", label: "Label hard examples until smart." },
+    { id: "new",  label: "Label new examples until diverse." },
+  ];
+
+  /**
+   * Render the autopilot checklist into the steps div.
+   * Shows all steps, highlights the active one with a detail sub-line,
+   * crosses out completed steps, and dims future steps.
+   */
+  function renderAutopilotSteps() {
+    if (!autopilotStepsDiv) return;
+    if (!_autopilotState) {
+      autopilotStepsDiv.innerHTML = "";
+      return;
+    }
+
+    const st = _autopilotState;
+    const phaseIdx = _apSteps.findIndex(s => s.id === st.phase);
+    const isDone = st.phase === "done";
+
+    let html = "";
+    for (let i = 0; i < _apSteps.length; i++) {
+      const step = _apSteps[i];
+      let cls = "ap-step";
+      if (isDone || i < phaseIdx) cls += " done";
+      else if (i === phaseIdx) cls += " active";
+      else cls += " future";
+
+      html += `<div class="${cls}">${step.label}`;
+
+      // Active step gets an expanded detail line
+      if (!isDone && i === phaseIdx) {
+        html += `<div class="ap-step-detail">${_autopilotDetail(st)}</div>`;
+      }
+      html += "</div>";
+    }
+
+    if (isDone) {
+      html += `<div class="ap-step active" style="border-left-color:#2ecc71">Done! All indicators green.</div>`;
+    }
+
+    autopilotStepsDiv.innerHTML = html;
+  }
+
+  /**
+   * Build the detail / progress string for the currently active phase.
+   */
+  function _autopilotDetail(st) {
+    if (st.phase === "good") {
+      const cur = votes.good.length;
+      const target = st.goodToStart;
+      const pct = Math.min(100, Math.round((cur / target) * 100));
+      return `${cur}/${target} Good `
+        + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
+    }
+    if (st.phase === "bad") {
+      const cur = votes.bad.length;
+      const target = st.badToStart;
+      const pct = Math.min(100, Math.round((cur / target) * 100));
+      return `${cur}/${target} Bad `
+        + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
+    }
+    if (st.phase === "hard") {
+      const n = st.hardLabels || 0;
+      const smartSt = st.smartStatus || "";
+      const stableSt = st.stableStatus || "";
+      return `${n} hard labels applied `
+        + `<span class="ap-indicator-dot" data-status="${smartSt}" title="Smart"></span>`
+        + `<span class="ap-indicator-dot" data-status="${stableSt}" title="Stable"></span>`
+        + ` Smart + Stable`;
+    }
+    if (st.phase === "new") {
+      const frac = st.fracDiversity ?? 0;
+      const pct = Math.min(100, Math.max(0, Math.round((frac / 4) * 100)));
+      return `Diversity ${frac.toFixed(1)} / 4 `
+        + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
+    }
+    return "";
+  }
+
+  // Helper: set select-mode radio buttons and variable
+  function _apSetSelectMode(mode) {
+    selectMode = mode;
+    document.querySelectorAll('input[name="select-mode"]').forEach(r => {
+      r.checked = r.value === mode;
+    });
+  }
+
+  // Helper: switch to learned sort mode
+  function _apActivateLearnedSort() {
+    sortMode = "learned";
+    document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+      r.checked = r.value === "learned";
+    });
+    textSortWrap.style.display = "none";
+    learnedSortWrap.style.display = "";
+    loadSortWrap.style.display = "none";
+    updateLearnedSortDesc();
   }
 
   /**
    * Start the autopilot workflow.  Reads the first example from the current
    * model, triggers the appropriate sort, sets select-mode to Top, and enters
-   * the "top" phase of the state machine.
+   * the "good" phase of the state machine.
    */
   async function startAutopilot() {
     if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
-      setAutopilotStatus("No model selected");
+      _autopilotState = null;
+      renderAutopilotSteps();
       return;
     }
     const model = _dashboardTrainMode.model;
     const examples = model.examples || [];
     if (examples.length === 0) {
-      setAutopilotStatus("No examples — add one first");
+      _autopilotState = null;
+      renderAutopilotSteps();
       return;
     }
 
@@ -467,19 +568,21 @@
       }
     } catch (_) { /* use defaults */ }
 
-    _autopilotState = { phase: "top", goodToStart, badToStart };
+    _autopilotState = {
+      phase: "good", goodToStart, badToStart,
+      hardLabels: 0, smartStatus: "", stableStatus: "",
+      fracDiversity: 0,
+    };
 
     // Sort by the first example
     const firstExample = examples[0];
 
     // Set select mode to Top
-    selectMode = "top";
-    document.querySelectorAll('input[name="select-mode"]').forEach(r => {
-      r.checked = r.value === "top";
-    });
+    _apSetSelectMode("top");
+
+    renderAutopilotSteps();
 
     if (firstExample.type === "text") {
-      // Text sort
       sortMode = "text";
       document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
         r.checked = r.value === "text";
@@ -488,12 +591,9 @@
       learnedSortWrap.style.display = "none";
       loadSortWrap.style.display = "none";
       textSortInput.value = firstExample.value;
-      setAutopilotStatus("Top — sorting by text");
       await fetchTextSort(firstExample.value);
     } else if (firstExample.type === "media") {
-      // Example sort via server media file
       activateLoadSort("Example: " + firstExample.value);
-      setAutopilotStatus("Top — sorting by example");
       showSortProgress("Scoring with example media\u2026");
       try {
         const res = await fetch("/api/example-sort-server", {
@@ -516,8 +616,6 @@
         sortStatus.textContent = `Error: ${err.message}`;
       }
     } else if (firstExample.type === "detector") {
-      // Load detector sort — fetch the named favorite detector
-      setAutopilotStatus("Top — sorting by detector");
       try {
         const res = await fetch("/api/favorite-detectors");
         if (!res.ok) throw new Error("Failed to fetch detectors");
@@ -538,51 +636,96 @@
 
   /**
    * Check whether the autopilot should advance to the next phase based on
-   * the current vote counts.  Called after every vote.
+   * vote counts and indicator statuses.  Called after every vote and after
+   * labeling-status updates.
    */
   function checkAutopilotPhase() {
     if (!_autopilotState) return;
 
-    const { phase, goodToStart, badToStart } = _autopilotState;
+    const st = _autopilotState;
 
-    if (phase === "top") {
-      if (votes.good.length >= goodToStart) {
-        // Transition to Hard phase
-        _autopilotState.phase = "hard";
-        selectMode = "hard";
-        document.querySelectorAll('input[name="select-mode"]').forEach(r => {
-          r.checked = r.value === "hard";
-        });
-        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
-        // Re-check in case we also satisfy the hard threshold
-        checkAutopilotPhase();
-      } else {
-        setAutopilotStatus(`Top — need ${goodToStart} goods (${votes.good.length} so far)`);
+    if (st.phase === "good") {
+      if (votes.good.length >= st.goodToStart) {
+        // Transition to Bad phase — switch select mode to Hard
+        st.phase = "bad";
+        _apSetSelectMode("hard");
+        checkAutopilotPhase(); // re-check in case bad threshold also met
+        return;
       }
-    } else if (phase === "hard") {
-      if (votes.bad.length >= badToStart) {
-        // Transition to Learn phase
-        _autopilotState.phase = "learn";
-        sortMode = "learned";
-        document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
-          r.checked = r.value === "learned";
-        });
-        textSortWrap.style.display = "none";
-        learnedSortWrap.style.display = "";
-        loadSortWrap.style.display = "none";
-        setAutopilotStatus("Learn");
-        updateLearnedSortDesc();
+    } else if (st.phase === "bad") {
+      if (votes.bad.length >= st.badToStart) {
+        // Transition to Hard phase — switch to learned sort + hard select
+        st.phase = "hard";
+        st.hardLabels = 0;
+        _apActivateLearnedSort();
+        _apSetSelectMode("hard");
         fetchLearnedSort(true);
-      } else {
-        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
+        checkAutopilotPhase(); // re-check indicators
+        return;
+      }
+    } else if (st.phase === "hard") {
+      // Check if Smart AND Stable indicators are both green
+      if (st.smartStatus === "green" && st.stableStatus === "green") {
+        // Transition to New phase
+        st.phase = "new";
+        _apSetSelectMode("new");
+        // Keep learned sort active; select mode = new uses diversity tree
+        _fetchAndApplyDiversitySample();
+        checkAutopilotPhase(); // re-check span
+        return;
+      }
+    } else if (st.phase === "new") {
+      // Check if Diverse (span) indicator is green
+      if (st.spanStatus === "green") {
+        st.phase = "done";
       }
     }
-    // phase === "learn" — nothing to do, stay in learn mode
+
+    renderAutopilotSteps();
+  }
+
+  /**
+   * Called from applyLabelingStatus whenever indicator data arrives.
+   * Feeds indicator statuses into the autopilot state machine so it can
+   * decide when to transition from Hard→New and New→Done.
+   */
+  function _autopilotOnIndicatorUpdate(data) {
+    if (!_autopilotState) return;
+    const st = _autopilotState;
+    if (data.smart) st.smartStatus = data.smart.status;
+    if (data.stable) st.stableStatus = data.stable.status;
+    if (data.span) {
+      st.spanStatus = data.span.status;
+      if (typeof data.span.fractional_level === "number") {
+        st.fracDiversity = data.span.fractional_level;
+      }
+    }
+    checkAutopilotPhase();
+  }
+
+  /**
+   * Increment the hard-labels counter.  Called from castVote when
+   * autopilot is in the "hard" phase.
+   */
+  function _autopilotCountHardLabel() {
+    if (_autopilotState && _autopilotState.phase === "hard") {
+      _autopilotState.hardLabels = (_autopilotState.hardLabels || 0) + 1;
+    }
+  }
+
+  /** Fetch a diversity-tree sample and navigate to it. */
+  async function _fetchAndApplyDiversitySample() {
+    const data = await fetchDiversityTreeNext();
+    if (data.id != null) {
+      selectMedia(data.id);
+    } else if (data.exhausted) {
+      vtAlert("Diversity tree exhausted. All branches labeled.", "warning");
+    }
   }
 
   function stopAutopilot() {
     _autopilotState = null;
-    setAutopilotStatus("");
+    renderAutopilotSteps();
   }
 
   // ---- Dataset Management ----
@@ -3881,7 +4024,8 @@
         }
       }
 
-      // Autopilot: check if the phase should advance (may change selectMode/sortMode).
+      // Autopilot: count hard labels and check if the phase should advance.
+      _autopilotCountHardLabel();
       checkAutopilotPhase();
 
       // Auto-advance to next media.  When swipe animation is enabled, play a
@@ -5069,6 +5213,8 @@
     if (data.span) {
       _applyIndicator(spanIndicator, document.getElementById("span-subtext"), data.span);
     }
+    // Feed indicator statuses into the autopilot state machine
+    _autopilotOnIndicatorUpdate(data);
   }
 
   // Generic handler: fetch full analysis, then show the relevant section
