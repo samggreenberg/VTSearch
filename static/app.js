@@ -99,18 +99,38 @@
         vtDialogInput.style.display = "none";
       }
 
+      function closeWith(value) {
+        document.removeEventListener("keydown", keyHandler);
+        vtDialogModal.classList.remove("show");
+        resolve(value);
+      }
+
+      function keyHandler(e) {
+        if (!vtDialogModal.classList.contains("show")) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const primaryBtn = buttons.find((b) => b.primary);
+          if (primaryBtn) closeWith(primaryBtn.value === "input" ? vtDialogInput.value : primaryBtn.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          const cancelBtn = buttons.find((b) => !b.primary);
+          if (cancelBtn) closeWith(cancelBtn.value === "input" ? vtDialogInput.value : cancelBtn.value);
+          else closeWith(buttons[0].value === "input" ? vtDialogInput.value : buttons[0].value);
+        }
+      }
+
       vtDialogActions.innerHTML = "";
       buttons.forEach((btn) => {
         const el = document.createElement("button");
         el.className = "vt-dialog-btn " + (btn.primary ? "primary" : "secondary");
         el.textContent = btn.label;
         el.addEventListener("click", () => {
-          vtDialogModal.classList.remove("show");
-          resolve(btn.value === "input" ? vtDialogInput.value : btn.value);
+          closeWith(btn.value === "input" ? vtDialogInput.value : btn.value);
         });
         vtDialogActions.appendChild(el);
       });
 
+      document.addEventListener("keydown", keyHandler);
       vtDialogModal.classList.add("show");
       if (showInput) {
         setTimeout(() => vtDialogInput.focus(), 50);
@@ -6719,6 +6739,9 @@
       [detectorExportModal, detectorExportModalClose],
       [processorImporterModal, processorImporterModalClose],
       [autodetectModal, autodetectModalClose],
+      [datasetImporterModal, datasetImporterModalClose],
+      [loadSortModal, loadSortModalClose],
+      [settingsModal, settingsModalClose],
       [progressModal, modalClose],
     ];
     for (const [modal, closeBtn] of modalClosePairs) {
