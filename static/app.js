@@ -489,6 +489,7 @@
                 num_medias: info.num_medias,
                 media_type: info.media_type,
                 origin: info.origin,
+                source: info.source || null,
               });
             }
           } catch (_) { /* ignore */ }
@@ -499,6 +500,50 @@
           selected = null;
           datasetLoaded = false;
           showDashboard();
+          return;
+        }
+
+        // Dashboard train mode: dataset loaded, now apply labels and enter labeling UI
+        if (_dashboardTrainMode) {
+          const trainInfo = _dashboardTrainMode;
+          await fetchMedias();
+
+          // Import labels from the trainable model's labelset
+          try {
+            const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(trainInfo.model.name)}`);
+            if (modelRes.ok) {
+              const modelData = await modelRes.json();
+              const labels = modelData.labelset && modelData.labelset.labels;
+              if (labels && labels.length > 0) {
+                await fetch("/api/labels/import", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ labels }),
+                });
+              }
+            }
+          } catch (_) { /* ignore label import errors */ }
+
+          await fetchVotes();
+
+          // Set text sort mode and trigger sort with the model's text query
+          sortMode = "text";
+          textSortWrap.style.display = "";
+          learnedSortWrap.style.display = "none";
+          loadSortWrap.style.display = "none";
+          // Update radio buttons to reflect text sort mode
+          document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+            r.checked = r.value === "text";
+          });
+          textSortInput.value = trainInfo.model.text_query || "";
+          if (trainInfo.model.text_query) {
+            fetchTextSort(trainInfo.model.text_query);
+          }
+
+          // Select first media
+          if (medias.length > 0 && !selected) {
+            selectMedia(medias[0].id);
+          }
           return;
         }
 
@@ -1264,6 +1309,12 @@
     // If we came from the dashboard, go back to dashboard
     if (_dashboardAddDatasetMode) {
       _dashboardAddDatasetMode = false;
+      showDashboard();
+      return;
+    }
+    // If we were in a training session, save labels and return to dashboard
+    if (_dashboardTrainMode) {
+      saveTrainableModelLabels();
       showDashboard();
       return;
     }
@@ -5445,9 +5496,57 @@
   let dashboardSelectedDatasets = {};  // id -> true
   let dashboardSelectedModels = {};    // id -> true
   let _dashboardAddDatasetMode = false;
+  let _dashboardTrainMode = null;  // {model, dataset} when training a trainable model
   let _dashboardNextId = 1;
 
+  async function saveTrainableModelLabels() {
+    if (!_dashboardTrainMode) return;
+    const modelName = _dashboardTrainMode.model.name;
+    try {
+      const res = await fetch(`/api/trainable-models/${encodeURIComponent(modelName)}/labels`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const result = await res.json();
+        // Update the dashboard model entry with new label count
+        const model = dashboardModels.find(m => m.name === modelName && m.trainable);
+        if (model) {
+          model.num_labels = result.num_labels || 0;
+        }
+      }
+    } catch (_) { /* ignore save errors */ }
+    _dashboardTrainMode = null;
+  }
+
+  async function loadTrainableModelsIntoDashboard() {
+    try {
+      const res = await fetch("/api/trainable-models");
+      if (!res.ok) return;
+      const data = await res.json();
+      const serverModels = data.models || [];
+      for (const sm of serverModels) {
+        // Skip if already present in dashboardModels (match by name + trainable flag)
+        if (dashboardModels.some(m => m.trainable && m.name === sm.name)) continue;
+        dashboardModels.push({
+          id: _dashboardNextId++,
+          name: sm.name,
+          num_labels: sm.num_labels || 0,
+          media_type: "any",
+          text_examples: sm.text_query || "-",
+          media_examples: "-",
+          origin: "Train New",
+          trainable: true,
+          text_query: sm.text_query || "",
+        });
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   function showDashboard() {
+    // If leaving a training session, save labels first
+    if (_dashboardTrainMode) {
+      saveTrainableModelLabels();
+    }
     // Hide left/right panels and welcome screen
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
@@ -5458,9 +5557,12 @@
     center.innerHTML = "";
     center.appendChild(dashboardView);
     dashboardView.style.display = "flex";
-    renderDashboardDatasets();
-    renderDashboardModels();
-    updateDashboardButtons();
+    // Load trainable models from server, then render
+    loadTrainableModelsIntoDashboard().then(() => {
+      renderDashboardDatasets();
+      renderDashboardModels();
+      updateDashboardButtons();
+    });
   }
 
   function hideDashboard() {
@@ -5567,8 +5669,9 @@
     const sorted = dashboardSortRows(dashboardModels, dashboardModelSort);
     dashboardModelsTbody.innerHTML = sorted.map(m => {
       const sel = dashboardSelectedModels[m.id] ? " selected" : "";
+      const trainBadge = m.trainable ? ' <span class="trainable-badge">trainable</span>' : "";
       return `<tr data-id="${m.id}" class="${sel}">
-        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
+        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}${trainBadge} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
         <td>${m.num_labels}</td>
         <td>${escapeHtml(m.media_type)}</td>
         <td title="${escapeHtml(m.text_examples)}">${escapeHtml(m.text_examples)}</td>
@@ -5598,6 +5701,11 @@
       btn.addEventListener("click", async () => {
         const id = parseInt(btn.dataset.id);
         if (btn.dataset.action === "remove") {
+          const m = dashboardModels.find(m => m.id === id);
+          if (m && m.trainable) {
+            // Also delete from backend
+            fetch(`/api/trainable-models/${encodeURIComponent(m.name)}`, { method: "DELETE" }).catch(() => {});
+          }
           dashboardModels = dashboardModels.filter(m => m.id !== id);
           delete dashboardSelectedModels[id];
           renderDashboardModels();
@@ -5607,6 +5715,16 @@
           if (!m) return;
           const newName = await vtPrompt(`Rename model "${m.name}" to:`, m.name);
           if (newName && newName !== m.name) {
+            if (m.trainable) {
+              // Rename on backend too
+              try {
+                await fetch(`/api/trainable-models/${encodeURIComponent(m.name)}/rename`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ new_name: newName }),
+                });
+              } catch (_) { /* ignore */ }
+            }
             m.name = newName;
             renderDashboardModels();
           }
@@ -5618,10 +5736,59 @@
   function updateDashboardButtons() {
     const numDS = Object.keys(dashboardSelectedDatasets).length;
     const numMD = Object.keys(dashboardSelectedModels).length;
-    // Train: exactly 1 dataset + exactly 1 model
-    dashboardTrainBtn.disabled = !(numDS === 1 && numMD === 1);
+    // Train: exactly 1 dataset + exactly 1 model (model must be trainable)
+    let trainEnabled = numDS === 1 && numMD === 1;
+    if (trainEnabled) {
+      const modelId = parseInt(Object.keys(dashboardSelectedModels)[0]);
+      const model = dashboardModels.find(m => m.id === modelId);
+      trainEnabled = model && model.trainable;
+    }
+    dashboardTrainBtn.disabled = !trainEnabled;
     // Run: at least 1 dataset + at least 1 model
     dashboardRunBtn.disabled = !(numDS >= 1 && numMD >= 1);
+  }
+
+  // -- Train button: load dataset + import labels + enter labeling UI --
+  if (dashboardTrainBtn) {
+    dashboardTrainBtn.addEventListener("click", async () => {
+      const dsId = parseInt(Object.keys(dashboardSelectedDatasets)[0]);
+      const mdId = parseInt(Object.keys(dashboardSelectedModels)[0]);
+      const dataset = dashboardDatasets.find(d => d.id === dsId);
+      const model = dashboardModels.find(m => m.id === mdId);
+      if (!dataset || !model || !model.trainable) return;
+
+      if (!dataset.source) {
+        await vtAlert("Cannot reload this dataset — no source info stored. Please re-add the dataset.", "warning");
+        return;
+      }
+
+      // Enter training mode
+      _dashboardTrainMode = { model, dataset };
+      hideDashboard();
+
+      // Kick off dataset reload from the stored source
+      try {
+        const res = await fetch("/api/dataset/load-source", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: dataset.source }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          _dashboardTrainMode = null;
+          await vtAlert(err.error || "Failed to reload dataset", "warning");
+          showDashboard();
+          return;
+        }
+      } catch (err) {
+        _dashboardTrainMode = null;
+        await vtAlert(`Failed to reload dataset: ${err.message}`, "warning");
+        showDashboard();
+        return;
+      }
+
+      startProgressPolling();
+    });
   }
 
   // Wire sortable headers for datasets table
@@ -5689,10 +5856,19 @@
     processorImporterBack.style.display = "none";
     processorImporterList.style.display = "";
 
-    if (importers.length === 0) {
-      processorImporterList.innerHTML = '<p style="color:var(--text-muted);">No processor importers available.</p>';
-    } else {
-      processorImporterList.innerHTML = importers.map(imp => `
+    // Build option cards: "Train New" first, then processor importers
+    let html = `
+      <div class="processor-importer-option option-card" data-name="__train_new__">
+        <span class="option-card-icon">\u{1F9E0}</span>
+        <div>
+          <div class="option-card-title">Train New</div>
+          <div class="option-card-desc">Create a trainable model with a text description. Add labels over time.</div>
+        </div>
+      </div>
+    `;
+
+    if (importers.length > 0) {
+      html += importers.map(imp => `
         <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}">
           <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
           <div>
@@ -5701,20 +5877,100 @@
           </div>
         </div>
       `).join("");
+    }
 
-      processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
-        el.setAttribute("role", "button");
-        el.setAttribute("tabindex", "0");
-        const name = el.dataset.name;
+    processorImporterList.innerHTML = html;
+
+    processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      const name = el.dataset.name;
+      if (name === "__train_new__") {
+        el.addEventListener("click", () => showTrainNewFormForDashboard());
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showTrainNewFormForDashboard(); }
+        });
+      } else {
         const imp = importers.find(i => i.name === name);
         el.addEventListener("click", () => showProcessorImporterFormForDashboard(imp));
         el.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showProcessorImporterFormForDashboard(imp); }
         });
-      });
-    }
+      }
+    });
 
     processorImporterModal.classList.add("show");
+  }
+
+  function showTrainNewFormForDashboard() {
+    processorImporterList.style.display = "none";
+    processorImporterBack.style.display = "inline-block";
+
+    let html = `<h3 class="form-heading">Train New Model</h3>`;
+    html += `<form id="train-new-form">`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Model Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">A name for this trainable model.</div>`;
+    html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Text Sort Query *</label>`;
+    html += `<input type="text" name="text_query" placeholder="e.g. sounds of dogs barking" class="form-input" required>`;
+    html += `<div class="form-hint">Describes what to look for. Used for initial text-based sorting.</div>`;
+    html += `</div>`;
+    html += `<div id="train-new-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Create Model</button>`;
+    html += `</form>`;
+
+    processorImporterFormDiv.innerHTML = html;
+    processorImporterFormDiv.style.display = "block";
+
+    const statusEl = processorImporterFormDiv.querySelector("#train-new-status");
+
+    processorImporterFormDiv.querySelector("#train-new-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const name = formEl.elements["name"].value.trim();
+      const textQuery = formEl.elements["text_query"].value.trim();
+      if (!name || !textQuery) return;
+
+      statusEl.textContent = "Creating\u2026";
+      statusEl.style.color = "var(--text-muted)";
+
+      try {
+        const res = await fetch("/api/trainable-models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, text_query: textQuery }),
+        });
+        const result = await res.json();
+        if (res.ok) {
+          dashboardModels.push({
+            id: _dashboardNextId++,
+            name: result.name,
+            num_labels: 0,
+            media_type: "any",
+            text_examples: result.text_query,
+            media_examples: "-",
+            origin: "Train New",
+            trainable: true,
+            text_query: result.text_query,
+          });
+          statusEl.textContent = `Created "${result.name}"`;
+          statusEl.style.color = "var(--color-good)";
+          setTimeout(() => {
+            processorImporterModal.classList.remove("show");
+            showDashboard();
+          }, 800);
+        } else {
+          statusEl.textContent = result.error || "Creation failed";
+          statusEl.style.color = "var(--color-bad)";
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+      }
+    });
   }
 
   function showProcessorImporterFormForDashboard(importer) {
