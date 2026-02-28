@@ -4,7 +4,6 @@ Covers:
 - ExporterField and LabelsetExporter base classes
 - Auto-discovery registry
 - Built-in exporters: gui, server_json_file, server_csv_file, email_smtp
-- Old-IO exporters: local_json_file (imported from old_io.exporters)
 - Flask API routes: GET /api/exporters, POST /api/exporters/export
 """
 
@@ -333,54 +332,6 @@ class TestServerJsonLabelsetExporter:
 
 
 # ---------------------------------------------------------------------------
-# Local JSON file exporter
-# ---------------------------------------------------------------------------
-
-
-class TestLocalJsonLabelsetExporter:
-    def _get_exporter(self):
-        from old_io.exporters.local_json_file import EXPORTER
-
-        return EXPORTER
-
-    def test_export_returns_download_content(self):
-        exp = self._get_exporter()
-        result = exp.export(SAMPLE_RESULTS, {})
-        assert "message" in result
-        assert "download_content" in result
-        assert "download_filename" in result
-        assert "download_content_type" in result
-        assert result["download_content_type"] == "application/json"
-        parsed = json.loads(result["download_content"])
-        assert parsed["media_type"] == "audio"
-        assert parsed["detectors_run"] == 2
-
-    def test_export_uses_custom_filename(self):
-        exp = self._get_exporter()
-        result = exp.export(SAMPLE_RESULTS, {"filepath": "custom.json"})
-        assert result["download_filename"] == "custom.json"
-
-    def test_export_default_filename(self):
-        exp = self._get_exporter()
-        result = exp.export(SAMPLE_RESULTS, {})
-        assert result["download_filename"] == "autodetect_results.json"
-
-    def test_export_cli_writes_file(self):
-        exp = self._get_exporter()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fpath = Path(tmpdir) / "out.json"
-            result = exp.export_cli(SAMPLE_RESULTS, {"filepath": str(fpath)})
-            assert fpath.exists()
-            assert "message" in result
-            written = json.loads(fpath.read_text())
-            assert written["media_type"] == "audio"
-
-    def test_to_dict(self):
-        d = self._get_exporter().to_dict()
-        assert d["name"] == "local_json_file"
-
-
-# ---------------------------------------------------------------------------
 # Email SMTP exporter
 # ---------------------------------------------------------------------------
 
@@ -627,12 +578,6 @@ class TestExportEndpoint:
         data = res.get_json()
         assert "missing_fields" in data
         assert "filepath" in data["missing_fields"]
-
-    def test_local_json_exporter_returns_download(self):
-        from old_io.exporters.local_json_file import EXPORTER
-
-        result = EXPORTER.export(SAMPLE_RESULTS, {})
-        assert "download_content" in result
 
     def test_email_exporter_sends_via_smtp(self, client):
         mock_server = MagicMock()
