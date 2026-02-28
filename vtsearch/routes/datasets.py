@@ -800,6 +800,7 @@ def dashboard_dataset_info():
     return jsonify({
         "name": name,
         "num_medias": num_medias,
+        "num_dupes": get_dupe_count(),
         "media_type": media_type,
         "origin": origin or "unknown",
         "source": source,

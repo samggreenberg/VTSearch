@@ -926,7 +926,7 @@
     }
 
     // Populate grids
-    renderDashboardDatasets();
+    await renderDashboardDatasets();
     await renderDashboardModels();
     updateDashboardButtons();
   }
@@ -937,12 +937,36 @@
     if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
   }
 
-  function renderDashboardDatasets() {
+  async function renderDashboardDatasets() {
     if (!dashDatasetGrid) return;
 
     if (datasetLoaded) {
-      // Dataset is already loaded — status bar shows the info; grid can be minimal
-      dashDatasetGrid.innerHTML = "";
+      // Fetch dataset info and display it in the grid
+      try {
+        const res = await fetch("/api/dashboard/dataset-info");
+        const info = await res.json();
+        const mtInfo = mediaTypesMap[info.media_type];
+        const icon = mtInfo ? mtInfo.icon : "";
+        const typeName = mtInfo ? mtInfo.name : info.media_type || "media";
+        const dupeSuffix = info.num_dupes ? ` (${info.num_dupes} dupes)` : "";
+        dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
+          <thead><tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Items</th>
+            <th>Origin</th>
+          </tr></thead>
+          <tbody>
+            <tr class="dash-dataset-row dash-selected">
+              <td class="col-name">${escapeHtml(info.name)}</td>
+              <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
+              <td class="col-count">${info.num_medias}${escapeHtml(dupeSuffix)}</td>
+              <td class="col-origin">${escapeHtml(info.origin)}</td>
+            </tr>
+          </tbody></table>`;
+      } catch (_) {
+        dashDatasetGrid.innerHTML = "";
+      }
       return;
     }
 
