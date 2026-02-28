@@ -2,7 +2,6 @@
 
 import json
 import shutil
-from pathlib import Path
 
 import pytest
 
@@ -235,7 +234,7 @@ class TestSaveLabels:
         model_data = model_res.get_json()
         labels = model_data["labelset"]["labels"]
         assert len(labels) == 2
-        label_values = {l["label"] for l in labels}
+        label_values = {lbl["label"] for lbl in labels}
         assert "good" in label_values
         assert "bad" in label_values
 

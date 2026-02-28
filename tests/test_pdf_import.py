@@ -14,7 +14,6 @@ from __future__ import annotations
 import unittest.mock as mock
 
 import numpy as np
-import pytest
 
 
 def _create_test_pdf(path, num_pages=2):
