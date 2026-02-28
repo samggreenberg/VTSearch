@@ -16,6 +16,9 @@
       <span aria-hidden="true"></span>
     </button>
     <div class="burger-dropdown" id="burger-dropdown" role="menu" aria-label="Main menu">
+      <div class="burger-section" role="group" aria-label="Dataset">
+        <div class="burger-section-title" id="menu-section-dataset">Dataset</div>
+      </div>
       <div class="burger-section" role="group" aria-label="Labels">
         <div class="burger-section-title" id="menu-section-labels">Labels</div>
         <div class="burger-item disabled" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
@@ -125,7 +128,6 @@
             <span class="dashboard-section-title">Datasets</span>
             <div class="dashboard-section-actions">
               <button class="btn-sm" id="dash-add-dataset-btn">+</button>
-              <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
             </div>
           </div>
           <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
