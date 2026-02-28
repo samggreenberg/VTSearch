@@ -655,7 +655,11 @@ def train_from_label_import(importer_name: str):
 
 @detectors_bp.route("/api/auto-detect", methods=["POST"])
 def auto_detect():
-    """Run all favorite detectors for the current media type and return positive hits."""
+    """Run favorite detectors for the current media type and return positive hits.
+
+    Accepts an optional JSON body with ``detector_name`` to run a single
+    detector instead of all favorites.
+    """
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
@@ -672,6 +676,14 @@ def auto_detect():
 
     if not detectors:
         return jsonify({"error": f"No favorite detectors found for media type: {media_type}"}), 400
+
+    # Optionally filter to a single detector
+    body = request.get_json(silent=True) or {}
+    single_name = body.get("detector_name")
+    if single_name:
+        if single_name not in detectors:
+            return jsonify({"error": f"Detector '{single_name}' not found for media type: {media_type}"}), 404
+        detectors = {single_name: detectors[single_name]}
 
     # Prepare shared data for all detectors
     import torch  # noqa: PLC0415
