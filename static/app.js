@@ -1358,7 +1358,7 @@
         const deleteBtn = tr.querySelector(".dash-delete-btn");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!confirm("Remove this dataset? All votes and labels will be cleared.")) return;
+          if (!(await vtConfirm("Remove this dataset? All votes and labels will be cleared."))) return;
           try {
             await fetch("/api/dataset/clear", { method: "POST" });
             datasetLoaded = false;
@@ -1511,7 +1511,7 @@
         const deleteBtn = tr.querySelector(".dash-delete-btn");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!confirm(`Delete model "${det.name}"? This cannot be undone.`)) return;
+          if (!(await vtConfirm(`Delete model "${det.name}"? This cannot be undone.`))) return;
           try {
             const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(det.name)}`, { method: "DELETE" });
             if (res.ok) {
