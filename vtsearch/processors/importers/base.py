@@ -22,7 +22,7 @@ The processor data returned by :meth:`run` is a dict with at minimum::
     }
 
 The route handler adds the user-supplied ``name`` and saves the result as a
-favorite detector via :func:`~vtsearch.utils.add_favorite_detector`.
+autorun detector via :func:`~vtsearch.utils.add_autorun_detector`.
 
 Example -- a minimal S3 processor importer skeleton::
 
@@ -114,7 +114,7 @@ class ProcessorImporter:
 
     The :meth:`run` method must return a dict with at minimum ``media_type``,
     ``weights``, and ``threshold`` keys.  The route handler will combine this
-    with the user-supplied name and save it as a favorite detector.
+    with the user-supplied name and save it as a autorun detector.
 
     CLI support
     -----------

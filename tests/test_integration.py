@@ -44,10 +44,10 @@ def _export_detector(client):
     return data
 
 
-def _save_favorite_detector(client, name, detector, *, autodetect=True):
-    """Save a detector as a favorite with autodetect enabled by default."""
+def _save_autorun_detector(client, name, detector, *, autodetect=True):
+    """Save an autorun detector."""
     resp = client.post(
-        "/api/favorite-detectors",
+        "/api/autorun-detectors",
         json={
             "name": name,
             "media_type": "audio",
@@ -56,7 +56,7 @@ def _save_favorite_detector(client, name, detector, *, autodetect=True):
             "autodetect": autodetect,
         },
     )
-    assert resp.status_code == 200, f"Save favorite failed: {resp.get_json()}"
+    assert resp.status_code == 200, f"Save autorun detector failed: {resp.get_json()}"
     return resp.get_json()
 
 
@@ -190,11 +190,11 @@ class TestDetectorLifecycleWorkflow:
         det_scores = [e["score"] for e in sort_data["results"]]
         assert det_scores == sorted(det_scores, reverse=True)
 
-        # Step 4: Save as favorite
-        _save_favorite_detector(client, "my-detector", detector)
+        # Step 4: Save as autorun
+        _save_autorun_detector(client, "my-detector", detector)
 
-        # Step 5: Verify it appears in favorites list
-        resp = client.get("/api/favorite-detectors")
+        # Step 5: Verify it appears in autorun list list
+        resp = client.get("/api/autorun-detectors")
         assert resp.status_code == 200
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "my-detector" in names
@@ -203,7 +203,7 @@ class TestDetectorLifecycleWorkflow:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Step 7: Run auto-detect using saved favorite
+        # Step 7: Run auto-detect using saved autorun detector
         resp = client.post("/api/auto-detect")
         assert resp.status_code == 200
         auto_data = resp.get_json()
@@ -335,17 +335,17 @@ class TestAutoDetectExportPipeline:
         # Step 1: Train and save first detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         det1 = _export_detector(client)
-        _save_favorite_detector(client, "low-freq-detector", det1)
+        _save_autorun_detector(client, "low-freq-detector", det1)
 
         # Step 2: Change votes and train second detector
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
         _vote_clips(client, [5, 6, 7], [1, 2, 3])
         det2 = _export_detector(client)
-        _save_favorite_detector(client, "mid-freq-detector", det2)
+        _save_autorun_detector(client, "mid-freq-detector", det2)
 
         # Step 3: Verify both detectors saved
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         names = {d["name"] for d in resp.get_json()["detectors"]}
         assert names == {"low-freq-detector", "mid-freq-detector"}
 
@@ -477,7 +477,7 @@ class TestDetectorFileImportWorkflow:
         # Step 2: Import the detector from a "file"
         json_bytes = json.dumps(detector).encode("utf-8")
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data={
                 "file": (io.BytesIO(json_bytes), "imported_detector.json"),
                 "name": "file-imported",
@@ -487,8 +487,8 @@ class TestDetectorFileImportWorkflow:
         assert resp.status_code == 200
         assert resp.get_json()["name"] == "file-imported"
 
-        # Step 3: Verify it appears in favorites
-        resp = client.get("/api/favorite-detectors")
+        # Step 3: Verify it appears in autorun list
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "file-imported" in names
 
@@ -501,24 +501,24 @@ class TestDetectorFileImportWorkflow:
 
         # Step 5: Rename the detector
         resp = client.put(
-            "/api/favorite-detectors/file-imported/rename",
+            "/api/autorun-detectors/file-imported/rename",
             json={"new_name": "renamed-detector"},
         )
         assert resp.status_code == 200
         assert resp.get_json()["new_name"] == "renamed-detector"
 
         # Step 6: Verify old name gone, new name present
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "renamed-detector" in names
         assert "file-imported" not in names
 
         # Step 7: Delete the detector
-        resp = client.delete("/api/favorite-detectors/renamed-detector")
+        resp = client.delete("/api/autorun-detectors/renamed-detector")
         assert resp.status_code == 200
 
         # Step 8: Verify it's gone
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         assert resp.get_json()["detectors"] == []
 
 
@@ -617,15 +617,15 @@ class TestErrorRecoveryWorkflow:
 
 
 # ---------------------------------------------------------------------------
-# 12. Detector Train → Save to Favorite Processor → Verify Settings
+# 12. Detector Train → Save to Autorun Processor → Verify Settings
 # ---------------------------------------------------------------------------
 
 
-class TestFavoriteProcessorWorkflow:
-    """Simulates: user exports a detector to a file, adds it as a favorite
+class TestAutorunProcessorWorkflow:
+    """Simulates: user exports a detector to a file, adds it as an autorun
     processor in settings, and verifies the settings pipeline."""
 
-    def test_detector_to_favorite_processor(self, client, tmp_path):
+    def test_detector_to_autorun_processor(self, client, tmp_path):
         # Step 1: Vote and export detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         detector = _export_detector(client)
@@ -642,9 +642,9 @@ class TestFavoriteProcessorWorkflow:
             )
         )
 
-        # Step 3: Add as a favorite processor in settings
+        # Step 3: Add as a autorun processor in settings
         resp = client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "my-saved-detector",
                 "processor_importer": "server_detector_file",
@@ -657,21 +657,21 @@ class TestFavoriteProcessorWorkflow:
         # Step 4: Verify it appears in settings
         resp = client.get("/api/settings")
         data = resp.get_json()
-        proc_names = [p["processor_name"] for p in data["favorite_processors"]]
+        proc_names = [p["processor_name"] for p in data["autorun_processors"]]
         assert "my-saved-detector" in proc_names
 
         # Step 5: Verify it also appears in the processors list
-        resp = client.get("/api/settings/favorite-processors")
+        resp = client.get("/api/settings/autorun-processors")
         assert resp.status_code == 200
-        proc_names = [p["processor_name"] for p in resp.get_json()["favorite_processors"]]
+        proc_names = [p["processor_name"] for p in resp.get_json()["autorun_processors"]]
         assert "my-saved-detector" in proc_names
 
         # Step 6: Delete it and verify it's gone
-        resp = client.delete("/api/settings/favorite-processors/my-saved-detector")
+        resp = client.delete("/api/settings/autorun-processors/my-saved-detector")
         assert resp.status_code == 200
 
-        resp = client.get("/api/settings/favorite-processors")
-        proc_names = [p["processor_name"] for p in resp.get_json()["favorite_processors"]]
+        resp = client.get("/api/settings/autorun-processors")
+        proc_names = [p["processor_name"] for p in resp.get_json()["autorun_processors"]]
         assert "my-saved-detector" not in proc_names
 
 
@@ -687,7 +687,7 @@ class TestGuiExporterWorkflow:
         # Step 1: Train and save a detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         detector = _export_detector(client)
-        _save_favorite_detector(client, "gui-test-det", detector)
+        _save_autorun_detector(client, "gui-test-det", detector)
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 

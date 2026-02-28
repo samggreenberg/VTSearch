@@ -731,7 +731,7 @@
     try {
       const url = model.trainable
         ? `/api/trainable-models/${encodeURIComponent(model.name)}/examples`
-        : `/api/favorite-detectors/${encodeURIComponent(model.name)}/examples`;
+        : `/api/autorun-detectors/${encodeURIComponent(model.name)}/examples`;
       await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1008,7 +1008,7 @@
       }
     } else if (firstExample.type === "detector") {
       try {
-        const res = await fetch("/api/favorite-detectors");
+        const res = await fetch("/api/autorun-detectors");
         if (!res.ok) throw new Error("Failed to fetch detectors");
         const data = await res.json();
         const det = (data.detectors || []).find(d => d.name === firstExample.value);
@@ -1352,14 +1352,14 @@
   async function renderDashboardModels() {
     if (!dashModelGrid) return;
 
-    // Fetch fresh favorites
+    // Fetch fresh autorun detectors
     try {
-      const res = await fetch("/api/favorite-detectors");
+      const res = await fetch("/api/autorun-detectors");
       const data = await res.json();
-      favoriteDetectors = data.detectors || [];
+      autorunDetectors = data.detectors || [];
     } catch (_) {}
 
-    if (favoriteDetectors.length === 0) {
+    if (autorunDetectors.length === 0) {
       dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
       return;
     }
@@ -1381,7 +1381,7 @@
     let modelSort = { key: "name", asc: true };
 
     function renderModelRows() {
-      const sorted = [...favoriteDetectors].sort((a, b) => {
+      const sorted = [...autorunDetectors].sort((a, b) => {
         let va = a[modelSort.key], vb = b[modelSort.key];
         if (modelSort.key === "num_labels") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
         if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
@@ -1981,13 +1981,13 @@
         // Build tab bar and content sections
         const availableTypes = mediaOrder;
 
-        // Fetch the user's favorite media types to pick the initial tab
+        // Fetch the user's autoload media types to pick the initial tab
         let initialTab = availableTypes[0] || Object.keys(mediaTypesMap)[0] || "audio";
         try {
           const settingsRes = await fetch("/api/settings");
           if (settingsRes.ok) {
             const settingsData = await settingsRes.json();
-            const favs = settingsData.favorite_media_types || [];
+            const favs = settingsData.autoload_media_types || [];
             const firstFav = favs.find(f => availableTypes.includes(f));
             if (firstFav) {
               initialTab = firstFav;
@@ -3387,7 +3387,7 @@
     }
     if (autopilotTopGreensInput) autopilotTopGreensInput.value = data.autopilot_top_greens;
     if (autopilotHardRedsInput) autopilotHardRedsInput.value = data.autopilot_hard_reds;
-    const favList = data.favorite_media_types || [];
+    const favList = data.autoload_media_types || [];
     favMtCheckboxes.forEach(cb => {
       cb.checked = favList.includes(cb.dataset.mediaType);
     });
@@ -3474,7 +3474,7 @@
     });
   }
 
-  // Favorite media type toggles
+  // Autoload media type toggles
   favMtCheckboxes.forEach(cb => {
     cb.addEventListener("change", () => {
       const selected = [];
@@ -3482,7 +3482,7 @@
       fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ favorite_media_types: selected }),
+        body: JSON.stringify({ autoload_media_types: selected }),
       }).catch(() => {});
     });
   });
@@ -3561,7 +3561,7 @@
         if (!res.ok) return;
         const data = await res.json();
         // Exclude runtime-only fields
-        delete data.favorite_processors;
+        delete data.autorun_processors;
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -5306,7 +5306,7 @@
         if (!res.ok) throw new Error(result.error || "Import failed");
 
         // Now load the newly created detector and use it for sorting
-        const detRes = await fetch("/api/favorite-detectors");
+        const detRes = await fetch("/api/autorun-detectors");
         if (detRes.ok) {
           const detData = await detRes.json();
           const det = (detData.detectors || []).find(d => d.name === result.name);
@@ -6582,7 +6582,7 @@
       const settingsRes = await fetch("/api/settings");
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
-        const favs = settingsData.favorite_media_types || [];
+        const favs = settingsData.autoload_media_types || [];
         const firstFav = favs.find(f => mediaOrder.includes(f));
         if (firstFav) initialTab = firstFav;
       }

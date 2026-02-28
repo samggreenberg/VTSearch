@@ -2,7 +2,7 @@
 
 Validates that the ``_state_lock`` in ``vtsearch.utils.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
-favorite detectors.
+autorun detectors.
 """
 
 import threading

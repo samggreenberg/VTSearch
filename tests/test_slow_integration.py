@@ -117,7 +117,7 @@ def _write_settings_file(
     name: str = "settings.json",
     extra: dict | None = None,
 ) -> Path:
-    """Write a settings.json that references detectors as favorite_processors."""
+    """Write a settings.json that references detectors as autorun_processors."""
     processors = []
     for dp in detector_paths:
         processors.append(
@@ -127,7 +127,7 @@ def _write_settings_file(
                 "field_values": {"filepath": str(dp)},
             }
         )
-    settings: dict[str, Any] = {"favorite_processors": processors}
+    settings: dict[str, Any] = {"autorun_processors": processors}
     if extra:
         settings.update(extra)
     settings_path = tmp_path / name
@@ -508,12 +508,12 @@ class TestFillFromSortExportPipeline:
 
 
 # ======================================================================
-# 6. Processor Importer → Favorite → Autodetect Chain
+# 6. Processor Importer → Autorun → Autodetect Chain
 # ======================================================================
 
 
 class TestProcessorImporterToAutodetect:
-    """Import a detector via processor importer, save as favorite processor
+    """Import a detector via processor importer, save as autorun processor
     in settings, run autodetect using that settings file."""
 
     def test_detector_file_import_then_chunked_autodetect(self, client, tmp_path):
@@ -759,15 +759,15 @@ class TestLargeDatasetChunking:
 
 
 # ======================================================================
-# 11. Detector Train → Save Favorite → Clear State → Auto-Detect
+# 11. Detector Train → Save Autorun → Clear State → Auto-Detect
 # ======================================================================
 
 
-class TestDetectorFavoriteRoundTrip:
-    """Full lifecycle: vote → export detector → save as favorite →
-    clear all state → run auto-detect using favorite → verify results."""
+class TestDetectorAutorunRoundTrip:
+    """Full lifecycle: vote → export detector → save as autorun →
+    clear all state → run auto-detect using autorun detector → verify results."""
 
-    def test_favorite_detector_survives_state_clear(self, client):
+    def test_autorun_detector_survives_state_clear(self, client):
         # Step 1: Vote and export detector
         app_module.good_votes.update({1: None, 2: None, 3: None})
         app_module.bad_votes.update({18: None, 19: None, 20: None})
@@ -775,9 +775,9 @@ class TestDetectorFavoriteRoundTrip:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 2: Save as favorite with autodetect
+        # Step 2: Save as autorun detector
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "production-detector",
                 "media_type": "audio",
@@ -792,8 +792,8 @@ class TestDetectorFavoriteRoundTrip:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Step 4: Verify favorite is still there
-        resp = client.get("/api/favorite-detectors")
+        # Step 4: Verify autorun detector is still there
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "production-detector" in names
 
@@ -1063,7 +1063,7 @@ class TestAutoDetectExporterLabelRoundTrip:
         detector = resp.get_json()
 
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "roundtrip-det",
                 "media_type": "audio",
@@ -1271,7 +1271,7 @@ class TestExporterIntegration:
 
 class TestLabelImporterDetectorChain:
     """Import labels via the API, train detector from imported labels,
-    save as favorite, run autodetect.  Tests the full pipeline from
+    save as autorun, run autodetect.  Tests the full pipeline from
     external label file to production scoring."""
 
     def test_json_label_import_to_autodetect(self, client, tmp_path):
@@ -1309,7 +1309,7 @@ class TestLabelImporterDetectorChain:
 
         # Step 5: Save as favorite with autodetect
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "from-labels",
                 "media_type": "audio",

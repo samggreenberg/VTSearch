@@ -37,7 +37,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 VTSearch downloads four embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for the
-first time (or at startup if `favorite_media_types` is configured in
+first time (or at startup if `autoload_media_types` is configured in
 settings).
 
 | Model | Media type | HuggingFace ID | Approx. size |
@@ -196,7 +196,7 @@ data/
 |------|-----------|-----|
 | `data/models/` | **Yes** | Re-downloading is slow (~3.1 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
-| `data/settings.json` | **Yes** | User preferences, trained detectors, favorite processors |
+| `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
 | `data/audio/`, `video/`, `images/`, `paragraphs/` | Depends | Media files from imported datasets; re-import if lost |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
@@ -218,16 +218,16 @@ and auto-saved on every change. Schema:
   "swipe_animation": true,
   "show_thumbnails_left": false,
   "show_thumbnails_right": true,
-  "favorite_media_types": [],
-  "favorite_processors": []
+  "autoload_media_types": [],
+  "autorun_processors": []
 }
 ```
 
 Notable fields:
 
-- `favorite_media_types` — media types to preload at startup (triggers
+- `autoload_media_types` — media types to preload at startup (triggers
   model downloads if models aren't cached)
-- `favorite_processors` — saved detector/extractor configurations with
+- `autorun_processors` — saved detector/extractor configurations with
   importer name, processor name, and field values
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
 
@@ -359,7 +359,7 @@ pre-download models with `./download_models.sh` and set
 **Symptom**: Process killed or `torch.cuda.OutOfMemoryError`.
 
 **Fix**: Load fewer media types simultaneously. Set
-`favorite_media_types` in settings to only the types you need, so unused
+`autoload_media_types` in settings to only the types you need, so unused
 models aren't preloaded. For GPU, ensure adequate VRAM (4+ GB
 recommended).
 
