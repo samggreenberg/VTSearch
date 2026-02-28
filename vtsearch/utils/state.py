@@ -282,6 +282,7 @@ def add_favorite_detector(
     *,
     autodetect: bool = False,
     examples: list[dict[str, str]] | None = None,
+    num_labels: int = 0,
 ) -> None:
     """Add or overwrite a named favorite detector in the global store.
 
@@ -300,6 +301,8 @@ def add_favorite_detector(
             running autodetect.  Defaults to ``False``.
         examples: Optional list of example dicts, each with ``"type"``
             (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
+        num_labels: Number of training labels used when this detector was last
+            trained.  Defaults to ``0`` for untrained stubs.
     """
     import time
 
@@ -312,6 +315,7 @@ def add_favorite_detector(
             "created_at": time.time(),
             "autodetect": autodetect,
             "examples": examples or [],
+            "num_labels": num_labels,
         }
 
 

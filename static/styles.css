@@ -731,3 +731,17 @@ video { max-width: 100%; }
 .examples-add-bar { display: flex; gap: 6px; align-items: center; }
 .examples-summary { display: inline; font-size: 0.82rem; color: var(--text-primary); }
 .examples-empty { font-size: 0.78rem; color: var(--text-muted); padding: 8px 0; text-align: center; }
+
+/* Example picker overlay (for promptForExample) */
+.example-picker-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.example-picker-panel {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; min-width: 280px; max-width: 420px;
+  max-height: 80vh; display: flex; flex-direction: column; gap: 8px;
+}
+.example-picker-header { font-size: 0.95rem; margin-bottom: 4px; }
+.example-picker-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
