@@ -401,6 +401,7 @@ def ensure_favorite_processors_imported() -> list[str]:
                 result.get("media_type", "audio"),
                 result["weights"],
                 result.get("threshold", 0.5),
+                autodetect=True,
             )
             imported.append(name)
         except Exception as exc:

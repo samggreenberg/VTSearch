@@ -44,8 +44,8 @@ def _export_detector(client):
     return data
 
 
-def _save_favorite_detector(client, name, detector):
-    """Save a detector as a favorite."""
+def _save_favorite_detector(client, name, detector, *, autodetect=True):
+    """Save a detector as a favorite with autodetect enabled by default."""
     resp = client.post(
         "/api/favorite-detectors",
         json={
@@ -53,6 +53,7 @@ def _save_favorite_detector(client, name, detector):
             "media_type": "audio",
             "weights": detector["weights"],
             "threshold": detector["threshold"],
+            "autodetect": autodetect,
         },
     )
     assert resp.status_code == 200, f"Save favorite failed: {resp.get_json()}"
