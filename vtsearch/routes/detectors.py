@@ -891,6 +891,247 @@ def auto_detect():
 
 
 # ---------------------------------------------------------------------------
+# Multi-dataset, multi-model Find
+# ---------------------------------------------------------------------------
+
+
+@detectors_bp.route("/api/find", methods=["POST"])
+def multi_find():
+    """Run selected models on selected datasets and return merged results.
+
+    Expects JSON::
+
+        {
+            "dataset_ids": ["abc123", "def456"],
+            "model_ids": ["ghi789", "jkl012"]
+        }
+
+    For each dataset: loads it from its saved pkl, then for each model runs
+    detection.  Returns a merged results table.
+    """
+    import gc
+    import pickle
+    import threading
+
+    import torch
+
+    from vtsearch.datasets import export_dataset_to_file
+    from vtsearch.datasets.loader import load_dataset_from_pickle
+    from vtsearch.datasets.registry import get_dataset as reg_get_ds
+    from vtsearch.models.registry import get_model as reg_get_model
+    from vtsearch.routes.trainable_models import _model_path, _read_model
+
+    body = request.get_json(force=True, silent=True) or {}
+    dataset_ids = body.get("dataset_ids", [])
+    model_ids = body.get("model_ids", [])
+
+    if not dataset_ids:
+        return jsonify({"error": "No datasets selected"}), 400
+    if not model_ids:
+        return jsonify({"error": "No models selected"}), 400
+
+    # Resolve datasets and models from registries
+    datasets = []
+    for ds_id in dataset_ids:
+        ds = reg_get_ds(ds_id)
+        if ds is None:
+            return jsonify({"error": f"Dataset '{ds_id}' not found"}), 404
+        pkl_path = ds.get("pkl_path", "")
+        if not pkl_path or not Path(pkl_path).is_file():
+            return jsonify({"error": f"Dataset file missing for '{ds.get('name', ds_id)}'"}), 404
+        datasets.append(ds)
+
+    models = []
+    for m_id in model_ids:
+        m = reg_get_model(m_id)
+        if m is None:
+            return jsonify({"error": f"Model '{m_id}' not found"}), 404
+        models.append(m)
+
+    # Build the list of detector configs (weights+threshold) for each model
+    model_configs = []
+    for m in models:
+        det_name = m.get("detector_name", "")
+        tm_name = m.get("trainable_model_name", "")
+
+        # Try autorun detector first (has weights)
+        if det_name:
+            det = get_autorun_detectors().get(det_name)
+            if det and det.get("weights"):
+                model_configs.append({
+                    "name": m["name"],
+                    "model_id": m["id"],
+                    "weights": det["weights"],
+                    "threshold": det.get("threshold", 0.5),
+                })
+                continue
+
+        # For trainable models, we need to train on-the-fly from their labelset
+        if tm_name:
+            tm_path = _model_path(tm_name)
+            tm_data = _read_model(tm_path)
+            if tm_data and tm_data.get("labelset", {}).get("labels"):
+                model_configs.append({
+                    "name": m["name"],
+                    "model_id": m["id"],
+                    "trainable_model_data": tm_data,
+                })
+                continue
+
+        return jsonify({"error": f"Model '{m['name']}' has no weights or labels for detection"}), 400
+
+    # Run Find across all datasets × models
+    all_results = []
+    multiple_datasets = len(datasets) > 1
+    multiple_models = len(model_configs) > 1
+    model_names = [mc["name"] for mc in model_configs]
+
+    for ds in datasets:
+        # Load dataset from pkl
+        temp_medias: dict = {}
+        try:
+            pkl_path = ds["pkl_path"]
+            with open(pkl_path, "rb") as f:
+                pkl_data = pickle.load(f)
+            if isinstance(pkl_data, dict) and "medias" in pkl_data:
+                raw_medias = pkl_data["medias"]
+            else:
+                raw_medias = pkl_data
+
+            for cid, mdata in raw_medias.items():
+                mid = int(cid) if not isinstance(cid, int) else cid
+                emb = mdata.get("embedding")
+                if emb is not None:
+                    emb = np.array(emb, dtype=np.float32)
+                temp_medias[mid] = {**mdata, "id": mid, "embedding": emb}
+        except Exception as e:
+            return jsonify({"error": f"Failed to load dataset '{ds['name']}': {e}"}), 500
+
+        if not temp_medias:
+            continue
+
+        # Build embeddings tensor
+        all_ids = sorted(temp_medias.keys())
+        all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
+        X_all = torch.tensor(all_embs, dtype=torch.float32)
+
+        # Per-media result: {media_id -> {info, per_model_scores}}
+        media_results: dict[int, dict] = {}
+        for cid in all_ids:
+            clip = temp_medias[cid]
+            media_results[cid] = {
+                "id": cid,
+                "filename": clip.get("filename", ""),
+                "md5": clip.get("md5", ""),
+                "origin_name": clip.get("origin_name", clip.get("filename", "")),
+                "origin": clip.get("origin"),
+                "dataset_name": ds["name"],
+                "model_verdicts": {},
+            }
+
+        # Run each model on this dataset
+        for mc in model_configs:
+            if "weights" in mc:
+                # Pre-trained detector with weights
+                try:
+                    model = build_model_from_weights(mc["weights"])
+                    with torch.no_grad():
+                        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+                    threshold = mc.get("threshold", 0.5)
+                    for cid, score in zip(all_ids, scores):
+                        verdict = "Good" if score >= threshold else "Bad"
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": verdict,
+                            "score": round(score, 4),
+                        }
+                except Exception:
+                    for cid in all_ids:
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": "Error",
+                            "score": 0,
+                        }
+            elif "trainable_model_data" in mc:
+                # Trainable model — train from labelset, then score
+                tm_data = mc["trainable_model_data"]
+                labels = tm_data.get("labelset", {}).get("labels", [])
+                text_query = tm_data.get("text_query", "")
+
+                # Try to match labels to this dataset's medias and train
+                try:
+                    from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+                    origin_lookup, md5_lookup = build_media_lookup(temp_medias)
+                    good_ids, bad_ids = [], []
+                    for lbl in labels:
+                        matched = resolve_media_ids(lbl, origin_lookup, md5_lookup)
+                        label_val = lbl.get("label", "")
+                        for mid in matched:
+                            if label_val == "good":
+                                good_ids.append(mid)
+                            elif label_val == "bad":
+                                bad_ids.append(mid)
+
+                    if good_ids and bad_ids:
+                        good_embs = [temp_medias[i]["embedding"] for i in good_ids if i in temp_medias]
+                        bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
+                        X_list = good_embs + bad_embs
+                        y_list = [1.0] * len(good_embs) + [0.0] * len(bad_embs)
+
+                        from vtsearch.models import calculate_cross_calibration_threshold, train_model
+
+                        input_dim = X_list[0].shape[0]
+                        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim)
+
+                        import torch
+
+                        X_train = torch.tensor(np.array(X_list), dtype=torch.float32)
+                        y_train = torch.tensor([[v] for v in y_list], dtype=torch.float32)
+                        model = train_model(X_train, y_train, input_dim)
+
+                        with torch.no_grad():
+                            scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+
+                        for cid, score in zip(all_ids, scores):
+                            verdict = "Good" if score >= threshold else "Bad"
+                            media_results[cid]["model_verdicts"][mc["name"]] = {
+                                "verdict": verdict,
+                                "score": round(score, 4),
+                            }
+                    else:
+                        # Not enough labels matched this dataset
+                        for cid in all_ids:
+                            media_results[cid]["model_verdicts"][mc["name"]] = {
+                                "verdict": "N/A",
+                                "score": 0,
+                            }
+                except Exception:
+                    for cid in all_ids:
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": "Error",
+                            "score": 0,
+                        }
+
+        # Collect positive hits (Good for at least one model)
+        for cid, mr in media_results.items():
+            verdicts = mr["model_verdicts"]
+            if any(v["verdict"] == "Good" for v in verdicts.values()):
+                all_results.append(mr)
+
+        # Free memory
+        del temp_medias, X_all
+        gc.collect()
+
+    return jsonify({
+        "results": all_results,
+        "datasets": [ds["name"] for ds in datasets],
+        "models": model_names,
+        "multiple_datasets": multiple_datasets,
+        "multiple_models": multiple_models,
+        "total_hits": len(all_results),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Extractor routes
 # ---------------------------------------------------------------------------
 
