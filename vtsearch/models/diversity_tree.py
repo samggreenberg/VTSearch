@@ -1,15 +1,14 @@
 """Diversity Tree: hierarchical k-means clustering for diverse sampling.
 
 A k-Diversity Tree recursively partitions a set of vectors using k-means
-clustering. Each node tracks a "representative" (the vector closest to the
-node's centroid) and a "seen" flag driven by label activity.
+clustering. Each node tracks a "seen" flag driven by label activity.
 
 The tree supports:
 - Lookup: given a vector ID, return the name of its deepest (leaf) node.
 - Labeling: when a vector is labeled, mark its leaf and all ancestors as seen.
 - Unlabeling: when a label is removed, propagate unseen status upward.
 - Diversity level: the deepest tree level at which every node is seen.
-- Next sample: the representative of the first unseen node in BFS order.
+- Next sample: the highest-scored element of the first unseen node in BFS order.
 """
 
 from __future__ import annotations
@@ -56,7 +55,7 @@ class DiversityTree:
         self.max_depth = max_depth
         self.min_node_size = min_node_size
 
-        # Node storage: name -> {ids, representative, children, depth, parent}
+        # Node storage: name -> {ids, children, depth, parent}
         self.nodes: dict[str, dict] = {}
         # Vector ID -> leaf node name
         self.vector_to_leaf: dict[int, str] = {}
@@ -80,14 +79,8 @@ class DiversityTree:
         parent: str | None,
     ) -> None:
         """Recursively build a tree node and its children."""
-        # Compute representative: vector closest to centroid
-        centroid = vecs.mean(axis=0)
-        dists = np.linalg.norm(vecs - centroid, axis=1)
-        rep_idx = int(np.argmin(dists))
-
         self.nodes[name] = {
             "ids": ids,
-            "representative": ids[rep_idx],
             "children": [],
             "depth": depth,
             "parent": parent,
@@ -218,10 +211,15 @@ class DiversityTree:
         seen_count = sum(1 for name in nodes_at_next if name in self.seen)
         return level + seen_count / len(nodes_at_next)
 
-    def next_sample(self) -> int | None:
-        """Return the representative of the first unseen node in BFS order.
+    def next_sample(self, scores: dict[int, float] | None = None) -> int | None:
+        """Return an element from the first unseen node in BFS order.
 
-        Returns None if all nodes have been seen.
+        When *scores* is provided, returns the highest-scored element in the
+        node (so the sort mode influences which element is picked from the
+        diverse region).  When *scores* is ``None``, returns the first element
+        in the node's ID list.
+
+        Returns ``None`` if all nodes have been seen.
         """
         if not self.nodes:
             return None
@@ -230,7 +228,10 @@ class DiversityTree:
         while queue:
             name = queue.popleft()
             if name not in self.seen:
-                return self.nodes[name]["representative"]
+                ids = self.nodes[name]["ids"]
+                if scores:
+                    return max(ids, key=lambda i: scores.get(i, 0.0))
+                return ids[0]
             children = self.nodes[name]["children"]
             queue.extend(children)
 

@@ -52,7 +52,7 @@ class TestConstruction:
         tree = DiversityTree(vecs, k=2, min_node_size=20)
         assert len(tree.nodes) == 1
         assert tree.vector_to_leaf[1] == "0"
-        assert tree.nodes["0"]["representative"] == 1
+        assert 1 in tree.nodes["0"]["ids"]
 
     def test_small_set_stays_single_node(self):
         vecs = _make_vectors(10)
@@ -97,21 +97,11 @@ class TestConstruction:
         for node in tree.nodes.values():
             assert node["depth"] <= 3
 
-    def test_representative_is_in_node(self):
+    def test_node_has_ids(self):
         vecs = _make_vectors(100)
         tree = DiversityTree(vecs, k=3, min_node_size=10)
         for name, node in tree.nodes.items():
-            assert node["representative"] in node["ids"]
-
-    def test_representative_closest_to_centroid(self):
-        vecs = _make_vectors(100)
-        tree = DiversityTree(vecs, k=2, min_node_size=10)
-        for name, node in tree.nodes.items():
-            node_vecs = np.array([vecs[vid] for vid in node["ids"]])
-            centroid = node_vecs.mean(axis=0)
-            dists = np.linalg.norm(node_vecs - centroid, axis=1)
-            closest_idx = int(np.argmin(dists))
-            assert node["representative"] == node["ids"][closest_idx]
+            assert len(node["ids"]) > 0
 
     def test_invalid_k_raises(self):
         with pytest.raises(ValueError, match="k must be between 2 and 9"):
@@ -410,24 +400,23 @@ class TestNextSample:
         tree = DiversityTree({})
         assert tree.next_sample() is None
 
-    def test_first_sample_is_root_representative(self):
+    def test_first_sample_is_from_root(self):
         vecs = _make_vectors(100)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
         sample = tree.next_sample()
-        assert sample == tree.nodes["0"]["representative"]
+        assert sample in tree.nodes["0"]["ids"]
 
-    def test_after_labeling_root_rep_returns_child(self):
+    def test_after_labeling_first_returns_child(self):
         vecs = _make_vectors(100)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
-        root_rep = tree.nodes["0"]["representative"]
-        tree.label(root_rep)
+        first = tree.next_sample()
+        tree.label(first)
 
-        # Next sample should not be the root representative anymore
+        # Next sample should not be the same element anymore
         # (root is seen now, so we descend to first unseen child)
         sample = tree.next_sample()
         if sample is not None:
-            # It should be the representative of some unseen child
-            assert sample != root_rep or len(tree.nodes) == 1
+            assert sample != first or len(tree.nodes) == 1
 
     def test_all_seen_returns_none(self):
         vecs = _make_vectors(10)
@@ -447,19 +436,46 @@ class TestNextSample:
         vecs = _make_clustered_vectors([30, 30], dim=32)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
 
-        # First sample is root rep
+        # First sample is from root
         s1 = tree.next_sample()
-        assert s1 == tree.nodes["0"]["representative"]
+        assert s1 in tree.nodes["0"]["ids"]
 
-        # After labeling root rep, next should be first unseen child
+        # After labeling, next should be from first unseen child
         tree.label(s1)
         s2 = tree.next_sample()
 
         children = tree.nodes["0"]["children"]
-        # s2 should be the representative of one of the unseen children
         unseen_children = [c for c in children if c not in tree.seen]
         if unseen_children:
-            assert s2 == tree.nodes[unseen_children[0]]["representative"]
+            assert s2 in tree.nodes[unseen_children[0]]["ids"]
+
+    def test_next_sample_with_scores(self):
+        """When scores are provided, return the highest-scored element from the node."""
+        vecs = _make_vectors(50)
+        tree = DiversityTree(vecs, k=2, min_node_size=20)
+        # Single node tree; assign highest score to vector 5
+        scores = {i: float(i) for i in range(1, 51)}
+        sample = tree.next_sample(scores=scores)
+        # Vector 50 has the highest score
+        assert sample == 50
+
+    def test_next_sample_with_scores_picks_from_unseen_node(self):
+        """Scores should influence selection within the correct unseen node."""
+        vecs = _make_clustered_vectors([30, 30], dim=32)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+
+        # Give high scores to cluster-1 vectors, low to cluster-0
+        scores = {}
+        for vid in range(1, 31):
+            scores[vid] = 0.1
+        for vid in range(31, 61):
+            scores[vid] = 0.9
+
+        # First sample (from root) should be the highest-scored element overall
+        s1 = tree.next_sample(scores=scores)
+        assert s1 in tree.nodes["0"]["ids"]
+        # Should pick a high-scoring element
+        assert scores[s1] == 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -476,7 +492,7 @@ class TestWorkflow:
         assert tree.diversity_level() >= 0
         tree.unlabel(1)
         assert tree.diversity_level() == -1
-        assert tree.next_sample() == tree.nodes["0"]["representative"]
+        assert tree.next_sample() in tree.nodes["0"]["ids"]
 
     def test_progressive_labeling(self):
         """Label vectors progressively and verify diversity level grows."""
