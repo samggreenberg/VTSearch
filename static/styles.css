@@ -627,6 +627,11 @@ video { max-width: 100%; }
 .dashboard-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; }
 .dashboard-grid { min-height: 0; }
 
+/* In-grid progress bar for dataset loading */
+.dash-grid-progress { max-width: none; padding: 16px 14px; }
+.dash-grid-progress .progress-message { max-width: none; text-align: left; }
+.dash-grid-progress .progress-eta { text-align: left; }
+
 /* Dashboard dataset table */
 .dashboard-grid .dash-dataset-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; table-layout: fixed; }
 .dashboard-grid .dash-dataset-table thead th {

@@ -1254,7 +1254,8 @@
     center.appendChild(dashboardView);
     center.className = "panel-center";
     dashboardView.style.display = "flex";
-    dashProgress.style.display = "none";
+    // Only hide the in-grid progress if no load is actively running
+    if (!dashProgressTimer) hideDashGridProgress();
 
     // Update dataset status bar
     if (datasetLoaded) {
@@ -1576,17 +1577,29 @@
     renderModelRows();
   }
 
-  // Dashboard: load a dataset from the selected demo, then run a callback
-  async function dashLoadSelectedDataset(callback) {
-    if (!dashSelectedDataset) return;
-
+  // Show the in-grid progress bar inside the dataset section, hiding the grid content
+  function showDashGridProgress(message) {
+    dashDatasetGrid.style.display = "none";
     dashProgress.style.display = "block";
     dashProgressFill.style.width = "0%";
     dashProgressFill.classList.add("indeterminate");
     dashProgressText.textContent = "";
-    dashProgressMessage.textContent = "Loading...";
+    dashProgressMessage.textContent = message || "Loading...";
     dashProgressMessage.style.color = "var(--text-secondary)";
     dashProgressEta.textContent = "";
+  }
+
+  // Hide the in-grid progress bar and restore the dataset grid
+  function hideDashGridProgress() {
+    dashProgress.style.display = "none";
+    dashDatasetGrid.style.display = "";
+  }
+
+  // Dashboard: load a dataset from the selected demo, then run a callback
+  async function dashLoadSelectedDataset(callback) {
+    if (!dashSelectedDataset) return;
+
+    showDashGridProgress("Loading...");
 
     try {
       const res = await fetch("/api/dataset/load-demo", {
@@ -1647,11 +1660,12 @@
 
       if (progress.status === "idle") {
         stopDashProgressPolling();
-        dashProgress.style.display = "none";
+        hideDashGridProgress();
 
         // Refresh dataset state
         await checkDatasetStatus();
         if (datasetLoaded) {
+          await renderDashboardDatasets();
           await fetchMedias();
           await fetchVotes();
 
@@ -6421,15 +6435,9 @@
       statusEl.textContent = "Importing\u2026";
       statusEl.style.color = "var(--text-secondary)";
 
-      // Close modal and show dashboard progress
+      // Close modal and show in-grid progress
       datasetImporterModal.classList.remove("show");
-      dashProgress.style.display = "block";
-      dashProgressFill.style.width = "0%";
-      dashProgressFill.classList.add("indeterminate");
-      dashProgressText.textContent = "";
-      dashProgressMessage.textContent = "Importing\u2026";
-      dashProgressMessage.style.color = "var(--text-secondary)";
-      dashProgressEta.textContent = "";
+      showDashGridProgress("Importing\u2026");
 
       try {
         const res = await fetch(`/api/dataset/import/${importer.name}`, { method: "POST", headers, body });
@@ -6634,13 +6642,7 @@
       const file = dashFileInput.files[0];
       if (!file) return;
 
-      dashProgress.style.display = "block";
-      dashProgressFill.style.width = "0%";
-      dashProgressFill.classList.add("indeterminate");
-      dashProgressText.textContent = "";
-      dashProgressMessage.textContent = "Uploading...";
-      dashProgressMessage.style.color = "var(--text-secondary)";
-      dashProgressEta.textContent = "";
+      showDashGridProgress("Uploading...");
 
       const formData = new FormData();
       formData.append("file", file);
