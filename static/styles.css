@@ -162,7 +162,7 @@
   outline-offset: 2px;
 }
 .media-item:focus-visible, .vote-entry:focus-visible, .burger-item:focus-visible,
-.label-importer-option:focus-visible, .processor-importer-option:focus-visible,
+.label-importer-option:focus-visible, .processor-importer-option:focus-visible, .dataset-importer-option:focus-visible,
 .demo-dataset:focus-visible, .dataset-option:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -607,7 +607,7 @@ video { max-width: 100%; }
   margin: 0 auto; padding: 24px 32px; gap: 16px; flex: 1; min-height: 0;
 }
 .dashboard-header h2 { font-size: 1.4rem; color: var(--accent); margin: 0; }
-.dashboard-grids { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex: 1; min-height: 0; }
+.dashboard-grids { display: grid; grid-template-columns: 1fr; gap: 20px; flex: 1; min-height: 0; }
 .dashboard-section {
   display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--border); border-radius: 8px;
