@@ -47,7 +47,7 @@ VTSearch/
 │   ├── settings.py                 Persistent settings & favorite processors
 │   │
 │   ├── media/                      Media type registry + plugins
-│   │   ├── base.py                 MediaType ABC, MediaResponse, Processor, Detector, Extractor
+│   │   ├── base.py                 MediaType ABC, MediaResponse, Processor, Detector, Localizer, Extractor, MediaClipper
 │   │   ├── __init__.py             Registry (register/get/all_types)
 │   │   ├── audio/media_type.py     CLAP embeddings
 │   │   ├── image/media_type.py     CLIP embeddings
@@ -80,20 +80,25 @@ VTSearch/
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
-│   │   ├── file/                   JSON file writer
-│   │   ├── csv_file/               CSV file writer
+│   │   ├── local_json_file/        JSON file download (local)
+│   │   ├── server_json_file/       JSON file on server
+│   │   ├── local_csv_file/         CSV file download (local)
+│   │   ├── server_csv_file/        CSV file on server
 │   │   ├── email_smtp/             SMTP email sender
 │   │   ├── webhook/                HTTP POST webhook
 │   │   └── gui/                    In-browser / console display
 │   │
 │   ├── labels/importers/           Plugin system for label sources
 │   │   ├── base.py                 LabelImporter ABC + LabelImporterField
-│   │   ├── json_file/              JSON label file reader
-│   │   └── csv_file/               CSV label file reader
+│   │   ├── local_json_file/        Upload JSON label file (local)
+│   │   ├── server_json_file/       JSON label file on server
+│   │   ├── local_csv_file/         Upload CSV label file (local)
+│   │   └── server_csv_file/        CSV label file on server
 │   │
 │   ├── processors/importers/       Plugin system for processor sources
 │   │   ├── base.py                 ProcessorImporter ABC + ProcessorImporterField
-│   │   ├── detector_file/          Import detector from JSON file
+│   │   ├── detector_file/          Import detector from uploaded JSON file
+│   │   ├── server_detector_file/   Import detector from server JSON file
 │   │   ├── label_file/             Train detector from a labeled media file
 │   │   └── csv_label_file/         Train detector from a CSV label file
 │   │
@@ -162,17 +167,17 @@ modules on the right.
 │ (NO Flask)  │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
-┌─────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
-│ exporters/*         │  │ labels/importers/*      │  │ processors/importers/*   │
-│                     │  │                          │  │                          │
-│ base.py (ABC)       │  │ base.py (ABC)           │  │ base.py (ABC)            │
-│ file, csv, webhook  │  │ json_file, csv_file     │  │ detector_file, label_file│
-│ email_smtp, gui     │  │                          │  │ csv_label_file           │
-│                     │  │ (NO Flask, NO state,     │  │                          │
-│ (NO Flask,          │  │  pure data processing)   │  │ (NO Flask, NO state,     │
-│  NO state,          │  │                          │  │  pure data processing)   │
-│  pure data in/out)  │  └────────────────────────┘  └──────────────────────────┘
-└─────────────────────┘
+┌──────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
+│ exporters/*              │  │ labels/importers/*      │  │ processors/importers/*   │
+│                          │  │                          │  │                          │
+│ base.py (ABC)            │  │ base.py (ABC)           │  │ base.py (ABC)            │
+│ local_json, server_json  │  │ local_json, server_json │  │ detector_file, label_file│
+│ local_csv, server_csv    │  │ local_csv, server_csv   │  │ server_detector_file     │
+│ email_smtp, webhook, gui │  │                          │  │ csv_label_file           │
+│                          │  │ (NO Flask, NO state,     │  │                          │
+│ (NO Flask, NO state,     │  │  pure data processing)   │  │ (NO Flask, NO state,     │
+│  pure data in/out)       │  │                          │  │  pure data processing)   │
+└──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
 ```
 
 ### Key observations
@@ -294,7 +299,7 @@ load_dataset_from_folder(
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
-# medias is now {1: {"id": 1, "embedding": ..., "clip_bytes": ..., ...}, ...}
+# medias is now {1: {"id": 1, "embedding": ..., "media_bytes": ..., ...}, ...}
 ```
 
 ### Progress tracking
@@ -351,7 +356,8 @@ dicts:
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_thumbnails`, favorite processor recipes) live
+`swipe_animation`, `show_thumbnails_left`, `show_thumbnails_right`,
+favorite processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).

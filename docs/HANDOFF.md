@@ -250,7 +250,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 python app.py --autodetect \
   --dataset data.pkl \
   --settings settings.json \
-  --exporter file --filepath results.json
+  --exporter local_json_file --filepath results.json
 ```
 
 This loads the dataset, runs all detectors from the settings file, and

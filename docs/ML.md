@@ -74,7 +74,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Media type | Model | Embedding dim |
 |------------|-------|--------------|
 | Audio | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
-| Image | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 512 |
+| Image | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
 | Video | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
 | Text | E5 (`intfloat/e5-base-v2`) | 768 |
 
