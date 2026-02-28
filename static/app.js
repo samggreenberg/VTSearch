@@ -1760,6 +1760,7 @@
   }
 
   function updateFavoritesList() {
+    if (!favoritesList) return;
     if (favoriteDetectors.length === 0) {
       favoritesList.innerHTML = '<p style="color:var(--text-muted);">No favorite detectors saved yet.</p>';
       return;
@@ -5406,6 +5407,7 @@
           origin: "Train New",
           trainable: true,
           text_query: sm.text_query || "",
+          autodetect: true,
         });
       }
     } catch (_) { /* ignore */ }
@@ -5541,6 +5543,7 @@
     dashboardModelsTbody.innerHTML = sorted.map(m => {
       const sel = dashboardSelectedModels[m.id] ? " selected" : "";
       const trainBadge = m.trainable ? ' <span class="trainable-badge">trainable</span>' : "";
+      const adChecked = m.autodetect !== false ? "checked" : "";
       return `<tr data-id="${m.id}" class="${sel}">
         <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}${trainBadge} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
         <td>${m.num_labels}</td>
@@ -5548,6 +5551,7 @@
         <td title="${escapeHtml(m.text_examples)}">${escapeHtml(m.text_examples)}</td>
         <td title="${escapeHtml(m.media_examples)}">${escapeHtml(m.media_examples)}</td>
         <td title="${escapeHtml(m.origin)}">${escapeHtml(m.origin)}</td>
+        <td style="text-align:center"><input type="checkbox" class="autodetect-checkbox" data-id="${m.id}" ${adChecked} title="Include in autodetect"></td>
         <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${m.id}" title="Remove">&#128465;</button></td>
       </tr>`;
     }).join("");
@@ -5555,7 +5559,7 @@
     // Wire row click for selection
     dashboardModelsTbody.querySelectorAll("tr").forEach(tr => {
       tr.addEventListener("click", (e) => {
-        if (e.target.closest("button")) return;
+        if (e.target.closest("button") || e.target.closest("input[type=checkbox]")) return;
         const id = parseInt(tr.dataset.id);
         if (dashboardSelectedModels[id]) {
           delete dashboardSelectedModels[id];
@@ -5564,6 +5568,22 @@
         }
         renderDashboardModels();
         updateDashboardButtons();
+      });
+    });
+
+    // Wire autodetect checkboxes
+    dashboardModelsTbody.querySelectorAll(".autodetect-checkbox").forEach(cb => {
+      cb.addEventListener("change", (e) => {
+        const id = parseInt(cb.dataset.id);
+        const m = dashboardModels.find(m => m.id === id);
+        if (!m) return;
+        m.autodetect = cb.checked;
+        // Persist to backend
+        fetch(`/api/favorite-detectors/${encodeURIComponent(m.name)}/autodetect`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ autodetect: cb.checked }),
+        }).catch(() => {});
       });
     });
 
@@ -5831,6 +5851,7 @@
             origin: "Train New",
             trainable: true,
             text_query: result.text_query,
+            autodetect: true,
           });
           statusEl.textContent = `Created "${result.name}"`;
           statusEl.style.color = "var(--color-good)";
@@ -5924,6 +5945,7 @@
             text_examples: "-",
             media_examples: "-",
             origin: importer.display_name,
+            autodetect: true,
           };
           dashboardModels.push(modelEntry);
           statusEl.textContent = `Imported "${result.name}"`;
@@ -6079,7 +6101,6 @@
       [labelExporterModal, labelExporterModalClose],
       [detectorExportModal, detectorExportModalClose],
       [processorImporterModal, processorImporterModalClose],
-      [favoritesModal, favoritesModalClose],
       [autodetectModal, autodetectModalClose],
       [progressModal, modalClose],
     ];
