@@ -280,7 +280,7 @@ def add_favorite_detector(
     weights: dict[str, Any] | None = None,
     threshold: float = 0.5,
     *,
-    autodetect: bool = True,
+    autodetect: bool = False,
     examples: list[dict[str, str]] | None = None,
 ) -> None:
     """Add or overwrite a named favorite detector in the global store.
@@ -296,8 +296,8 @@ def add_favorite_detector(
             May be ``None`` for an untrained detector stub.
         threshold: Decision boundary score in ``[0, 1]``. Clips scoring at or
             above this value are classified as positive.  Defaults to ``0.5``.
-        autodetect: Whether this detector should be included when running
-            autodetect.  Defaults to ``True``.
+        autodetect: Whether this detector is a "favorite" included when
+            running autodetect.  Defaults to ``False``.
         examples: Optional list of example dicts, each with ``"type"``
             (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
     """

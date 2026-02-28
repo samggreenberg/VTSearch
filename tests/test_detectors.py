@@ -176,12 +176,17 @@ class TestFavoriteDetectors:
         )
         assert resp.status_code == 400
 
-    def test_add_missing_weights_returns_400(self, client):
+    def test_add_without_weights_creates_untrained(self, client):
         resp = client.post(
             "/api/favorite-detectors",
             json={"name": "test", "media_type": "audio"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+
+        detectors = client.get("/api/favorite-detectors").get_json()["detectors"]
+        det = [d for d in detectors if d["name"] == "test"][0]
+        assert det["weights"] is None
+        assert det["autodetect"] is False
 
     def test_add_multiple_detectors(self, client):
         det = self._export_detector(client)
@@ -348,7 +353,7 @@ class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
 
     def _add_audio_detector(self, client, name="test-detector"):
-        """Helper: create and save an audio detector."""
+        """Helper: create and save an audio detector with autodetect enabled."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         export_resp = client.post("/api/detector/export")
@@ -362,6 +367,7 @@ class TestAutoDetect:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert save_resp.status_code == 200
@@ -384,7 +390,7 @@ class TestAutoDetect:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Save as "image" type — medias are audio, so it won't match
+        # Save as "image" type with autodetect — medias are audio, so it won't match
         client.post(
             "/api/favorite-detectors",
             json={
@@ -392,6 +398,7 @@ class TestAutoDetect:
                 "media_type": "image",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         resp = client.post("/api/auto-detect")

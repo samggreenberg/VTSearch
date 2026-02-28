@@ -971,6 +971,7 @@
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
         <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
+        <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
       </tr></thead><tbody></tbody></table>`;
     dashModelGrid.innerHTML = html;
@@ -983,6 +984,10 @@
         let va = a[modelSort.key], vb = b[modelSort.key];
         if (modelSort.key === "threshold") return modelSort.asc ? va - vb : vb - va;
         if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+        if (modelSort.key === "autodetect") {
+          va = va ? 1 : 0; vb = vb ? 1 : 0;
+          return modelSort.asc ? va - vb : vb - va;
+        }
         va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
         return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
       });
@@ -993,6 +998,7 @@
         const icon = mediaIcons[det.media_type] || "\uD83D\uDD0D";
         const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
         const isSelected = dashSelectedDetector === det.name;
+        const isFav = det.autodetect;
         const tr = document.createElement("tr");
         tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
         tr.setAttribute("role", "button");
@@ -1001,8 +1007,25 @@
           <td class="col-name">${escapeHtml(det.name)}</td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
           <td class="col-threshold">${det.weights ? det.threshold.toFixed(2) : '<span style="color:var(--text-muted)">Untrained</span>'}</td>
+          <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
         `;
+        // Favorite checkbox toggle
+        const checkbox = tr.querySelector(".fav-checkbox");
+        checkbox.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const newVal = checkbox.checked;
+          try {
+            await fetch(`/api/favorite-detectors/${encodeURIComponent(det.name)}/autodetect`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ autodetect: newVal }),
+            });
+            det.autodetect = newVal;
+          } catch (_) {
+            checkbox.checked = !newVal; // revert on failure
+          }
+        });
         tr.addEventListener("click", () => {
           dashSelectedDetector = det.name;
           renderModelRows();

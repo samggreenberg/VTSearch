@@ -775,7 +775,7 @@ class TestDetectorFavoriteRoundTrip:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 2: Save as favorite
+        # Step 2: Save as favorite with autodetect
         resp = client.post(
             "/api/favorite-detectors",
             json={
@@ -783,6 +783,7 @@ class TestDetectorFavoriteRoundTrip:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -1068,6 +1069,7 @@ class TestAutoDetectExporterLabelRoundTrip:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -1306,7 +1308,7 @@ class TestLabelImporterDetectorChain:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 5: Save as favorite
+        # Step 5: Save as favorite with autodetect
         resp = client.post(
             "/api/favorite-detectors",
             json={
@@ -1314,6 +1316,7 @@ class TestLabelImporterDetectorChain:
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
