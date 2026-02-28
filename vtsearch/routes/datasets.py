@@ -13,7 +13,6 @@ from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.datasets.registry import (
     SAVED_DATASETS_DIR,
-    find_by_pkl_path as _reg_find_by_pkl,
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
     register_dataset as _reg_register,
