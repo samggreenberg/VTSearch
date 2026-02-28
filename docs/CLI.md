@@ -28,12 +28,12 @@ Available importers: `folder`, `pickle`, `http_zip`, `rss_feed`, `youtube_playli
 **Exporting results** — by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
-python app.py --autodetect --dataset data.pkl --settings settings.json --exporter file --filepath results.json
-python app.py --autodetect --dataset data.pkl --settings settings.json --exporter csv_file --filepath results.csv
+python app.py --autodetect --dataset data.pkl --settings settings.json --exporter local_json_file --filepath results.json
+python app.py --autodetect --dataset data.pkl --settings settings.json --exporter local_csv_file --filepath results.csv
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter webhook --url https://example.com/hook
 ```
 
-Available exporters: `file` (JSON), `csv_file` (CSV), `webhook` (HTTP POST), `email_smtp`, `gui` (default — print to console).
+Available exporters: `local_json_file` (JSON to local file), `server_json_file` (JSON to server), `local_csv_file` (CSV to local file), `server_csv_file` (CSV to server), `webhook` (HTTP POST), `email_smtp`, `gui` (default — print to console).
 
 **How to get the files:**
 

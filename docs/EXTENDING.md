@@ -729,7 +729,7 @@ class CodeMediaType(MediaType):
         """
         content = file_path.read_text(errors="replace")
         return {
-            "clip_string": content,
+            "media_string": content,
             "duration": 0,
             "line_count": content.count("\n") + 1,
         }
@@ -738,16 +738,16 @@ class CodeMediaType(MediaType):
     # HTTP serving (required method)
     # ------------------------------------------------------------------
 
-    def clip_response(self, clip: dict) -> MediaResponse:
-        """Return a MediaResponse serving this clip's content.
+    def media_response(self, media: dict) -> MediaResponse:
+        """Return a MediaResponse serving this media's content.
 
         Set data to bytes for binary media (with an appropriate mimetype)
         or to a dict for JSON responses.
         """
         return MediaResponse(
             data={
-                "content": clip.get("clip_string", ""),
-                "line_count": clip.get("line_count", 0),
+                "content": media.get("media_string", ""),
+                "line_count": media.get("line_count", 0),
             },
             mimetype="application/json",
         )
@@ -772,7 +772,7 @@ additional changes:
 |------------------------|---------------------------------------------------------------|
 | **Model init**         | `load_models()` is called at startup for your type            |
 | **Folder import**      | Files matching your `file_extensions` are found and embedded  |
-| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `clip_response()`|
+| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `media_response()`|
 | **Text sorting**       | `embed_text()` is called for text-query cosine similarity     |
 | **Demo listing**       | Your `demo_datasets` appear in `GET /api/dataset/demo-list`   |
 | **Dataset export**     | Clip data is serialized to pickle (including your custom fields)|
@@ -804,13 +804,13 @@ additional changes:
 | `embed_media(file_path)`            | `(Path) -> Optional[np.ndarray]`                   |
 | `embed_text(text)`                  | `(str) -> Optional[np.ndarray]`                    |
 | `load_media_data(file_path)`        | `(Path) -> dict` (must include `"duration"` key)   |
-| `clip_response(clip)`               | `(dict) -> MediaResponse`                           |
+| `media_response(media)`             | `(dict) -> MediaResponse`                           |
 
 ### Making dataset export aware of custom clip fields
 
 The existing `export_dataset_to_file()` in `vtsearch/datasets/loader.py`
-serializes a fixed set of keys (`clip_bytes`, `clip_string`, `word_count`,
-`character_count`, `width`, `height`).  If your
+serializes a fixed set of keys (`media_bytes`, `media_string`, `media_path`,
+`word_count`, `character_count`, `width`, `height`).  If your
 media type stores clip data under different keys, add those keys to the export
 function so they survive a round-trip through pickle export/import.
 
@@ -844,9 +844,7 @@ requirements.txt              # Core deps + includes per-media + per-importer + 
 │   └── vtsearch/datasets/importers/combine_datasets/requirements.txt
 ├── requirements-exporters.txt          # Aggregates all exporter deps
 │   ├── vtsearch/exporters/gui/requirements.txt
-│   ├── vtsearch/exporters/file/requirements.txt
 │   ├── vtsearch/exporters/email_smtp/requirements.txt
-│   ├── vtsearch/exporters/csv_file/requirements.txt
 │   └── vtsearch/exporters/webhook/requirements.txt
 requirements-cpu.txt          # CPU-specific pins (lists packages INLINE)
 requirements-gpu.txt          # GPU-specific (minimal, includes importers)

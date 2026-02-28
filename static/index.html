@@ -16,8 +16,9 @@
       <span aria-hidden="true"></span>
     </button>
     <div class="burger-dropdown" id="burger-dropdown" role="menu" aria-label="Main menu">
-      <div class="burger-section">
-        <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Return to Dashboard</div>
+      <div class="burger-section" role="group" aria-label="Dataset">
+        <div class="burger-section-title" id="menu-section-dataset">Dataset</div>
+        <div class="burger-item" id="menu-dataset-change" role="menuitem" tabindex="-1">Change Dataset</div>
       </div>
       <div class="burger-section" role="group" aria-label="Labels">
         <div class="burger-section-title" id="menu-section-labels">Labels</div>
@@ -32,11 +33,13 @@
         <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
       </div>
       <div class="burger-section">
-        <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
+        <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
+        <div class="burger-item" id="menu-settings">Settings</div>
       </div>
     </div>
   </nav>
   <h1>VTSearch</h1>
+  <button class="header-nav-btn" id="header-dashboard-btn" style="display:none">Dashboard</button>
   <img src="/static/logo.png" alt="VTSearch logo" class="header-logo">
 </header>
 <div class="layout" role="presentation">
@@ -117,6 +120,56 @@
 
   <!-- Center panel -->
   <main class="panel-center" id="center">
+    <!-- Dashboard view — select dataset + model, then dispatch to Label or Detect -->
+    <div class="dashboard-view" id="dashboard-view" style="display:none">
+      <div class="dashboard-header">
+        <h2>Dashboard</h2>
+      </div>
+      <div class="dashboard-grids">
+        <!-- Dataset grid -->
+        <div class="dashboard-section">
+          <div class="dashboard-section-header">
+            <span class="dashboard-section-title">Dataset</span>
+            <div class="dashboard-section-actions">
+              <button class="btn-sm" id="dash-load-file-btn">Load File</button>
+              <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
+            </div>
+          </div>
+          <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
+          <div class="dashboard-grid-wrap">
+            <div id="dash-dataset-tabs" class="demo-tab-bar"></div>
+            <div id="dash-dataset-grid" class="dashboard-grid demo-content-area"></div>
+          </div>
+        </div>
+        <!-- Model grid -->
+        <div class="dashboard-section">
+          <div class="dashboard-section-header">
+            <span class="dashboard-section-title">Model</span>
+            <div class="dashboard-section-actions">
+              <button class="btn-sm" id="dash-add-model-btn">Add</button>
+            </div>
+          </div>
+          <div class="dashboard-grid-wrap">
+            <div id="dash-model-grid" class="dashboard-grid"></div>
+          </div>
+        </div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="dashboard-action-btn" id="dash-label-btn" disabled>Label</button>
+        <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Detect</button>
+      </div>
+      <!-- Reuse the progress bar for dataset loading within the dashboard -->
+      <div class="dataset-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
+        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+          <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
+        </div>
+        <div class="progress-message" id="dash-progress-message">Loading...</div>
+        <div class="progress-eta" id="dash-progress-eta"></div>
+      </div>
+      <input type="file" id="dash-file-input" accept=".pkl" style="display:none">
+    </div>
+
     <div class="dataset-welcome" id="dataset-welcome">
       <div>
         <h2>Welcome to VTSearch</h2>
@@ -147,65 +200,6 @@
       <div class="demo-datasets" id="demo-datasets" style="display:none"></div>
       <div id="extended-importer-form" style="display:none"></div>
       <button class="back-button" id="back-button" style="display:none" aria-label="Back to dataset options">Back</button>
-    </div>
-    <!-- Dashboard view -->
-    <div id="dashboard-view" style="display:none">
-      <h2>VTSearch Dashboard</h2>
-      <p class="dashboard-subtitle">Manage your datasets and models</p>
-
-      <!-- My Datasets section -->
-      <div class="dashboard-section">
-        <div class="dashboard-section-header">
-          <h3>My Datasets</h3>
-          <div class="dashboard-section-actions">
-            <button id="dashboard-dataset-add" class="btn-sm">Add</button>
-          </div>
-        </div>
-        <div id="dashboard-datasets-empty" class="dashboard-empty">No datasets added yet.</div>
-        <table id="dashboard-datasets-table" class="dashboard-table" style="display:none">
-          <thead>
-            <tr>
-              <th data-col="name">Name<span class="sort-arrow"></span></th>
-              <th data-col="num_medias">#Media<span class="sort-arrow"></span></th>
-              <th data-col="media_type">MediaType<span class="sort-arrow"></span></th>
-              <th data-col="origin">Origin<span class="sort-arrow"></span></th>
-              <th class="col-actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="dashboard-datasets-tbody"></tbody>
-        </table>
-      </div>
-
-      <!-- My Models section -->
-      <div class="dashboard-section">
-        <div class="dashboard-section-header">
-          <h3>My Models</h3>
-          <div class="dashboard-section-actions">
-            <button id="dashboard-model-add" class="btn-sm">Add</button>
-          </div>
-        </div>
-        <div id="dashboard-models-empty" class="dashboard-empty">No models added yet.</div>
-        <table id="dashboard-models-table" class="dashboard-table" style="display:none">
-          <thead>
-            <tr>
-              <th data-col="name">Name<span class="sort-arrow"></span></th>
-              <th data-col="num_labels">#Labels<span class="sort-arrow"></span></th>
-              <th data-col="media_type">MediaType<span class="sort-arrow"></span></th>
-              <th data-col="examples">Examples<span class="sort-arrow"></span></th>
-              <th data-col="origin">Origin<span class="sort-arrow"></span></th>
-              <th data-col="autodetect">Autodetect<span class="sort-arrow"></span></th>
-              <th class="col-actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="dashboard-models-tbody"></tbody>
-        </table>
-      </div>
-
-      <!-- Action buttons -->
-      <div class="dashboard-actions">
-        <button id="dashboard-train-btn" class="btn-block-primary" disabled>Train</button>
-        <button id="dashboard-run-btn" class="btn-block-primary" disabled>Run</button>
-      </div>
     </div>
   </main>
   <input type="file" id="file-input" accept=".pkl" style="display:none" aria-label="Dataset file">

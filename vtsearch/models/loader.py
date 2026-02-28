@@ -16,20 +16,40 @@ import sys
 from vtsearch.config import MODELS_CACHE_DIR
 
 
+_torch_configured = False
+
+
+def ensure_torch_configured() -> None:
+    """Set ``torch.set_num_threads(1)`` once, the first time torch is used.
+
+    Safe to call multiple times — the configuration is applied only once.
+    Call this from any code path that imports torch before doing work
+    (e.g. ``load_models``, ``train_model``).
+    """
+    global _torch_configured
+    if _torch_configured:
+        return
+    if "torch" not in sys.modules:
+        return
+    import torch  # noqa: PLC0415
+
+    torch.set_num_threads(1)
+    _torch_configured = True
+
+
 def initialize_models() -> None:
     """Prepare the runtime environment for embedding models.
 
-    Creates the model cache directory and configures PyTorch thread count.
-    Models themselves are **not** loaded here — each
-    :class:`~vtsearch.media.base.MediaType` loads its model lazily the
-    first time it is needed (e.g. when ``embed_media`` or ``embed_text``
-    is called).
+    Creates the model cache directory and configures PyTorch thread count
+    **if torch is already imported**.  When torch has not been imported yet
+    (e.g. during fast test startup) the thread-count configuration is
+    deferred until ``ensure_torch_configured`` is called by the first code
+    path that actually imports torch.
+
+    Models themselves are **not** loaded here.
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    import torch
-
-    torch.set_num_threads(1)
+    ensure_torch_configured()
     gc.collect()
 
 

@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+import numpy as np
 import os
 
 import pytest
@@ -7,6 +10,46 @@ import vtsearch.config as config
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
 # for the tiny MLP to converge on the small test dataset).
 config.TRAIN_EPOCHS = 30
+
+# ---------------------------------------------------------------------------
+# Stub out heavy embedding models BEFORE importing the app.
+#
+# Tests don't need semantically meaningful embeddings — they just need
+# deterministic vectors of the correct dimension (512 for CLAP audio).
+# By patching embed_audio_file and the AudioMediaType's embed_text, we
+# avoid loading the ~600 MB CLAP model, the ~100-200 MB librosa/numba
+# stack, and the CLAP processor.  This cuts ~700-800 MB of RSS.
+# ---------------------------------------------------------------------------
+
+_EMBEDDING_DIM = 512
+
+
+def _fake_embed_audio(path):
+    """Deterministic fake audio embedding derived from the file contents.
+
+    Uses the first 1000 bytes of the file as a seed so that different audio
+    files (even when written to the same temp path) produce distinct vectors.
+    """
+    import hashlib
+
+    try:
+        data = open(path, "rb").read(1000)
+        seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
+    except Exception:
+        seed = hash(str(path)) % 2**31
+    rng = np.random.RandomState(seed)
+    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
+
+
+def _fake_embed_text(text):
+    """Deterministic fake text embedding derived from the query string."""
+    rng = np.random.RandomState(hash(text) % 2**31)
+    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
+
+
+# Patch embed_audio_file so init_medias() never triggers CLAP model loading.
+_patch_embed_audio = patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio)
+_patch_embed_audio.start()
 
 import app as app_module
 
@@ -37,6 +80,36 @@ app_module.bad_votes = bad_votes
 # Initialize models and medias
 initialize_models()
 app_module.init_medias()
+
+# Stop the module-level patch (init_medias is done); the per-test autouse
+# fixture below re-applies the patches for every test so that /api/sort and
+# other routes that call embed_text don't trigger CLAP loading either.
+_patch_embed_audio.stop()
+
+# Grab the audio media-type singleton so the per-test fixture can patch
+# embed_text and load_models on it, preventing CLAP from loading during
+# /api/sort and similar calls.
+from vtsearch.media import get as _media_get
+
+_audio_mt = _media_get("audio")
+
+
+@pytest.fixture(autouse=True)
+def _stub_embedding_models():
+    """Prevent CLAP (and librosa) from loading during individual tests.
+
+    Patches ``embed_audio_file``, the audio media-type's ``embed_text``,
+    ``embed_media``, and ``load_models`` so that any test-time calls
+    (e.g. via ``/api/sort``) return cheap deterministic fake vectors
+    instead of loading a ~600 MB model.
+    """
+    with (
+        patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio),
+        patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
+        patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
+        patch.object(_audio_mt, "load_models"),
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)

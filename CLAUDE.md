@@ -10,7 +10,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - **Run all tests (CPU + GPU)**: `python -m pytest tests/ -v -m ''`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
-- **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter file --filepath results.json`
+- **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter local_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
 - **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
 - **Lint**: `ruff check .`
@@ -21,14 +21,14 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_media_types, favorite_processors); auto-saves to `data/settings.json`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, favorite_media_types, favorite_processors); auto-saves to `data/settings.json`
 - `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/rss_feed/youtube_playlist/combine_datasets); auto-discovered via `IMPORTER` sentinel
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
-- `vtsearch/exporters/` — Results exporters (file/gui/email_smtp/csv_file/webhook); auto-discovered via `EXPORTER` sentinel
-- `vtsearch/labels/importers/` — Label importers (json_file/csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
-- `vtsearch/processors/importers/` — Processor importers (detector_file/label_file/csv_label_file); auto-discovered via `PROCESSOR_IMPORTER` sentinel
+- `vtsearch/exporters/` — Results exporters (local_json_file/server_json_file/local_csv_file/server_csv_file/email_smtp/webhook/gui); auto-discovered via `EXPORTER` sentinel
+- `vtsearch/labels/importers/` — Label importers (local_json_file/server_json_file/local_csv_file/server_csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
+- `vtsearch/processors/importers/` — Processor importers (detector_file/server_detector_file/label_file/csv_label_file); auto-discovered via `PROCESSOR_IMPORTER` sentinel
 - `vtsearch/media/` — Media type plugins: audio, image, text, video
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
 - `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
@@ -40,9 +40,10 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_votes.py` — Voting and vote retrieval
   - `test_sorting.py` — Text sort, learned sort, example sort, train_and_score
   - `test_labels.py` — Label export/import (via /api/labels/export and /api/labels/import)
-  - `test_label_importers.py` — Label importer base class, registry, json_file/csv_file importers, API routes
+  - `test_label_importers.py` — Label importer base class, registry, local/server json_file/csv_file importers, API routes
   - `test_inclusion.py` — Inclusion GET/POST
   - `test_detectors.py` — Detector export, detector sort, favorites, auto-detect
+  - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
   - `test_datasets.py` — Dataset endpoints, startup state, importers, archive extraction
   - `test_dataset_split.py` — Train/test dataset splitting
@@ -56,12 +57,13 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_origin_labelset.py` — Origin class, LabeledElement, LabelSet, build_origin(), label export/import with origins, integration
   - `test_combine_datasets.py` — Combine-datasets importer: metadata, dedup, media type validation, CLI, API routes
   - `test_creation_info.py` — Legacy creation_info handling in pickle datasets
+  - `test_duplicates.py` — Duplicate-content collapsing: collapse_duplicates function, dupe counting, label export/import integration
   - `test_enrich_descriptions.py` — Enriched text-sort description embedding
   - `test_eval.py` — Evaluation framework runner and metrics
   - `test_eval_visualize.py` — Evaluation visualisation chart generation
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
-  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails, favorites)
+  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails_left, show_thumbnails_right, favorites)
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
   - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
   - `test_integration.py` — End-to-end user workflow simulations: chained API calls, state interactions, response format consistency
@@ -72,8 +74,16 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
   - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
+  - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
+  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
+  - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
+  - `test_load_sort_window.py` — Load Sort window endpoints: example-sort, server-media-files, detector server-files
   - `test_memory_errors.py` — Graceful MemoryError handling during dataset loading
+  - `test_pdf_import.py` — PDF-to-image import: render_pdf_pages conversion, folder importer PDF handling, origin tracking
   - `test_preload_progress.py` — Console progress output during embedding model preloading
+  - `test_slow_integration.py` — Slow integration tests: chunked loading, detector scoring, export, label round-trips, settings persistence (marked slow)
+  - `test_thread_safety.py` — Thread-safe global state operations: _state_lock verification, concurrent vote/click-time/label history access
+  - `test_ucsf_documents_download.py` — UCSF Industry Documents demo dataset download and load_demo_source integration
   - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
 
 ## Test Markers
@@ -122,7 +132,7 @@ All mutable global state is reset automatically before each test via two autouse
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `favorite_detectors`, `favorite_extractors`, `favorite_localizers` are module-level dicts/lists
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails, favorite_media_types, favorite_processors
+- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, favorite_media_types, favorite_processors
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)

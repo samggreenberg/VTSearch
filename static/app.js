@@ -28,6 +28,12 @@
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
+  // Dashboard state
+  let dashSelectedDataset = null;    // { name, label, ... } from demo list, or null
+  let dashSelectedDetector = null;   // detector name string, or null
+  let dashDemoDatasets = null;       // cached demo dataset list from API
+  let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
+  let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -261,6 +267,7 @@
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
+  const menuDatasetChange = document.getElementById("menu-dataset-change");
   const menuLabelsExport = document.getElementById("menu-labels-export");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
@@ -330,6 +337,26 @@
   const showThumbnailsLeftCheckbox = document.getElementById("show-thumbnails-left-checkbox");
   const showThumbnailsRightCheckbox = document.getElementById("show-thumbnails-right-checkbox");
   let showThumbnailsLeft = false;
+
+  // Dashboard elements
+  const dashboardView = document.getElementById("dashboard-view");
+  const dashDatasetTabs = document.getElementById("dash-dataset-tabs");
+  const dashDatasetGrid = document.getElementById("dash-dataset-grid");
+  const dashModelGrid = document.getElementById("dash-model-grid");
+  const dashDatasetStatus = document.getElementById("dash-dataset-status");
+  const dashLabelBtn = document.getElementById("dash-label-btn");
+  const dashDetectBtn = document.getElementById("dash-detect-btn");
+  const dashLoadFileBtn = document.getElementById("dash-load-file-btn");
+  const dashChangeDatasetBtn = document.getElementById("dash-change-dataset-btn");
+  const dashAddModelBtn = document.getElementById("dash-add-model-btn");
+  const dashFileInput = document.getElementById("dash-file-input");
+  const dashProgress = document.getElementById("dash-progress");
+  const dashProgressFill = document.getElementById("dash-progress-fill");
+  const dashProgressText = document.getElementById("dash-progress-text");
+  const dashProgressMessage = document.getElementById("dash-progress-message");
+  const dashProgressEta = document.getElementById("dash-progress-eta");
+  const headerDashboardBtn = document.getElementById("header-dashboard-btn");
+  const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
   const autopilotTopGreensInput = document.getElementById("autopilot-top-greens-input");
@@ -566,20 +593,24 @@
     datasetLoaded = status.loaded;
 
     if (datasetLoaded) {
-      showTrainingUI();
       const mtInfo = mediaTypesMap[status.media_type];
       const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
       datasetInfo.textContent = mtInfo
         ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
         : `${status.num_medias} medias loaded${dupeSuffix}`;
+      // Go to dashboard unless we're already in labeling view
+      if (currentView !== "labeling") {
+        showDashboard();
+      }
     } else {
-      showWelcomeScreen();
+      showDashboard();
     }
 
     return status;
   }
 
   function showWelcomeScreen() {
+    currentView = "welcome";
     // Clean up combine state if we're returning to the welcome screen.
     if (_combineState) {
       fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
@@ -596,6 +627,9 @@
     demoDatasetsDiv.style.display = "none";
     extendedImporterForm.style.display = "none";
     backButton.style.display = "none";
+    if (dashboardView) dashboardView.style.display = "none";
+    const autodetectToggle = document.getElementById("autodetect-toggle");
+    if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     trainDatasetBar.style.display = "none";
@@ -603,6 +637,7 @@
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     stripeContainer.innerHTML = "";
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
@@ -610,12 +645,15 @@
     if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
   }
 
-  function showTrainingUI() {
+  function showMainUI() {
+    currentView = "labeling";
     datasetWelcome.style.display = "none";
+    if (dashboardView) dashboardView.style.display = "none";
     leftPanel.style.display = "";
     if (rightPanel) rightPanel.style.display = "";
     sortBar.style.display = "block";
     datasetBar.style.display = "flex";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "";
     if (!selected) {
       center.className = "panel-center empty";
       center.innerHTML = '<p>Select a media from the left panel</p>';
@@ -624,6 +662,399 @@
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
+  }
+
+  // ---- Dashboard view ----
+
+  async function showDashboard() {
+    currentView = "dashboard";
+    // Hide other views
+    datasetWelcome.style.display = "none";
+    leftPanel.style.display = "none";
+    if (rightPanel) rightPanel.style.display = "none";
+    sortBar.style.display = "none";
+    datasetBar.style.display = "none";
+    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
+
+    // Show dashboard
+    center.innerHTML = "";
+    center.appendChild(dashboardView);
+    center.className = "panel-center";
+    dashboardView.style.display = "flex";
+    dashProgress.style.display = "none";
+
+    // Update dataset status bar
+    if (datasetLoaded) {
+      const res = await fetch("/api/dataset/status");
+      const status = await res.json();
+      const mtInfo = mediaTypesMap[status.media_type];
+      const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
+      dashDatasetStatus.textContent = mtInfo
+        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
+        : `${status.num_medias} medias loaded${dupeSuffix}`;
+      dashDatasetStatus.style.display = "";
+      dashChangeDatasetBtn.style.display = "";
+    } else {
+      dashDatasetStatus.style.display = "none";
+      dashChangeDatasetBtn.style.display = "none";
+    }
+
+    // Populate grids
+    await renderDashboardDatasets();
+    await renderDashboardModels();
+    updateDashboardButtons();
+  }
+
+  function updateDashboardButtons() {
+    const hasDataset = datasetLoaded || dashSelectedDataset;
+    if (dashLabelBtn) dashLabelBtn.disabled = !hasDataset;
+    if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
+  }
+
+  async function renderDashboardDatasets() {
+    if (!dashDatasetGrid) return;
+
+    // Fetch demo datasets if not cached
+    if (!dashDemoDatasets) {
+      try {
+        const res = await fetch("/api/dataset/demo-list");
+        if (res.ok) {
+          const data = await res.json();
+          dashDemoDatasets = data.datasets || [];
+        } else {
+          dashDemoDatasets = [];
+        }
+      } catch (_) {
+        dashDemoDatasets = [];
+      }
+    }
+
+    if (dashDemoDatasets.length === 0) {
+      dashDatasetTabs.innerHTML = "";
+      dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No demo datasets available. Use "Load File" to load a .pkl dataset.</p>';
+      return;
+    }
+
+    const grouped = {};
+    dashDemoDatasets.forEach(ds => {
+      const mt = ds.media_type || "audio";
+      if (!grouped[mt]) grouped[mt] = [];
+      grouped[mt].push(ds);
+    });
+    const mediaOrder = Object.keys(mediaTypesMap).filter(mt => (grouped[mt] || []).length > 0);
+
+    const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
+    const sortColumns = [
+      { key: "label",          label: "Name" },
+      { key: "num_files",      label: "# Media" },
+      { key: "num_categories", label: "# Cat." },
+      { key: "description",    label: "Description" },
+      { key: "status",         label: "Readiness" },
+    ];
+
+    function buildStatusBadge(st) {
+      if (st === "ready") return '<span class="ready-badge">Ready</span>';
+      if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
+      return '<span class="download-badge">Needs Download</span>';
+    }
+
+    function renderTable(items, section) {
+      const sortState = section._demoSort || { key: "label", asc: true };
+      const sorted = [...items].sort((a, b) => {
+        let va = a[sortState.key], vb = b[sortState.key];
+        if (sortState.key === "status") { va = statusOrder[va] ?? 3; vb = statusOrder[vb] ?? 3; }
+        if (typeof va === "number" && typeof vb === "number") return sortState.asc ? va - vb : vb - va;
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return sortState.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = section.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(ds => {
+        const st = ds.status || (ds.ready ? "ready" : "needs_download");
+        const tr = document.createElement("tr");
+        const isSelected = dashSelectedDataset && dashSelectedDataset.name === ds.name;
+        tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "") + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+        tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
+        tr.addEventListener("click", () => {
+          dashSelectedDataset = ds;
+          // Re-render all tables to update selection highlight
+          Object.values(dashSections).forEach(sec => renderTable(grouped[sec._mt], sec));
+          updateDashboardButtons();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            tr.click();
+          }
+        });
+        const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "\u2026" : ds.description;
+        tr.innerHTML = `
+          <td class="col-name">${escapeHtml(ds.label)}</td>
+          <td class="col-num">${ds.num_files}</td>
+          <td class="col-num">${ds.num_categories}</td>
+          <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
+          <td class="col-status">${buildStatusBadge(st)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === sortState.key) {
+          arrow.textContent = sortState.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    // Pick initial tab
+    let initialTab = mediaOrder[0] || Object.keys(mediaTypesMap)[0] || "audio";
+    try {
+      const settingsRes = await fetch("/api/settings");
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const favs = settingsData.favorite_media_types || [];
+        const firstFav = favs.find(f => mediaOrder.includes(f));
+        if (firstFav) initialTab = firstFav;
+      }
+    } catch (_) {}
+
+    dashDatasetTabs.innerHTML = "";
+    dashDatasetGrid.innerHTML = "";
+
+    const dashSections = {};
+
+    mediaOrder.forEach(mt => {
+      const items = grouped[mt];
+      const mtInfo = mediaTypesMap[mt] || { icon: "\uD83D\uDCC1", tab_title: mt };
+
+      const tab = document.createElement("button");
+      tab.className = "demo-tab";
+      tab.dataset.mediaType = mt;
+      tab.textContent = `${mtInfo.icon} ${mtInfo.tab_title}`;
+      tab.addEventListener("click", () => {
+        dashDatasetTabs.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        Object.keys(dashSections).forEach(k => {
+          dashSections[k].style.display = k === mt ? "" : "none";
+        });
+      });
+      dashDatasetTabs.appendChild(tab);
+
+      const section = document.createElement("div");
+      section.className = "demo-section";
+      section._demoSort = { key: "num_files", asc: true };
+      section._mt = mt;
+      section.style.display = "none";
+
+      const headerRow = sortColumns.map(col =>
+        `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
+      ).join("");
+      section.innerHTML = `<table class="demo-table"><thead><tr>${headerRow}</tr></thead><tbody></tbody></table>`;
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          if (section._demoSort.key === key) {
+            section._demoSort.asc = !section._demoSort.asc;
+          } else {
+            section._demoSort = { key, asc: true };
+          }
+          renderTable(items, section);
+        });
+      });
+
+      renderTable(items, section);
+      dashSections[mt] = section;
+      dashDatasetGrid.appendChild(section);
+    });
+
+    const initialTabBtn = dashDatasetTabs.querySelector(`.demo-tab[data-media-type="${initialTab}"]`);
+    if (initialTabBtn) {
+      initialTabBtn.classList.add("active");
+      if (dashSections[initialTab]) dashSections[initialTab].style.display = "";
+    }
+  }
+
+  async function renderDashboardModels() {
+    if (!dashModelGrid) return;
+
+    // Fetch fresh favorites
+    try {
+      const res = await fetch("/api/favorite-detectors");
+      const data = await res.json();
+      favoriteDetectors = data.detectors || [];
+    } catch (_) {}
+
+    if (favoriteDetectors.length === 0) {
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors saved yet. Use "Add" to create one.</p>';
+      return;
+    }
+
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
+
+    let html = `<table class="dash-model-table">
+      <thead><tr>
+        <th data-sort="name">Name<span class="sort-arrow"></span></th>
+        <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
+        <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
+        <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+      </tr></thead><tbody></tbody></table>`;
+    dashModelGrid.innerHTML = html;
+
+    const table = dashModelGrid.querySelector(".dash-model-table");
+    let modelSort = { key: "name", asc: true };
+
+    function renderModelRows() {
+      const sorted = [...favoriteDetectors].sort((a, b) => {
+        let va = a[modelSort.key], vb = b[modelSort.key];
+        if (modelSort.key === "threshold") return modelSort.asc ? va - vb : vb - va;
+        if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(det => {
+        const icon = mediaIcons[det.media_type] || "\uD83D\uDD0D";
+        const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
+        const isSelected = dashSelectedDetector === det.name;
+        const tr = document.createElement("tr");
+        tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+        tr.innerHTML = `
+          <td class="col-name">${escapeHtml(det.name)}</td>
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
+          <td class="col-threshold">${det.threshold.toFixed(2)}</td>
+          <td class="col-date">${escapeHtml(created)}</td>
+        `;
+        tr.addEventListener("click", () => {
+          dashSelectedDetector = det.name;
+          renderModelRows();
+          updateDashboardButtons();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === modelSort.key) {
+          arrow.textContent = modelSort.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    table.querySelectorAll("th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sort;
+        if (modelSort.key === key) {
+          modelSort.asc = !modelSort.asc;
+        } else {
+          modelSort = { key, asc: true };
+        }
+        renderModelRows();
+      });
+    });
+
+    renderModelRows();
+  }
+
+  // Dashboard: load a dataset from the selected demo, then run a callback
+  async function dashLoadSelectedDataset(callback) {
+    if (!dashSelectedDataset) return;
+
+    dashProgress.style.display = "block";
+    dashProgressFill.style.width = "0%";
+    dashProgressFill.classList.add("indeterminate");
+    dashProgressText.textContent = "";
+    dashProgressMessage.textContent = "Loading...";
+    dashProgressMessage.style.color = "var(--text-secondary)";
+    dashProgressEta.textContent = "";
+
+    try {
+      const res = await fetch("/api/dataset/load-demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: dashSelectedDataset.name }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        dashProgressMessage.textContent = `Error: ${error.error}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        return;
+      }
+    } catch (e) {
+      dashProgressMessage.textContent = `Error: ${e.message}`;
+      dashProgressMessage.style.color = "var(--color-bad)";
+      return;
+    }
+
+    // Poll progress until done
+    dashPendingAction = callback;
+    startDashProgressPolling();
+  }
+
+  let dashProgressTimer = null;
+
+  function startDashProgressPolling() {
+    if (dashProgressTimer) clearInterval(dashProgressTimer);
+    dashProgressTimer = setInterval(pollDashProgress, 500);
+  }
+
+  function stopDashProgressPolling() {
+    if (dashProgressTimer) { clearInterval(dashProgressTimer); dashProgressTimer = null; }
+  }
+
+  async function pollDashProgress() {
+    try {
+      const res = await fetch("/api/dataset/progress");
+      const progress = await res.json();
+
+      if (progress.error) {
+        stopDashProgressPolling();
+        dashProgressMessage.textContent = `Error: ${progress.error}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        dashProgressFill.classList.remove("indeterminate");
+        return;
+      }
+
+      if (progress.pct != null) {
+        dashProgressFill.classList.remove("indeterminate");
+        dashProgressFill.style.width = `${progress.pct}%`;
+        dashProgressText.textContent = `${progress.pct}%`;
+      }
+      if (progress.message) {
+        dashProgressMessage.textContent = progress.message;
+        dashProgressMessage.style.color = "var(--text-secondary)";
+      }
+
+      if (progress.status === "idle") {
+        stopDashProgressPolling();
+        dashProgress.style.display = "none";
+
+        // Refresh dataset state
+        await checkDatasetStatus();
+        if (datasetLoaded) {
+          await fetchMedias();
+          await fetchVotes();
+
+          const cb = dashPendingAction;
+          dashPendingAction = null;
+          if (typeof cb === "function") cb();
+        }
+      }
+    } catch (_) {}
   }
 
   function showProgress() {
@@ -749,12 +1180,8 @@
 
         await fetchMedias();
         await fetchVotes();
-
-        // Auto-select first media if none selected
-        if (medias.length > 0 && !selected) {
-          selectMedia(medias[0].id);
-        }
-
+        // Dataset loaded — dashboard is now shown via checkDatasetStatus.
+        // Auto-select is deferred until user clicks "Label".
       }
       return;
     }
@@ -1595,6 +2022,29 @@
       }
     });
   }
+
+  // Dataset change — clears current dataset and returns to dashboard
+  if (menuDatasetChange && burgerDropdown) {
+    menuDatasetChange.addEventListener("click", async () => {
+      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
+        fetch("/api/dataset/clear", { method: "POST" })
+          .then(() => {
+            medias = [];
+            votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+            selected = null;
+            datasetLoaded = false;
+            dashSelectedDataset = null;
+            showDashboard();
+            renderVotes();
+            updateLabelCounts();
+            closeBurgerMenu();
+          });
+      } else {
+        closeBurgerMenu();
+      }
+    });
+  }
+
 
   // Labels export – open modal
   async function openLabelExporterModal() {
@@ -5146,811 +5596,21 @@
     }
   }
 
-  // ---- Dashboard ----
-
-  const dashboardView = document.getElementById("dashboard-view");
-  const dashboardDatasetsTbody = document.getElementById("dashboard-datasets-tbody");
-  const dashboardDatasetsTable = document.getElementById("dashboard-datasets-table");
-  const dashboardDatasetsEmpty = document.getElementById("dashboard-datasets-empty");
-  const dashboardModelsTbody = document.getElementById("dashboard-models-tbody");
-  const dashboardModelsTable = document.getElementById("dashboard-models-table");
-  const dashboardModelsEmpty = document.getElementById("dashboard-models-empty");
-  const dashboardTrainBtn = document.getElementById("dashboard-train-btn");
-  const dashboardRunBtn = document.getElementById("dashboard-run-btn");
-  const dashboardDatasetAdd = document.getElementById("dashboard-dataset-add");
-  const dashboardModelAdd = document.getElementById("dashboard-model-add");
-  const menuDashboard = document.getElementById("menu-dashboard");
-
-  let dashboardDatasets = [];
-  let dashboardModels = [];
-  let dashboardDatasetSort = { key: "name", asc: true };
-  let dashboardModelSort = { key: "name", asc: true };
-  let dashboardSelectedDatasets = {};  // id -> true
-  let dashboardSelectedModels = {};    // id -> true
-  let _dashboardAddDatasetMode = false;
-  let _dashboardTrainMode = null;  // {model, dataset} when training a trainable model
-  let _dashboardNextId = 1;
-
-  async function _persistTrainableModelLabels() {
-    if (!_dashboardTrainMode) return;
-    const modelName = _dashboardTrainMode.model.name;
-    try {
-      const res = await fetch(`/api/trainable-models/${encodeURIComponent(modelName)}/labels`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        const result = await res.json();
-        // Update the dashboard model entry with new label count
-        const model = dashboardModels.find(m => m.name === modelName && m.trainable);
-        if (model) {
-          model.num_labels = result.num_labels || 0;
-        }
-      }
-    } catch (_) { /* ignore save errors */ }
-  }
-
-  async function saveTrainableModelLabels() {
-    await _persistTrainableModelLabels();
-    _dashboardTrainMode = null;
-  }
-
-  async function loadTrainableModelsIntoDashboard() {
-    try {
-      const res = await fetch("/api/trainable-models");
-      if (!res.ok) return;
-      const data = await res.json();
-      const serverModels = data.models || [];
-      for (const sm of serverModels) {
-        // Skip if already present in dashboardModels (match by name + trainable flag)
-        if (dashboardModels.some(m => m.trainable && m.name === sm.name)) continue;
-        dashboardModels.push({
-          id: _dashboardNextId++,
-          name: sm.name,
-          num_labels: sm.num_labels || 0,
-          media_type: sm.media_type || "any",
-          examples: sm.examples || [],
-          origin: "Train New",
-          trainable: true,
-          text_query: sm.text_query || "",
-          autodetect: true,
-        });
-      }
-    } catch (_) { /* ignore */ }
-  }
-
-  function showDashboard() {
-    stopAutopilot();
-    // If leaving a training session, save labels first
-    if (_dashboardTrainMode) {
-      saveTrainableModelLabels();
+  // Initialize — go to dashboard; pre-fetch medias/votes if dataset is already loaded
+  fetchMediaTypes().then(() => checkDatasetStatus()).then(async () => {
+    if (datasetLoaded) {
+      await fetchMedias();
+      await fetchVotes();
     }
-    // Hide left/right panels and welcome screen
-    leftPanel.style.display = "none";
-    if (rightPanel) rightPanel.style.display = "none";
-    sortBar.style.display = "none";
-    datasetBar.style.display = "none";
-    datasetWelcome.style.display = "none";
-    trainDatasetBar.style.display = "none";
-    trainDetectorBar.style.display = "none";
-    center.className = "panel-center";
-    center.innerHTML = "";
-    center.appendChild(dashboardView);
-    dashboardView.style.display = "flex";
-    // Load trainable models from server, then render
-    loadTrainableModelsIntoDashboard().then(() => {
-      renderDashboardDatasets();
-      renderDashboardModels();
-      updateDashboardButtons();
-    });
+  });
+  // ---- Dashboard event handlers ----
+
+  // Header "Dashboard" button — visible during labeling
+  if (headerDashboardBtn) {
+    headerDashboardBtn.addEventListener("click", () => showDashboard());
   }
 
-  function hideDashboard() {
-    dashboardView.style.display = "none";
-  }
-
-  // Sort helper
-  function dashboardSortRows(rows, sortState) {
-    const { key, asc } = sortState;
-    return rows.slice().sort((a, b) => {
-      let va = a[key], vb = b[key];
-      if (typeof va === "number" && typeof vb === "number") {
-        return asc ? va - vb : vb - va;
-      }
-      va = String(va || "").toLowerCase();
-      vb = String(vb || "").toLowerCase();
-      if (va < vb) return asc ? -1 : 1;
-      if (va > vb) return asc ? 1 : -1;
-      return 0;
-    });
-  }
-
-  function renderDashboardDatasets() {
-    if (dashboardDatasets.length === 0) {
-      dashboardDatasetsTable.style.display = "none";
-      dashboardDatasetsEmpty.style.display = "";
-      return;
-    }
-    dashboardDatasetsEmpty.style.display = "none";
-    dashboardDatasetsTable.style.display = "";
-
-    // Update sort arrows
-    dashboardDatasetsTable.querySelectorAll("th[data-col]").forEach(th => {
-      const arrow = th.querySelector(".sort-arrow");
-      arrow.textContent = th.dataset.col === dashboardDatasetSort.key
-        ? (dashboardDatasetSort.asc ? " \u25B2" : " \u25BC") : "";
-    });
-
-    const sorted = dashboardSortRows(dashboardDatasets, dashboardDatasetSort);
-    dashboardDatasetsTbody.innerHTML = sorted.map(ds => {
-      const sel = dashboardSelectedDatasets[ds.id] ? " selected" : "";
-      return `<tr data-id="${ds.id}" class="${sel}">
-        <td title="${escapeHtml(ds.name)}">${escapeHtml(ds.name)} <button class="btn-icon" data-action="rename" data-id="${ds.id}" title="Rename">&#9998;</button></td>
-        <td>${ds.num_medias}</td>
-        <td>${escapeHtml(ds.media_type)}</td>
-        <td title="${escapeHtml(ds.origin)}">${escapeHtml(ds.origin)}</td>
-        <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${ds.id}" title="Remove">&#128465;</button></td>
-      </tr>`;
-    }).join("");
-
-    // Wire row click for selection
-    dashboardDatasetsTbody.querySelectorAll("tr").forEach(tr => {
-      tr.addEventListener("click", (e) => {
-        if (e.target.closest("button")) return;
-        const id = parseInt(tr.dataset.id);
-        if (dashboardSelectedDatasets[id]) {
-          delete dashboardSelectedDatasets[id];
-        } else {
-          dashboardSelectedDatasets[id] = true;
-        }
-        renderDashboardDatasets();
-        updateDashboardButtons();
-      });
-    });
-
-    // Wire action buttons
-    dashboardDatasetsTbody.querySelectorAll("button[data-action]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const id = parseInt(btn.dataset.id);
-        if (btn.dataset.action === "remove") {
-          dashboardDatasets = dashboardDatasets.filter(d => d.id !== id);
-          delete dashboardSelectedDatasets[id];
-          renderDashboardDatasets();
-          updateDashboardButtons();
-        } else if (btn.dataset.action === "rename") {
-          const ds = dashboardDatasets.find(d => d.id === id);
-          if (!ds) return;
-          const newName = await vtPrompt(`Rename dataset "${ds.name}" to:`, ds.name);
-          if (newName && newName !== ds.name) {
-            ds.name = newName;
-            renderDashboardDatasets();
-          }
-        }
-      });
-    });
-  }
-
-  // ---- Examples helpers ----
-
-  function examplesSummary(examples) {
-    if (!examples || examples.length === 0) return "-";
-    const texts = examples.filter(e => e.type === "text");
-    const medias = examples.filter(e => e.type === "media");
-    const detectors = examples.filter(e => e.type === "detector");
-    // If only texts and 2 or fewer, show quoted values
-    if (medias.length === 0 && detectors.length === 0 && texts.length <= 2) {
-      return texts.map(e => "\u2018" + e.value + "\u2019").join(", ");
-    }
-    const parts = [];
-    if (texts.length > 0) parts.push(texts.length + " text" + (texts.length > 1 ? "s" : ""));
-    if (medias.length > 0) parts.push(medias.length + " media");
-    if (detectors.length > 0) parts.push(detectors.length + " detector" + (detectors.length > 1 ? "s" : ""));
-    return parts.join(", ");
-  }
-
-  function renderExamplesGrid(container, examples, onChange) {
-    if (!examples || examples.length === 0) {
-      container.innerHTML = '<div class="examples-empty">No examples yet</div>';
-      return;
-    }
-    container.innerHTML = examples.map((ex, i) => `
-      <div class="example-row" data-idx="${i}">
-        <span class="example-type-badge type-${escapeHtml(ex.type)}">${escapeHtml(ex.type)}</span>
-        <span class="example-value" title="${escapeHtml(ex.value)}">${escapeHtml(ex.value)}</span>
-        <button class="example-remove" data-idx="${i}" title="Remove">&times;</button>
-      </div>
-    `).join("");
-    container.querySelectorAll(".example-remove").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.dataset.idx);
-        examples.splice(idx, 1);
-        renderExamplesGrid(container, examples, onChange);
-        if (onChange) onChange(examples);
-      });
-    });
-  }
-
-  async function promptForExample(type) {
-    if (type === "text") {
-      const val = await vtPrompt("Enter text description:", "");
-      if (val && val.trim()) return { type: "text", value: val.trim() };
-    } else if (type === "detector") {
-      // Show list of existing detectors to pick from
-      let detectors = [];
-      try {
-        const res = await fetch("/api/favorite-detectors");
-        if (res.ok) {
-          const data = await res.json();
-          detectors = data.detectors || [];
-        }
-      } catch (_) {}
-      if (detectors.length === 0) {
-        await vtAlert("No detectors available to reference.", "info");
-        return null;
-      }
-      const names = detectors.map(d => d.name);
-      const picked = await vtPrompt("Enter detector name:\n(" + names.join(", ") + ")", names[0]);
-      if (picked && picked.trim()) return { type: "detector", value: picked.trim() };
-    } else if (type === "media") {
-      const val = await vtPrompt("Enter media description or filename:", "");
-      if (val && val.trim()) return { type: "media", value: val.trim() };
-    }
-    return null;
-  }
-
-  // State for examples editor modal
-  let _examplesEditorState = null; // { model, examples, onSave }
-
-  function openExamplesEditor(model, onSave) {
-    const examples = (model.examples || []).map(e => ({...e}));
-    _examplesEditorState = { model, examples, onSave };
-    document.getElementById("examples-editor-modal-title").textContent = `Edit Examples — ${model.name}`;
-    examplesEditorStatus.textContent = "";
-    renderExamplesGrid(examplesEditorGrid, examples);
-    examplesEditorModal.classList.add("show");
-  }
-
-  if (examplesEditorModalClose) {
-    examplesEditorModalClose.addEventListener("click", () => {
-      examplesEditorModal.classList.remove("show");
-      _examplesEditorState = null;
-    });
-  }
-
-  if (examplesEditorAdd) {
-    examplesEditorAdd.addEventListener("click", async () => {
-      if (!_examplesEditorState) return;
-      const type = examplesEditorType.value;
-      const ex = await promptForExample(type);
-      if (ex) {
-        _examplesEditorState.examples.push(ex);
-        renderExamplesGrid(examplesEditorGrid, _examplesEditorState.examples);
-      }
-    });
-  }
-
-  if (examplesEditorSave) {
-    examplesEditorSave.addEventListener("click", async () => {
-      if (!_examplesEditorState) return;
-      const { model, examples, onSave } = _examplesEditorState;
-      examplesEditorStatus.textContent = "Saving\u2026";
-      examplesEditorStatus.style.color = "var(--text-muted)";
-
-      try {
-        let url, method = "PUT";
-        if (model.trainable) {
-          url = `/api/trainable-models/${encodeURIComponent(model.name)}/examples`;
-        } else {
-          url = `/api/favorite-detectors/${encodeURIComponent(model.name)}/examples`;
-        }
-        const res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ examples }),
-        });
-        if (res.ok) {
-          model.examples = examples;
-          examplesEditorStatus.textContent = "Saved";
-          examplesEditorStatus.style.color = "var(--color-good)";
-          if (onSave) onSave(examples);
-          setTimeout(() => {
-            examplesEditorModal.classList.remove("show");
-            _examplesEditorState = null;
-          }, 600);
-        } else {
-          const err = await res.json();
-          examplesEditorStatus.textContent = err.error || "Save failed";
-          examplesEditorStatus.style.color = "var(--color-bad)";
-        }
-      } catch (err) {
-        examplesEditorStatus.textContent = `Error: ${err.message}`;
-        examplesEditorStatus.style.color = "var(--color-bad)";
-      }
-    });
-  }
-
-  function renderDashboardModels() {
-    if (dashboardModels.length === 0) {
-      dashboardModelsTable.style.display = "none";
-      dashboardModelsEmpty.style.display = "";
-      return;
-    }
-    dashboardModelsEmpty.style.display = "none";
-    dashboardModelsTable.style.display = "";
-
-    // Update sort arrows
-    dashboardModelsTable.querySelectorAll("th[data-col]").forEach(th => {
-      const arrow = th.querySelector(".sort-arrow");
-      arrow.textContent = th.dataset.col === dashboardModelSort.key
-        ? (dashboardModelSort.asc ? " \u25B2" : " \u25BC") : "";
-    });
-
-    const sorted = dashboardSortRows(dashboardModels, dashboardModelSort);
-    dashboardModelsTbody.innerHTML = sorted.map(m => {
-      const sel = dashboardSelectedModels[m.id] ? " selected" : "";
-      const trainBadge = m.trainable ? ' <span class="trainable-badge">trainable</span>' : "";
-      const adChecked = m.autodetect !== false ? "checked" : "";
-      const exSummary = examplesSummary(m.examples);
-      return `<tr data-id="${m.id}" class="${sel}">
-        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}${trainBadge} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
-        <td>${m.num_labels}</td>
-        <td>${escapeHtml(m.media_type)}</td>
-        <td title="${escapeHtml(exSummary)}"><span class="examples-summary">${escapeHtml(exSummary)}</span> <button class="btn-icon" data-action="edit-examples" data-id="${m.id}" title="Edit examples">&#9998;</button></td>
-        <td title="${escapeHtml(m.origin)}">${escapeHtml(m.origin)}</td>
-        <td style="text-align:center"><input type="checkbox" class="autodetect-checkbox" data-id="${m.id}" ${adChecked} title="Include in autodetect"></td>
-        <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${m.id}" title="Remove">&#128465;</button></td>
-      </tr>`;
-    }).join("");
-
-    // Wire row click for selection
-    dashboardModelsTbody.querySelectorAll("tr").forEach(tr => {
-      tr.addEventListener("click", (e) => {
-        if (e.target.closest("button") || e.target.closest("input[type=checkbox]")) return;
-        const id = parseInt(tr.dataset.id);
-        if (dashboardSelectedModels[id]) {
-          delete dashboardSelectedModels[id];
-        } else {
-          dashboardSelectedModels[id] = true;
-        }
-        renderDashboardModels();
-        updateDashboardButtons();
-      });
-    });
-
-    // Wire autodetect checkboxes
-    dashboardModelsTbody.querySelectorAll(".autodetect-checkbox").forEach(cb => {
-      cb.addEventListener("change", (e) => {
-        const id = parseInt(cb.dataset.id);
-        const m = dashboardModels.find(m => m.id === id);
-        if (!m) return;
-        m.autodetect = cb.checked;
-        // Persist to backend
-        fetch(`/api/favorite-detectors/${encodeURIComponent(m.name)}/autodetect`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ autodetect: cb.checked }),
-        }).catch(() => {});
-      });
-    });
-
-    // Wire action buttons
-    dashboardModelsTbody.querySelectorAll("button[data-action]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const id = parseInt(btn.dataset.id);
-        if (btn.dataset.action === "remove") {
-          const m = dashboardModels.find(m => m.id === id);
-          if (m && m.trainable) {
-            // Also delete from backend
-            fetch(`/api/trainable-models/${encodeURIComponent(m.name)}`, { method: "DELETE" }).catch(() => {});
-          }
-          dashboardModels = dashboardModels.filter(m => m.id !== id);
-          delete dashboardSelectedModels[id];
-          renderDashboardModels();
-          updateDashboardButtons();
-        } else if (btn.dataset.action === "rename") {
-          const m = dashboardModels.find(m => m.id === id);
-          if (!m) return;
-          const newName = await vtPrompt(`Rename model "${m.name}" to:`, m.name);
-          if (newName && newName !== m.name) {
-            if (m.trainable) {
-              // Rename on backend too
-              try {
-                await fetch(`/api/trainable-models/${encodeURIComponent(m.name)}/rename`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ new_name: newName }),
-                });
-              } catch (_) { /* ignore */ }
-            }
-            m.name = newName;
-            renderDashboardModels();
-          }
-        } else if (btn.dataset.action === "edit-examples") {
-          const m = dashboardModels.find(m => m.id === id);
-          if (!m) return;
-          openExamplesEditor(m, () => renderDashboardModels());
-        }
-      });
-    });
-  }
-
-  function updateDashboardButtons() {
-    const numDS = Object.keys(dashboardSelectedDatasets).length;
-    const numMD = Object.keys(dashboardSelectedModels).length;
-    // Train: exactly 1 dataset + exactly 1 model (model must be trainable)
-    let trainEnabled = numDS === 1 && numMD === 1;
-    if (trainEnabled) {
-      const modelId = parseInt(Object.keys(dashboardSelectedModels)[0]);
-      const model = dashboardModels.find(m => m.id === modelId);
-      trainEnabled = model && model.trainable;
-    }
-    dashboardTrainBtn.disabled = !trainEnabled;
-    // Run: at least 1 dataset + at least 1 model
-    dashboardRunBtn.disabled = !(numDS >= 1 && numMD >= 1);
-  }
-
-  // -- Train button: load dataset + import labels + enter labeling UI --
-  if (dashboardTrainBtn) {
-    dashboardTrainBtn.addEventListener("click", async () => {
-      const dsId = parseInt(Object.keys(dashboardSelectedDatasets)[0]);
-      const mdId = parseInt(Object.keys(dashboardSelectedModels)[0]);
-      const dataset = dashboardDatasets.find(d => d.id === dsId);
-      const model = dashboardModels.find(m => m.id === mdId);
-      if (!dataset || !model || !model.trainable) return;
-
-      if (!dataset.source) {
-        await vtAlert("Cannot reload this dataset — no source info stored. Please re-add the dataset.", "warning");
-        return;
-      }
-
-      // Enter training mode
-      _dashboardTrainMode = { model, dataset };
-      hideDashboard();
-      // Show dataset/detector context bars
-      trainDatasetName.textContent = dataset.name;
-      trainDatasetBar.style.display = "";
-      trainDetectorName.textContent = model.name;
-      trainDetectorBar.style.display = "";
-
-      // Kick off dataset reload from the stored source
-      try {
-        const res = await fetch("/api/dataset/load-source", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source: dataset.source }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          _dashboardTrainMode = null;
-          await vtAlert(err.error || "Failed to reload dataset", "warning");
-          showDashboard();
-          return;
-        }
-      } catch (err) {
-        _dashboardTrainMode = null;
-        await vtAlert(`Failed to reload dataset: ${err.message}`, "warning");
-        showDashboard();
-        return;
-      }
-
-      startProgressPolling();
-    });
-  }
-
-  // Wire sortable headers for datasets table
-  if (dashboardDatasetsTable) {
-    dashboardDatasetsTable.querySelectorAll("th[data-col]").forEach(th => {
-      th.addEventListener("click", () => {
-        const col = th.dataset.col;
-        if (dashboardDatasetSort.key === col) {
-          dashboardDatasetSort.asc = !dashboardDatasetSort.asc;
-        } else {
-          dashboardDatasetSort = { key: col, asc: true };
-        }
-        renderDashboardDatasets();
-      });
-    });
-  }
-
-  // Wire sortable headers for models table
-  if (dashboardModelsTable) {
-    dashboardModelsTable.querySelectorAll("th[data-col]").forEach(th => {
-      th.addEventListener("click", () => {
-        const col = th.dataset.col;
-        if (dashboardModelSort.key === col) {
-          dashboardModelSort.asc = !dashboardModelSort.asc;
-        } else {
-          dashboardModelSort = { key: col, asc: true };
-        }
-        renderDashboardModels();
-      });
-    });
-  }
-
-  // Dashboard "Add Dataset" — enters the welcome screen in dashboard mode
-  if (dashboardDatasetAdd) {
-    dashboardDatasetAdd.addEventListener("click", () => {
-      _dashboardAddDatasetMode = true;
-      hideDashboard();
-      // Clear any existing dataset so we can load a fresh one
-      fetch("/api/dataset/clear", { method: "POST" }).then(() => {
-        medias = [];
-        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
-        selected = null;
-        datasetLoaded = false;
-        showWelcomeScreen();
-      });
-    });
-  }
-
-  // Dashboard "Add Model" — opens the processor importer modal in dashboard mode
-  if (dashboardModelAdd) {
-    dashboardModelAdd.addEventListener("click", () => {
-      openProcessorImporterModalForDashboard();
-    });
-  }
-
-  async function openProcessorImporterModalForDashboard() {
-    let importers = [];
-    try {
-      const res = await fetch("/api/processor-importers");
-      if (res.ok) importers = await res.json();
-    } catch (_) { /* ignore */ }
-
-    processorImporterFormDiv.style.display = "none";
-    processorImporterFormDiv.innerHTML = "";
-    processorImporterBack.style.display = "none";
-    processorImporterList.style.display = "";
-
-    // Build option cards: "Train New" first, then processor importers
-    let html = `
-      <div class="processor-importer-option option-card" data-name="__train_new__">
-        <span class="option-card-icon">\u{1F9E0}</span>
-        <div>
-          <div class="option-card-title">Train New</div>
-          <div class="option-card-desc">Create a trainable model with a text description. Add labels over time.</div>
-        </div>
-      </div>
-    `;
-
-    if (importers.length > 0) {
-      html += importers.map(imp => `
-        <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}">
-          <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
-          <div>
-            <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
-            <div class="option-card-desc">${escapeHtml(imp.description)}</div>
-          </div>
-        </div>
-      `).join("");
-    }
-
-    processorImporterList.innerHTML = html;
-
-    processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
-      el.setAttribute("role", "button");
-      el.setAttribute("tabindex", "0");
-      const name = el.dataset.name;
-      if (name === "__train_new__") {
-        el.addEventListener("click", () => showTrainNewFormForDashboard());
-        el.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showTrainNewFormForDashboard(); }
-        });
-      } else {
-        const imp = importers.find(i => i.name === name);
-        el.addEventListener("click", () => showProcessorImporterFormForDashboard(imp));
-        el.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showProcessorImporterFormForDashboard(imp); }
-        });
-      }
-    });
-
-    processorImporterModal.classList.add("show");
-  }
-
-  function showTrainNewFormForDashboard() {
-    processorImporterList.style.display = "none";
-    processorImporterBack.style.display = "inline-block";
-
-    // Build media type options from known types
-    const mtOptions = Object.keys(mediaTypesMap).length > 0
-      ? Object.values(mediaTypesMap).map(mt => `<option value="${escapeHtml(mt.type_id)}">${escapeHtml(mt.name || mt.type_id)}</option>`).join("")
-      : `<option value="audio">Audio</option><option value="image">Image</option><option value="paragraph">Text</option><option value="video">Video</option>`;
-
-    let html = `<h3 class="form-heading">Train New Model</h3>`;
-    html += `<form id="train-new-form">`;
-    html += `<div class="form-group">`;
-    html += `<label class="form-label">Model Name *</label>`;
-    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
-    html += `<div class="form-hint">A name for this trainable model.</div>`;
-    html += `</div>`;
-    html += `<div class="form-group">`;
-    html += `<label class="form-label">Media Type *</label>`;
-    html += `<select name="media_type" class="form-input" required>${mtOptions}</select>`;
-    html += `<div class="form-hint">What type of media this detector will analyze.</div>`;
-    html += `</div>`;
-    html += `<div class="form-group">`;
-    html += `<label class="form-label">Examples * <span style="font-weight:normal; font-size:0.75rem; color:var(--text-dim)">(at least one required)</span></label>`;
-    html += `<div id="train-new-examples-grid" class="examples-grid"></div>`;
-    html += `<div class="examples-add-bar" style="margin-top:6px">`;
-    html += `<select id="train-new-example-type" class="form-select-inline"><option value="text">Text</option><option value="media">Media</option><option value="detector">Detector</option></select>`;
-    html += `<button type="button" id="train-new-example-add" class="btn-sm">+ Add</button>`;
-    html += `</div>`;
-    html += `<div class="form-hint">Describe what to look for. Can be text descriptions, media references, or existing detectors.</div>`;
-    html += `</div>`;
-    html += `<div id="train-new-status" class="status-text compact"></div>`;
-    html += `<button type="submit" class="btn-block-primary">Create Model</button>`;
-    html += `</form>`;
-
-    processorImporterFormDiv.innerHTML = html;
-    processorImporterFormDiv.style.display = "block";
-
-    const statusEl = processorImporterFormDiv.querySelector("#train-new-status");
-    const exGrid = processorImporterFormDiv.querySelector("#train-new-examples-grid");
-    const exTypeSelect = processorImporterFormDiv.querySelector("#train-new-example-type");
-    const exAddBtn = processorImporterFormDiv.querySelector("#train-new-example-add");
-    const trainNewExamples = [];
-
-    renderExamplesGrid(exGrid, trainNewExamples);
-
-    exAddBtn.addEventListener("click", async () => {
-      const ex = await promptForExample(exTypeSelect.value);
-      if (ex) {
-        trainNewExamples.push(ex);
-        renderExamplesGrid(exGrid, trainNewExamples);
-      }
-    });
-
-    processorImporterFormDiv.querySelector("#train-new-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formEl = e.target;
-      const name = formEl.elements["name"].value.trim();
-      const mediaType = formEl.elements["media_type"].value;
-      if (!name) return;
-
-      if (trainNewExamples.length === 0) {
-        statusEl.textContent = "At least one example is required";
-        statusEl.style.color = "var(--color-bad)";
-        return;
-      }
-
-      // Derive text_query from first text example for backward compat
-      const firstText = trainNewExamples.find(e => e.type === "text");
-      const textQuery = firstText ? firstText.value : name;
-
-      statusEl.textContent = "Creating\u2026";
-      statusEl.style.color = "var(--text-muted)";
-
-      try {
-        const res = await fetch("/api/trainable-models", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, text_query: textQuery, media_type: mediaType, examples: trainNewExamples }),
-        });
-        const result = await res.json();
-        if (res.ok) {
-          dashboardModels.push({
-            id: _dashboardNextId++,
-            name: result.name,
-            num_labels: 0,
-            media_type: result.media_type || mediaType,
-            examples: result.examples || trainNewExamples,
-            origin: "Train New",
-            trainable: true,
-            text_query: result.text_query || textQuery,
-            autodetect: true,
-          });
-          statusEl.textContent = `Created "${result.name}"`;
-          statusEl.style.color = "var(--color-good)";
-          setTimeout(() => {
-            processorImporterModal.classList.remove("show");
-            showDashboard();
-          }, 800);
-        } else {
-          statusEl.textContent = result.error || "Creation failed";
-          statusEl.style.color = "var(--color-bad)";
-        }
-      } catch (err) {
-        statusEl.textContent = `Error: ${err.message}`;
-        statusEl.style.color = "var(--color-bad)";
-      }
-    });
-  }
-
-  function showProcessorImporterFormForDashboard(importer) {
-    processorImporterList.style.display = "none";
-    processorImporterBack.style.display = "inline-block";
-
-    let html = `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
-    html += `<form id="proc-imp-form">`;
-    html += `<div class="form-group">`;
-    html += `<label class="form-label">Detector Name *</label>`;
-    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
-    html += `<div class="form-hint">Name for the imported detector.</div>`;
-    html += `</div>`;
-    for (const field of importer.fields) {
-      html += `<div class="form-group">`;
-      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
-      if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
-      } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
-        for (const opt of field.options) {
-          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt || "(auto-detect)")}</option>`;
-        }
-        html += `</select>`;
-      } else {
-        const itype = field.field_type === "password" ? "password" : "text";
-        const placeholder = escapeHtml(field.placeholder || field.description);
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${placeholder}" class="form-input" ${field.required ? "required" : ""}>`;
-      }
-      if (field.description) {
-        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
-      }
-      html += `</div>`;
-    }
-    html += `<div id="proc-imp-status" class="status-text compact"></div>`;
-    html += `<button type="submit" class="btn-block-primary">Import</button>`;
-    html += `</form>`;
-
-    processorImporterFormDiv.innerHTML = html;
-    processorImporterFormDiv.style.display = "block";
-
-    const statusEl = processorImporterFormDiv.querySelector("#proc-imp-status");
-
-    processorImporterFormDiv.querySelector("#proc-imp-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      statusEl.textContent = "Importing\u2026";
-      statusEl.style.color = "var(--text-muted)";
-
-      const formEl = e.target;
-      const hasFiles = importer.fields.some(f => f.field_type === "file");
-      let body, headers = {};
-
-      if (hasFiles) {
-        body = new FormData(formEl);
-      } else {
-        const obj = { name: formEl.elements["name"].value };
-        for (const field of importer.fields) {
-          obj[field.key] = formEl.elements[field.key].value;
-        }
-        body = JSON.stringify(obj);
-        headers["Content-Type"] = "application/json";
-      }
-
-      try {
-        const res = await fetch(`/api/processor-importers/import/${encodeURIComponent(importer.name)}`, {
-          method: "POST", headers, body,
-        });
-        const result = await res.json();
-        if (res.ok) {
-          const modelEntry = {
-            id: _dashboardNextId++,
-            name: result.name,
-            num_labels: result.loaded || 0,
-            media_type: result.media_type || "unknown",
-            examples: result.examples || [],
-            origin: importer.display_name,
-            autodetect: true,
-          };
-          dashboardModels.push(modelEntry);
-          statusEl.textContent = `Imported "${result.name}"`;
-          statusEl.style.color = "var(--color-good)";
-          setTimeout(() => {
-            processorImporterModal.classList.remove("show");
-            showDashboard();
-          }, 1000);
-        } else {
-          statusEl.textContent = result.error || "Import failed";
-          statusEl.style.color = "var(--color-bad)";
-        }
-      } catch (err) {
-        statusEl.textContent = `Error: ${err.message}`;
-        statusEl.style.color = "var(--color-bad)";
-      }
-    });
-  }
-
-  // Burger menu handler for Dashboard
+  // Burger menu "Dashboard" item
   if (menuDashboard) {
     menuDashboard.addEventListener("click", () => {
       closeBurgerMenu();
@@ -5958,16 +5618,158 @@
     });
   }
 
-  // Initialize
-  fetchMediaTypes().then(() => checkDatasetStatus()).then(async () => {
-    if (datasetLoaded) {
-      await fetchMedias();
-      await fetchVotes();
-      if (medias.length > 0 && !selected) {
-        selectMedia(medias[0].id);
+  // Dashboard: Load File button
+  if (dashLoadFileBtn && dashFileInput) {
+    dashLoadFileBtn.addEventListener("click", () => dashFileInput.click());
+    dashFileInput.addEventListener("change", async () => {
+      const file = dashFileInput.files[0];
+      if (!file) return;
+
+      dashProgress.style.display = "block";
+      dashProgressFill.style.width = "0%";
+      dashProgressFill.classList.add("indeterminate");
+      dashProgressText.textContent = "";
+      dashProgressMessage.textContent = "Uploading...";
+      dashProgressMessage.style.color = "var(--text-secondary)";
+      dashProgressEta.textContent = "";
+
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/dataset/load-file", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = await res.json();
+          dashProgressMessage.textContent = `Error: ${data.error || "Upload failed"}`;
+          dashProgressMessage.style.color = "var(--color-bad)";
+          dashFileInput.value = "";
+          return;
+        }
+      } catch (e) {
+        dashProgressMessage.textContent = `Error: ${e.message}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        dashFileInput.value = "";
+        return;
       }
-    }
-  });
+
+      dashFileInput.value = "";
+      dashSelectedDataset = null;
+      // Poll progress
+      dashPendingAction = null;
+      startDashProgressPolling();
+    });
+  }
+
+  // Dashboard: Change Dataset button
+  if (dashChangeDatasetBtn) {
+    dashChangeDatasetBtn.addEventListener("click", async () => {
+      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
+        await fetch("/api/dataset/clear", { method: "POST" });
+        medias = [];
+        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+        selected = null;
+        datasetLoaded = false;
+        dashSelectedDataset = null;
+        showDashboard();
+      }
+    });
+  }
+
+  // Dashboard: Add Model button — opens the existing Manage Favorites modal
+  if (dashAddModelBtn) {
+    dashAddModelBtn.addEventListener("click", async () => {
+      await loadFavoriteDetectors();
+      loadFavImporterButtons();
+      if (favAddName && !favAddName.value.trim()) {
+        try {
+          const sugRes = await fetch("/api/textsort-suggestions");
+          const sugData = await sugRes.json();
+          if (sugData.suggestions && sugData.suggestions.length > 0) {
+            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
+          }
+        } catch (_) {}
+      }
+      favoritesModal.classList.add("show");
+    });
+  }
+
+  // Re-render dashboard model grid when favorites modal closes (detectors may have changed)
+  if (favoritesModalClose) {
+    const origClose = favoritesModalClose.onclick;
+    favoritesModalClose.addEventListener("click", () => {
+      if (currentView === "dashboard") renderDashboardModels();
+    });
+  }
+
+  // Dashboard: Label button
+  if (dashLabelBtn) {
+    dashLabelBtn.addEventListener("click", async () => {
+      if (datasetLoaded) {
+        // Dataset already loaded — go straight to labeling
+        showMainUI();
+        if (medias.length > 0 && !selected) {
+          selectMedia(medias[0].id);
+        }
+        return;
+      }
+      if (dashSelectedDataset) {
+        // Need to load the selected demo dataset first, then go to labeling
+        dashLoadSelectedDataset(() => {
+          showMainUI();
+          if (medias.length > 0 && !selected) {
+            selectMedia(medias[0].id);
+          }
+        });
+      }
+    });
+  }
+
+  // Dashboard: Detect button
+  if (dashDetectBtn) {
+    dashDetectBtn.addEventListener("click", async () => {
+      async function runDetect() {
+        if (!dashSelectedDetector) {
+          await vtAlert("Select a detector from the Model grid first.", "warning");
+          return;
+        }
+        // Run auto-detect
+        autodetectProgressModal.classList.add("show");
+        autodetectProgressText.textContent = "Running auto-detect...";
+        autodetectProgressBar.style.width = "0%";
+
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress += 5;
+          if (progress > 90) progress = 90;
+          autodetectProgressBar.style.width = `${progress}%`;
+        }, 200);
+
+        const res = await fetch("/api/auto-detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ detector_name: dashSelectedDetector }),
+        });
+
+        clearInterval(progressInterval);
+        autodetectProgressBar.style.width = "100%";
+
+        setTimeout(async () => {
+          autodetectProgressModal.classList.remove("show");
+          if (!res.ok) {
+            await vtAlert("Auto-detect failed. Make sure you have saved a detector for this media type.", "error");
+            return;
+          }
+          res.json().then(data => displayAutodetectResults(data));
+        }, 500);
+      }
+
+      if (datasetLoaded) {
+        await runDetect();
+      } else if (dashSelectedDataset) {
+        dashLoadSelectedDataset(() => runDetect());
+      }
+    });
+  }
+
   // ---- Settings persistence ----
 
   function saveVolume(vol) {

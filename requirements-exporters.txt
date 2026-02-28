@@ -8,7 +8,5 @@
 #
 # ── Built-in exporters ──────────────────────────────────────────────────────
 -r vtsearch/exporters/gui/requirements.txt
--r vtsearch/exporters/file/requirements.txt
 -r vtsearch/exporters/email_smtp/requirements.txt
--r vtsearch/exporters/csv_file/requirements.txt
 -r vtsearch/exporters/webhook/requirements.txt
