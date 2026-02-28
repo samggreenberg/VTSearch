@@ -370,7 +370,7 @@
   const dashLabelBtn = document.getElementById("dash-label-btn");
   const dashDetectBtn = document.getElementById("dash-detect-btn");
   const dashAddDatasetBtn = document.getElementById("dash-add-dataset-btn");
-  const dashChangeDatasetBtn = document.getElementById("dash-change-dataset-btn");
+
   const dashAddModelBtn = document.getElementById("dash-add-model-btn");
   const datasetImporterModal = document.getElementById("dataset-importer-modal");
   const datasetImporterModalClose = document.getElementById("dataset-importer-modal-close");
@@ -1126,6 +1126,7 @@
     if (rightPanel) rightPanel.style.display = "none";
     if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     stripeContainer.innerHTML = "";
+    if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
   }
@@ -1151,6 +1152,7 @@
       center.innerHTML = '<p>Select a media from the left panel</p>';
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
+    if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
   }
@@ -1170,13 +1172,15 @@
     if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     // Import Labels is only for the labeling interface
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
+    if (menuDashboard) menuDashboard.classList.add("disabled");
 
     // Show dashboard
     center.innerHTML = "";
     center.appendChild(dashboardView);
     center.className = "panel-center";
     dashboardView.style.display = "flex";
-    dashProgress.style.display = "none";
+    // Only hide the in-grid progress if no load is actively running
+    if (!dashProgressTimer) hideDashGridProgress();
 
     // Update dataset status bar
     if (datasetLoaded) {
@@ -1188,10 +1192,8 @@
         ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
         : `${status.num_medias} medias loaded${dupeSuffix}`;
       dashDatasetStatus.style.display = "";
-      dashChangeDatasetBtn.style.display = "";
     } else {
       dashDatasetStatus.style.display = "none";
-      dashChangeDatasetBtn.style.display = "none";
     }
 
     // Populate grids
@@ -1282,12 +1284,11 @@
         const deleteBtn = tr.querySelector(".dash-delete-btn");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!confirm("Remove this dataset? All votes and labels will be cleared.")) return;
+          if (!(await vtConfirm("Remove this dataset? All votes and labels will be cleared."))) return;
           try {
             await fetch("/api/dataset/clear", { method: "POST" });
             datasetLoaded = false;
             dashDatasetStatus.style.display = "none";
-            dashChangeDatasetBtn.style.display = "none";
             await renderDashboardDatasets();
             updateDashboardButtons();
           } catch (_) {}
@@ -1435,7 +1436,7 @@
         const deleteBtn = tr.querySelector(".dash-delete-btn");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!confirm(`Delete model "${det.name}"? This cannot be undone.`)) return;
+          if (!(await vtConfirm(`Delete model "${det.name}"? This cannot be undone.`))) return;
           try {
             const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(det.name)}`, { method: "DELETE" });
             if (res.ok) {
@@ -1501,17 +1502,29 @@
     renderModelRows();
   }
 
-  // Dashboard: load a dataset from the selected demo, then run a callback
-  async function dashLoadSelectedDataset(callback) {
-    if (!dashSelectedDataset) return;
-
+  // Show the in-grid progress bar inside the dataset section, hiding the grid content
+  function showDashGridProgress(message) {
+    dashDatasetGrid.style.display = "none";
     dashProgress.style.display = "block";
     dashProgressFill.style.width = "0%";
     dashProgressFill.classList.add("indeterminate");
     dashProgressText.textContent = "";
-    dashProgressMessage.textContent = "Loading...";
+    dashProgressMessage.textContent = message || "Loading...";
     dashProgressMessage.style.color = "var(--text-secondary)";
     dashProgressEta.textContent = "";
+  }
+
+  // Hide the in-grid progress bar and restore the dataset grid
+  function hideDashGridProgress() {
+    dashProgress.style.display = "none";
+    dashDatasetGrid.style.display = "";
+  }
+
+  // Dashboard: load a dataset from the selected demo, then run a callback
+  async function dashLoadSelectedDataset(callback) {
+    if (!dashSelectedDataset) return;
+
+    showDashGridProgress("Loading...");
 
     try {
       const res = await fetch("/api/dataset/load-demo", {
@@ -1572,11 +1585,12 @@
 
       if (progress.status === "idle") {
         stopDashProgressPolling();
-        dashProgress.style.display = "none";
+        hideDashGridProgress();
 
         // Refresh dataset state
         await checkDatasetStatus();
         if (datasetLoaded) {
+          await renderDashboardDatasets();
           await fetchMedias();
           await fetchVotes();
 
@@ -6174,6 +6188,7 @@
   // Burger menu "Dashboard" item
   if (menuDashboard) {
     menuDashboard.addEventListener("click", () => {
+      if (menuDashboard.classList.contains("disabled")) return;
       closeBurgerMenu();
       showDashboard();
     });
@@ -6346,15 +6361,9 @@
       statusEl.textContent = "Importing\u2026";
       statusEl.style.color = "var(--text-secondary)";
 
-      // Close modal and show dashboard progress
+      // Close modal and show in-grid progress
       datasetImporterModal.classList.remove("show");
-      dashProgress.style.display = "block";
-      dashProgressFill.style.width = "0%";
-      dashProgressFill.classList.add("indeterminate");
-      dashProgressText.textContent = "";
-      dashProgressMessage.textContent = "Importing\u2026";
-      dashProgressMessage.style.color = "var(--text-secondary)";
-      dashProgressEta.textContent = "";
+      showDashGridProgress("Importing\u2026");
 
       try {
         const res = await fetch(`/api/dataset/import/${importer.name}`, { method: "POST", headers, body });
@@ -6559,13 +6568,7 @@
       const file = dashFileInput.files[0];
       if (!file) return;
 
-      dashProgress.style.display = "block";
-      dashProgressFill.style.width = "0%";
-      dashProgressFill.classList.add("indeterminate");
-      dashProgressText.textContent = "";
-      dashProgressMessage.textContent = "Uploading...";
-      dashProgressMessage.style.color = "var(--text-secondary)";
-      dashProgressEta.textContent = "";
+      showDashGridProgress("Uploading...");
 
       const formData = new FormData();
       formData.append("file", file);
@@ -6590,21 +6593,6 @@
       // Poll progress
       dashPendingAction = null;
       startDashProgressPolling();
-    });
-  }
-
-  // Dashboard: Change Dataset button
-  if (dashChangeDatasetBtn) {
-    dashChangeDatasetBtn.addEventListener("click", async () => {
-      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
-        await fetch("/api/dataset/clear", { method: "POST" });
-        medias = [];
-        votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
-        selected = null;
-        datasetLoaded = false;
-        dashSelectedDataset = null;
-        showDashboard();
-      }
     });
   }
 

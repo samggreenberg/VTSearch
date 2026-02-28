@@ -77,6 +77,9 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Image | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
 | Video | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
 | Text | E5 (`intfloat/e5-base-v2`) | 768 |
+| Document | None (no embedder) | N/A |
+
+The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtsearch/converters/` before embedding.
 
 Embeddings are computed once when a dataset is loaded and stored as `numpy.ndarray` in each clip's `"embedding"` field. The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
