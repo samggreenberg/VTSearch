@@ -659,3 +659,9 @@ video { max-width: 100%; }
   display: flex; gap: 12px; justify-content: flex-end; padding-top: 8px;
 }
 .dashboard-actions .btn-block-primary { width: auto; padding: 10px 32px; }
+.trainable-badge {
+  display: inline-block; font-size: 0.65rem; padding: 1px 5px;
+  background: var(--accent); color: #fff; border-radius: 3px;
+  vertical-align: middle; margin-left: 4px; font-weight: 600;
+  letter-spacing: 0.03em;
+}

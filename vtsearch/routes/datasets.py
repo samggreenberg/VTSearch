@@ -764,9 +764,105 @@ def dashboard_dataset_info():
     if origin and ":" in origin:
         name = origin.split(":", 1)[1] or origin
 
+    # Build a source dict that can be used to reload the dataset later
+    source = None
+    for m in medias.values():
+        o = m.get("origin")
+        if isinstance(o, dict):
+            source = o
+            break
+
     return jsonify({
         "name": name,
         "num_medias": num_medias,
         "media_type": media_type,
         "origin": origin or "unknown",
+        "source": source,
     })
+
+
+@datasets_bp.route("/api/dataset/load-source", methods=["POST"])
+def load_dataset_from_source():
+    """Reload a dataset from a stored source origin dict.
+
+    Accepts JSON with a ``source`` key containing the raw origin dict
+    (as returned by ``/api/dashboard/dataset-info``).  Supports demo,
+    pickle, folder, and other importer origins.
+
+    Returns ``{"ok": true}`` and begins loading in a background thread.
+    Poll ``/api/progress`` for status.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    source = data.get("source")
+    if not isinstance(source, dict):
+        return jsonify({"error": "source must be an origin dict"}), 400
+    return _load_from_origin(source)
+
+
+def _load_from_origin(source: dict):
+    """Start loading a dataset from a raw origin dict (internal helper)."""
+    importer_name = source.get("importer", "")
+    params = source.get("params", {})
+
+    if importer_name == "dupe_set":
+        members = source.get("members", [])
+        if members:
+            member_origin = members[0].get("origin")
+            if isinstance(member_origin, dict):
+                return _load_from_origin(member_origin)
+        return jsonify({"error": "Cannot reload from dupe_set origin"}), 400
+
+    if importer_name == "demo":
+        demo_name = params.get("name", "")
+        if demo_name not in DEMO_DATASETS:
+            return jsonify({"error": f"Unknown demo dataset: {demo_name}"}), 400
+
+        def load_task():
+            try:
+                clear_dataset()
+                gc.collect()
+                load_demo_dataset(demo_name, medias)
+                _set_clip_origins(medias, {"importer": "demo", "params": {"name": demo_name}})
+                collapse_duplicates(medias)
+                _load_embedder_for_clips()
+                build_diversity_tree()
+            except MemoryError:
+                medias.clear()
+                gc.collect()
+                update_progress("idle", "", 0, 0, "Out of memory — dataset too large.")
+            except Exception as e:
+                update_progress("idle", "", 0, 0, str(e))
+
+        threading.Thread(target=load_task, daemon=True).start()
+        return jsonify({"ok": True, "message": "Loading started"})
+
+    if importer_name == "pickle":
+        pkl_path = params.get("path", "")
+        if not pkl_path or not Path(pkl_path).is_file():
+            return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
+        importer = get_importer("pickle")
+        if importer is None:
+            return jsonify({"error": "pickle importer not available"}), 500
+        _run_importer_in_background(importer, {"pkl_path": pkl_path})
+        return jsonify({"ok": True, "message": "Loading started"})
+
+    if importer_name == "folder":
+        folder_path = params.get("path", "")
+        if not folder_path or not Path(folder_path).is_dir():
+            return jsonify({"error": f"Folder not found: {folder_path}"}), 400
+        importer = get_importer("folder")
+        if importer is None:
+            return jsonify({"error": "folder importer not available"}), 500
+        field_values = {"path": folder_path}
+        media_type = params.get("media_type", "")
+        if media_type:
+            field_values["media_type"] = media_type
+        _run_importer_in_background(importer, field_values)
+        return jsonify({"ok": True, "message": "Loading started"})
+
+    # Generic fallback: try the named importer with the stored params
+    importer = get_importer(importer_name)
+    if importer is None:
+        return jsonify({"error": f"Unknown importer: {importer_name}"}), 400
+    _run_importer_in_background(importer, params)
+    return jsonify({"ok": True, "message": "Loading started"})
