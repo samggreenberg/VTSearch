@@ -23,7 +23,8 @@ to know first.
 ## What is VTSearch?
 
 VTSearch is a media explorer web app for browsing and voting on collections
-of audio, images, text, or video. It supports two sorting strategies:
+of audio, images, text, video, or documents. It supports two sorting
+strategies:
 
 - **Semantic sorting** — uses pretrained embedding models (CLAP, CLIP,
   X-CLIP, E5) to rank items by similarity to a text query.
@@ -48,6 +49,7 @@ runs locally or in Docker.
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [FEATURE_IDEAS.md](FEATURE_IDEAS.md) | 132 brainstormed feature ideas |
 | [demos.md](demos.md) | Available demo datasets |
+| [old_io.md](old_io.md) | Retired IO module reference implementations |
 
 ---
 
@@ -90,7 +92,7 @@ both the learned-sort training and the label export.
 
 ### Media types
 
-Four media types are supported, each with its own embedding model:
+Five media types are supported:
 
 | Media type | Embedding model | Model ID |
 |-----------|----------------|----------|
@@ -98,26 +100,34 @@ Four media types are supported, each with its own embedding model:
 | Image | CLIP | `openai/clip-vit-base-patch32` |
 | Video | X-CLIP | `microsoft/xclip-base-patch32` |
 | Text | E5 | `intfloat/e5-base-v2` |
+| Document | None (convert first) | N/A — use converters to transform to image/text |
 
 Models are loaded lazily on first use. Total download size: ~3.1 GB.
+
+### Converters
+
+Media converters transform content between types (e.g. document pages to
+images, video to audio). Available converters: `Document2ImageConverter`,
+`Document2TextConverter`, `Video2AudioConverter`, `Video2ImageConverter`.
+See `vtsearch/converters/`.
 
 ### Detectors and processors
 
 A **detector** is a trained MLP that classifies clips as positive/negative.
-An **extractor** groups clips into categories. Both are types of
-**processors** and can be exported/imported as JSON files.
+An **extractor** groups clips into categories. A **localizer** identifies
+regions of interest within clips (e.g. face detection). All three are types
+of **processors** and can be exported/imported as JSON files.
 
 ### Plugin systems
 
 Four auto-discovered plugin systems share the same architecture:
 
-- **Dataset importers** — load data from folders, pickles, URLs, RSS feeds,
-  YouTube playlists, or combined datasets.
-- **Results exporters** — write autodetect results to files, CSV, email,
-  webhooks, or the GUI.
-- **Label importers** — import labels from JSON or CSV files.
-- **Processor importers** — import detectors/extractors from JSON files or
-  train them from labeled data.
+- **Dataset importers** — load data from folders, pickles, HTTP archives,
+  or combined datasets.
+- **Results exporters** — write autodetect results to server files (JSON/CSV),
+  email, webhooks, or the GUI.
+- **Label importers** — import labels from server-side JSON or CSV files.
+- **Processor importers** — import detectors from server-side JSON files.
 
 See [EXTENDING.md](EXTENDING.md) for how to add new plugins.
 
@@ -150,7 +160,9 @@ argument parsing. Key startup sequence:
 | Global state (medias, votes) | `vtsearch/utils/state.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
 | ML training and inference | `vtsearch/models/training.py` |
-| Embedding models | `vtsearch/media/{audio,image,text,video}/media_type.py` |
+| Embedding models | `vtsearch/media/{audio,image,text,video,document}/media_type.py` |
+| Media converters | `vtsearch/converters/` |
+| Trainable model definitions | `vtsearch/routes/trainable_models.py` → `data/trainable_models/` |
 | Dataset loading and downloading | `vtsearch/datasets/` |
 | Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/` |
 | Constants and model IDs | `vtsearch/config.py` |
@@ -250,7 +262,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 python app.py --autodetect \
   --dataset data.pkl \
   --settings settings.json \
-  --exporter local_json_file --filepath results.json
+  --exporter server_json_file --filepath results.json
 ```
 
 This loads the dataset, runs all detectors from the settings file, and
@@ -265,8 +277,8 @@ exports results without starting the web server.
 
 ### Import pre-trained processors
 
-Use the processor importers panel or CLI to load detectors/extractors
-from JSON files, labeled media files, or CSV label files.
+Use the processor importers panel or CLI to load detectors from
+server-side JSON files.
 
 ### Evaluate sorting quality
 

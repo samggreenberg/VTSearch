@@ -835,12 +835,11 @@ requirements.txt              # Core deps + includes per-media + per-importer + 
 ├── vtsearch/media/video/requirements.txt
 ├── vtsearch/media/image/requirements.txt
 ├── vtsearch/media/text/requirements.txt
+├── vtsearch/media/document/requirements.txt
 ├── requirements-importers.txt          # Aggregates all data importer deps
 │   ├── vtsearch/datasets/importers/pickle/requirements.txt
 │   ├── vtsearch/datasets/importers/folder/requirements.txt
 │   ├── vtsearch/datasets/importers/http_zip/requirements.txt
-│   ├── vtsearch/datasets/importers/rss_feed/requirements.txt
-│   ├── vtsearch/datasets/importers/youtube_playlist/requirements.txt
 │   └── vtsearch/datasets/importers/combine_datasets/requirements.txt
 ├── requirements-exporters.txt          # Aggregates all exporter deps
 │   ├── vtsearch/exporters/gui/requirements.txt

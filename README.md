@@ -1,6 +1,6 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, or videos — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
+A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
 
 ## Setup
 
@@ -65,7 +65,8 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── settings.py                 # Persistent settings & autorun processors
 │   ├── routes/                     # Flask blueprints
 │   ├── models/                     # ML models (embeddings, training, progress)
-│   ├── media/                      # Media type plugins (audio, image, text, video)
+│   ├── media/                      # Media type plugins (audio, image, text, video, document)
+│   ├── converters/                 # Media converters (document→image, video→audio, etc.)
 │   ├── datasets/                   # Dataset loading, downloading, importers
 │   ├── eval/                       # Evaluation framework (metrics, runner, visualisation)
 │   ├── exporters/                  # Results exporter plugins
@@ -85,7 +86,8 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
 │   ├── FEATURE_IDEAS.md            # Brainstorm of potential features
-│   └── demos.md                    # Demo dataset listing
+│   ├── demos.md                    # Demo dataset listing
+│   └── old_io.md                   # Retired IO module reference implementations
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
 
