@@ -1204,6 +1204,7 @@
     if (rightPanel) rightPanel.style.display = "none";
     if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     stripeContainer.innerHTML = "";
+    if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
   }
@@ -1229,6 +1230,7 @@
       center.innerHTML = '<p>Select a media from the left panel</p>';
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
+    if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
   }
@@ -1248,6 +1250,7 @@
     if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     // Import Labels is only for the labeling interface
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
+    if (menuDashboard) menuDashboard.classList.add("disabled");
 
     // Show dashboard
     center.innerHTML = "";
@@ -6263,6 +6266,7 @@
   // Burger menu "Dashboard" item
   if (menuDashboard) {
     menuDashboard.addEventListener("click", () => {
+      if (menuDashboard.classList.contains("disabled")) return;
       closeBurgerMenu();
       showDashboard();
     });
