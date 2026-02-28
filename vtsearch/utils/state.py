@@ -45,8 +45,8 @@ inclusion: int | None = None
 # Text-sort suggestions: text queries that received a Good vote, most recent last.
 textsort_suggestions: list[str] = []
 
-# Favorite detectors: name -> {name, media_type, weights, threshold, created_at}
-favorite_detectors: dict[str, dict[str, Any]] = {}
+# Autorun detectors: name -> {name, media_type, weights, threshold, created_at}
+autorun_detectors: dict[str, dict[str, Any]] = {}
 
 # Favorite extractors: name -> {name, extractor_type, media_type, config, created_at}
 favorite_extractors: dict[str, dict[str, Any]] = {}
@@ -274,7 +274,7 @@ def get_textsort_suggestions() -> list[str]:
         return list(textsort_suggestions)
 
 
-def add_favorite_detector(
+def add_autorun_detector(
     name: str,
     media_type: str,
     weights: dict[str, Any],
@@ -283,7 +283,7 @@ def add_favorite_detector(
     autodetect: bool = True,
     examples: list[dict[str, str]] | None = None,
 ) -> None:
-    """Add or overwrite a named favorite detector in the global store.
+    """Add or overwrite a named autorun detector in the global store.
 
     If a detector with the same ``name`` already exists it is replaced.
 
@@ -303,7 +303,7 @@ def add_favorite_detector(
     import time
 
     with _state_lock:
-        favorite_detectors[name] = {
+        autorun_detectors[name] = {
             "name": name,
             "media_type": media_type,
             "weights": weights,
@@ -314,8 +314,8 @@ def add_favorite_detector(
         }
 
 
-def remove_favorite_detector(name: str) -> bool:
-    """Remove a named favorite detector from the global store.
+def remove_autorun_detector(name: str) -> bool:
+    """Remove a named autorun detector from the global store.
 
     Args:
         name: Name of the detector to remove.
@@ -325,14 +325,14 @@ def remove_favorite_detector(name: str) -> bool:
         detector with that name exists.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            del favorite_detectors[name]
+        if name in autorun_detectors:
+            del autorun_detectors[name]
             return True
         return False
 
 
-def rename_favorite_detector(old_name: str, new_name: str) -> bool:
-    """Rename a favorite detector, updating its internal ``"name"`` field.
+def rename_autorun_detector(old_name: str, new_name: str) -> bool:
+    """Rename a autorun detector, updating its internal ``"name"`` field.
 
     The operation is atomic with respect to the dict: the old entry is removed
     and a new entry is created in a single step (no window where neither exists).
@@ -346,16 +346,16 @@ def rename_favorite_detector(old_name: str, new_name: str) -> bool:
         already taken); ``False`` otherwise (no changes are made).
     """
     with _state_lock:
-        if old_name in favorite_detectors and new_name not in favorite_detectors:
-            favorite_detectors[new_name] = favorite_detectors[old_name].copy()
-            favorite_detectors[new_name]["name"] = new_name
-            del favorite_detectors[old_name]
+        if old_name in autorun_detectors and new_name not in autorun_detectors:
+            autorun_detectors[new_name] = autorun_detectors[old_name].copy()
+            autorun_detectors[new_name]["name"] = new_name
+            del autorun_detectors[old_name]
             return True
         return False
 
 
-def get_favorite_detectors() -> dict[str, dict[str, Any]]:
-    """Return a shallow copy of all favorite detectors.
+def get_autorun_detectors() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of all autorun detectors.
 
     Returns:
         A dict mapping detector name to its data dict (with keys ``"name"``,
@@ -363,11 +363,11 @@ def get_favorite_detectors() -> dict[str, dict[str, Any]]:
         The returned dict is a copy; mutations to it do not affect the global store.
     """
     with _state_lock:
-        return favorite_detectors.copy()
+        return autorun_detectors.copy()
 
 
-def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return all favorite detectors matching a given media type.
+def get_autorun_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return all autorun detectors matching a given media type.
 
     Args:
         media_type: Media type to filter by (``"audio"``, ``"video"``,
@@ -380,11 +380,11 @@ def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]
         global store.
     """
     with _state_lock:
-        return {name: det for name, det in favorite_detectors.items() if det["media_type"] == media_type}
+        return {name: det for name, det in autorun_detectors.items() if det["media_type"] == media_type}
 
 
-def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
-    """Set the autodetect flag on a named favorite detector.
+def set_autorun_detector_autodetect(name: str, autodetect: bool) -> bool:
+    """Set the autodetect flag on a named autorun detector.
 
     Args:
         name: Name of the detector to update.
@@ -394,14 +394,14 @@ def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
         ``True`` if the detector was found and updated; ``False`` otherwise.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            favorite_detectors[name]["autodetect"] = autodetect
+        if name in autorun_detectors:
+            autorun_detectors[name]["autodetect"] = autodetect
             return True
         return False
 
 
-def set_favorite_detector_examples(name: str, examples: list[dict[str, str]]) -> bool:
-    """Set the examples list on a named favorite detector.
+def set_autorun_detector_examples(name: str, examples: list[dict[str, str]]) -> bool:
+    """Set the examples list on a named autorun detector.
 
     Args:
         name: Name of the detector to update.
@@ -411,28 +411,28 @@ def set_favorite_detector_examples(name: str, examples: list[dict[str, str]]) ->
         ``True`` if the detector was found and updated; ``False`` otherwise.
     """
     with _state_lock:
-        if name in favorite_detectors:
-            favorite_detectors[name]["examples"] = examples
+        if name in autorun_detectors:
+            autorun_detectors[name]["examples"] = examples
             return True
         return False
 
 
-def get_favorite_detector_examples(name: str) -> list[dict[str, str]]:
-    """Return the examples list for a named favorite detector.
+def get_autorun_detector_examples(name: str) -> list[dict[str, str]]:
+    """Return the examples list for a named autorun detector.
 
     Returns an empty list if the detector is not found or has no examples.
     """
     with _state_lock:
-        det = favorite_detectors.get(name)
+        det = autorun_detectors.get(name)
         if det is None:
             return []
         return list(det.get("examples") or [])
 
 
 def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
-    """Return favorite detectors matching a media type with autodetect enabled.
+    """Return autorun detectors matching a media type with autodetect enabled.
 
-    Like :func:`get_favorite_detectors_by_media` but also filters to only
+    Like :func:`get_autorun_detectors_by_media` but also filters to only
     include detectors whose ``"autodetect"`` flag is ``True``.
 
     Args:
@@ -444,13 +444,13 @@ def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, An
     with _state_lock:
         return {
             name: det
-            for name, det in favorite_detectors.items()
+            for name, det in autorun_detectors.items()
             if det["media_type"] == media_type and det.get("autodetect", True)
         }
 
 
 # ---------------------------------------------------------------------------
-# Favorite Extractors
+# Extractors
 # ---------------------------------------------------------------------------
 
 
@@ -516,7 +516,7 @@ def get_favorite_extractors_by_media(media_type: str) -> dict[str, dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Favorite Localizers
+# Localizers
 # ---------------------------------------------------------------------------
 
 

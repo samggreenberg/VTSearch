@@ -3,22 +3,22 @@
 Endpoints
 ---------
 GET  /api/settings
-    Return all persisted settings (volume, favorite_processors).
+    Return all persisted settings (volume, autorun_processors).
 
 PUT  /api/settings
     Update one or more settings fields.  Only supplied keys are changed.
 
 GET  /api/settings/defaults
-    Return the default values for all settings (excluding favorite_processors).
+    Return the default values for all settings (excluding autorun_processors).
 
-GET  /api/settings/favorite-processors
-    List all favorite processor recipes.
+GET  /api/settings/autorun-processors
+    List all autorun processor recipes.
 
-POST /api/settings/favorite-processors
-    Add (or overwrite) a favorite processor recipe.
+POST /api/settings/autorun-processors
+    Add (or overwrite) an autorun processor recipe.
 
-DELETE /api/settings/favorite-processors/<name>
-    Remove a favorite processor recipe by name.
+DELETE /api/settings/autorun-processors/<name>
+    Remove an autorun processor recipe by name.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ settings_bp = Blueprint("settings", __name__)
 def get_settings():
     """Return all settings."""
     data = settings.get_all()
-    # Include settings JSON snippets for each favorite processor
-    for proc in data.get("favorite_processors", []):
+    # Include settings JSON snippets for each autorun processor
+    for proc in data.get("autorun_processors", []):
         proc["settings_json"] = settings.to_settings_json(proc)
     return jsonify(data)
 
@@ -123,12 +123,12 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "autopilot_hard_reds must be a number"}), 400
 
-    if "favorite_media_types" in body:
-        val = body["favorite_media_types"]
+    if "autoload_media_types" in body:
+        val = body["autoload_media_types"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
-            return jsonify({"error": "favorite_media_types must be a list of strings"}), 400
+            return jsonify({"error": "autoload_media_types must be a list of strings"}), 400
         try:
-            settings.set_favorite_media_types(val)
+            settings.set_autoload_media_types(val)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -137,22 +137,22 @@ def update_settings():
 
 @settings_bp.route("/api/settings/defaults", methods=["GET"])
 def get_defaults():
-    """Return the default values for all settings (excluding favorite_processors)."""
+    """Return the default values for all settings (excluding autorun_processors)."""
     return jsonify(settings.get_defaults())
 
 
-@settings_bp.route("/api/settings/favorite-processors", methods=["GET"])
-def get_favorite_processors():
-    """List all favorite processor recipes."""
-    procs = settings.get_favorite_processors()
+@settings_bp.route("/api/settings/autorun-processors", methods=["GET"])
+def get_autorun_processors():
+    """List all autorun processor recipes."""
+    procs = settings.get_autorun_processors()
     for proc in procs:
         proc["settings_json"] = settings.to_settings_json(proc)
-    return jsonify({"favorite_processors": procs})
+    return jsonify({"autorun_processors": procs})
 
 
-@settings_bp.route("/api/settings/favorite-processors", methods=["POST"])
-def add_favorite_processor():
-    """Add or overwrite a favorite processor recipe."""
+@settings_bp.route("/api/settings/autorun-processors", methods=["POST"])
+def add_autorun_processor():
+    """Add or overwrite an autorun processor recipe."""
     body = request.get_json(force=True, silent=True)
     if not body or not isinstance(body, dict):
         return jsonify({"error": "Invalid request body"}), 400
@@ -166,7 +166,7 @@ def add_favorite_processor():
     if not processor_importer:
         return jsonify({"error": "processor_importer is required"}), 400
 
-    settings.add_favorite_processor(processor_name, processor_importer, field_values)
+    settings.add_autorun_processor(processor_name, processor_importer, field_values)
     entry = {
         "processor_name": processor_name,
         "processor_importer": processor_importer,
@@ -176,9 +176,9 @@ def add_favorite_processor():
     return jsonify({"success": True, **entry})
 
 
-@settings_bp.route("/api/settings/favorite-processors/<name>", methods=["DELETE"])
-def delete_favorite_processor(name: str):
-    """Remove a favorite processor recipe by name."""
-    if settings.remove_favorite_processor(name):
+@settings_bp.route("/api/settings/autorun-processors/<name>", methods=["DELETE"])
+def delete_autorun_processor(name: str):
+    """Remove an autorun processor recipe by name."""
+    if settings.remove_autorun_processor(name):
         return jsonify({"success": True})
-    return jsonify({"error": "Favorite processor not found"}), 404
+    return jsonify({"error": "Autorun processor not found"}), 404

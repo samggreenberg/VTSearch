@@ -139,7 +139,7 @@ argument parsing. Key startup sequence:
 1. Create `data/` directory structure
 2. Initialize model cache directory
 3. Load persistent settings from `data/settings.json`
-4. Preload models for `favorite_media_types` (if configured)
+4. Preload models for `autoload_media_types` (if configured)
 5. Start Flask server (or run CLI autodetect workflow)
 
 ### Where things live

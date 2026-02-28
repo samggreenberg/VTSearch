@@ -3,10 +3,10 @@
 Covers:
 - Settings file read/write (vtsearch.settings)
 - Volume persistence
-- Favorite processor recipes: add, remove, list, CLI command generation
-- ensure_favorite_processors_imported (lazy import on autodetect)
+- Autorun processor recipes: add, remove, list, CLI command generation
+- ensure_autorun_processors_imported (lazy import on autodetect)
 - Flask API routes: GET/PUT /api/settings,
-  GET/POST/DELETE /api/settings/favorite-processors
+  GET/POST/DELETE /api/settings/autorun-processors
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class TestSettingsModule:
     def test_defaults_when_no_file(self):
         data = settings_mod.get_all()
         assert data["volume"] == 1.0
-        assert data["favorite_processors"] == []
+        assert data["autorun_processors"] == []
 
     def test_get_set_volume(self, isolated_settings):
         settings_mod.set_volume(0.42)
@@ -75,30 +75,30 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
-    def test_add_favorite_processor(self, isolated_settings):
-        settings_mod.add_favorite_processor(
+    def test_add_autorun_processor(self, isolated_settings):
+        settings_mod.add_autorun_processor(
             "my det", "detector_file", {"file": "/tmp/det.json"}
         )
-        procs = settings_mod.get_favorite_processors()
+        procs = settings_mod.get_autorun_processors()
         assert len(procs) == 1
         assert procs[0]["processor_name"] == "my det"
         assert procs[0]["processor_importer"] == "detector_file"
         assert procs[0]["field_values"]["file"] == "/tmp/det.json"
 
     def test_add_overwrites_same_name(self):
-        settings_mod.add_favorite_processor("a", "detector_file", {"file": "1.json"})
-        settings_mod.add_favorite_processor("a", "detector_file", {"file": "2.json"})
-        procs = settings_mod.get_favorite_processors()
+        settings_mod.add_autorun_processor("a", "detector_file", {"file": "1.json"})
+        settings_mod.add_autorun_processor("a", "detector_file", {"file": "2.json"})
+        procs = settings_mod.get_autorun_processors()
         assert len(procs) == 1
         assert procs[0]["field_values"]["file"] == "2.json"
 
-    def test_remove_favorite_processor(self):
-        settings_mod.add_favorite_processor("x", "detector_file", {"file": "x.json"})
-        assert settings_mod.remove_favorite_processor("x") is True
-        assert settings_mod.get_favorite_processors() == []
+    def test_remove_autorun_processor(self):
+        settings_mod.add_autorun_processor("x", "detector_file", {"file": "x.json"})
+        assert settings_mod.remove_autorun_processor("x") is True
+        assert settings_mod.get_autorun_processors() == []
 
     def test_remove_nonexistent(self):
-        assert settings_mod.remove_favorite_processor("nope") is False
+        assert settings_mod.remove_autorun_processor("nope") is False
 
     def test_to_settings_json(self):
         entry = {
@@ -128,13 +128,13 @@ class TestSettingsModule:
 
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
-        settings_mod.add_favorite_processor("p", "detector_file", {"file": "p.json"})
+        settings_mod.add_autorun_processor("p", "detector_file", {"file": "p.json"})
 
         # Simulate restart
         settings_mod.reset()
 
         assert settings_mod.get_volume() == pytest.approx(0.7)
-        procs = settings_mod.get_favorite_processors()
+        procs = settings_mod.get_autorun_processors()
         assert len(procs) == 1
         assert procs[0]["processor_name"] == "p"
 
@@ -210,66 +210,66 @@ class TestSettingsModule:
         assert defaults["safe_thresholds"] is False
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
-        assert defaults["favorite_media_types"] == []
+        assert defaults["autoload_media_types"] == []
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
-        assert "favorite_processors" not in defaults
+        assert "autorun_processors" not in defaults
 
-    def test_get_set_favorite_media_types(self, isolated_settings):
-        settings_mod.set_favorite_media_types(["audio", "video"])
-        assert settings_mod.get_favorite_media_types() == ["audio", "video"]
+    def test_get_set_autoload_media_types(self, isolated_settings):
+        settings_mod.set_autoload_media_types(["audio", "video"])
+        assert settings_mod.get_autoload_media_types() == ["audio", "video"]
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["favorite_media_types"] == ["audio", "video"]
+        assert raw["autoload_media_types"] == ["audio", "video"]
 
-    def test_favorite_media_types_default(self):
-        assert settings_mod.get_favorite_media_types() == []
+    def test_autoload_media_types_default(self):
+        assert settings_mod.get_autoload_media_types() == []
 
-    def test_favorite_media_types_invalid(self):
+    def test_autoload_media_types_invalid(self):
         with pytest.raises(ValueError):
-            settings_mod.set_favorite_media_types(["invalid_type"])
+            settings_mod.set_autoload_media_types(["invalid_type"])
 
-    def test_favorite_media_types_clear(self):
-        settings_mod.set_favorite_media_types(["video"])
-        settings_mod.set_favorite_media_types([])
-        assert settings_mod.get_favorite_media_types() == []
+    def test_autoload_media_types_clear(self):
+        settings_mod.set_autoload_media_types(["video"])
+        settings_mod.set_autoload_media_types([])
+        assert settings_mod.get_autoload_media_types() == []
 
-    def test_favorite_media_types_persists_across_reset(self, isolated_settings):
-        settings_mod.set_favorite_media_types(["image", "audio"])
+    def test_autoload_media_types_persists_across_reset(self, isolated_settings):
+        settings_mod.set_autoload_media_types(["image", "audio"])
         settings_mod.reset()
-        assert settings_mod.get_favorite_media_types() == ["image", "audio"]
+        assert settings_mod.get_autoload_media_types() == ["image", "audio"]
 
-    def test_favorite_media_types_all_valid_types(self):
-        settings_mod.set_favorite_media_types(["audio", "image", "paragraph", "video"])
-        assert settings_mod.get_favorite_media_types() == ["audio", "image", "paragraph", "video"]
+    def test_autoload_media_types_all_valid_types(self):
+        settings_mod.set_autoload_media_types(["audio", "image", "paragraph", "video"])
+        assert settings_mod.get_autoload_media_types() == ["audio", "image", "paragraph", "video"]
 
-    def test_toggle_favorite_media_type(self):
-        result = settings_mod.toggle_favorite_media_type("audio")
+    def test_toggle_autoload_media_type(self):
+        result = settings_mod.toggle_autoload_media_type("audio")
         assert result == ["audio"]
-        result = settings_mod.toggle_favorite_media_type("video")
+        result = settings_mod.toggle_autoload_media_type("video")
         assert result == ["audio", "video"]
-        result = settings_mod.toggle_favorite_media_type("audio")
+        result = settings_mod.toggle_autoload_media_type("audio")
         assert result == ["video"]
 
-    def test_toggle_favorite_media_type_invalid(self):
+    def test_toggle_autoload_media_type_invalid(self):
         with pytest.raises(ValueError):
-            settings_mod.toggle_favorite_media_type("invalid")
+            settings_mod.toggle_autoload_media_type("invalid")
 
-    def test_favorite_media_types_deduplicates(self):
-        settings_mod.set_favorite_media_types(["audio", "audio", "video"])
-        assert settings_mod.get_favorite_media_types() == ["audio", "video"]
+    def test_autoload_media_types_deduplicates(self):
+        settings_mod.set_autoload_media_types(["audio", "audio", "video"])
+        assert settings_mod.get_autoload_media_types() == ["audio", "video"]
 
-    def test_migrate_legacy_favorite_media_type(self, isolated_settings):
-        """Legacy favorite_media_type string is migrated to favorite_media_types list."""
+    def test_migrate_legacy_autoload_media_type(self, isolated_settings):
+        """Legacy favorite_media_type string is migrated to autoload_media_types list."""
         isolated_settings.write_text(json.dumps({"favorite_media_type": "audio"}))
         settings_mod.reset()
-        assert settings_mod.get_favorite_media_types() == ["audio"]
+        assert settings_mod.get_autoload_media_types() == ["audio"]
 
-    def test_migrate_legacy_empty_favorite_media_type(self, isolated_settings):
+    def test_migrate_legacy_empty_autoload_media_type(self, isolated_settings):
         """Legacy empty favorite_media_type is migrated to empty list."""
         isolated_settings.write_text(json.dumps({"favorite_media_type": ""}))
         settings_mod.reset()
-        assert settings_mod.get_favorite_media_types() == []
+        assert settings_mod.get_autoload_media_types() == []
 
     def test_get_set_autopilot_top_greens(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(20)
@@ -320,18 +320,18 @@ class TestSettingsModule:
         settings_mod.reset()
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
-        assert settings_mod.get_favorite_processors() == []
+        assert settings_mod.get_autorun_processors() == []
 
 
 # ---------------------------------------------------------------------------
-# ensure_favorite_processors_imported
+# ensure_autorun_processors_imported
 # ---------------------------------------------------------------------------
 
 
-class TestEnsureFavoriteProcessorsImported:
+class TestEnsureAutorunProcessorsImported:
     def test_imports_detector_file_processor(self, tmp_path):
-        """A favorite processor recipe with detector_file should be imported."""
-        from vtsearch.utils import favorite_detectors
+        """An autorun processor recipe with detector_file should be imported."""
+        from vtsearch.utils import autorun_detectors
 
         # Create a fake detector JSON
         det_weights = {
@@ -347,34 +347,34 @@ class TestEnsureFavoriteProcessorsImported:
             "threshold": 0.5,
         }))
 
-        settings_mod.add_favorite_processor(
+        settings_mod.add_autorun_processor(
             "settings_test_det", "detector_file", {"file": str(det_path)}
         )
 
-        imported = settings_mod.ensure_favorite_processors_imported()
+        imported = settings_mod.ensure_autorun_processors_imported()
         assert "settings_test_det" in imported
-        assert "settings_test_det" in favorite_detectors
+        assert "settings_test_det" in autorun_detectors
 
     def test_skips_already_imported(self, tmp_path):
         """If a detector with the same name already exists, skip it."""
-        from vtsearch.utils import add_favorite_detector
+        from vtsearch.utils import add_autorun_detector
 
-        add_favorite_detector("existing", "audio", {"0.weight": [[0.1]], "0.bias": [0.0]}, 0.5)
+        add_autorun_detector("existing", "audio", {"0.weight": [[0.1]], "0.bias": [0.0]}, 0.5)
 
-        settings_mod.add_favorite_processor(
+        settings_mod.add_autorun_processor(
             "existing", "detector_file", {"file": "/nonexistent.json"}
         )
 
-        imported = settings_mod.ensure_favorite_processors_imported()
+        imported = settings_mod.ensure_autorun_processors_imported()
         assert imported == []
 
     def test_handles_bad_importer_gracefully(self):
         """Unknown importer name should not crash."""
-        settings_mod.add_favorite_processor(
+        settings_mod.add_autorun_processor(
             "bad_proc", "totally_fake_importer", {"file": "x.json"}
         )
 
-        imported = settings_mod.ensure_favorite_processors_imported()
+        imported = settings_mod.ensure_autorun_processors_imported()
         assert imported == []
 
 
@@ -389,7 +389,7 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert "volume" in data
-        assert "favorite_processors" in data
+        assert "autorun_processors" in data
 
     def test_update_volume(self, client):
         res = client.put(
@@ -463,9 +463,9 @@ class TestSettingsAPI:
         )
         assert res.status_code == 400
 
-    def test_add_favorite_processor(self, client):
+    def test_add_autorun_processor(self, client):
         res = client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "api_test",
                 "processor_importer": "detector_file",
@@ -478,24 +478,24 @@ class TestSettingsAPI:
         assert data["processor_name"] == "api_test"
         assert "settings_json" in data
 
-    def test_add_favorite_processor_missing_name(self, client):
+    def test_add_autorun_processor_missing_name(self, client):
         res = client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={"processor_importer": "detector_file", "field_values": {}},
         )
         assert res.status_code == 400
 
-    def test_add_favorite_processor_missing_importer(self, client):
+    def test_add_autorun_processor_missing_importer(self, client):
         res = client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={"processor_name": "x", "field_values": {}},
         )
         assert res.status_code == 400
 
-    def test_list_favorite_processors(self, client):
+    def test_list_autorun_processors(self, client):
         # Add one first
         client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "list_test",
                 "processor_importer": "detector_file",
@@ -503,14 +503,14 @@ class TestSettingsAPI:
             },
         )
 
-        res = client.get("/api/settings/favorite-processors")
+        res = client.get("/api/settings/autorun-processors")
         assert res.status_code == 200
         data = res.get_json()
-        assert any(p["processor_name"] == "list_test" for p in data["favorite_processors"])
+        assert any(p["processor_name"] == "list_test" for p in data["autorun_processors"])
 
-    def test_delete_favorite_processor(self, client):
+    def test_delete_autorun_processor(self, client):
         client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "del_test",
                 "processor_importer": "detector_file",
@@ -518,21 +518,21 @@ class TestSettingsAPI:
             },
         )
 
-        res = client.delete("/api/settings/favorite-processors/del_test")
+        res = client.delete("/api/settings/autorun-processors/del_test")
         assert res.status_code == 200
 
         # Verify it's gone
-        res2 = client.get("/api/settings/favorite-processors")
+        res2 = client.get("/api/settings/autorun-processors")
         data = res2.get_json()
-        assert not any(p["processor_name"] == "del_test" for p in data["favorite_processors"])
+        assert not any(p["processor_name"] == "del_test" for p in data["autorun_processors"])
 
     def test_delete_nonexistent(self, client):
-        res = client.delete("/api/settings/favorite-processors/nope")
+        res = client.delete("/api/settings/autorun-processors/nope")
         assert res.status_code == 404
 
     def test_get_settings_includes_settings_json(self, client):
         client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "cmd_test",
                 "processor_importer": "detector_file",
@@ -542,7 +542,7 @@ class TestSettingsAPI:
 
         res = client.get("/api/settings")
         data = res.get_json()
-        proc = next(p for p in data["favorite_processors"] if p["processor_name"] == "cmd_test")
+        proc = next(p for p in data["autorun_processors"] if p["processor_name"] == "cmd_test")
         import json
 
         parsed = json.loads(proc["settings_json"])
@@ -558,8 +558,8 @@ class TestSettingsAPI:
         assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
-        assert data["favorite_media_types"] == []
-        assert "favorite_processors" not in data
+        assert data["autoload_media_types"] == []
+        assert "autorun_processors" not in data
 
     def test_update_safe_thresholds(self, client):
         res = client.put("/api/settings", json={"safe_thresholds": True})
@@ -613,38 +613,38 @@ class TestSettingsAPI:
         assert "show_thumbnails_left" in data
         assert "show_thumbnails_right" in data
 
-    def test_update_favorite_media_types(self, client):
-        res = client.put("/api/settings", json={"favorite_media_types": ["audio", "video"]})
+    def test_update_autoload_media_types(self, client):
+        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "video"]})
         assert res.status_code == 200
-        assert res.get_json()["favorite_media_types"] == ["audio", "video"]
+        assert res.get_json()["autoload_media_types"] == ["audio", "video"]
 
         # Verify it persisted
         res2 = client.get("/api/settings")
-        assert res2.get_json()["favorite_media_types"] == ["audio", "video"]
+        assert res2.get_json()["autoload_media_types"] == ["audio", "video"]
 
-    def test_update_favorite_media_types_all_types(self, client):
-        res = client.put("/api/settings", json={"favorite_media_types": ["audio", "image", "paragraph", "video"]})
+    def test_update_autoload_media_types_all_types(self, client):
+        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "image", "paragraph", "video"]})
         assert res.status_code == 200
-        assert res.get_json()["favorite_media_types"] == ["audio", "image", "paragraph", "video"]
+        assert res.get_json()["autoload_media_types"] == ["audio", "image", "paragraph", "video"]
 
-    def test_update_favorite_media_types_clear(self, client):
-        client.put("/api/settings", json={"favorite_media_types": ["video"]})
-        res = client.put("/api/settings", json={"favorite_media_types": []})
+    def test_update_autoload_media_types_clear(self, client):
+        client.put("/api/settings", json={"autoload_media_types": ["video"]})
+        res = client.put("/api/settings", json={"autoload_media_types": []})
         assert res.status_code == 200
-        assert res.get_json()["favorite_media_types"] == []
+        assert res.get_json()["autoload_media_types"] == []
 
-    def test_update_favorite_media_types_invalid(self, client):
-        res = client.put("/api/settings", json={"favorite_media_types": ["invalid"]})
+    def test_update_autoload_media_types_invalid(self, client):
+        res = client.put("/api/settings", json={"autoload_media_types": ["invalid"]})
         assert res.status_code == 400
 
-    def test_update_favorite_media_types_not_list(self, client):
-        res = client.put("/api/settings", json={"favorite_media_types": "audio"})
+    def test_update_autoload_media_types_not_list(self, client):
+        res = client.put("/api/settings", json={"autoload_media_types": "audio"})
         assert res.status_code == 400
 
-    def test_get_settings_includes_favorite_media_types(self, client):
+    def test_get_settings_includes_autoload_media_types(self, client):
         res = client.get("/api/settings")
         assert res.status_code == 200
-        assert "favorite_media_types" in res.get_json()
+        assert "autoload_media_types" in res.get_json()
 
     def test_update_autopilot_top_greens(self, client):
         res = client.put("/api/settings", json={"autopilot_top_greens": 20})

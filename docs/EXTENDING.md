@@ -470,7 +470,7 @@ LABEL_IMPORTER = PostgresLabelImporter()
 Processor importers let users import processors (detectors/extractors) from
 external sources.  A processor importer takes some input (a JSON detector
 file, a labeled media file, etc.) and returns a dict containing model weights
-and a threshold — which is then saved as a favorite detector.
+and a threshold — which is then saved as a autorun detector.
 
 ### How discovery works
 
@@ -535,16 +535,16 @@ PROCESSOR_IMPORTER = S3ProcessorImporter()
 
 1. `GET /api/processor-importers` returns the list of available importers.
 2. `POST /api/processor-importers/import/<name>` invokes `run()`, combines the
-   result with the user-supplied name, and saves it as a favorite detector.
+   result with the user-supplied name, and saves it as a autorun detector.
 
 ### CLI usage
 
 Processor importers are used from the CLI via the settings file.  Add a
-processor recipe to `favorite_processors` in `settings.json`:
+processor recipe to `autorun_processors` in `settings.json`:
 
 ```json
 {
-    "favorite_processors": [
+    "autorun_processors": [
         {
             "processor_name": "my detector",
             "processor_importer": "s3",
