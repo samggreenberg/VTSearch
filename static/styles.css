@@ -303,6 +303,11 @@ video { max-width: 100%; }
 .btn-bad::after { content: "Bad"; font-weight: 700; display: block; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .btn-bad.voted, .btn-bad.vote-flash { background: var(--color-bad); color: #fff; }
 
+/* Training context bar – dataset / detector name shown during training */
+.train-context-bar { padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--accent-highlight-bg); flex-shrink: 0; overflow: hidden; }
+.train-context-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; line-height: 1; margin-bottom: 2px; }
+.train-context-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* Right panel – votes */
 .panel-right { width: 220px; border-left: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; background: var(--bg-panel); display: flex; flex-direction: column; }
 .label-sort-bar { padding: 8px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
