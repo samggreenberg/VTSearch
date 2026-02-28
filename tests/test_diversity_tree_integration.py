@@ -108,7 +108,7 @@ class TestDiversityTreeNextSample:
         first = diversity_tree_next_sample()
         diversity_tree_label(first)
         second = diversity_tree_next_sample()
-        # After labeling the root representative, the tree should suggest
+        # After labeling the first sample, the tree should suggest
         # a different media (or None if fully seen).
         if second is not None:
             assert second != first or len(medias) == 1
@@ -122,7 +122,7 @@ class TestDiversityTreeNextSample:
 class TestDiversityTreeNextEndpoint:
     def test_returns_id_when_tree_exists(self, client):
         _build_tree()
-        resp = client.get("/api/diversity-tree/next")
+        resp = client.post("/api/diversity-tree/next", json={})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "id" in data
@@ -134,18 +134,27 @@ class TestDiversityTreeNextEndpoint:
         assert data["exhausted"] is False
 
     def test_returns_null_when_no_tree(self, client):
-        resp = client.get("/api/diversity-tree/next")
+        resp = client.post("/api/diversity-tree/next", json={})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["id"] is None
         assert data["diversity_level"] == -1
         assert data["exhausted"] is False  # no tree != exhausted
 
+    def test_get_still_works(self, client):
+        """GET without scores still returns a valid result."""
+        _build_tree()
+        resp = client.get("/api/diversity-tree/next")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["id"] is not None
+        assert data["id"] in medias
+
     def test_diversity_level_after_labeling(self, client):
         tree = _build_tree()
-        root_rep = tree.nodes["0"]["representative"]
-        diversity_tree_label(root_rep)
-        resp = client.get("/api/diversity-tree/next")
+        first_id = tree.nodes["0"]["ids"][0]
+        diversity_tree_label(first_id)
+        resp = client.post("/api/diversity-tree/next", json={})
         data = resp.get_json()
         assert data["diversity_level"] >= 0
 
@@ -155,10 +164,23 @@ class TestDiversityTreeNextEndpoint:
         # Label every vector so all leaves (and ancestors) become seen
         for vid in tree.vector_to_leaf:
             diversity_tree_label(vid)
-        resp = client.get("/api/diversity-tree/next")
+        resp = client.post("/api/diversity-tree/next", json={})
         data = resp.get_json()
         assert data["id"] is None
         assert data["exhausted"] is True
+
+    def test_scores_influence_selection(self, client):
+        """When scores are posted, the highest-scored element in the node is returned."""
+        tree = _build_tree()
+        # Build scores: give the highest score to a specific media
+        all_ids = list(tree.vector_to_leaf.keys())
+        target_id = all_ids[-1]  # pick the last one
+        scores = {str(vid): 0.1 for vid in all_ids}
+        scores[str(target_id)] = 1.0
+
+        resp = client.post("/api/diversity-tree/next", json={"scores": scores})
+        data = resp.get_json()
+        assert data["id"] == target_id
 
 
 # ---------------------------------------------------------------------------

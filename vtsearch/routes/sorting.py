@@ -716,9 +716,13 @@ def labeling_status_indicator():
         return jsonify({"error": str(e)}), 500
 
 
-@sorting_bp.route("/api/diversity-tree/next")
+@sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
 def diversity_tree_next():
     """Return the next diverse sample from the Diversity Tree.
+
+    Accepts an optional POST body with ``{"scores": {id: score, ...}}``
+    so the sort mode influences which element is picked from the next
+    unseen node.  Without scores the first element in the node is returned.
 
     Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
     exhausted or not yet built.  Also includes ``diversity_level`` so the
@@ -726,8 +730,15 @@ def diversity_tree_next():
     and ``exhausted`` (bool) which is true when the tree exists but every
     node has already been seen.
     """
+    scores = None
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        raw_scores = data.get("scores")
+        if isinstance(raw_scores, dict):
+            scores = {int(k): float(v) for k, v in raw_scores.items()}
+
     tree = get_diversity_tree()
-    next_id = diversity_tree_next_sample()
+    next_id = diversity_tree_next_sample(scores=scores)
     level = tree.diversity_level() if tree is not None else -1
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
