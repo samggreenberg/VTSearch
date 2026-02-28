@@ -211,6 +211,8 @@ class TestSettingsModule:
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
         assert defaults["favorite_media_types"] == []
+        assert defaults["autopilot_top_greens"] == 3
+        assert defaults["autopilot_hard_reds"] == 4
         assert "favorite_processors" not in defaults
 
     def test_get_set_favorite_media_types(self, isolated_settings):
@@ -268,6 +270,50 @@ class TestSettingsModule:
         isolated_settings.write_text(json.dumps({"favorite_media_type": ""}))
         settings_mod.reset()
         assert settings_mod.get_favorite_media_types() == []
+
+    def test_get_set_autopilot_top_greens(self, isolated_settings):
+        settings_mod.set_autopilot_top_greens(20)
+        assert settings_mod.get_autopilot_top_greens() == 20
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["autopilot_top_greens"] == 20
+
+    def test_autopilot_top_greens_clamped(self):
+        settings_mod.set_autopilot_top_greens(0)
+        assert settings_mod.get_autopilot_top_greens() == 1
+
+        settings_mod.set_autopilot_top_greens(-5)
+        assert settings_mod.get_autopilot_top_greens() == 1
+
+    def test_autopilot_top_greens_default(self):
+        assert settings_mod.get_autopilot_top_greens() == 3
+
+    def test_autopilot_top_greens_persists_across_reset(self, isolated_settings):
+        settings_mod.set_autopilot_top_greens(25)
+        settings_mod.reset()
+        assert settings_mod.get_autopilot_top_greens() == 25
+
+    def test_get_set_autopilot_hard_reds(self, isolated_settings):
+        settings_mod.set_autopilot_hard_reds(15)
+        assert settings_mod.get_autopilot_hard_reds() == 15
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["autopilot_hard_reds"] == 15
+
+    def test_autopilot_hard_reds_clamped(self):
+        settings_mod.set_autopilot_hard_reds(0)
+        assert settings_mod.get_autopilot_hard_reds() == 1
+
+        settings_mod.set_autopilot_hard_reds(-5)
+        assert settings_mod.get_autopilot_hard_reds() == 1
+
+    def test_autopilot_hard_reds_default(self):
+        assert settings_mod.get_autopilot_hard_reds() == 4
+
+    def test_autopilot_hard_reds_persists_across_reset(self, isolated_settings):
+        settings_mod.set_autopilot_hard_reds(30)
+        settings_mod.reset()
+        assert settings_mod.get_autopilot_hard_reds() == 30
 
     def test_corrupt_settings_file(self, isolated_settings):
         isolated_settings.write_text("not json!!!")
@@ -599,3 +645,51 @@ class TestSettingsAPI:
         res = client.get("/api/settings")
         assert res.status_code == 200
         assert "favorite_media_types" in res.get_json()
+
+    def test_update_autopilot_top_greens(self, client):
+        res = client.put("/api/settings", json={"autopilot_top_greens": 20})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_top_greens"] == 20
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["autopilot_top_greens"] == 20
+
+    def test_update_autopilot_top_greens_clamped(self, client):
+        res = client.put("/api/settings", json={"autopilot_top_greens": 0})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_top_greens"] == 1
+
+    def test_update_autopilot_top_greens_invalid(self, client):
+        res = client.put("/api/settings", json={"autopilot_top_greens": "not a number"})
+        assert res.status_code == 400
+
+    def test_update_autopilot_hard_reds(self, client):
+        res = client.put("/api/settings", json={"autopilot_hard_reds": 15})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_hard_reds"] == 15
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["autopilot_hard_reds"] == 15
+
+    def test_update_autopilot_hard_reds_clamped(self, client):
+        res = client.put("/api/settings", json={"autopilot_hard_reds": 0})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_hard_reds"] == 1
+
+    def test_update_autopilot_hard_reds_invalid(self, client):
+        res = client.put("/api/settings", json={"autopilot_hard_reds": "not a number"})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_autopilot(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "autopilot_top_greens" in data
+        assert "autopilot_hard_reds" in data
+
+    def test_get_defaults_includes_autopilot(self, client):
+        res = client.get("/api/settings/defaults")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["autopilot_top_greens"] == 3
+        assert data["autopilot_hard_reds"] == 4

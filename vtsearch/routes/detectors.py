@@ -17,11 +17,11 @@ from vtsearch.utils import (
     add_favorite_detector,
     add_favorite_extractor,
     add_favorite_localizer,
+    get_autodetect_detectors_by_media,
     medias,
     get_calibrate_count,
     get_calibration_fraction,
     get_favorite_detectors,
-    get_favorite_detectors_by_media,
     get_favorite_extractors,
     get_favorite_extractors_by_media,
     get_favorite_localizers,
@@ -34,6 +34,7 @@ from vtsearch.utils import (
     rename_favorite_detector,
     rename_favorite_extractor,
     rename_favorite_localizer,
+    set_favorite_detector_autodetect,
 )
 
 detectors_bp = Blueprint("detectors", __name__)
@@ -308,6 +309,8 @@ def add_favorite_detector_route():
     weights = data.get("weights")
     threshold = data.get("threshold", 0.5)
 
+    examples = data.get("examples")
+
     if not name:
         return jsonify({"error": "name is required"}), 400
     if not media_type:
@@ -315,7 +318,7 @@ def add_favorite_detector_route():
     if not weights:
         return jsonify({"error": "weights are required"}), 400
 
-    add_favorite_detector(name, media_type, weights, threshold)
+    add_favorite_detector(name, media_type, weights, threshold, examples=examples)
     return jsonify({"success": True, "name": name})
 
 
@@ -341,6 +344,49 @@ def rename_favorite_detector_route(name):
     if rename_favorite_detector(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Detector not found or new name already exists"}), 400
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/autodetect", methods=["PUT"])
+def set_favorite_detector_autodetect_route(name):
+    """Set the autodetect flag on a favorite detector."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    autodetect = data.get("autodetect")
+    if autodetect is None:
+        return jsonify({"error": "autodetect is required"}), 400
+
+    if set_favorite_detector_autodetect(name, bool(autodetect)):
+        return jsonify({"success": True, "autodetect": bool(autodetect)})
+    return jsonify({"error": "Detector not found"}), 404
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["GET"])
+def get_detector_examples_route(name):
+    """Get the examples for a favorite detector."""
+    from vtsearch.utils import get_favorite_detector_examples
+
+    examples = get_favorite_detector_examples(name)
+    return jsonify({"name": name, "examples": examples})
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["PUT"])
+def set_detector_examples_route(name):
+    """Set/replace the examples for a favorite detector."""
+    from vtsearch.utils import set_favorite_detector_examples
+
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    examples = data.get("examples")
+    if examples is None:
+        return jsonify({"error": "examples is required"}), 400
+
+    if set_favorite_detector_examples(name, examples):
+        return jsonify({"success": True, "name": name, "examples": examples})
+    return jsonify({"error": "Detector not found"}), 404
 
 
 @detectors_bp.route("/api/favorite-detectors/import-pkl", methods=["POST"])
@@ -671,8 +717,8 @@ def auto_detect():
     # Determine media type from current medias
     media_type = next(iter(medias.values())).get("type", "audio")
 
-    # Get favorite detectors for this media type
-    detectors = get_favorite_detectors_by_media(media_type)
+    # Get favorite detectors for this media type (only those with autodetect enabled)
+    detectors = get_autodetect_detectors_by_media(media_type)
 
     if not detectors:
         return jsonify({"error": f"No favorite detectors found for media type: {media_type}"}), 400

@@ -442,9 +442,9 @@ def autodetect_main(
 
         media_type = _detect_media_type(medias)
 
-        from vtsearch.utils import get_favorite_detectors_by_media
+        from vtsearch.utils import get_autodetect_detectors_by_media
 
-        detectors = get_favorite_detectors_by_media(media_type)
+        detectors = get_autodetect_detectors_by_media(media_type)
         if not detectors:
             raise ValueError(
                 f"No favorite processors found for media type: {media_type}. "
@@ -506,9 +506,9 @@ def autodetect_importer_main(
 
         media_type = _detect_media_type(medias)
 
-        from vtsearch.utils import get_favorite_detectors_by_media
+        from vtsearch.utils import get_autodetect_detectors_by_media
 
-        detectors = get_favorite_detectors_by_media(media_type)
+        detectors = get_autodetect_detectors_by_media(media_type)
         if not detectors:
             raise ValueError(
                 f"No favorite processors found for media type: {media_type}. "
@@ -568,9 +568,9 @@ def autodetect_main_chunked(
             if media_type is None:
                 media_type = _detect_media_type(chunk_medias)
 
-                from vtsearch.utils import get_favorite_detectors_by_media
+                from vtsearch.utils import get_autodetect_detectors_by_media
 
-                detectors = get_favorite_detectors_by_media(media_type)
+                detectors = get_autodetect_detectors_by_media(media_type)
                 if not detectors:
                     raise ValueError(
                         f"No favorite processors found for media type: {media_type}. "
@@ -643,9 +643,9 @@ def autodetect_importer_main_chunked(
             if media_type is None:
                 media_type = _detect_media_type(chunk_medias)
 
-                from vtsearch.utils import get_favorite_detectors_by_media
+                from vtsearch.utils import get_autodetect_detectors_by_media
 
-                detectors = get_favorite_detectors_by_media(media_type)
+                detectors = get_autodetect_detectors_by_media(media_type)
                 if not detectors:
                     raise ValueError(
                         f"No favorite processors found for media type: {media_type}. "

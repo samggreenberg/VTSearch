@@ -96,7 +96,7 @@ class FolderDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files to scan for in the folder.",
-            options=["sounds", "videos", "images", "paragraphs"],
+            options=["sounds", "videos", "images", "paragraphs", "documents"],
             default="sounds",
         ),
         ImporterField(

@@ -887,7 +887,7 @@ def load_dataset_from_pickle(
         )
 
     # Release the raw pickle data now that medias are built
-    del data
+    del data  # noqa: F821 — ruff cannot see past `del data` in the except branch (which always re-raises)
     gc.collect()
 
     if missing_media > 0:
