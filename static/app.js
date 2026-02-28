@@ -876,22 +876,83 @@
             <th>Type</th>
             <th>Items</th>
             <th>Origin</th>
+            <th class="col-actions-header"></th>
           </tr></thead>
-          <tbody>
-            <tr class="dash-dataset-row dash-selected">
-              <td class="col-name">${escapeHtml(info.name)}</td>
-              <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
-              <td class="col-count">${info.num_medias}${escapeHtml(dupeSuffix)}</td>
-              <td class="col-origin">${escapeHtml(info.origin)}</td>
-            </tr>
-          </tbody></table>`;
+          <tbody></tbody></table>`;
+        const tr = document.createElement("tr");
+        tr.className = "dash-dataset-row dash-selected";
+        const nameTd = document.createElement("td");
+        nameTd.className = "col-name";
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(info.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        tr.appendChild(nameTd);
+        tr.insertAdjacentHTML("beforeend", `
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
+          <td class="col-count">${info.num_medias}${escapeHtml(dupeSuffix)}</td>
+          <td class="col-origin">${escapeHtml(info.origin)}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+        `);
+
+        // Inline rename for dataset
+        const renameBtn = tr.querySelector(".dash-rename-btn");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const nameSpan = nameTd.querySelector(".dash-name-text");
+          const current = nameSpan.textContent;
+          nameSpan.style.display = "none";
+          renameBtn.style.display = "none";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "dash-rename-input";
+          input.value = current;
+          nameTd.insertBefore(input, nameSpan);
+          input.focus();
+          input.select();
+          const commit = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== current) {
+              try {
+                await fetch("/api/dashboard/dataset-rename", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: newName }),
+                });
+                nameSpan.textContent = newName;
+              } catch (_) {}
+            }
+            input.remove();
+            nameSpan.style.display = "";
+            renameBtn.style.display = "";
+          };
+          input.addEventListener("blur", commit);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+            if (ev.key === "Escape") { input.value = current; input.blur(); }
+          });
+        });
+
+        // Delete dataset
+        const deleteBtn = tr.querySelector(".dash-delete-btn");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm("Remove this dataset? All votes and labels will be cleared.")) return;
+          try {
+            await fetch("/api/dataset/clear", { method: "POST" });
+            datasetLoaded = false;
+            dashDatasetStatus.style.display = "none";
+            dashChangeDatasetBtn.style.display = "none";
+            await renderDashboardDatasets();
+            updateDashboardButtons();
+          } catch (_) {}
+        });
+
+        dashDatasetGrid.querySelector("tbody").appendChild(tr);
       } catch (_) {
         dashDatasetGrid.innerHTML = "";
       }
       return;
     }
 
-    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "Add" to load one.</p>';
+    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "+" to load one.</p>';
   }
 
   async function renderDashboardModels() {
@@ -905,7 +966,7 @@
     } catch (_) {}
 
     if (favoriteDetectors.length === 0) {
-      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "Add" to create one.</p>';
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
       return;
     }
 
@@ -918,6 +979,7 @@
         <th data-sort="threshold">Threshold<span class="sort-arrow"></span></th>
         <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+        <th class="col-actions-header"></th>
       </tr></thead><tbody></tbody></table>`;
     dashModelGrid.innerHTML = html;
 
@@ -949,12 +1011,73 @@
         tr.setAttribute("role", "button");
         tr.setAttribute("tabindex", "0");
         tr.innerHTML = `
-          <td class="col-name">${escapeHtml(det.name)}</td>
+          <td class="col-name"><span class="dash-name-text">${escapeHtml(det.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button></td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
           <td class="col-threshold">${det.weights ? det.threshold.toFixed(2) : '<span style="color:var(--text-muted)">Untrained</span>'}</td>
           <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `;
+        // Inline rename for model
+        const renameBtn = tr.querySelector(".dash-rename-btn");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const nameTd = tr.querySelector(".col-name");
+          const nameSpan = nameTd.querySelector(".dash-name-text");
+          const current = nameSpan.textContent;
+          nameSpan.style.display = "none";
+          renameBtn.style.display = "none";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "dash-rename-input";
+          input.value = current;
+          nameTd.insertBefore(input, nameSpan);
+          input.focus();
+          input.select();
+          const commit = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== current) {
+              try {
+                const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(current)}/rename`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ new_name: newName }),
+                });
+                if (res.ok) {
+                  det.name = newName;
+                  if (dashSelectedDetector === current) dashSelectedDetector = newName;
+                  nameSpan.textContent = newName;
+                }
+              } catch (_) {}
+            }
+            input.remove();
+            nameSpan.style.display = "";
+            renameBtn.style.display = "";
+          };
+          input.addEventListener("blur", commit);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+            if (ev.key === "Escape") { input.value = current; input.blur(); }
+          });
+        });
+        // Delete model
+        const deleteBtn = tr.querySelector(".dash-delete-btn");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete model "${det.name}"? This cannot be undone.`)) return;
+          try {
+            const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(det.name)}`, { method: "DELETE" });
+            if (res.ok) {
+              favoriteDetectors = favoriteDetectors.filter(d => d.name !== det.name);
+              if (dashSelectedDetector === det.name) dashSelectedDetector = null;
+              renderModelRows();
+              updateDashboardButtons();
+              if (favoriteDetectors.length === 0) {
+                dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
+              }
+            }
+          } catch (_) {}
+        });
         // Favorite checkbox toggle
         const checkbox = tr.querySelector(".fav-checkbox");
         checkbox.addEventListener("click", async (e) => {

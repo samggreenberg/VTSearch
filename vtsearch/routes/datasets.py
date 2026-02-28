@@ -16,10 +16,12 @@ from vtsearch.utils import (
     build_diversity_tree,
     clear_all,
     collapse_duplicates,
+    get_dataset_display_name,
     medias,
     get_dupe_count,
     get_progress,
     good_votes,
+    set_dataset_display_name,
     update_progress,
 )
 
@@ -784,10 +786,14 @@ def dashboard_dataset_info():
                 origin = importer
             break
 
-    # Determine a sensible name from origin or filenames
-    name = origin or "Untitled"
-    if origin and ":" in origin:
-        name = origin.split(":", 1)[1] or origin
+    # Use display name override if set, otherwise derive from origin
+    display_name = get_dataset_display_name()
+    if display_name:
+        name = display_name
+    else:
+        name = origin or "Untitled"
+        if origin and ":" in origin:
+            name = origin.split(":", 1)[1] or origin
 
     # Build a source dict that can be used to reload the dataset later
     source = None
@@ -805,6 +811,21 @@ def dashboard_dataset_info():
         "origin": origin or "unknown",
         "source": source,
     })
+
+
+@datasets_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
+def dashboard_dataset_rename():
+    """Set a custom display name for the currently loaded dataset."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return jsonify({"error": "name is required"}), 400
+
+    set_dataset_display_name(new_name)
+    return jsonify({"success": True, "name": new_name})
 
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
