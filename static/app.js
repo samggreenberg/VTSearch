@@ -255,8 +255,6 @@
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
-  const menuDatasetExport = document.getElementById("menu-dataset-export");
-  const menuDatasetChange = document.getElementById("menu-dataset-change");
   const menuLabelsExport = document.getElementById("menu-labels-export");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
@@ -356,10 +354,6 @@
     const res = await fetch("/api/dataset/status");
     const status = await res.json();
     datasetLoaded = status.loaded;
-
-    if (menuDatasetExport) {
-      menuDatasetExport.classList.toggle("disabled", !datasetLoaded);
-    }
 
     if (datasetLoaded) {
       showMainUI();
@@ -1418,37 +1412,6 @@
         if (burgerDropdown.classList.contains("show")) {
           closeBurgerMenu();
         }
-      }
-    });
-  }
-
-  // Dataset export
-  if (menuDatasetExport && burgerDropdown) {
-    menuDatasetExport.addEventListener("click", () => {
-      if (menuDatasetExport.classList.contains("disabled")) return;
-      window.location.href = "/api/dataset/export";
-      closeBurgerMenu();
-    });
-  }
-
-  // Dataset change
-  if (menuDatasetChange && burgerDropdown) {
-    menuDatasetChange.addEventListener("click", async () => {
-      if (await vtConfirm("Changing the dataset will erase your current dataset. Continue?")) {
-        fetch("/api/dataset/clear", { method: "POST" })
-          .then(() => {
-            medias = [];
-            votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
-            selected = null;
-            datasetLoaded = false;
-            if (menuDatasetExport) menuDatasetExport.classList.add("disabled");
-            showWelcomeScreen();
-            renderVotes();
-            updateLabelCounts();
-            closeBurgerMenu();
-          });
-      } else {
-        closeBurgerMenu();
       }
     });
   }
@@ -3708,6 +3671,12 @@
       announce(`Voted ${vote} on ${mediaName}`);
       await fetchVotes();
 
+      // In dashboard train mode, persist labels to the trainable model's
+      // labelset after every vote so work is never lost.
+      if (_dashboardTrainMode) {
+        _persistTrainableModelLabels(); // fire-and-forget
+      }
+
       // When voting Good while a text-sort query is active, store the query
       // as a suggested name for saving detectors / labelsets later.
       if (vote === "good" && sortMode === "text") {
@@ -5499,7 +5468,7 @@
   let _dashboardTrainMode = null;  // {model, dataset} when training a trainable model
   let _dashboardNextId = 1;
 
-  async function saveTrainableModelLabels() {
+  async function _persistTrainableModelLabels() {
     if (!_dashboardTrainMode) return;
     const modelName = _dashboardTrainMode.model.name;
     try {
@@ -5515,6 +5484,10 @@
         }
       }
     } catch (_) { /* ignore save errors */ }
+  }
+
+  async function saveTrainableModelLabels() {
+    await _persistTrainableModelLabels();
     _dashboardTrainMode = null;
   }
 
