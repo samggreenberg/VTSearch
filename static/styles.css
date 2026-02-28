@@ -609,8 +609,6 @@ video { max-width: 100%; }
 .combine-item-count { color: var(--text-dim); font-size: 0.75rem; margin-right: 10px; }
 .combine-item-remove { background: none; border: none; color: var(--color-bad); cursor: pointer; font-size: 1rem; padding: 0 4px; }
 
-/* Autodetect toggle */
-.autodetect-toggle-wrap { width: 100%; margin-top: 16px; padding: 12px; background: var(--border); border-radius: 4px; box-sizing: border-box; }
 
 /* Missing elements prompt */
 .missing-prompt { margin-top: 14px; padding: 14px; background: var(--border); border: 1px solid var(--bg-secondary-btn); border-radius: 6px; }

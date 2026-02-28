@@ -287,7 +287,6 @@
   const menuFavoritesStatus = document.getElementById("menu-favorites-status");
   const favPregenBtn = document.getElementById("fav-pregen-btn");
   const menuFavoritesManage = document.getElementById("menu-favorites-manage");
-  const menuFavoritesAutodetect = document.getElementById("menu-favorites-autodetect");
   const favoritesModal = document.getElementById("favorites-modal");
   const favoritesModalClose = document.getElementById("favorites-modal-close");
   const favoritesList = document.getElementById("favorites-list");
@@ -386,15 +385,12 @@
     demoDatasetsDiv.style.display = "none";
     extendedImporterForm.style.display = "none";
     backButton.style.display = "none";
-    const autodetectToggle = document.getElementById("autodetect-toggle");
-    if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
     stripeContainer.innerHTML = "";
-    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.add("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
@@ -412,7 +408,6 @@
       center.innerHTML = '<p>Select a media from the left panel</p>';
       announce("Dataset loaded. Select a media from the left panel to begin.");
     }
-    if (menuFavoritesAutodetect) menuFavoritesAutodetect.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
@@ -424,8 +419,6 @@
     extendedImporterForm.style.display = "none";
     datasetProgress.style.display = "block";
     backButton.style.display = "none";
-    const autodetectToggle = document.getElementById("autodetect-toggle");
-    if (autodetectToggle) autodetectToggle.style.display = "none";
     // Reset progress bar to indeterminate state
     progressFill.style.width = "0%";
     progressFill.classList.add("indeterminate");
@@ -549,14 +542,6 @@
           selectMedia(medias[0].id);
         }
 
-        // Check if auto-detect mode is enabled
-        const autodetectCheckbox = document.getElementById("autodetect-mode-checkbox");
-        if (autodetectCheckbox && autodetectCheckbox.checked) {
-          // Wait a moment for UI to settle
-          setTimeout(async () => {
-            await runAutoDetectAfterLoad();
-          }, 500);
-        }
       }
       return;
     }
@@ -891,18 +876,6 @@
     });
     datasetLoadColumn.appendChild(demoBtnEl);
 
-    // Always render the autodetect toggle last, after all import options
-    const autodetectDiv = document.createElement("div");
-    autodetectDiv.id = "autodetect-toggle";
-    autodetectDiv.className = "autodetect-toggle-wrap";
-    autodetectDiv.innerHTML = `
-      <label style="display: flex; align-items: center; color: var(--text-primary); cursor: pointer;">
-        <input type="checkbox" id="autodetect-mode-checkbox" style="margin-right: 8px;">
-        <span>Run auto-detect after loading (skip manual labeling)</span>
-      </label>
-      <p class="form-text" style="margin: 8px 0 0 0;">When checked, automatically runs all favorite detectors and shows positive hits.</p>
-    `;
-    datasetWelcome.insertBefore(autodetectDiv, backButton);
   }
 
   function showExtendedImporterForm(importer) {
@@ -2132,89 +2105,6 @@
     addSection("Train from Labelset", labelButtons);
   }
 
-  if (menuFavoritesAutodetect) {
-    menuFavoritesAutodetect.addEventListener("click", async () => {
-      if (menuFavoritesAutodetect.classList.contains("disabled")) return;
-
-      closeBurgerMenu();
-
-      // Show progress modal
-      autodetectProgressModal.classList.add("show");
-      autodetectProgressText.textContent = "Running auto-detect...";
-      autodetectProgressBar.style.width = "0%";
-
-      // Simulate progress (since we don't have real-time progress from backend)
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 5;
-        if (progress > 90) progress = 90;
-        autodetectProgressBar.style.width = `${progress}%`;
-      }, 200);
-
-      // Run auto-detect
-      const res = await fetch("/api/auto-detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      clearInterval(progressInterval);
-      autodetectProgressBar.style.width = "100%";
-
-      setTimeout(async () => {
-        autodetectProgressModal.classList.remove("show");
-
-        if (!res.ok) {
-          await vtAlert("Auto-detect failed. Make sure you have saved some favorite detectors for this media type.", "error");
-          return;
-        }
-
-        res.json().then(data => {
-          displayAutodetectResults(data);
-        });
-      }, 500);
-    });
-  }
-
-  async function runAutoDetectAfterLoad() {
-    if (medias.length === 0) {
-      return;
-    }
-
-    // Show progress modal
-    autodetectProgressModal.classList.add("show");
-    autodetectProgressText.textContent = "Running auto-detect...";
-    autodetectProgressBar.style.width = "0%";
-
-    // Simulate progress (since we don't have real-time progress from backend)
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-      progress += 5;
-      if (progress > 90) progress = 90;
-      autodetectProgressBar.style.width = `${progress}%`;
-    }, 200);
-
-    // Run auto-detect
-    const res = await fetch("/api/auto-detect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    clearInterval(progressInterval);
-    autodetectProgressBar.style.width = "100%";
-
-    setTimeout(async () => {
-      autodetectProgressModal.classList.remove("show");
-
-      if (!res.ok) {
-        await vtAlert("Auto-detect failed. Make sure you have saved some favorite detectors for this media type.", "error");
-        return;
-      }
-
-      res.json().then(data => {
-        displayAutodetectResults(data);
-      });
-    }, 500);
-  }
 
   function formatOrigin(hit) {
     const origin = hit.origin;
