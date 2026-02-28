@@ -9,7 +9,6 @@
   let threshold = null;    // threshold for Good/Bad boundary
   let sortTimer = null;
   let inclusion = 0;       // Inclusion setting: -10 to +10
-  let favoriteDetectors = [];  // List of favorite detectors
   let loadedDetector = null; // Stores loaded detector model weights
   let datasetLoaded = false;
   let audioVolume = 1.0; // Persisted volume across media loads
@@ -288,16 +287,6 @@
   const loadSortStatus = document.getElementById("load-sort-status");
   const loadSortDetectorFile = document.getElementById("load-sort-detector-file");
   const loadSortMediaFile = document.getElementById("load-sort-media-file");
-  const menuFavoritesStatus = document.getElementById("menu-favorites-status");
-  const favPregenBtn = document.getElementById("fav-pregen-btn");
-  const menuFavoritesManage = document.getElementById("menu-favorites-manage");
-  const favoritesModal = document.getElementById("favorites-modal");
-  const favoritesModalClose = document.getElementById("favorites-modal-close");
-  const favoritesList = document.getElementById("favorites-list");
-  const favAddName = document.getElementById("fav-add-name");
-  const favAddStatus = document.getElementById("fav-add-status");
-  const favAddFromVotesBtn = document.getElementById("fav-add-from-votes-btn");
-  const favImporterButtonsDiv = document.getElementById("fav-importer-buttons");
   const autodetectModal = document.getElementById("autodetect-modal");
   const autodetectModalClose = document.getElementById("autodetect-modal-close");
   const autodetectSummary = document.getElementById("autodetect-summary");
@@ -1318,12 +1307,6 @@
   function closeBurgerMenu() {
     burgerDropdown.classList.remove("show");
     burgerBtn.setAttribute("aria-expanded", "false");
-    // Collapse any open submenus
-    document.querySelectorAll(".burger-submenu.show").forEach(s => {
-      s.classList.remove("show");
-      const parent = s.previousElementSibling;
-      if (parent) parent.setAttribute("aria-expanded", "false");
-    });
     resumeActiveMedia();
   }
 
@@ -1750,368 +1733,11 @@
     }
   }
 
-  // ---- Favorite Detectors ----
-
-  async function loadFavoriteDetectors() {
-    const res = await fetch("/api/favorite-detectors");
-    const data = await res.json();
-    favoriteDetectors = data.detectors || [];
-    updateFavoritesList();
-  }
-
-  function updateFavoritesList() {
-    if (!favoritesList) return;
-    if (favoriteDetectors.length === 0) {
-      favoritesList.innerHTML = '<p style="color:var(--text-muted);">No favorite detectors saved yet.</p>';
-      return;
-    }
-
-    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
-    favoritesList.innerHTML = "";
-    favoriteDetectors.forEach(detector => {
-      const icon = mediaIcons[detector.media_type] || "🔍";
-      const created = detector.created_at
-        ? new Date(detector.created_at * 1000).toLocaleDateString()
-        : "";
-      const row = document.createElement("div");
-      row.className = "fav-card";
-      row.innerHTML = `
-        <div class="fav-card-info">
-          <div class="fav-card-name">${escapeHtml(detector.name)}</div>
-          <div class="fav-card-meta">
-            <span class="fav-badge">${escapeHtml(icon)} ${escapeHtml(detector.media_type)}</span>
-            <span>threshold&nbsp;${detector.threshold.toFixed(2)}</span>
-            ${created ? `<span>${escapeHtml(created)}</span>` : ""}
-          </div>
-        </div>
-        <div class="fav-card-actions">
-          <button class="fav-rename-btn btn-sm">Rename</button>
-          <button class="fav-delete-btn btn-sm-danger">Delete</button>
-        </div>`;
-      row.querySelector(".fav-rename-btn").addEventListener("click", () => renameDetector(detector.name));
-      row.querySelector(".fav-delete-btn").addEventListener("click", () => deleteDetector(detector.name));
-      favoritesList.appendChild(row);
-    });
-  }
-
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML.replace(/'/g, '&#39;');
   }
-
-  async function renameDetector(oldName) {
-    const newName = await vtPrompt(`Rename detector "${oldName}" to:`, oldName);
-    if (!newName || newName === oldName) return;
-
-    const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(oldName)}/rename`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ new_name: newName }),
-    });
-
-    if (res.ok) {
-      await loadFavoriteDetectors();
-    } else {
-      await vtAlert("Failed to rename detector. Name may already exist.", "error");
-    }
-  }
-
-  async function deleteDetector(name) {
-    if (!await vtConfirm(`Are you sure you want to delete detector "${name}"?`)) return;
-
-    const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
-      await loadFavoriteDetectors();
-    } else {
-      await vtAlert("Failed to delete detector.", "error");
-    }
-  }
-
-  if (menuFavoritesManage) {
-    menuFavoritesManage.addEventListener("click", async () => {
-      await loadFavoriteDetectors();
-      loadFavImporterButtons();
-      // Pre-fill name input with most recent text-sort suggestion
-      if (favAddName && !favAddName.value.trim()) {
-        try {
-          const sugRes = await fetch("/api/textsort-suggestions");
-          const sugData = await sugRes.json();
-          if (sugData.suggestions && sugData.suggestions.length > 0) {
-            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
-          }
-        } catch (_) {}
-      }
-      favoritesModal.classList.add("show");
-      closeBurgerMenu();
-    });
-  }
-
-  if (favoritesModalClose) {
-    favoritesModalClose.addEventListener("click", () => {
-      favoritesModal.classList.remove("show");
-    });
-  }
-
-  // ---- Add Detector panel inside Manage Favorites modal ----
-
-  function setFavAddStatus(msg, color) {
-    if (favAddStatus) {
-      favAddStatus.textContent = msg;
-      favAddStatus.style.color = color || "var(--text-secondary)";
-    }
-  }
-
-  // Add from current votes (train a new detector from labelled medias)
-  if (favAddFromVotesBtn) {
-    favAddFromVotesBtn.addEventListener("click", async () => {
-      if (votes.good.length === 0 || votes.bad.length === 0) {
-        setFavAddStatus("Need at least one good and one bad vote first.", "var(--color-bad)");
-        return;
-      }
-      const name = favAddName ? favAddName.value.trim() : "";
-      if (!name) {
-        setFavAddStatus("Enter a name first.", "var(--color-bad)");
-        return;
-      }
-      setFavAddStatus("Training detector\u2026", "var(--text-secondary)");
-
-      const exportRes = await fetch("/api/detector/export", { method: "POST" });
-      if (!exportRes.ok) {
-        setFavAddStatus("Failed to train detector.", "var(--color-bad)");
-        return;
-      }
-      const detectorData = await exportRes.json();
-      const mediaType = medias.length > 0 ? medias[0].type : "audio";
-
-      const saveRes = await fetch("/api/favorite-detectors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          media_type: mediaType,
-          weights: detectorData.weights,
-          threshold: detectorData.threshold,
-        }),
-      });
-
-      if (saveRes.ok) {
-        setFavAddStatus(`Detector \u201c${name}\u201d saved (${mediaType}).`, "var(--color-good)");
-        if (favAddName) favAddName.value = "";
-        await loadFavoriteDetectors();
-      } else {
-        setFavAddStatus("Failed to save detector.", "var(--color-bad)");
-      }
-    });
-  }
-
-  // ---- Dynamic importer buttons (processor importers + label importers) ----
-
-  async function loadFavImporterButtons() {
-    if (!favImporterButtonsDiv) return;
-    favImporterButtonsDiv.innerHTML = "";
-
-    const [procRes, labelRes] = await Promise.all([
-      fetch("/api/processor-importers").catch(() => null),
-      fetch("/api/label-importers").catch(() => null),
-    ]);
-
-    const procImporters = procRes && procRes.ok ? await procRes.json() : [];
-    const labelImporters = labelRes && labelRes.ok ? await labelRes.json() : [];
-
-    // Filter out processor importers that train from labelsets (label_file, csv_label_file)
-    const detectorImporters = procImporters.filter((imp) => !imp.name.includes("label"));
-
-    // Helper: add a section header + row of buttons
-    function addSection(title, buttons) {
-      if (buttons.length === 0) return;
-      const header = document.createElement("div");
-      header.className = "fav-section-header";
-      header.textContent = title;
-      favImporterButtonsDiv.appendChild(header);
-      const row = document.createElement("div");
-      row.className = "fav-btn-row";
-      for (const btn of buttons) row.appendChild(btn);
-      favImporterButtonsDiv.appendChild(row);
-    }
-
-    // Helper: create a file-picker button for a processor importer
-    function makeProcFileButton(imp, fileField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = fileField.accept || "";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.addEventListener("change", async () => {
-          const file = input.files[0];
-          if (!file) { input.remove(); return; }
-          const defaultName = file.name.replace(/\.[^/.]+$/, "");
-          const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("name", detectorName);
-          const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-            setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-            if (favAddName) favAddName.value = "";
-            await loadFavoriteDetectors();
-          } else {
-            const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
-          }
-          input.remove();
-        });
-        input.click();
-      });
-      return btn;
-    }
-
-    // Helper: create a text-prompt button for a processor importer (server path)
-    function makeProcTextButton(imp, textField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", async () => {
-        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
-        if (!value) return;
-        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
-        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
-        const body = { name: detectorName };
-        body[textField.key] = value;
-        const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-          setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-          if (favAddName) favAddName.value = "";
-          await loadFavoriteDetectors();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
-        }
-      });
-      return btn;
-    }
-
-    // Helper: create a file-picker button for a label importer (trains detector)
-    function makeLabelFileButton(imp, fileField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = fileField.accept || "";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.addEventListener("change", async () => {
-          const file = input.files[0];
-          if (!file) { input.remove(); return; }
-          const defaultName = file.name.replace(/\.[^/.]+$/, "");
-          const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("name", detectorName);
-          const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-            setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-            if (favAddName) favAddName.value = "";
-            await loadFavoriteDetectors();
-          } else {
-            const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
-          }
-          input.remove();
-        });
-        input.click();
-      });
-      return btn;
-    }
-
-    // Helper: create a text-prompt button for a label importer (server path, trains detector)
-    function makeLabelTextButton(imp, textField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", async () => {
-        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
-        if (!value) return;
-        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
-        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
-        const body = { name: detectorName };
-        body[textField.key] = value;
-        const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-          setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-          if (favAddName) favAddName.value = "";
-          await loadFavoriteDetectors();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
-        }
-      });
-      return btn;
-    }
-
-    // Build buttons for processor importers (load pre-trained detector)
-    const procButtons = [];
-    for (const imp of detectorImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      const textField = imp.fields.find((f) => f.field_type === "text");
-      if (fileField) {
-        procButtons.push(makeProcFileButton(imp, fileField));
-      } else if (textField) {
-        procButtons.push(makeProcTextButton(imp, textField));
-      }
-    }
-
-    // Build buttons for label importers (train detector from labelset)
-    const labelButtons = [];
-    for (const imp of labelImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      const textField = imp.fields.find((f) => f.field_type === "text");
-      if (fileField) {
-        labelButtons.push(makeLabelFileButton(imp, fileField));
-      } else if (textField) {
-        labelButtons.push(makeLabelTextButton(imp, textField));
-      }
-    }
-
-    addSection("Import Detector", procButtons);
-    addSection("Train from Labelset", labelButtons);
-  }
-
 
   function formatOrigin(hit) {
     const origin = hit.origin;
@@ -4123,43 +3749,6 @@
     });
   }
 
-  // ---- Pregen processors (in favorites modal) ----
-
-  if (favPregenBtn) {
-    favPregenBtn.addEventListener("click", async () => {
-      favPregenBtn.disabled = true;
-      if (favAddStatus) {
-        favAddStatus.textContent = "Adding pregen processors\u2026";
-        favAddStatus.style.color = "var(--text-muted)";
-      }
-      try {
-        const res = await fetch("/api/pregen-processors/add", { method: "POST" });
-        const result = await res.json();
-        if (res.ok && result.success) {
-          if (favAddStatus) {
-            favAddStatus.textContent = `Added ${result.added.length} pregen processor(s)`;
-            favAddStatus.style.color = "var(--color-good)";
-            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-          }
-        } else {
-          if (favAddStatus) {
-            favAddStatus.textContent = result.error || "Failed to add pregen processors";
-            favAddStatus.style.color = "var(--color-bad)";
-            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-          }
-        }
-      } catch (err) {
-        if (favAddStatus) {
-          favAddStatus.textContent = `Error: ${err.message}`;
-          favAddStatus.style.color = "var(--color-bad)";
-          setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-        }
-      } finally {
-        favPregenBtn.disabled = false;
-      }
-    });
-  }
-
   // ---- Load Sort modal ----
 
   if (loadSortModalClose) {
@@ -4707,10 +4296,6 @@
           statusEl.style.color = "var(--color-good)";
           setTimeout(() => {
             processorImporterModal.classList.remove("show");
-            if (menuFavoritesStatus) {
-              menuFavoritesStatus.textContent = msg;
-              setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
-            }
           }, 1500);
         } else {
           statusEl.textContent = result.error || "Import failed";
@@ -6084,7 +5669,6 @@
   }
 
   updateLabelCounts();
-  loadFavoriteDetectors();
   fetchLabelingStatus();
   loadSettings();
 

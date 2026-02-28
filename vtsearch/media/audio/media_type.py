@@ -455,7 +455,7 @@ class AudioMediaType(MediaType):
         # status remains "loading" so the frontend knows not to include this
         # phase in its ETA calculation for the subsequent "embedding" phase.
         self._on_progress("loading", "Warming up audio pipeline: importing libraries…", 1, 3)
-        import librosa  # noqa: PLC0415 — lazy import; pulls in numba, scipy, etc.
+        import librosa  # noqa: F401, PLC0415 — lazy warmup import; pulls in numba, scipy, etc.
         import torch  # noqa: PLC0415
 
         self._on_progress("loading", "Warming up audio pipeline: preprocessing…", 2, 3)
