@@ -8,6 +8,8 @@ When omitted the functions fall back to the application-wide
 to use these functions outside the Flask app.
 """
 
+from __future__ import annotations
+
 import csv
 import gc
 import hashlib
