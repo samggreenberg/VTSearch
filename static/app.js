@@ -1000,7 +1000,7 @@
         tr.innerHTML = `
           <td class="col-name">${escapeHtml(det.name)}</td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
-          <td class="col-threshold">${det.threshold.toFixed(2)}</td>
+          <td class="col-threshold">${det.weights ? det.threshold.toFixed(2) : '<span style="color:var(--text-muted)">Untrained</span>'}</td>
           <td class="col-date">${escapeHtml(created)}</td>
         `;
         tr.addEventListener("click", () => {
@@ -4934,6 +4934,8 @@
     processorImporterFormDiv.innerHTML = "";
     processorImporterBack.style.display = "none";
     processorImporterList.style.display = "";
+    const modalTitle = document.getElementById("processor-importer-modal-title");
+    if (modalTitle) modalTitle.textContent = "Import Detector";
 
     if (importers.length === 0) {
       processorImporterList.innerHTML = '<p style="color:var(--text-muted);">No processor importers available.</p>';
@@ -5037,6 +5039,7 @@
           statusEl.style.color = "var(--color-good)";
           setTimeout(() => {
             processorImporterModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
           }, 1500);
         } else {
           statusEl.textContent = result.error || "Import failed";
@@ -5052,6 +5055,7 @@
   if (processorImporterModalClose) {
     processorImporterModalClose.addEventListener("click", () => {
       processorImporterModal.classList.remove("show");
+      if (currentView === "dashboard") renderDashboardModels();
     });
   }
 
@@ -6119,29 +6123,139 @@
     });
   }
 
-  // Dashboard: Add Model button — opens the existing Manage Favorites modal
+  // Dashboard: Add Model button — opens a picker with New Model + processor importers
   if (dashAddModelBtn) {
-    dashAddModelBtn.addEventListener("click", async () => {
-      await loadFavoriteDetectors();
-      loadFavImporterButtons();
-      if (favAddName && !favAddName.value.trim()) {
-        try {
-          const sugRes = await fetch("/api/textsort-suggestions");
-          const sugData = await sugRes.json();
-          if (sugData.suggestions && sugData.suggestions.length > 0) {
-            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
-          }
-        } catch (_) {}
-      }
-      favoritesModal.classList.add("show");
-    });
+    dashAddModelBtn.addEventListener("click", () => openAddModelPicker());
   }
 
-  // Re-render dashboard model grid when favorites modal closes (detectors may have changed)
-  if (favoritesModalClose) {
-    const origClose = favoritesModalClose.onclick;
-    favoritesModalClose.addEventListener("click", () => {
-      if (currentView === "dashboard") renderDashboardModels();
+  async function openAddModelPicker() {
+    // Fetch processor importers for the importer options
+    let importers = [];
+    try {
+      const res = await fetch("/api/processor-importers");
+      if (res.ok) importers = await res.json();
+    } catch (_) { /* ignore */ }
+
+    // Reset modal to list view
+    processorImporterFormDiv.style.display = "none";
+    processorImporterFormDiv.innerHTML = "";
+    processorImporterBack.style.display = "none";
+    processorImporterList.style.display = "";
+
+    // Update modal title
+    const modalTitle = document.getElementById("processor-importer-modal-title");
+    if (modalTitle) modalTitle.textContent = "Add Model";
+
+    // Build options: New Model first, then processor importers
+    let html = `
+      <div class="processor-importer-option option-card" data-name="__new_model__" role="button" tabindex="0">
+        <span class="option-card-icon">\u2795</span>
+        <div>
+          <div class="option-card-title">New Model</div>
+          <div class="option-card-desc">Create a new model with a name and media type.</div>
+        </div>
+      </div>`;
+
+    html += importers.map(imp => `
+      <div class="processor-importer-option option-card" data-name="${escapeHtml(imp.name)}" role="button" tabindex="0">
+        <span class="option-card-icon">${escapeHtml(imp.icon || '\u{1F9E9}')}</span>
+        <div>
+          <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+          <div class="option-card-desc">${escapeHtml(imp.description)}</div>
+        </div>
+      </div>
+    `).join("");
+
+    processorImporterList.innerHTML = html;
+
+    // Wire up click handlers
+    processorImporterList.querySelectorAll(".processor-importer-option").forEach(el => {
+      const name = el.dataset.name;
+      el.addEventListener("click", () => {
+        if (name === "__new_model__") {
+          showNewModelForm();
+        } else {
+          const imp = importers.find(i => i.name === name);
+          if (imp) showProcessorImporterForm(imp);
+        }
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); }
+      });
+    });
+
+    processorImporterModal.classList.add("show");
+  }
+
+  function showNewModelForm() {
+    processorImporterList.style.display = "none";
+    processorImporterBack.style.display = "inline-block";
+
+    // Build media type options from the registry
+    const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
+      `<option value="${escapeHtml(id)}">${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
+    ).join("");
+
+    let html = `<h3 class="form-heading">New Model</h3>`;
+    html += `<form id="new-model-form">`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Model Name *</label>`;
+    html += `<input type="text" name="name" placeholder="e.g. Dog Barks" class="form-input" required>`;
+    html += `<div class="form-hint">A short name for this model.</div>`;
+    html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Media Type *</label>`;
+    html += `<select name="media_type" class="form-input" required>`;
+    html += mtOptions || `<option value="audio">Audio</option><option value="image">Image</option><option value="paragraph">Text</option><option value="video">Video</option>`;
+    html += `</select>`;
+    html += `<div class="form-hint">The type of media this model will be trained on.</div>`;
+    html += `</div>`;
+    html += `<div id="new-model-status" class="status-text compact"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Create</button>`;
+    html += `</form>`;
+
+    processorImporterFormDiv.innerHTML = html;
+    processorImporterFormDiv.style.display = "block";
+
+    const statusEl = processorImporterFormDiv.querySelector("#new-model-status");
+
+    processorImporterFormDiv.querySelector("#new-model-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const name = formEl.elements["name"].value.trim();
+      const media_type = formEl.elements["media_type"].value;
+
+      if (!name) {
+        statusEl.textContent = "Name is required";
+        statusEl.style.color = "var(--color-bad)";
+        return;
+      }
+
+      statusEl.textContent = "Creating\u2026";
+      statusEl.style.color = "var(--text-muted)";
+
+      try {
+        const res = await fetch("/api/favorite-detectors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, media_type }),
+        });
+        const result = await res.json();
+        if (res.ok) {
+          statusEl.textContent = `Created "${name}"`;
+          statusEl.style.color = "var(--color-good)";
+          setTimeout(() => {
+            processorImporterModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
+          }, 800);
+        } else {
+          statusEl.textContent = result.error || "Failed to create model";
+          statusEl.style.color = "var(--color-bad)";
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.style.color = "var(--color-bad)";
+      }
     });
   }
 
