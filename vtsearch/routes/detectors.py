@@ -1,5 +1,7 @@
 """Blueprint for detector, extractor, and localizer routes."""
 
+from __future__ import annotations
+
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
