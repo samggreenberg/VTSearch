@@ -1,5 +1,7 @@
 """Blueprint for main application routes."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, send_from_directory
