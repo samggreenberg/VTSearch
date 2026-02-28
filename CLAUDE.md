@@ -47,7 +47,6 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
   - `test_datasets.py` — Dataset endpoints, startup state, importers, archive extraction
   - `test_dataset_split.py` — Train/test dataset splitting
-  - `test_rss_youtube_importers.py` — RSS feed and YouTube playlist importer metadata, CLI args, run logic
   - `test_csv_webhook_exporters.py` — CSV and Webhook exporter metadata, CLI args, export logic
   - `test_exporters.py` — Results exporter base classes, registry, built-in exporters, API routes
   - `test_importers.py` — Importer base class, HTTP archive/folder importer metadata, archive extraction

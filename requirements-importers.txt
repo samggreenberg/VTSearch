@@ -10,5 +10,5 @@
 -r vtsearch/datasets/importers/pickle/requirements.txt
 -r vtsearch/datasets/importers/folder/requirements.txt
 -r vtsearch/datasets/importers/http_zip/requirements.txt
-# rss_feed and youtube_playlist moved to old_io/ (kept as examples)
+# rss_feed and youtube_playlist retired (see docs/old_io.md)
 -r vtsearch/datasets/importers/combine_datasets/requirements.txt
