@@ -309,6 +309,8 @@ def add_favorite_detector_route():
     weights = data.get("weights")
     threshold = data.get("threshold", 0.5)
 
+    examples = data.get("examples")
+
     if not name:
         return jsonify({"error": "name is required"}), 400
     if not media_type:
@@ -316,7 +318,7 @@ def add_favorite_detector_route():
     if not weights:
         return jsonify({"error": "weights are required"}), 400
 
-    add_favorite_detector(name, media_type, weights, threshold)
+    add_favorite_detector(name, media_type, weights, threshold, examples=examples)
     return jsonify({"success": True, "name": name})
 
 
@@ -357,6 +359,33 @@ def set_favorite_detector_autodetect_route(name):
 
     if set_favorite_detector_autodetect(name, bool(autodetect)):
         return jsonify({"success": True, "autodetect": bool(autodetect)})
+    return jsonify({"error": "Detector not found"}), 404
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["GET"])
+def get_detector_examples_route(name):
+    """Get the examples for a favorite detector."""
+    from vtsearch.utils import get_favorite_detector_examples
+
+    examples = get_favorite_detector_examples(name)
+    return jsonify({"name": name, "examples": examples})
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/examples", methods=["PUT"])
+def set_detector_examples_route(name):
+    """Set/replace the examples for a favorite detector."""
+    from vtsearch.utils import set_favorite_detector_examples
+
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    examples = data.get("examples")
+    if examples is None:
+        return jsonify({"error": "examples is required"}), 400
+
+    if set_favorite_detector_examples(name, examples):
+        return jsonify({"success": True, "name": name, "examples": examples})
     return jsonify({"error": "Detector not found"}), 404
 
 

@@ -296,6 +296,22 @@
   const autodetectProgressText = document.getElementById("autodetect-progress-text");
   const autodetectProgressBar = document.getElementById("autodetect-progress-bar");
 
+  // Examples editor modal elements
+  const examplesEditorModal = document.getElementById("examples-editor-modal");
+  const examplesEditorModalClose = document.getElementById("examples-editor-modal-close");
+  const examplesEditorGrid = document.getElementById("examples-editor-grid");
+  const examplesEditorType = document.getElementById("examples-editor-type");
+  const examplesEditorAdd = document.getElementById("examples-editor-add");
+  const examplesEditorSave = document.getElementById("examples-editor-save");
+  const examplesEditorStatus = document.getElementById("examples-editor-status");
+  const examplesMediaFile = document.getElementById("examples-media-file");
+
+  // Autopilot examples elements
+  const autopilotExamplesSection = document.getElementById("autopilot-examples-section");
+  const autopilotExamplesGrid = document.getElementById("autopilot-examples-grid");
+  const autopilotExampleType = document.getElementById("autopilot-example-type");
+  const autopilotExampleAdd = document.getElementById("autopilot-example-add");
+
   // Settings modal elements
   const menuSettings = document.getElementById("menu-settings");
   const settingsModal = document.getElementById("settings-modal");
@@ -337,6 +353,49 @@
       tabManual.setAttribute("aria-selected", "false");
       tabPanelAutopilot.style.display = "";
       tabPanelManual.style.display = "none";
+      refreshAutopilotExamples();
+    });
+  }
+
+  function refreshAutopilotExamples() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
+      if (autopilotExamplesSection) autopilotExamplesSection.style.display = "none";
+      return;
+    }
+    const model = _dashboardTrainMode.model;
+    if (autopilotExamplesSection) autopilotExamplesSection.style.display = "";
+    if (autopilotExamplesGrid) {
+      renderExamplesGrid(autopilotExamplesGrid, model.examples || [], (updated) => {
+        model.examples = updated;
+        saveAutopilotExamples(model);
+      });
+    }
+  }
+
+  async function saveAutopilotExamples(model) {
+    try {
+      const url = model.trainable
+        ? `/api/trainable-models/${encodeURIComponent(model.name)}/examples`
+        : `/api/favorite-detectors/${encodeURIComponent(model.name)}/examples`;
+      await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examples: model.examples || [] }),
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  if (autopilotExampleAdd) {
+    autopilotExampleAdd.addEventListener("click", async () => {
+      if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+      const model = _dashboardTrainMode.model;
+      if (!model.examples) model.examples = [];
+      const ex = await promptForExample(autopilotExampleType.value);
+      if (ex) {
+        model.examples.push(ex);
+        refreshAutopilotExamples();
+        saveAutopilotExamples(model);
+      }
     });
   }
 
@@ -4986,9 +5045,8 @@
           id: _dashboardNextId++,
           name: sm.name,
           num_labels: sm.num_labels || 0,
-          media_type: "any",
-          text_examples: sm.text_query || "-",
-          media_examples: "-",
+          media_type: sm.media_type || "any",
+          examples: sm.examples || [],
           origin: "Train New",
           trainable: true,
           text_query: sm.text_query || "",
@@ -5108,6 +5166,145 @@
     });
   }
 
+  // ---- Examples helpers ----
+
+  function examplesSummary(examples) {
+    if (!examples || examples.length === 0) return "-";
+    const texts = examples.filter(e => e.type === "text");
+    const medias = examples.filter(e => e.type === "media");
+    const detectors = examples.filter(e => e.type === "detector");
+    // If only texts and 2 or fewer, show quoted values
+    if (medias.length === 0 && detectors.length === 0 && texts.length <= 2) {
+      return texts.map(e => "\u2018" + e.value + "\u2019").join(", ");
+    }
+    const parts = [];
+    if (texts.length > 0) parts.push(texts.length + " text" + (texts.length > 1 ? "s" : ""));
+    if (medias.length > 0) parts.push(medias.length + " media");
+    if (detectors.length > 0) parts.push(detectors.length + " detector" + (detectors.length > 1 ? "s" : ""));
+    return parts.join(", ");
+  }
+
+  function renderExamplesGrid(container, examples, onChange) {
+    if (!examples || examples.length === 0) {
+      container.innerHTML = '<div class="examples-empty">No examples yet</div>';
+      return;
+    }
+    container.innerHTML = examples.map((ex, i) => `
+      <div class="example-row" data-idx="${i}">
+        <span class="example-type-badge type-${escapeHtml(ex.type)}">${escapeHtml(ex.type)}</span>
+        <span class="example-value" title="${escapeHtml(ex.value)}">${escapeHtml(ex.value)}</span>
+        <button class="example-remove" data-idx="${i}" title="Remove">&times;</button>
+      </div>
+    `).join("");
+    container.querySelectorAll(".example-remove").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.dataset.idx);
+        examples.splice(idx, 1);
+        renderExamplesGrid(container, examples, onChange);
+        if (onChange) onChange(examples);
+      });
+    });
+  }
+
+  async function promptForExample(type) {
+    if (type === "text") {
+      const val = await vtPrompt("Enter text description:", "");
+      if (val && val.trim()) return { type: "text", value: val.trim() };
+    } else if (type === "detector") {
+      // Show list of existing detectors to pick from
+      let detectors = [];
+      try {
+        const res = await fetch("/api/favorite-detectors");
+        if (res.ok) {
+          const data = await res.json();
+          detectors = data.detectors || [];
+        }
+      } catch (_) {}
+      if (detectors.length === 0) {
+        await vtAlert("No detectors available to reference.", "info");
+        return null;
+      }
+      const names = detectors.map(d => d.name);
+      const picked = await vtPrompt("Enter detector name:\n(" + names.join(", ") + ")", names[0]);
+      if (picked && picked.trim()) return { type: "detector", value: picked.trim() };
+    } else if (type === "media") {
+      const val = await vtPrompt("Enter media description or filename:", "");
+      if (val && val.trim()) return { type: "media", value: val.trim() };
+    }
+    return null;
+  }
+
+  // State for examples editor modal
+  let _examplesEditorState = null; // { model, examples, onSave }
+
+  function openExamplesEditor(model, onSave) {
+    const examples = (model.examples || []).map(e => ({...e}));
+    _examplesEditorState = { model, examples, onSave };
+    document.getElementById("examples-editor-modal-title").textContent = `Edit Examples — ${model.name}`;
+    examplesEditorStatus.textContent = "";
+    renderExamplesGrid(examplesEditorGrid, examples);
+    examplesEditorModal.classList.add("show");
+  }
+
+  if (examplesEditorModalClose) {
+    examplesEditorModalClose.addEventListener("click", () => {
+      examplesEditorModal.classList.remove("show");
+      _examplesEditorState = null;
+    });
+  }
+
+  if (examplesEditorAdd) {
+    examplesEditorAdd.addEventListener("click", async () => {
+      if (!_examplesEditorState) return;
+      const type = examplesEditorType.value;
+      const ex = await promptForExample(type);
+      if (ex) {
+        _examplesEditorState.examples.push(ex);
+        renderExamplesGrid(examplesEditorGrid, _examplesEditorState.examples);
+      }
+    });
+  }
+
+  if (examplesEditorSave) {
+    examplesEditorSave.addEventListener("click", async () => {
+      if (!_examplesEditorState) return;
+      const { model, examples, onSave } = _examplesEditorState;
+      examplesEditorStatus.textContent = "Saving\u2026";
+      examplesEditorStatus.style.color = "var(--text-muted)";
+
+      try {
+        let url, method = "PUT";
+        if (model.trainable) {
+          url = `/api/trainable-models/${encodeURIComponent(model.name)}/examples`;
+        } else {
+          url = `/api/favorite-detectors/${encodeURIComponent(model.name)}/examples`;
+        }
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ examples }),
+        });
+        if (res.ok) {
+          model.examples = examples;
+          examplesEditorStatus.textContent = "Saved";
+          examplesEditorStatus.style.color = "var(--color-good)";
+          if (onSave) onSave(examples);
+          setTimeout(() => {
+            examplesEditorModal.classList.remove("show");
+            _examplesEditorState = null;
+          }, 600);
+        } else {
+          const err = await res.json();
+          examplesEditorStatus.textContent = err.error || "Save failed";
+          examplesEditorStatus.style.color = "var(--color-bad)";
+        }
+      } catch (err) {
+        examplesEditorStatus.textContent = `Error: ${err.message}`;
+        examplesEditorStatus.style.color = "var(--color-bad)";
+      }
+    });
+  }
+
   function renderDashboardModels() {
     if (dashboardModels.length === 0) {
       dashboardModelsTable.style.display = "none";
@@ -5129,12 +5326,12 @@
       const sel = dashboardSelectedModels[m.id] ? " selected" : "";
       const trainBadge = m.trainable ? ' <span class="trainable-badge">trainable</span>' : "";
       const adChecked = m.autodetect !== false ? "checked" : "";
+      const exSummary = examplesSummary(m.examples);
       return `<tr data-id="${m.id}" class="${sel}">
         <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}${trainBadge} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
         <td>${m.num_labels}</td>
         <td>${escapeHtml(m.media_type)}</td>
-        <td title="${escapeHtml(m.text_examples)}">${escapeHtml(m.text_examples)}</td>
-        <td title="${escapeHtml(m.media_examples)}">${escapeHtml(m.media_examples)}</td>
+        <td title="${escapeHtml(exSummary)}"><span class="examples-summary">${escapeHtml(exSummary)}</span> <button class="btn-icon" data-action="edit-examples" data-id="${m.id}" title="Edit examples">&#9998;</button></td>
         <td title="${escapeHtml(m.origin)}">${escapeHtml(m.origin)}</td>
         <td style="text-align:center"><input type="checkbox" class="autodetect-checkbox" data-id="${m.id}" ${adChecked} title="Include in autodetect"></td>
         <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${m.id}" title="Remove">&#128465;</button></td>
@@ -5204,6 +5401,10 @@
             m.name = newName;
             renderDashboardModels();
           }
+        } else if (btn.dataset.action === "edit-examples") {
+          const m = dashboardModels.find(m => m.id === id);
+          if (!m) return;
+          openExamplesEditor(m, () => renderDashboardModels());
         }
       });
     });
@@ -5387,6 +5588,11 @@
     processorImporterList.style.display = "none";
     processorImporterBack.style.display = "inline-block";
 
+    // Build media type options from known types
+    const mtOptions = Object.keys(mediaTypesMap).length > 0
+      ? Object.values(mediaTypesMap).map(mt => `<option value="${escapeHtml(mt.type_id)}">${escapeHtml(mt.name || mt.type_id)}</option>`).join("")
+      : `<option value="audio">Audio</option><option value="image">Image</option><option value="paragraph">Text</option><option value="video">Video</option>`;
+
     let html = `<h3 class="form-heading">Train New Model</h3>`;
     html += `<form id="train-new-form">`;
     html += `<div class="form-group">`;
@@ -5395,9 +5601,18 @@
     html += `<div class="form-hint">A name for this trainable model.</div>`;
     html += `</div>`;
     html += `<div class="form-group">`;
-    html += `<label class="form-label">Text Sort Query *</label>`;
-    html += `<input type="text" name="text_query" placeholder="e.g. sounds of dogs barking" class="form-input" required>`;
-    html += `<div class="form-hint">Describes what to look for. Used for initial text-based sorting.</div>`;
+    html += `<label class="form-label">Media Type *</label>`;
+    html += `<select name="media_type" class="form-input" required>${mtOptions}</select>`;
+    html += `<div class="form-hint">What type of media this detector will analyze.</div>`;
+    html += `</div>`;
+    html += `<div class="form-group">`;
+    html += `<label class="form-label">Examples * <span style="font-weight:normal; font-size:0.75rem; color:var(--text-dim)">(at least one required)</span></label>`;
+    html += `<div id="train-new-examples-grid" class="examples-grid"></div>`;
+    html += `<div class="examples-add-bar" style="margin-top:6px">`;
+    html += `<select id="train-new-example-type" class="form-select-inline"><option value="text">Text</option><option value="media">Media</option><option value="detector">Detector</option></select>`;
+    html += `<button type="button" id="train-new-example-add" class="btn-sm">+ Add</button>`;
+    html += `</div>`;
+    html += `<div class="form-hint">Describe what to look for. Can be text descriptions, media references, or existing detectors.</div>`;
     html += `</div>`;
     html += `<div id="train-new-status" class="status-text compact"></div>`;
     html += `<button type="submit" class="btn-block-primary">Create Model</button>`;
@@ -5407,13 +5622,37 @@
     processorImporterFormDiv.style.display = "block";
 
     const statusEl = processorImporterFormDiv.querySelector("#train-new-status");
+    const exGrid = processorImporterFormDiv.querySelector("#train-new-examples-grid");
+    const exTypeSelect = processorImporterFormDiv.querySelector("#train-new-example-type");
+    const exAddBtn = processorImporterFormDiv.querySelector("#train-new-example-add");
+    const trainNewExamples = [];
+
+    renderExamplesGrid(exGrid, trainNewExamples);
+
+    exAddBtn.addEventListener("click", async () => {
+      const ex = await promptForExample(exTypeSelect.value);
+      if (ex) {
+        trainNewExamples.push(ex);
+        renderExamplesGrid(exGrid, trainNewExamples);
+      }
+    });
 
     processorImporterFormDiv.querySelector("#train-new-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const formEl = e.target;
       const name = formEl.elements["name"].value.trim();
-      const textQuery = formEl.elements["text_query"].value.trim();
-      if (!name || !textQuery) return;
+      const mediaType = formEl.elements["media_type"].value;
+      if (!name) return;
+
+      if (trainNewExamples.length === 0) {
+        statusEl.textContent = "At least one example is required";
+        statusEl.style.color = "var(--color-bad)";
+        return;
+      }
+
+      // Derive text_query from first text example for backward compat
+      const firstText = trainNewExamples.find(e => e.type === "text");
+      const textQuery = firstText ? firstText.value : name;
 
       statusEl.textContent = "Creating\u2026";
       statusEl.style.color = "var(--text-muted)";
@@ -5422,7 +5661,7 @@
         const res = await fetch("/api/trainable-models", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, text_query: textQuery }),
+          body: JSON.stringify({ name, text_query: textQuery, media_type: mediaType, examples: trainNewExamples }),
         });
         const result = await res.json();
         if (res.ok) {
@@ -5430,12 +5669,11 @@
             id: _dashboardNextId++,
             name: result.name,
             num_labels: 0,
-            media_type: "any",
-            text_examples: result.text_query,
-            media_examples: "-",
+            media_type: result.media_type || mediaType,
+            examples: result.examples || trainNewExamples,
             origin: "Train New",
             trainable: true,
-            text_query: result.text_query,
+            text_query: result.text_query || textQuery,
             autodetect: true,
           });
           statusEl.textContent = `Created "${result.name}"`;
@@ -5527,8 +5765,7 @@
             name: result.name,
             num_labels: result.loaded || 0,
             media_type: result.media_type || "unknown",
-            text_examples: "-",
-            media_examples: "-",
+            examples: result.examples || [],
             origin: importer.display_name,
             autodetect: true,
           };
@@ -5681,6 +5918,7 @@
 
     // Close any open modal on Escape, from most specific to least
     const modalClosePairs = [
+      [examplesEditorModal, examplesEditorModalClose],
       [labelImporterModal, labelImporterModalClose],
       [labelExporterModal, labelExporterModalClose],
       [detectorExportModal, detectorExportModalClose],

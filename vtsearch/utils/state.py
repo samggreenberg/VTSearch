@@ -281,6 +281,7 @@ def add_favorite_detector(
     threshold: float,
     *,
     autodetect: bool = True,
+    examples: list[dict[str, str]] | None = None,
 ) -> None:
     """Add or overwrite a named favorite detector in the global store.
 
@@ -296,6 +297,8 @@ def add_favorite_detector(
             above this value are classified as positive.
         autodetect: Whether this detector should be included when running
             autodetect.  Defaults to ``True``.
+        examples: Optional list of example dicts, each with ``"type"``
+            (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
     """
     import time
 
@@ -307,6 +310,7 @@ def add_favorite_detector(
             "threshold": threshold,
             "created_at": time.time(),
             "autodetect": autodetect,
+            "examples": examples or [],
         }
 
 
@@ -394,6 +398,35 @@ def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
             favorite_detectors[name]["autodetect"] = autodetect
             return True
         return False
+
+
+def set_favorite_detector_examples(name: str, examples: list[dict[str, str]]) -> bool:
+    """Set the examples list on a named favorite detector.
+
+    Args:
+        name: Name of the detector to update.
+        examples: List of example dicts, each with ``"type"`` and ``"value"``.
+
+    Returns:
+        ``True`` if the detector was found and updated; ``False`` otherwise.
+    """
+    with _state_lock:
+        if name in favorite_detectors:
+            favorite_detectors[name]["examples"] = examples
+            return True
+        return False
+
+
+def get_favorite_detector_examples(name: str) -> list[dict[str, str]]:
+    """Return the examples list for a named favorite detector.
+
+    Returns an empty list if the detector is not found or has no examples.
+    """
+    with _state_lock:
+        det = favorite_detectors.get(name)
+        if det is None:
+            return []
+        return list(det.get("examples") or [])
 
 
 def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:

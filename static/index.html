@@ -99,6 +99,18 @@
       <div class="autopilot-panel">
         <span class="sort-label">Status</span>
         <input type="text" id="autopilot-status" class="autopilot-status-input" value="" readonly placeholder="Idle">
+        <div id="autopilot-examples-section" style="display:none">
+          <span class="sort-label" style="margin-top:10px">Examples</span>
+          <div id="autopilot-examples-grid" class="examples-grid"></div>
+          <div class="examples-add-bar">
+            <select id="autopilot-example-type" class="form-select-inline" style="font-size:0.75rem">
+              <option value="text">Text</option>
+              <option value="media">Media</option>
+              <option value="detector">Detector</option>
+            </select>
+            <button id="autopilot-example-add" class="btn-sm" style="font-size:0.7rem">+ Add</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -179,8 +191,7 @@
               <th data-col="name">Name<span class="sort-arrow"></span></th>
               <th data-col="num_labels">#Labels<span class="sort-arrow"></span></th>
               <th data-col="media_type">MediaType<span class="sort-arrow"></span></th>
-              <th data-col="text_examples">Text Examples<span class="sort-arrow"></span></th>
-              <th data-col="media_examples">Media Examples<span class="sort-arrow"></span></th>
+              <th data-col="examples">Examples<span class="sort-arrow"></span></th>
               <th data-col="origin">Origin<span class="sort-arrow"></span></th>
               <th data-col="autodetect">Autodetect<span class="sort-arrow"></span></th>
               <th class="col-actions">Actions</th>
@@ -462,6 +473,30 @@
 <!-- Hidden file inputs for load sort modal -->
 <input type="file" id="load-sort-detector-file" accept=".json" style="display:none" aria-label="Local detector file">
 <input type="file" id="load-sort-media-file" style="display:none" aria-label="Local media file">
+
+<!-- Examples Editor Modal -->
+<div id="examples-editor-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="examples-editor-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="examples-editor-modal-title">Edit Examples</h2>
+      <button class="modal-close" id="examples-editor-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="examples-editor-grid" class="examples-grid"></div>
+      <div class="examples-add-bar" style="margin-top:10px">
+        <select id="examples-editor-type" class="form-select-inline">
+          <option value="text">Text</option>
+          <option value="media">Media</option>
+          <option value="detector">Detector</option>
+        </select>
+        <button id="examples-editor-add" class="btn-sm">+ Add</button>
+      </div>
+      <div id="examples-editor-status" class="status-text compact" style="margin-top:8px"></div>
+      <button id="examples-editor-save" class="btn-block-primary" style="margin-top:12px">Save</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="examples-media-file" style="display:none" aria-label="Example media file">
 
 <!-- Custom VTSearch Dialog (replaces native alert/confirm/prompt) -->
 <div id="vt-dialog-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="vt-dialog-message">
