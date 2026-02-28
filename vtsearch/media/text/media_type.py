@@ -328,6 +328,9 @@ class TextMediaType(MediaType):
 
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
+        from vtsearch.models.loader import ensure_torch_configured
+
+        ensure_torch_configured()
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading E5 model…", 0, 0)

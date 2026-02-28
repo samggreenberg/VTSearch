@@ -433,6 +433,9 @@ class AudioMediaType(MediaType):
 
         from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
+        from vtsearch.models.loader import ensure_torch_configured
+
+        ensure_torch_configured()
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLAP model weights…", 0, 0)

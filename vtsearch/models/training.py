@@ -191,6 +191,10 @@ def train_model(
     import torch  # noqa: PLC0415
     import torch.nn as nn  # noqa: PLC0415
 
+    from vtsearch.models.loader import ensure_torch_configured
+
+    ensure_torch_configured()
+
     n_train = len(X_train)
     if hidden_dim is None:
         hidden_dim = _auto_hidden_dim(n_train)
