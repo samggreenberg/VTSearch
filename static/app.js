@@ -9,7 +9,6 @@
   let threshold = null;    // threshold for Good/Bad boundary
   let sortTimer = null;
   let inclusion = 0;       // Inclusion setting: -10 to +10
-  let favoriteDetectors = [];  // List of favorite detectors
   let loadedDetector = null; // Stores loaded detector model weights
   let datasetLoaded = false;
   let audioVolume = 1.0; // Persisted volume across media loads
@@ -23,6 +22,9 @@
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
   let _combineState = null;          // When non-null, we are in combine-datasets staging mode
+  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart}
+  // phase: "top" | "hard" | "learn"
+  let _autopilotState = null;
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
@@ -257,6 +259,10 @@
   const leftPanel = document.getElementById("left-panel");
   const rightPanel = document.querySelector(".panel-right");
   const sortBar = document.getElementById("sort-bar");
+  const trainDatasetBar = document.getElementById("train-dataset-bar");
+  const trainDatasetName = document.getElementById("train-dataset-name");
+  const trainDetectorBar = document.getElementById("train-detector-bar");
+  const trainDetectorName = document.getElementById("train-detector-name");
 
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
@@ -291,17 +297,6 @@
   const loadSortStatus = document.getElementById("load-sort-status");
   const loadSortDetectorFile = document.getElementById("load-sort-detector-file");
   const loadSortMediaFile = document.getElementById("load-sort-media-file");
-  const menuFavoritesStatus = document.getElementById("menu-favorites-status");
-  const favPregenBtn = document.getElementById("fav-pregen-btn");
-  const menuFavoritesManage = document.getElementById("menu-favorites-manage");
-  const menuFavoritesAutodetect = document.getElementById("menu-favorites-autodetect");
-  const favoritesModal = document.getElementById("favorites-modal");
-  const favoritesModalClose = document.getElementById("favorites-modal-close");
-  const favoritesList = document.getElementById("favorites-list");
-  const favAddName = document.getElementById("fav-add-name");
-  const favAddStatus = document.getElementById("fav-add-status");
-  const favAddFromVotesBtn = document.getElementById("fav-add-from-votes-btn");
-  const favImporterButtonsDiv = document.getElementById("fav-importer-buttons");
   const autodetectModal = document.getElementById("autodetect-modal");
   const autodetectModalClose = document.getElementById("autodetect-modal-close");
   const autodetectSummary = document.getElementById("autodetect-summary");
@@ -310,6 +305,23 @@
   const autodetectProgressModal = document.getElementById("autodetect-progress-modal");
   const autodetectProgressText = document.getElementById("autodetect-progress-text");
   const autodetectProgressBar = document.getElementById("autodetect-progress-bar");
+
+  // Examples editor modal elements
+  const examplesEditorModal = document.getElementById("examples-editor-modal");
+  const examplesEditorModalClose = document.getElementById("examples-editor-modal-close");
+  const examplesEditorGrid = document.getElementById("examples-editor-grid");
+  const examplesEditorType = document.getElementById("examples-editor-type");
+  const examplesEditorAdd = document.getElementById("examples-editor-add");
+  const examplesEditorSave = document.getElementById("examples-editor-save");
+  const examplesEditorStatus = document.getElementById("examples-editor-status");
+  const examplesMediaFile = document.getElementById("examples-media-file");
+
+  // Autopilot examples elements
+  const autopilotExamplesSection = document.getElementById("autopilot-examples-section");
+  const autopilotExamplesGrid = document.getElementById("autopilot-examples-grid");
+  const autopilotExampleType = document.getElementById("autopilot-example-type");
+  const autopilotExampleAdd = document.getElementById("autopilot-example-add");
+  const autopilotStatusInput = document.getElementById("autopilot-status");
 
   // Settings modal elements
   const menuSettings = document.getElementById("menu-settings");
@@ -347,6 +359,231 @@
   const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
+  const autopilotTopGreensInput = document.getElementById("autopilot-top-greens-input");
+  const autopilotHardRedsInput = document.getElementById("autopilot-hard-reds-input");
+
+  // Left-panel tab switching
+  const tabManual = document.getElementById("tab-manual");
+  const tabAutopilot = document.getElementById("tab-autopilot");
+  const tabPanelManual = document.getElementById("tab-panel-manual");
+  const tabPanelAutopilot = document.getElementById("tab-panel-autopilot");
+
+  if (tabManual && tabAutopilot) {
+    tabManual.addEventListener("click", () => {
+      tabManual.classList.add("active");
+      tabManual.setAttribute("aria-selected", "true");
+      tabAutopilot.classList.remove("active");
+      tabAutopilot.setAttribute("aria-selected", "false");
+      tabPanelManual.style.display = "";
+      tabPanelAutopilot.style.display = "none";
+      stopAutopilot();
+    });
+    tabAutopilot.addEventListener("click", () => {
+      tabAutopilot.classList.add("active");
+      tabAutopilot.setAttribute("aria-selected", "true");
+      tabManual.classList.remove("active");
+      tabManual.setAttribute("aria-selected", "false");
+      tabPanelAutopilot.style.display = "";
+      tabPanelManual.style.display = "none";
+      refreshAutopilotExamples();
+      startAutopilot();
+    });
+  }
+
+  function refreshAutopilotExamples() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
+      if (autopilotExamplesSection) autopilotExamplesSection.style.display = "none";
+      return;
+    }
+    const model = _dashboardTrainMode.model;
+    if (autopilotExamplesSection) autopilotExamplesSection.style.display = "";
+    if (autopilotExamplesGrid) {
+      renderExamplesGrid(autopilotExamplesGrid, model.examples || [], (updated) => {
+        model.examples = updated;
+        saveAutopilotExamples(model);
+      });
+    }
+  }
+
+  async function saveAutopilotExamples(model) {
+    try {
+      const url = model.trainable
+        ? `/api/trainable-models/${encodeURIComponent(model.name)}/examples`
+        : `/api/favorite-detectors/${encodeURIComponent(model.name)}/examples`;
+      await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examples: model.examples || [] }),
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  if (autopilotExampleAdd) {
+    autopilotExampleAdd.addEventListener("click", async () => {
+      if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+      const model = _dashboardTrainMode.model;
+      if (!model.examples) model.examples = [];
+      const ex = await promptForExample(autopilotExampleType.value);
+      if (ex) {
+        model.examples.push(ex);
+        refreshAutopilotExamples();
+        saveAutopilotExamples(model);
+      }
+    });
+  }
+
+  // ---- Autopilot state machine ----
+
+  function setAutopilotStatus(text) {
+    if (autopilotStatusInput) autopilotStatusInput.value = text;
+  }
+
+  /**
+   * Start the autopilot workflow.  Reads the first example from the current
+   * model, triggers the appropriate sort, sets select-mode to Top, and enters
+   * the "top" phase of the state machine.
+   */
+  async function startAutopilot() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) {
+      setAutopilotStatus("No model selected");
+      return;
+    }
+    const model = _dashboardTrainMode.model;
+    const examples = model.examples || [];
+    if (examples.length === 0) {
+      setAutopilotStatus("No examples — add one first");
+      return;
+    }
+
+    // Read settings for phase thresholds
+    let goodToStart = 3;
+    let badToStart = 4;
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const s = await res.json();
+        if (typeof s.autopilot_top_greens === "number") goodToStart = s.autopilot_top_greens;
+        if (typeof s.autopilot_hard_reds === "number") badToStart = s.autopilot_hard_reds;
+      }
+    } catch (_) { /* use defaults */ }
+
+    _autopilotState = { phase: "top", goodToStart, badToStart };
+
+    // Sort by the first example
+    const firstExample = examples[0];
+
+    // Set select mode to Top
+    selectMode = "top";
+    document.querySelectorAll('input[name="select-mode"]').forEach(r => {
+      r.checked = r.value === "top";
+    });
+
+    if (firstExample.type === "text") {
+      // Text sort
+      sortMode = "text";
+      document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+        r.checked = r.value === "text";
+      });
+      textSortWrap.style.display = "";
+      learnedSortWrap.style.display = "none";
+      loadSortWrap.style.display = "none";
+      textSortInput.value = firstExample.value;
+      setAutopilotStatus("Top — sorting by text");
+      await fetchTextSort(firstExample.value);
+    } else if (firstExample.type === "media") {
+      // Example sort via server media file
+      activateLoadSort("Example: " + firstExample.value);
+      setAutopilotStatus("Top — sorting by example");
+      showSortProgress("Scoring with example media\u2026");
+      try {
+        const res = await fetch("/api/example-sort-server", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: firstExample.value }),
+        });
+        if (!res.ok) throw new Error("Failed to sort by example");
+        const data = await res.json();
+        sortOrder = data.results.map(r => ({ id: r.id, score: r.similarity ?? r.score }));
+        threshold = data.threshold;
+        loadedDetector = { _example: true, _name: firstExample.value };
+        hideSortProgress();
+        sortStatus.textContent = `Threshold: ${(threshold * 100).toFixed(1)}%`;
+        renderMediaList();
+        const nextClip = findNextClip();
+        if (nextClip) selectMedia(nextClip.id);
+      } catch (err) {
+        hideSortProgress();
+        sortStatus.textContent = `Error: ${err.message}`;
+      }
+    } else if (firstExample.type === "detector") {
+      // Load detector sort — fetch the named favorite detector
+      setAutopilotStatus("Top — sorting by detector");
+      try {
+        const res = await fetch("/api/favorite-detectors");
+        if (!res.ok) throw new Error("Failed to fetch detectors");
+        const data = await res.json();
+        const det = (data.detectors || []).find(d => d.name === firstExample.value);
+        if (!det) throw new Error(`Detector "${firstExample.value}" not found`);
+        loadedDetector = det;
+        activateLoadSort("Detector: " + det.name);
+        await fetchLoadedSort(true);
+      } catch (err) {
+        sortStatus.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    // Check if we already satisfy the first phase (e.g. from imported labels)
+    checkAutopilotPhase();
+  }
+
+  /**
+   * Check whether the autopilot should advance to the next phase based on
+   * the current vote counts.  Called after every vote.
+   */
+  function checkAutopilotPhase() {
+    if (!_autopilotState) return;
+
+    const { phase, goodToStart, badToStart } = _autopilotState;
+
+    if (phase === "top") {
+      if (votes.good.length >= goodToStart) {
+        // Transition to Hard phase
+        _autopilotState.phase = "hard";
+        selectMode = "hard";
+        document.querySelectorAll('input[name="select-mode"]').forEach(r => {
+          r.checked = r.value === "hard";
+        });
+        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
+        // Re-check in case we also satisfy the hard threshold
+        checkAutopilotPhase();
+      } else {
+        setAutopilotStatus(`Top — need ${goodToStart} goods (${votes.good.length} so far)`);
+      }
+    } else if (phase === "hard") {
+      if (votes.bad.length >= badToStart) {
+        // Transition to Learn phase
+        _autopilotState.phase = "learn";
+        sortMode = "learned";
+        document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+          r.checked = r.value === "learned";
+        });
+        textSortWrap.style.display = "none";
+        learnedSortWrap.style.display = "";
+        loadSortWrap.style.display = "none";
+        setAutopilotStatus("Learn");
+        updateLearnedSortDesc();
+        fetchLearnedSort(true);
+      } else {
+        setAutopilotStatus(`Hard — need ${badToStart} bads (${votes.bad.length} so far)`);
+      }
+    }
+    // phase === "learn" — nothing to do, stay in learn mode
+  }
+
+  function stopAutopilot() {
+    _autopilotState = null;
+    setAutopilotStatus("");
+  }
 
   // ---- Dataset Management ----
 
@@ -395,6 +632,8 @@
     if (autodetectToggle) autodetectToggle.style.display = "";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
+    trainDatasetBar.style.display = "none";
+    trainDetectorBar.style.display = "none";
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
@@ -824,8 +1063,6 @@
     extendedImporterForm.style.display = "none";
     datasetProgress.style.display = "block";
     backButton.style.display = "none";
-    const autodetectToggle = document.getElementById("autodetect-toggle");
-    if (autodetectToggle) autodetectToggle.style.display = "none";
     // Reset progress bar to indeterminate state
     progressFill.style.width = "0%";
     progressFill.classList.add("indeterminate");
@@ -856,7 +1093,7 @@
       stopProgressPolling();
 
       // If we are in combine-datasets staging mode, handle the staging result
-      // instead of loading the dataset into the main UI.
+      // instead of loading the dataset into the training UI.
       if (_combineState && progress.staging_result) {
         _combineState.push(progress.staging_result);
         showCombineDatasetsForm();
@@ -870,6 +1107,77 @@
 
       await checkDatasetStatus();
       if (datasetLoaded) {
+        // Dashboard add-dataset mode: capture info and return to dashboard
+        if (_dashboardAddDatasetMode) {
+          _dashboardAddDatasetMode = false;
+          try {
+            const infoRes = await fetch("/api/dashboard/dataset-info");
+            if (infoRes.ok) {
+              const info = await infoRes.json();
+              dashboardDatasets.push({
+                id: _dashboardNextId++,
+                name: info.name,
+                num_medias: info.num_medias,
+                media_type: info.media_type,
+                origin: info.origin,
+                source: info.source || null,
+              });
+            }
+          } catch (_) { /* ignore */ }
+          // Clear the dataset from the backend
+          await fetch("/api/dataset/clear", { method: "POST" });
+          medias = [];
+          votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+          selected = null;
+          datasetLoaded = false;
+          showDashboard();
+          return;
+        }
+
+        // Dashboard train mode: dataset loaded, now apply labels and enter labeling UI
+        if (_dashboardTrainMode) {
+          const trainInfo = _dashboardTrainMode;
+          await fetchMedias();
+
+          // Import labels from the trainable model's labelset
+          try {
+            const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(trainInfo.model.name)}`);
+            if (modelRes.ok) {
+              const modelData = await modelRes.json();
+              const labels = modelData.labelset && modelData.labelset.labels;
+              if (labels && labels.length > 0) {
+                await fetch("/api/labels/import", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ labels }),
+                });
+              }
+            }
+          } catch (_) { /* ignore label import errors */ }
+
+          await fetchVotes();
+
+          // Set text sort mode and trigger sort with the model's text query
+          sortMode = "text";
+          textSortWrap.style.display = "";
+          learnedSortWrap.style.display = "none";
+          loadSortWrap.style.display = "none";
+          // Update radio buttons to reflect text sort mode
+          document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+            r.checked = r.value === "text";
+          });
+          textSortInput.value = trainInfo.model.text_query || "";
+          if (trainInfo.model.text_query) {
+            fetchTextSort(trainInfo.model.text_query);
+          }
+
+          // Select first media
+          if (medias.length > 0 && !selected) {
+            selectMedia(medias[0].id);
+          }
+          return;
+        }
+
         await fetchMedias();
         await fetchVotes();
         // Dataset loaded — dashboard is now shown via checkDatasetStatus.
@@ -1208,18 +1516,6 @@
     });
     datasetLoadColumn.appendChild(demoBtnEl);
 
-    // Always render the autodetect toggle last, after all import options
-    const autodetectDiv = document.createElement("div");
-    autodetectDiv.id = "autodetect-toggle";
-    autodetectDiv.className = "autodetect-toggle-wrap";
-    autodetectDiv.innerHTML = `
-      <label style="display: flex; align-items: center; color: var(--text-primary); cursor: pointer;">
-        <input type="checkbox" id="autodetect-mode-checkbox" style="margin-right: 8px;">
-        <span>Run auto-detect after loading (skip manual labeling)</span>
-      </label>
-      <p class="form-text" style="margin: 8px 0 0 0;">When checked, automatically runs all favorite detectors and shows positive hits.</p>
-    `;
-    datasetWelcome.insertBefore(autodetectDiv, backButton);
   }
 
   function showExtendedImporterForm(importer) {
@@ -1617,6 +1913,18 @@
       fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
       _combineState = null;
     }
+    // If we came from the dashboard, go back to dashboard
+    if (_dashboardAddDatasetMode) {
+      _dashboardAddDatasetMode = false;
+      showDashboard();
+      return;
+    }
+    // If we were in a training session, save labels and return to dashboard
+    if (_dashboardTrainMode) {
+      saveTrainableModelLabels();
+      showDashboard();
+      return;
+    }
     showWelcomeScreen();
   });
 
@@ -1644,12 +1952,6 @@
   function closeBurgerMenu() {
     burgerDropdown.classList.remove("show");
     burgerBtn.setAttribute("aria-expanded", "false");
-    // Collapse any open submenus
-    document.querySelectorAll(".burger-submenu.show").forEach(s => {
-      s.classList.remove("show");
-      const parent = s.previousElementSibling;
-      if (parent) parent.setAttribute("aria-expanded", "false");
-    });
     resumeActiveMedia();
   }
 
@@ -1742,6 +2044,7 @@
       }
     });
   }
+
 
   // Labels export – open modal
   async function openLabelExporterModal() {
@@ -2098,449 +2401,10 @@
     }
   }
 
-  // ---- Favorite Detectors ----
-
-  async function loadFavoriteDetectors() {
-    const res = await fetch("/api/favorite-detectors");
-    const data = await res.json();
-    favoriteDetectors = data.detectors || [];
-    updateFavoritesList();
-  }
-
-  function updateFavoritesList() {
-    if (favoriteDetectors.length === 0) {
-      favoritesList.innerHTML = '<p style="color:var(--text-muted);">No favorite detectors saved yet.</p>';
-      return;
-    }
-
-    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
-    favoritesList.innerHTML = "";
-    favoriteDetectors.forEach(detector => {
-      const icon = mediaIcons[detector.media_type] || "🔍";
-      const created = detector.created_at
-        ? new Date(detector.created_at * 1000).toLocaleDateString()
-        : "";
-      const row = document.createElement("div");
-      row.className = "fav-card";
-      row.innerHTML = `
-        <div class="fav-card-info">
-          <div class="fav-card-name">${escapeHtml(detector.name)}</div>
-          <div class="fav-card-meta">
-            <span class="fav-badge">${escapeHtml(icon)} ${escapeHtml(detector.media_type)}</span>
-            <span>threshold&nbsp;${detector.threshold.toFixed(2)}</span>
-            ${created ? `<span>${escapeHtml(created)}</span>` : ""}
-          </div>
-        </div>
-        <div class="fav-card-actions">
-          <button class="fav-rename-btn btn-sm">Rename</button>
-          <button class="fav-delete-btn btn-sm-danger">Delete</button>
-        </div>`;
-      row.querySelector(".fav-rename-btn").addEventListener("click", () => renameDetector(detector.name));
-      row.querySelector(".fav-delete-btn").addEventListener("click", () => deleteDetector(detector.name));
-      favoritesList.appendChild(row);
-    });
-  }
-
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML.replace(/'/g, '&#39;');
-  }
-
-  async function renameDetector(oldName) {
-    const newName = await vtPrompt(`Rename detector "${oldName}" to:`, oldName);
-    if (!newName || newName === oldName) return;
-
-    const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(oldName)}/rename`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ new_name: newName }),
-    });
-
-    if (res.ok) {
-      await loadFavoriteDetectors();
-    } else {
-      await vtAlert("Failed to rename detector. Name may already exist.", "error");
-    }
-  }
-
-  async function deleteDetector(name) {
-    if (!await vtConfirm(`Are you sure you want to delete detector "${name}"?`)) return;
-
-    const res = await fetch(`/api/favorite-detectors/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
-      await loadFavoriteDetectors();
-    } else {
-      await vtAlert("Failed to delete detector.", "error");
-    }
-  }
-
-  if (menuFavoritesManage) {
-    menuFavoritesManage.addEventListener("click", async () => {
-      await loadFavoriteDetectors();
-      loadFavImporterButtons();
-      // Pre-fill name input with most recent text-sort suggestion
-      if (favAddName && !favAddName.value.trim()) {
-        try {
-          const sugRes = await fetch("/api/textsort-suggestions");
-          const sugData = await sugRes.json();
-          if (sugData.suggestions && sugData.suggestions.length > 0) {
-            favAddName.value = sugData.suggestions[sugData.suggestions.length - 1];
-          }
-        } catch (_) {}
-      }
-      favoritesModal.classList.add("show");
-      closeBurgerMenu();
-    });
-  }
-
-  if (favoritesModalClose) {
-    favoritesModalClose.addEventListener("click", () => {
-      favoritesModal.classList.remove("show");
-    });
-  }
-
-  // ---- Add Detector panel inside Manage Favorites modal ----
-
-  function setFavAddStatus(msg, color) {
-    if (favAddStatus) {
-      favAddStatus.textContent = msg;
-      favAddStatus.style.color = color || "var(--text-secondary)";
-    }
-  }
-
-  // Add from current votes (train a new detector from labelled medias)
-  if (favAddFromVotesBtn) {
-    favAddFromVotesBtn.addEventListener("click", async () => {
-      if (votes.good.length === 0 || votes.bad.length === 0) {
-        setFavAddStatus("Need at least one good and one bad vote first.", "var(--color-bad)");
-        return;
-      }
-      const name = favAddName ? favAddName.value.trim() : "";
-      if (!name) {
-        setFavAddStatus("Enter a name first.", "var(--color-bad)");
-        return;
-      }
-      setFavAddStatus("Training detector\u2026", "var(--text-secondary)");
-
-      const exportRes = await fetch("/api/detector/export", { method: "POST" });
-      if (!exportRes.ok) {
-        setFavAddStatus("Failed to train detector.", "var(--color-bad)");
-        return;
-      }
-      const detectorData = await exportRes.json();
-      const mediaType = medias.length > 0 ? medias[0].type : "audio";
-
-      const saveRes = await fetch("/api/favorite-detectors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          media_type: mediaType,
-          weights: detectorData.weights,
-          threshold: detectorData.threshold,
-        }),
-      });
-
-      if (saveRes.ok) {
-        setFavAddStatus(`Detector \u201c${name}\u201d saved (${mediaType}).`, "var(--color-good)");
-        if (favAddName) favAddName.value = "";
-        await loadFavoriteDetectors();
-      } else {
-        setFavAddStatus("Failed to save detector.", "var(--color-bad)");
-      }
-    });
-  }
-
-  // ---- Dynamic importer buttons (processor importers + label importers) ----
-
-  async function loadFavImporterButtons() {
-    if (!favImporterButtonsDiv) return;
-    favImporterButtonsDiv.innerHTML = "";
-
-    const [procRes, labelRes] = await Promise.all([
-      fetch("/api/processor-importers").catch(() => null),
-      fetch("/api/label-importers").catch(() => null),
-    ]);
-
-    const procImporters = procRes && procRes.ok ? await procRes.json() : [];
-    const labelImporters = labelRes && labelRes.ok ? await labelRes.json() : [];
-
-    // Filter out processor importers that train from labelsets (label_file, csv_label_file)
-    const detectorImporters = procImporters.filter((imp) => !imp.name.includes("label"));
-
-    // Helper: add a section header + row of buttons
-    function addSection(title, buttons) {
-      if (buttons.length === 0) return;
-      const header = document.createElement("div");
-      header.className = "fav-section-header";
-      header.textContent = title;
-      favImporterButtonsDiv.appendChild(header);
-      const row = document.createElement("div");
-      row.className = "fav-btn-row";
-      for (const btn of buttons) row.appendChild(btn);
-      favImporterButtonsDiv.appendChild(row);
-    }
-
-    // Helper: create a file-picker button for a processor importer
-    function makeProcFileButton(imp, fileField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = fileField.accept || "";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.addEventListener("change", async () => {
-          const file = input.files[0];
-          if (!file) { input.remove(); return; }
-          const defaultName = file.name.replace(/\.[^/.]+$/, "");
-          const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("name", detectorName);
-          const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-            setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-            if (favAddName) favAddName.value = "";
-            await loadFavoriteDetectors();
-          } else {
-            const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
-          }
-          input.remove();
-        });
-        input.click();
-      });
-      return btn;
-    }
-
-    // Helper: create a text-prompt button for a processor importer (server path)
-    function makeProcTextButton(imp, textField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F9E9}"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", async () => {
-        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
-        if (!value) return;
-        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
-        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Importing from ${imp.display_name}\u2026`, "var(--text-secondary)");
-        const body = { name: detectorName };
-        body[textField.key] = value;
-        const res = await fetch(`/api/processor-importers/import/${imp.name}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const detail = data.loaded != null ? `, ${data.loaded} files` : "";
-          setFavAddStatus(`Saved \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-          if (favAddName) favAddName.value = "";
-          await loadFavoriteDetectors();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Import failed"}`, "var(--color-bad)");
-        }
-      });
-      return btn;
-    }
-
-    // Helper: create a file-picker button for a label importer (trains detector)
-    function makeLabelFileButton(imp, fileField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = fileField.accept || "";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.addEventListener("change", async () => {
-          const file = input.files[0];
-          if (!file) { input.remove(); return; }
-          const defaultName = file.name.replace(/\.[^/.]+$/, "");
-          const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-          setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("name", detectorName);
-          const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-            setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-            if (favAddName) favAddName.value = "";
-            await loadFavoriteDetectors();
-          } else {
-            const err = await res.json().catch(() => ({}));
-            setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
-          }
-          input.remove();
-        });
-        input.click();
-      });
-      return btn;
-    }
-
-    // Helper: create a text-prompt button for a label importer (server path, trains detector)
-    function makeLabelTextButton(imp, textField) {
-      const btn = document.createElement("button");
-      btn.textContent = `${imp.icon || "\u{1F3F7}\uFE0F"} ${imp.display_name}`;
-      btn.className = "fav-import-btn";
-      btn.addEventListener("click", async () => {
-        const value = await vtPrompt(`Enter ${textField.label}:`, textField.placeholder || "");
-        if (!value) return;
-        const defaultName = value.split("/").pop().replace(/\.[^/.]+$/, "");
-        const detectorName = (favAddName && favAddName.value.trim()) || defaultName;
-        setFavAddStatus(`Training from labelset (${imp.display_name})\u2026`, "var(--text-secondary)");
-        const body = { name: detectorName };
-        body[textField.key] = value;
-        const res = await fetch(`/api/favorite-detectors/from-label-import/${imp.name}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const detail = data.loaded != null ? `, ${data.loaded} matched` : "";
-          setFavAddStatus(`Trained \u201c${data.name}\u201d (${data.media_type}${detail}).`, "var(--color-good)");
-          if (favAddName) favAddName.value = "";
-          await loadFavoriteDetectors();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setFavAddStatus(`Error: ${err.error || "Training failed"}`, "var(--color-bad)");
-        }
-      });
-      return btn;
-    }
-
-    // Build buttons for processor importers (load pre-trained detector)
-    const procButtons = [];
-    for (const imp of detectorImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      const textField = imp.fields.find((f) => f.field_type === "text");
-      if (fileField) {
-        procButtons.push(makeProcFileButton(imp, fileField));
-      } else if (textField) {
-        procButtons.push(makeProcTextButton(imp, textField));
-      }
-    }
-
-    // Build buttons for label importers (train detector from labelset)
-    const labelButtons = [];
-    for (const imp of labelImporters) {
-      const fileField = imp.fields.find((f) => f.field_type === "file");
-      const textField = imp.fields.find((f) => f.field_type === "text");
-      if (fileField) {
-        labelButtons.push(makeLabelFileButton(imp, fileField));
-      } else if (textField) {
-        labelButtons.push(makeLabelTextButton(imp, textField));
-      }
-    }
-
-    addSection("Import Detector", procButtons);
-    addSection("Train from Labelset", labelButtons);
-  }
-
-  if (menuFavoritesAutodetect) {
-    menuFavoritesAutodetect.addEventListener("click", async () => {
-      if (menuFavoritesAutodetect.classList.contains("disabled")) return;
-
-      closeBurgerMenu();
-
-      // Show progress modal
-      autodetectProgressModal.classList.add("show");
-      autodetectProgressText.textContent = "Running auto-detect...";
-      autodetectProgressBar.style.width = "0%";
-
-      // Simulate progress (since we don't have real-time progress from backend)
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 5;
-        if (progress > 90) progress = 90;
-        autodetectProgressBar.style.width = `${progress}%`;
-      }, 200);
-
-      // Run auto-detect
-      const res = await fetch("/api/auto-detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      clearInterval(progressInterval);
-      autodetectProgressBar.style.width = "100%";
-
-      setTimeout(async () => {
-        autodetectProgressModal.classList.remove("show");
-
-        if (!res.ok) {
-          await vtAlert("Auto-detect failed. Make sure you have saved some favorite detectors for this media type.", "error");
-          return;
-        }
-
-        res.json().then(data => {
-          displayAutodetectResults(data);
-        });
-      }, 500);
-    });
-  }
-
-  async function runAutoDetectAfterLoad() {
-    if (medias.length === 0) {
-      return;
-    }
-
-    // Show progress modal
-    autodetectProgressModal.classList.add("show");
-    autodetectProgressText.textContent = "Running auto-detect...";
-    autodetectProgressBar.style.width = "0%";
-
-    // Simulate progress (since we don't have real-time progress from backend)
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-      progress += 5;
-      if (progress > 90) progress = 90;
-      autodetectProgressBar.style.width = `${progress}%`;
-    }, 200);
-
-    // Run auto-detect
-    const res = await fetch("/api/auto-detect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    clearInterval(progressInterval);
-    autodetectProgressBar.style.width = "100%";
-
-    setTimeout(async () => {
-      autodetectProgressModal.classList.remove("show");
-
-      if (!res.ok) {
-        await vtAlert("Auto-detect failed. Make sure you have saved some favorite detectors for this media type.", "error");
-        return;
-      }
-
-      res.json().then(data => {
-        displayAutodetectResults(data);
-      });
-    }, 500);
   }
 
   function formatOrigin(hit) {
@@ -2966,6 +2830,8 @@
       showThumbnailsRightCheckbox.checked = val;
       showThumbnailsRight = val;
     }
+    if (autopilotTopGreensInput) autopilotTopGreensInput.value = data.autopilot_top_greens;
+    if (autopilotHardRedsInput) autopilotHardRedsInput.value = data.autopilot_hard_reds;
     const favList = data.favorite_media_types || [];
     favMtCheckboxes.forEach(cb => {
       cb.checked = favList.includes(cb.dataset.mediaType);
@@ -3083,7 +2949,7 @@
         populateSettingsModal(defaults);
         // Apply theme immediately
         applyTheme(defaults.theme || "dark");
-        // Update main UI controls that live outside the modal
+        // Update training UI controls that live outside the modal
         if (inclusionSlider) { inclusionSlider.value = defaults.inclusion || 0; inclusionValue.textContent = defaults.inclusion || 0; inclusion = defaults.inclusion || 0; }
         audioVolume = defaults.volume != null ? defaults.volume : 1.0;
         const audioEl = document.getElementById("media-audio");
@@ -3105,7 +2971,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right", "autopilot_top_greens", "autopilot_hard_reds"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -3303,6 +3169,32 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ calibration_fraction: val }),
+      }).catch(() => {});
+    });
+  }
+
+  // ---- Autopilot settings ----
+
+  if (autopilotTopGreensInput) {
+    autopilotTopGreensInput.addEventListener("change", () => {
+      const val = Math.max(1, parseInt(autopilotTopGreensInput.value) || 10);
+      autopilotTopGreensInput.value = val;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autopilot_top_greens: val }),
+      }).catch(() => {});
+    });
+  }
+
+  if (autopilotHardRedsInput) {
+    autopilotHardRedsInput.addEventListener("change", () => {
+      const val = Math.max(1, parseInt(autopilotHardRedsInput.value) || 10);
+      autopilotHardRedsInput.value = val;
+      fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autopilot_hard_reds: val }),
       }).catch(() => {});
     });
   }
@@ -3970,6 +3862,12 @@
       announce(`Voted ${vote} on ${mediaName}`);
       await fetchVotes();
 
+      // In dashboard train mode, persist labels to the trainable model's
+      // labelset after every vote so work is never lost.
+      if (_dashboardTrainMode) {
+        _persistTrainableModelLabels(); // fire-and-forget
+      }
+
       // When voting Good while a text-sort query is active, store the query
       // as a suggested name for saving detectors / labelsets later.
       if (vote === "good" && sortMode === "text") {
@@ -3982,6 +3880,9 @@
           }).catch(() => {}); // fire-and-forget
         }
       }
+
+      // Autopilot: check if the phase should advance (may change selectMode/sortMode).
+      checkAutopilotPhase();
 
       // Auto-advance to next media.  When swipe animation is enabled, play a
       // fast swipe-out before switching; otherwise advance immediately.
@@ -4516,43 +4417,6 @@
       labelImporterFormDiv.innerHTML = "";
       labelImporterBack.style.display = "none";
       labelImporterList.style.display = "";
-    });
-  }
-
-  // ---- Pregen processors (in favorites modal) ----
-
-  if (favPregenBtn) {
-    favPregenBtn.addEventListener("click", async () => {
-      favPregenBtn.disabled = true;
-      if (favAddStatus) {
-        favAddStatus.textContent = "Adding pregen processors\u2026";
-        favAddStatus.style.color = "var(--text-muted)";
-      }
-      try {
-        const res = await fetch("/api/pregen-processors/add", { method: "POST" });
-        const result = await res.json();
-        if (res.ok && result.success) {
-          if (favAddStatus) {
-            favAddStatus.textContent = `Added ${result.added.length} pregen processor(s)`;
-            favAddStatus.style.color = "var(--color-good)";
-            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-          }
-        } else {
-          if (favAddStatus) {
-            favAddStatus.textContent = result.error || "Failed to add pregen processors";
-            favAddStatus.style.color = "var(--color-bad)";
-            setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-          }
-        }
-      } catch (err) {
-        if (favAddStatus) {
-          favAddStatus.textContent = `Error: ${err.message}`;
-          favAddStatus.style.color = "var(--color-bad)";
-          setTimeout(() => { favAddStatus.textContent = ""; }, 3000);
-        }
-      } finally {
-        favPregenBtn.disabled = false;
-      }
     });
   }
 
@@ -5103,10 +4967,6 @@
           statusEl.style.color = "var(--color-good)";
           setTimeout(() => {
             processorImporterModal.classList.remove("show");
-            if (menuFavoritesStatus) {
-              menuFavoritesStatus.textContent = msg;
-              setTimeout(() => { menuFavoritesStatus.textContent = ""; }, 3000);
-            }
           }, 1500);
         } else {
           statusEl.textContent = result.error || "Import failed";
@@ -5309,7 +5169,7 @@
     document.getElementById("smart-section").style.display = "none";
     document.getElementById("stable-section").style.display = "none";
     document.getElementById("span-section").style.display = "";
-    document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+    document.getElementById("progress-modal-title").textContent = "Diverse: Diversity Coverage";
 
     pauseActiveMedia();
     progressModal.classList.add("show");
@@ -5375,7 +5235,7 @@
     } else if (metric === "span") {
       spanSec.style.display = "";
       renderDiversityChart(data.diversity_level_over_time);
-      document.getElementById("progress-modal-title").textContent = "Span: Diversity Coverage";
+      document.getElementById("progress-modal-title").textContent = "Diverse: Diversity Coverage";
       const dvChart = document.getElementById("diversity-chart");
       if (dvChart) {
         dvChart.setAttribute("role", "img");
@@ -5999,13 +5859,18 @@
         showThumbnailsRightCheckbox.checked = val;
         showThumbnailsRight = val;
       }
+      if (autopilotTopGreensInput && typeof data.autopilot_top_greens === "number") {
+        autopilotTopGreensInput.value = data.autopilot_top_greens;
+      }
+      if (autopilotHardRedsInput && typeof data.autopilot_hard_reds === "number") {
+        autopilotHardRedsInput.value = data.autopilot_hard_reds;
+      }
     } catch (_) {
       // Settings not available yet; use defaults
     }
   }
 
   updateLabelCounts();
-  loadFavoriteDetectors();
   fetchLabelingStatus();
   loadSettings();
 
@@ -6018,11 +5883,11 @@
 
     // Close any open modal on Escape, from most specific to least
     const modalClosePairs = [
+      [examplesEditorModal, examplesEditorModalClose],
       [labelImporterModal, labelImporterModalClose],
       [labelExporterModal, labelExporterModalClose],
       [detectorExportModal, detectorExportModalClose],
       [processorImporterModal, processorImporterModalClose],
-      [favoritesModal, favoritesModalClose],
       [autodetectModal, autodetectModalClose],
       [progressModal, modalClose],
     ];

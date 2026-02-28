@@ -48,6 +48,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_thumbnails_right": True,
     "favorite_media_types": [],
     "favorite_processors": [],
+    "autopilot_top_greens": 3,
+    "autopilot_hard_reds": 4,
 }
 
 # In-memory cache — loaded once, written on every mutation.
@@ -236,6 +238,30 @@ def set_show_thumbnails_right(value: bool) -> None:
     """Set and persist the show_thumbnails_right flag."""
     s = _ensure_loaded()
     s["show_thumbnails_right"] = bool(value)
+    _save(s)
+
+
+def get_autopilot_top_greens() -> int:
+    """Return the autopilot 'Top # Greens' count (positive int)."""
+    return int(_ensure_loaded().get("autopilot_top_greens", _DEFAULTS["autopilot_top_greens"]))
+
+
+def set_autopilot_top_greens(value: int) -> None:
+    """Set and persist the autopilot top greens count (clamped to >= 1)."""
+    s = _ensure_loaded()
+    s["autopilot_top_greens"] = int(max(1, int(value)))
+    _save(s)
+
+
+def get_autopilot_hard_reds() -> int:
+    """Return the autopilot 'Hard # Reds' count (positive int)."""
+    return int(_ensure_loaded().get("autopilot_hard_reds", _DEFAULTS["autopilot_hard_reds"]))
+
+
+def set_autopilot_hard_reds(value: int) -> None:
+    """Set and persist the autopilot hard reds count (clamped to >= 1)."""
+    s = _ensure_loaded()
+    s["autopilot_hard_reds"] = int(max(1, int(value)))
     _save(s)
 
 

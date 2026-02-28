@@ -1,6 +1,8 @@
 from unittest.mock import patch
 
 import numpy as np
+import os
+
 import pytest
 
 import vtsearch.config as config
@@ -56,7 +58,15 @@ from vtsearch.config import NUM_MEDIAS, SAMPLE_RATE
 from vtsearch.audio import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
-from vtsearch.utils import bad_votes, medias, good_votes, label_history, last_learned_scores, textsort_suggestions, vote_click_times
+from vtsearch.utils import (
+    bad_votes,
+    medias,
+    good_votes,
+    label_history,
+    last_learned_scores,
+    textsort_suggestions,
+    vote_click_times,
+)
 
 # Attach to app_module for backward compatibility with existing tests
 app_module.NUM_MEDIAS = NUM_MEDIAS
@@ -149,3 +159,17 @@ def client():
     app_module.app.config["TESTING"] = True
     with app_module.app.test_client() as c:
         yield c
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Force-exit to avoid SIGABRT (exit code 134) from native library cleanup.
+
+    PyTorch, OpenMP, numba (via librosa), and other native libraries spin up
+    C++ thread pools that sometimes call ``std::terminate()`` during Python
+    interpreter shutdown.  This produces "terminate called without an active
+    exception" and exit code 134, even though all tests passed.
+
+    ``os._exit()`` skips the normal interpreter teardown (atexit handlers,
+    C++ static destructors) so the problematic cleanup never runs.
+    """
+    os._exit(exitstatus)

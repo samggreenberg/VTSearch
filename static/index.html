@@ -45,48 +45,76 @@
 <div class="layout" role="presentation">
   <!-- Left panel -->
   <div class="panel-left" id="left-panel" role="region" aria-label="Media list">
-    <div class="sort-bar" id="sort-bar">
-      <span class="sort-label">Sort</span>
-      <div class="sort-mode">
-        <label><input type="radio" name="sort-mode" value="text" checked> Text</label>
-        <label><input type="radio" name="sort-mode" value="learned" id="learned-radio"> Learn</label>
-        <label><input type="radio" name="sort-mode" value="load" id="load-radio"> Load</label>
-      </div>
-      <div id="text-sort-wrap">
-        <label for="text-sort" class="sr-only">Text sort query</label>
-        <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
-      </div>
-      <div id="learned-sort-wrap" style="display:none">
-        <div id="learned-sort-desc" class="sort-info-text"></div>
-      </div>
-      <div id="load-sort-wrap" style="display:none">
-        <div id="load-sort-desc" class="sort-info-text">No sort loaded</div>
-      </div>
-      <span class="sort-label" style="margin-top:8px">Select</span>
-      <div class="sort-mode">
-        <label><input type="radio" name="select-mode" value="top" checked> Top</label>
-        <label><input type="radio" name="select-mode" value="hard"> Hard</label>
-        <label><input type="radio" name="select-mode" value="new"> New</label>
-      </div>
-      <span class="sort-label" style="margin-top:8px">Inclusion</span>
-      <div style="display:flex; align-items:center; gap:6px; margin-top:4px">
-        <label for="inclusion-slider" class="sr-only">Inclusion</label>
-        <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="width:80%; accent-color:var(--accent)">
-        <span id="inclusion-value" style="font-size:0.75rem; color:var(--text-secondary); min-width:1.5em; text-align:right">0</span>
-      </div>
-      <div id="sort-status" class="sort-status" aria-live="polite"></div>
-      <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
-        <div class="sort-progress-bar">
-          <div class="sort-progress-fill"></div>
+    <div class="train-context-bar" id="train-dataset-bar" style="display:none">
+      <span class="train-context-label">Dataset</span>
+      <span class="train-context-name" id="train-dataset-name"></span>
+    </div>
+    <div class="left-tabs" role="tablist" aria-label="Panel mode">
+      <button class="left-tab active" id="tab-manual" role="tab" aria-selected="true" aria-controls="tab-panel-manual">Manual</button>
+      <button class="left-tab" id="tab-autopilot" role="tab" aria-selected="false" aria-controls="tab-panel-autopilot">Autopilot</button>
+    </div>
+    <div id="tab-panel-manual" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-manual">
+      <div class="sort-bar" id="sort-bar">
+        <span class="sort-label">Sort</span>
+        <div class="sort-mode">
+          <label><input type="radio" name="sort-mode" value="text" checked> Text</label>
+          <label><input type="radio" name="sort-mode" value="learned" id="learned-radio"> Learn</label>
+          <label><input type="radio" name="sort-mode" value="load" id="load-radio"> Load</label>
+        </div>
+        <div id="text-sort-wrap">
+          <label for="text-sort" class="sr-only">Text sort query</label>
+          <input type="text" id="text-sort" placeholder='e.g. "high pitched beep"'>
+        </div>
+        <div id="learned-sort-wrap" style="display:none">
+          <div id="learned-sort-desc" class="sort-info-text"></div>
+        </div>
+        <div id="load-sort-wrap" style="display:none">
+          <div id="load-sort-desc" class="sort-info-text">No sort loaded</div>
+        </div>
+        <span class="sort-label" style="margin-top:8px">Select</span>
+        <div class="sort-mode">
+          <label><input type="radio" name="select-mode" value="top" checked> Top</label>
+          <label><input type="radio" name="select-mode" value="hard"> Hard</label>
+          <label><input type="radio" name="select-mode" value="new"> New</label>
+        </div>
+        <span class="sort-label" style="margin-top:8px">Inclusion</span>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:4px">
+          <label for="inclusion-slider" class="sr-only">Inclusion</label>
+          <input type="range" id="inclusion-slider" min="-10" max="10" value="0" step="1" aria-valuetext="0" style="width:80%; accent-color:var(--accent)">
+          <span id="inclusion-value" style="font-size:0.75rem; color:var(--text-secondary); min-width:1.5em; text-align:right">0</span>
+        </div>
+        <div id="sort-status" class="sort-status" aria-live="polite"></div>
+        <div id="sort-progress" class="sort-progress" role="status" aria-live="polite">
+          <div class="sort-progress-bar">
+            <div class="sort-progress-fill"></div>
+          </div>
         </div>
       </div>
+      <div class="dataset-bar" id="dataset-bar" style="display:none">
+        <span class="dataset-info" id="dataset-info">No dataset loaded</span>
+      </div>
+      <div id="media-list" role="listbox" aria-label="Medias"></div>
+      <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
+        <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
+      </div>
     </div>
-    <div class="dataset-bar" id="dataset-bar" style="display:none">
-      <span class="dataset-info" id="dataset-info">No dataset loaded</span>
-    </div>
-    <div id="media-list" role="listbox" aria-label="Medias"></div>
-    <div class="stripe-overview" id="stripe-overview" role="img" aria-label="Media overview showing labeled medias and current position">
-      <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
+    <div id="tab-panel-autopilot" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-autopilot" style="display:none">
+      <div class="autopilot-panel">
+        <span class="sort-label">Status</span>
+        <input type="text" id="autopilot-status" class="autopilot-status-input" value="" readonly placeholder="Idle">
+        <div id="autopilot-examples-section" style="display:none">
+          <span class="sort-label" style="margin-top:10px">Examples</span>
+          <div id="autopilot-examples-grid" class="examples-grid"></div>
+          <div class="examples-add-bar">
+            <select id="autopilot-example-type" class="form-select-inline" style="font-size:0.75rem">
+              <option value="text">Text</option>
+              <option value="media">Media</option>
+              <option value="detector">Detector</option>
+            </select>
+            <button id="autopilot-example-add" class="btn-sm" style="font-size:0.7rem">+ Add</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -178,6 +206,10 @@
 
   <!-- Right panel -->
   <aside class="panel-right" aria-label="Labels">
+    <div class="train-context-bar" id="train-detector-bar" style="display:none">
+      <span class="train-context-label">Detector</span>
+      <span class="train-context-name" id="train-detector-name"></span>
+    </div>
     <!-- import-file removed: label import now uses the label importer modal -->
     <div class="progress-check-bar">
       <span class="progress-check-label">Progress</span>
@@ -191,9 +223,9 @@
         <span class="indicator-label">Stable</span>
         <span class="indicator-subtext" id="stable-subtext"></span>
       </button>
-      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Span level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
+      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
         <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Span</span>
+        <span class="indicator-label">Diverse</span>
         <span class="indicator-subtext" id="span-subtext"></span>
       </button>
     </div>
@@ -221,7 +253,7 @@
   </aside>
 </div>
 
-<!-- Progress Modal — shown per-metric when clicking Smart, Stable, or Span -->
+<!-- Progress Modal — shown per-metric when clicking Smart, Stable, or Diverse -->
 <div id="progress-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="progress-modal-title">
   <div class="modal-content">
     <div class="modal-header">
@@ -255,9 +287,9 @@
         </p>
         <canvas id="stability-chart" width="700" height="250"></canvas>
       </div>
-      <!-- Span: Diversity tree text info + chart -->
+      <!-- Diverse: Diversity tree text info + chart -->
       <div id="span-section" class="progress-chart" style="display:none;">
-        <h3>Span: Diversity Tree Coverage</h3>
+        <h3>Diverse: Diversity Tree Coverage</h3>
         <p class="form-text" style="font-size: 0.8rem; margin-bottom: 8px;">
           Shows how diversity level grows as you label. Higher means broader coverage.
         </p>
@@ -269,38 +301,6 @@
     </div>
   </div>
 </div>
-
-<!-- Favorite Detectors Management Modal -->
-<div id="favorites-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
-  <div class="modal-content" style="max-width: 700px;">
-    <div class="modal-header">
-      <h2 id="favorites-modal-title">Manage Favorite Detectors</h2>
-      <button class="modal-close" id="favorites-modal-close" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-body">
-      <!-- Add Detector Section -->
-      <div class="modal-section">
-        <div class="section-title-sm">Add Detector</div>
-        <div style="margin-bottom: 10px;">
-          <label class="form-label" style="font-size: 0.75rem; color: var(--text-muted);">Name (optional — defaults to filename)</label>
-          <input type="text" id="fav-add-name" placeholder="e.g. Dog Barks" class="form-input" style="background: var(--bg-surface);">
-        </div>
-        <div class="fav-btn-row">
-          <button id="fav-add-from-votes-btn" class="fav-import-btn" style="background: var(--accent); color: #fff; border-color: var(--accent);">From Current Labels</button>
-          <button id="fav-pregen-btn" class="fav-import-btn">Pregen Processors</button>
-        </div>
-        <div id="fav-importer-buttons" style="margin-top: 4px;"></div>
-        <div id="fav-add-status" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; min-height: 1.2em;"></div>
-      </div>
-      <!-- Saved Detectors List -->
-      <div class="section-title-sm tight">Saved Detectors</div>
-      <div id="favorites-list">
-        <p style="color: var(--text-muted);">No favorite detectors saved yet.</p>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Hidden file inputs for favorites modal (created dynamically by app.js) -->
 
 <!-- Auto-Detect Results Modal -->
 <div id="autodetect-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="autodetect-modal-title">
@@ -468,6 +468,30 @@
 <input type="file" id="load-sort-detector-file" accept=".json" style="display:none" aria-label="Local detector file">
 <input type="file" id="load-sort-media-file" style="display:none" aria-label="Local media file">
 
+<!-- Examples Editor Modal -->
+<div id="examples-editor-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="examples-editor-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="examples-editor-modal-title">Edit Examples</h2>
+      <button class="modal-close" id="examples-editor-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="examples-editor-grid" class="examples-grid"></div>
+      <div class="examples-add-bar" style="margin-top:10px">
+        <select id="examples-editor-type" class="form-select-inline">
+          <option value="text">Text</option>
+          <option value="media">Media</option>
+          <option value="detector">Detector</option>
+        </select>
+        <button id="examples-editor-add" class="btn-sm">+ Add</button>
+      </div>
+      <div id="examples-editor-status" class="status-text compact" style="margin-top:8px"></div>
+      <button id="examples-editor-save" class="btn-block-primary" style="margin-top:12px">Save</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="examples-media-file" style="display:none" aria-label="Example media file">
+
 <!-- Custom VTSearch Dialog (replaces native alert/confirm/prompt) -->
 <div id="vt-dialog-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="vt-dialog-message">
   <div class="modal-content vt-dialog-box">
@@ -559,6 +583,18 @@
             <div class="settings-row">
               <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
+            </div>
+          </div>
+          <!-- Autopilot -->
+          <div class="settings-section">
+            <div class="settings-section-title">Autopilot</div>
+            <div class="settings-row">
+              <label for="autopilot-top-greens-input" class="settings-label">#GoodToStart</label>
+              <input type="number" id="autopilot-top-greens-input" min="1" value="3" step="1" class="settings-number-input">
+            </div>
+            <div class="settings-row">
+              <label for="autopilot-hard-reds-input" class="settings-label">#BadToStart</label>
+              <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
             </div>
           </div>
           <!-- Favorite Media Types -->

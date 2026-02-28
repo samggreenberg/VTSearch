@@ -41,6 +41,11 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu \
   ultralytics \
   sentence-transformers \
   pandas \
+  PyMuPDF \
+  scipy \
+  soundfile \
+  feedparser \
+  yt-dlp \
   --ignore-installed blinker \
   -q
 
