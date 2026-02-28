@@ -257,18 +257,6 @@ class TestSettingsModule:
         settings_mod.set_autoload_media_types(["audio", "audio", "video"])
         assert settings_mod.get_autoload_media_types() == ["audio", "video"]
 
-    def test_migrate_legacy_autoload_media_type(self, isolated_settings):
-        """Legacy favorite_media_type string is migrated to autoload_media_types list."""
-        isolated_settings.write_text(json.dumps({"favorite_media_type": "audio"}))
-        settings_mod.reset()
-        assert settings_mod.get_autoload_media_types() == ["audio"]
-
-    def test_migrate_legacy_empty_autoload_media_type(self, isolated_settings):
-        """Legacy empty favorite_media_type is migrated to empty list."""
-        isolated_settings.write_text(json.dumps({"favorite_media_type": ""}))
-        settings_mod.reset()
-        assert settings_mod.get_autoload_media_types() == []
-
     def test_get_set_autopilot_top_greens(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(20)
         assert settings_mod.get_autopilot_top_greens() == 20

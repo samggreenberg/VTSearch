@@ -87,40 +87,12 @@ def _ensure_loaded() -> dict[str, Any]:
     global _settings
     if _settings is None:
         _settings = _load()
-        _migrate_autoload_media_type(_settings)
-        _migrate_autorun_processors(_settings)
     return _settings
 
 
 # -------------------------------------------------------------------
 # Public API
 # -------------------------------------------------------------------
-
-
-def _migrate_autoload_media_type(data: dict[str, Any]) -> None:
-    """Migrate legacy media-type keys to ``autoload_media_types`` (list).
-
-    Handles two legacy key forms:
-    1. ``favorite_media_type`` (ancient singular string) — converted to list.
-    2. ``favorite_media_types`` (previous list key) — renamed to ``autoload_media_types``.
-    """
-    # Step 1: ancient singular string → new key
-    if "favorite_media_type" in data and "favorite_media_types" not in data and "autoload_media_types" not in data:
-        old = data.pop("favorite_media_type")
-        data["autoload_media_types"] = [old] if old else []
-    # Step 2: old plural key → new key
-    if "favorite_media_types" in data and "autoload_media_types" not in data:
-        data["autoload_media_types"] = data.pop("favorite_media_types")
-    elif "favorite_media_types" in data:
-        data.pop("favorite_media_types")
-
-
-def _migrate_autorun_processors(data: dict[str, Any]) -> None:
-    """Migrate legacy ``favorite_processors`` key to ``autorun_processors``."""
-    if "favorite_processors" in data and "autorun_processors" not in data:
-        data["autorun_processors"] = data.pop("favorite_processors")
-    elif "favorite_processors" in data:
-        data.pop("favorite_processors")
 
 
 def get_defaults() -> dict[str, Any]:

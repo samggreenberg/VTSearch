@@ -18,25 +18,25 @@ from vtsearch.models import (
 )
 from vtsearch.utils import (
     add_autorun_detector,
-    add_favorite_extractor,
-    add_favorite_localizer,
+    add_autorun_extractor,
+    add_autorun_localizer,
     get_autodetect_detectors_by_media,
     medias,
     get_calibrate_count,
     get_calibration_fraction,
     get_autorun_detectors,
-    get_favorite_extractors,
-    get_favorite_extractors_by_media,
-    get_favorite_localizers,
-    get_favorite_localizers_by_media,
+    get_autorun_extractors,
+    get_autorun_extractors_by_media,
+    get_autorun_localizers,
+    get_autorun_localizers_by_media,
     get_inclusion,
     get_safe_thresholds,
     remove_autorun_detector,
-    remove_favorite_extractor,
-    remove_favorite_localizer,
+    remove_autorun_extractor,
+    remove_autorun_localizer,
     rename_autorun_detector,
-    rename_favorite_extractor,
-    rename_favorite_localizer,
+    rename_autorun_extractor,
+    rename_autorun_localizer,
     set_autorun_detector_autodetect,
 )
 
@@ -861,16 +861,16 @@ def _build_extractor(name: str, extractor_type: str, config: dict):
     return factory(name, config)
 
 
-@detectors_bp.route("/api/favorite-extractors")
-def get_favorite_extractors_route():
-    """Get all favorite extractors."""
-    extractors = get_favorite_extractors()
+@detectors_bp.route("/api/autorun-extractors")
+def get_autorun_extractors_route():
+    """Get all autorun extractors."""
+    extractors = get_autorun_extractors()
     return jsonify({"extractors": list(extractors.values())})
 
 
-@detectors_bp.route("/api/favorite-extractors", methods=["POST"])
-def add_favorite_extractor_route():
-    """Add a new favorite extractor."""
+@detectors_bp.route("/api/autorun-extractors", methods=["POST"])
+def add_autorun_extractor_route():
+    """Add a new autorun extractor."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -895,21 +895,21 @@ def add_favorite_extractor_route():
     except Exception as e:
         return jsonify({"error": f"Invalid extractor config: {e}"}), 400
 
-    add_favorite_extractor(name, extractor_type, media_type, config)
+    add_autorun_extractor(name, extractor_type, media_type, config)
     return jsonify({"success": True, "name": name})
 
 
-@detectors_bp.route("/api/favorite-extractors/<name>", methods=["DELETE"])
-def delete_favorite_extractor_route(name):
-    """Delete a favorite extractor."""
-    if remove_favorite_extractor(name):
+@detectors_bp.route("/api/autorun-extractors/<name>", methods=["DELETE"])
+def delete_autorun_extractor_route(name):
+    """Delete a autorun extractor."""
+    if remove_autorun_extractor(name):
         return jsonify({"success": True})
     return jsonify({"error": "Extractor not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-extractors/<name>/rename", methods=["PUT"])
-def rename_favorite_extractor_route(name):
-    """Rename a favorite extractor."""
+@detectors_bp.route("/api/autorun-extractors/<name>/rename", methods=["PUT"])
+def rename_autorun_extractor_route(name):
+    """Rename a autorun extractor."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -918,7 +918,7 @@ def rename_favorite_extractor_route(name):
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    if rename_favorite_extractor(name, new_name):
+    if rename_autorun_extractor(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Extractor not found or new name already exists"}), 400
 
@@ -979,15 +979,15 @@ def run_extract():
 
 @detectors_bp.route("/api/auto-extract", methods=["POST"])
 def auto_extract():
-    """Run all favorite extractors for the current media type and return extraction results."""
+    """Run all autorun extractors for the current media type and return extraction results."""
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
     media_type = next(iter(medias.values())).get("type", "")
-    extractors = get_favorite_extractors_by_media(media_type)
+    extractors = get_autorun_extractors_by_media(media_type)
 
     if not extractors:
-        return jsonify({"error": f"No favorite extractors found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
 
     sorted_media_ids = sorted(medias.keys())
 
@@ -1062,16 +1062,16 @@ def _build_localizer(name: str, localizer_type: str, config: dict):
     return factory(name, config)
 
 
-@detectors_bp.route("/api/favorite-localizers")
-def get_favorite_localizers_route():
-    """Get all favorite localizers."""
-    localizers = get_favorite_localizers()
+@detectors_bp.route("/api/autorun-localizers")
+def get_autorun_localizers_route():
+    """Get all autorun localizers."""
+    localizers = get_autorun_localizers()
     return jsonify({"localizers": list(localizers.values())})
 
 
-@detectors_bp.route("/api/favorite-localizers", methods=["POST"])
-def add_favorite_localizer_route():
-    """Add a new favorite localizer."""
+@detectors_bp.route("/api/autorun-localizers", methods=["POST"])
+def add_autorun_localizer_route():
+    """Add a new autorun localizer."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -1095,21 +1095,21 @@ def add_favorite_localizer_route():
     except Exception as e:
         return jsonify({"error": f"Invalid localizer config: {e}"}), 400
 
-    add_favorite_localizer(name, localizer_type, media_type, config)
+    add_autorun_localizer(name, localizer_type, media_type, config)
     return jsonify({"success": True, "name": name})
 
 
-@detectors_bp.route("/api/favorite-localizers/<name>", methods=["DELETE"])
-def delete_favorite_localizer_route(name):
-    """Delete a favorite localizer."""
-    if remove_favorite_localizer(name):
+@detectors_bp.route("/api/autorun-localizers/<name>", methods=["DELETE"])
+def delete_autorun_localizer_route(name):
+    """Delete a autorun localizer."""
+    if remove_autorun_localizer(name):
         return jsonify({"success": True})
     return jsonify({"error": "Localizer not found"}), 404
 
 
-@detectors_bp.route("/api/favorite-localizers/<name>/rename", methods=["PUT"])
-def rename_favorite_localizer_route(name):
-    """Rename a favorite localizer."""
+@detectors_bp.route("/api/autorun-localizers/<name>/rename", methods=["PUT"])
+def rename_autorun_localizer_route(name):
+    """Rename a autorun localizer."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -1118,7 +1118,7 @@ def rename_favorite_localizer_route(name):
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    if rename_favorite_localizer(name, new_name):
+    if rename_autorun_localizer(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Localizer not found or new name already exists"}), 400
 
@@ -1175,15 +1175,15 @@ def run_localize():
 
 @detectors_bp.route("/api/auto-localize", methods=["POST"])
 def auto_localize():
-    """Run all favorite localizers for the current media type."""
+    """Run all autorun localizers for the current media type."""
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
     media_type = next(iter(medias.values())).get("type", "")
-    localizers = get_favorite_localizers_by_media(media_type)
+    localizers = get_autorun_localizers_by_media(media_type)
 
     if not localizers:
-        return jsonify({"error": f"No favorite localizers found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
 
     sorted_media_ids = sorted(medias.keys())
 
@@ -1265,10 +1265,10 @@ def list_pregen_processors():
 
 @detectors_bp.route("/api/pregen-processors/add", methods=["POST"])
 def add_pregen_processors():
-    """Add all pregen processors as favorites.
+    """Add all pregen processors as autorun entries.
 
     Registers the OCR extractor, Speech extractor, and Face localizer
-    into the favorite extractors and localizers stores.
+    into the autorun extractors and localizers stores.
     """
     added = []
     for proc in _PREGEN_PROCESSORS:
@@ -1279,9 +1279,9 @@ def add_pregen_processors():
         processor_type = proc["processor_type"]
 
         if kind == "extractor":
-            add_favorite_extractor(name, processor_type, media_type, config)
+            add_autorun_extractor(name, processor_type, media_type, config)
         elif kind == "localizer":
-            add_favorite_localizer(name, processor_type, media_type, config)
+            add_autorun_localizer(name, processor_type, media_type, config)
         added.append(name)
 
     return jsonify({"success": True, "added": added})

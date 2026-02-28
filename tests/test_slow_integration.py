@@ -1307,7 +1307,7 @@ class TestLabelImporterDetectorChain:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 5: Save as favorite with autodetect
+        # Step 5: Save as autorun detector
         resp = client.post(
             "/api/autorun-detectors",
             json={
