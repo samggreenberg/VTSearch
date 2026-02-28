@@ -34,7 +34,13 @@
   let dashDemoDatasets = null;       // cached demo dataset list from API
   let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
   let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
-  let _dashboardTrainMode = null;    // {model, dataset} when training via dashboard
+  // Dashboard train mode: null when inactive, or { model: detectorObj } for
+  // the selected detector being trained in labeling mode
+  let _dashboardTrainMode = null;
+  // Tracks when the user is adding a dataset via the dashboard "+" button
+  let _dashboardAddDatasetMode = false;
+  // Local copy of favorite detectors list
+  let favoriteDetectors = [];
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -1041,6 +1047,34 @@
     renderAutopilotSteps();
   }
 
+  // ---- Trainable model label persistence ----
+
+  /**
+   * Fire-and-forget: persist current votes to the trainable model's labelset.
+   * Called after every vote when in dashboard train mode.
+   */
+  function _persistTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const name = _dashboardTrainMode.model.name;
+    fetch(`/api/trainable-models/${encodeURIComponent(name)}/labels`, {
+      method: "POST",
+    }).catch(() => {});
+  }
+
+  /**
+   * Save the current votes to the trainable model's labelset (awaitable).
+   * Called when leaving train mode (e.g. navigating back to dashboard).
+   */
+  async function saveTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const name = _dashboardTrainMode.model.name;
+    try {
+      await fetch(`/api/trainable-models/${encodeURIComponent(name)}/labels`, {
+        method: "POST",
+      });
+    } catch (_) { /* ignore */ }
+  }
+
   // ---- Dataset Management ----
 
   async function checkDatasetStatus() {
@@ -1110,6 +1144,13 @@
     sortBar.style.display = "block";
     datasetBar.style.display = "flex";
     if (headerDashboardBtn) headerDashboardBtn.style.display = "";
+    // Show train context bar when in dashboard train mode
+    if (_dashboardTrainMode && _dashboardTrainMode.model) {
+      if (trainDetectorBar) trainDetectorBar.style.display = "";
+      if (trainDetectorName) trainDetectorName.textContent = _dashboardTrainMode.model.name;
+    } else {
+      if (trainDetectorBar) trainDetectorBar.style.display = "none";
+    }
     if (!selected) {
       center.className = "panel-center empty";
       center.innerHTML = '<p>Select a media from the left panel</p>';
@@ -1120,17 +1161,12 @@
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
   }
 
-  // ---- Dashboard train mode stubs ----
-  // The full dashboard-train-mode implementation was removed during the
-  // dashboard rework.  These stubs keep references in castVote and the
-  // back-button handler from throwing ReferenceError.
-  async function _persistTrainableModelLabels() {}
-  async function saveTrainableModelLabels() { _dashboardTrainMode = null; }
-
   // ---- Dashboard view ----
 
   async function showDashboard() {
     currentView = "dashboard";
+    _dashboardTrainMode = null;
+    stopAutopilot();
     // Hide other views
     datasetWelcome.style.display = "none";
     leftPanel.style.display = "none";
@@ -1292,6 +1328,7 @@
       <thead><tr>
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
+        <th>Examples</th>
         <th data-sort="num_labels" style="text-align:right">#TrainingLabels<span class="sort-arrow"></span></th>
         <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
@@ -1327,9 +1364,14 @@
         tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
         tr.setAttribute("role", "button");
         tr.setAttribute("tabindex", "0");
+        const exArr = det.examples || [];
+        const exSummary = exArr.length === 0
+          ? '<span style="color:var(--text-muted)">none</span>'
+          : escapeHtml(exArr.map(e => e.value).join(", ")).substring(0, 40) + (exArr.map(e => e.value).join(", ").length > 40 ? "\u2026" : "");
         tr.innerHTML = `
           <td class="col-name"><span class="dash-name-text">${escapeHtml(det.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button></td>
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
+          <td class="col-examples"><span class="dash-examples-text">${exSummary}</span><button class="btn-icon dash-edit-examples-btn" title="Edit examples" aria-label="Edit examples">&#9998;</button></td>
           <td class="col-num-labels" style="text-align:right">${numLabels > 0 ? numLabels : '<span style="color:var(--text-muted)">0</span>'}</td>
           <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
           <td class="col-date">${escapeHtml(created)}</td>
@@ -1376,6 +1418,12 @@
             if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
             if (ev.key === "Escape") { input.value = current; input.blur(); }
           });
+        });
+        // Edit examples button
+        const editExBtn = tr.querySelector(".dash-edit-examples-btn");
+        editExBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openExamplesEditorModal(det);
         });
         // Delete model
         const deleteBtn = tr.querySelector(".dash-delete-btn");
@@ -6852,9 +6900,104 @@
     });
   }
 
+  // ---- Examples Editor Modal ----
+
+  let _examplesEditorTarget = null; // The detector object being edited
+
+  function openExamplesEditorModal(det) {
+    _examplesEditorTarget = det;
+    const localExamples = [...(det.examples || [])];
+    if (examplesEditorStatus) examplesEditorStatus.textContent = "";
+
+    function refresh() {
+      renderExamplesGrid(examplesEditorGrid, localExamples, (updated) => {
+        localExamples.length = 0;
+        localExamples.push(...updated);
+        refresh();
+      });
+    }
+    refresh();
+    examplesEditorModal.classList.add("show");
+
+    // Wire Add button (replace handler to avoid stacking)
+    const addHandler = async () => {
+      const type = examplesEditorType.value;
+      const ex = await promptForExample(type);
+      if (ex) {
+        localExamples.push(ex);
+        refresh();
+      }
+    };
+    examplesEditorAdd._handler && examplesEditorAdd.removeEventListener("click", examplesEditorAdd._handler);
+    examplesEditorAdd._handler = addHandler;
+    examplesEditorAdd.addEventListener("click", addHandler);
+
+    // Wire Save button
+    const saveHandler = async () => {
+      if (examplesEditorStatus) {
+        examplesEditorStatus.textContent = "Saving\u2026";
+        examplesEditorStatus.style.color = "var(--text-muted)";
+      }
+      try {
+        const url = `/api/favorite-detectors/${encodeURIComponent(det.name)}/examples`;
+        const res = await fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ examples: localExamples }),
+        });
+        if (res.ok) {
+          det.examples = [...localExamples];
+          if (examplesEditorStatus) {
+            examplesEditorStatus.textContent = "Saved";
+            examplesEditorStatus.style.color = "var(--color-good)";
+          }
+          // Update the autopilot panel if this model is the active train model
+          if (_dashboardTrainMode && _dashboardTrainMode.model && _dashboardTrainMode.model.name === det.name) {
+            _dashboardTrainMode.model.examples = [...localExamples];
+            refreshAutopilotExamples();
+          }
+          setTimeout(() => {
+            examplesEditorModal.classList.remove("show");
+            if (currentView === "dashboard") renderDashboardModels();
+          }, 600);
+        } else {
+          const data = await res.json();
+          if (examplesEditorStatus) {
+            examplesEditorStatus.textContent = data.error || "Save failed";
+            examplesEditorStatus.style.color = "var(--color-bad)";
+          }
+        }
+      } catch (err) {
+        if (examplesEditorStatus) {
+          examplesEditorStatus.textContent = `Error: ${err.message}`;
+          examplesEditorStatus.style.color = "var(--color-bad)";
+        }
+      }
+    };
+    examplesEditorSave._handler && examplesEditorSave.removeEventListener("click", examplesEditorSave._handler);
+    examplesEditorSave._handler = saveHandler;
+    examplesEditorSave.addEventListener("click", saveHandler);
+  }
+
+  if (examplesEditorModalClose) {
+    examplesEditorModalClose.addEventListener("click", () => {
+      examplesEditorModal.classList.remove("show");
+    });
+  }
+
   // Dashboard: Label button
   if (dashLabelBtn) {
     dashLabelBtn.addEventListener("click", async () => {
+      // Activate train mode when a model is selected
+      if (dashSelectedDetector) {
+        const det = (favoriteDetectors || []).find(d => d.name === dashSelectedDetector);
+        if (det) {
+          _dashboardTrainMode = { model: det };
+        }
+      } else {
+        _dashboardTrainMode = null;
+      }
+
       if (datasetLoaded) {
         // Dataset already loaded — go straight to labeling
         showMainUI();
