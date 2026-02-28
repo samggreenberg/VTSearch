@@ -34,6 +34,7 @@
   let dashDemoDatasets = null;       // cached demo dataset list from API
   let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
   let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
+  let _dashboardTrainMode = null;    // {model, dataset} when training via dashboard
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -1118,6 +1119,13 @@
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
   }
+
+  // ---- Dashboard train mode stubs ----
+  // The full dashboard-train-mode implementation was removed during the
+  // dashboard rework.  These stubs keep references in castVote and the
+  // back-button handler from throwing ReferenceError.
+  async function _persistTrainableModelLabels() {}
+  async function saveTrainableModelLabels() { _dashboardTrainMode = null; }
 
   // ---- Dashboard view ----
 
