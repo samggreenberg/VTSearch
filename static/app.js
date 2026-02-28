@@ -1198,6 +1198,13 @@
     // menuLabelsExport and menuDetectorExport stay disabled until votes are loaded (updateSortModeAvailability)
   }
 
+  // ---- Dashboard train mode stubs ----
+  // The full dashboard-train-mode implementation was removed during the
+  // dashboard rework.  These stubs keep references in castVote and the
+  // back-button handler from throwing ReferenceError.
+  async function _persistTrainableModelLabels() {}
+  async function saveTrainableModelLabels() { _dashboardTrainMode = null; }
+
   // ---- Dashboard view ----
 
   async function showDashboard() {
