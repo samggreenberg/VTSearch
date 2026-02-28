@@ -137,6 +137,13 @@ def reset_state():
     _state.autorun_localizers.clear()
     clear_progress_cache()
 
+    # Reset the dataset and model registries
+    from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
+    from vtsearch.models.registry import reset_for_tests as _reset_model_reg
+
+    _reset_ds_reg()
+    _reset_model_reg()
+
 
 @pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
@@ -151,8 +158,21 @@ def isolated_settings(tmp_path, monkeypatch):
     test_settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
     settings_mod.reset()
+
+    # Also redirect dataset and model registries to temp paths
+    from vtsearch.datasets import registry as ds_reg_mod
+    from vtsearch.models import registry as model_reg_mod
+
+    monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
+    monkeypatch.setattr(ds_reg_mod, "SAVED_DATASETS_DIR", tmp_path / "saved_datasets")
+    monkeypatch.setattr(model_reg_mod, "REGISTRY_PATH", tmp_path / "model_registry.json")
+    ds_reg_mod.reset_for_tests()
+    model_reg_mod.reset_for_tests()
+
     yield test_settings_path
     settings_mod.reset()
+    ds_reg_mod.reset_for_tests()
+    model_reg_mod.reset_for_tests()
 
 
 @pytest.fixture

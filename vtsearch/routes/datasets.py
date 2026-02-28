@@ -11,6 +11,18 @@ from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
+from vtsearch.datasets.registry import (
+    SAVED_DATASETS_DIR,
+    find_by_pkl_path as _reg_find_by_pkl,
+    get_loaded_id as _reg_loaded_id,
+    list_datasets as _reg_list_datasets,
+    register_dataset as _reg_register,
+    rename_dataset as _reg_rename,
+    set_loaded_id as _reg_set_loaded,
+    unregister_dataset as _reg_unregister,
+    update_dataset as _reg_update,
+    get_dataset as _reg_get,
+)
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
@@ -116,6 +128,48 @@ def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
             media["origin_name"] = media.get("filename", "")
 
 
+def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: dict | None = None) -> None:
+    """Save the current medias as a pkl and register in the dataset registry.
+
+    Called at the end of every successful dataset load.  Skips if medias is
+    empty or if a registry entry with the same pkl path already exists (to
+    avoid duplicating on reload).
+    """
+    if not medias:
+        return
+    from uuid import uuid4
+
+    first = next(iter(medias.values()))
+    media_type = first.get("type", "audio")
+    num_items = len(medias)
+
+    # Derive name from display-name override, origin, or fallback
+    if not name:
+        name = get_dataset_display_name() or origin_str or "Untitled"
+        if ":" in name:
+            name = name.split(":", 1)[1] or name
+
+    # Save to a pkl file in saved_datasets/
+    SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+    pkl_path = str(SAVED_DATASETS_DIR / f"ds_{uuid4().hex}.pkl")
+    try:
+        data_bytes = export_dataset_to_file(medias)
+        Path(pkl_path).write_bytes(data_bytes)
+        del data_bytes
+    except Exception:
+        return
+
+    entry = _reg_register(
+        name=name,
+        media_type=media_type,
+        num_items=num_items,
+        pkl_path=pkl_path,
+        origin=origin_str,
+        source=source,
+    )
+    _reg_set_loaded(entry["id"])
+
+
 def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
 
@@ -124,10 +178,18 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
             clear_dataset()
             gc.collect()
             importer.run(field_values, medias)
-            _set_clip_origins(medias, importer.build_origin(field_values))
+            origin = importer.build_origin(field_values)
+            _set_clip_origins(medias, origin)
             collapse_duplicates(medias)
             _load_embedder_for_clips()
             build_diversity_tree()
+            # Auto-register in the dataset registry
+            origin_str = _origin_to_str(origin)
+            _auto_register_dataset(
+                name=importer.display_name,
+                origin_str=origin_str,
+                source=origin,
+            )
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -141,6 +203,23 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
+
+
+def _origin_to_str(origin: dict | None) -> str:
+    """Convert an origin dict to a human-readable string."""
+    if not origin:
+        return "unknown"
+    importer = origin.get("importer", "")
+    params = origin.get("params", {})
+    if importer == "demo":
+        return f"demo:{params.get('name', '')}"
+    elif importer == "pickle":
+        return f"file:{params.get('filename', '')}"
+    elif importer == "folder":
+        return f"folder:{params.get('path', '')}"
+    elif importer:
+        return importer
+    return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +731,12 @@ def load_demo_dataset_route():
             collapse_duplicates(medias)
             _load_embedder_for_clips()
             build_diversity_tree()
+            # Auto-register in the dataset registry
+            _auto_register_dataset(
+                name=dataset_name,
+                origin_str=f"demo:{dataset_name}",
+                source=demo_origin,
+            )
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -751,6 +836,7 @@ def export_dataset():
 def clear_dataset_route():
     """Clear the current dataset."""
     clear_dataset()
+    _reg_set_loaded(None)
     return jsonify({"ok": True})
 
 
@@ -828,6 +914,101 @@ def dashboard_dataset_rename():
     return jsonify({"success": True, "name": new_name})
 
 
+# ---------------------------------------------------------------------------
+# Dataset registry endpoints
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/datasets/registry")
+def list_registered_datasets():
+    """Return all registered datasets with their loaded state."""
+    entries = _reg_list_datasets()
+    loaded_id = _reg_loaded_id()
+    for entry in entries:
+        entry["loaded"] = entry["id"] == loaded_id
+    return jsonify({"datasets": entries})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
+def load_registered_dataset(dataset_id: str):
+    """Load a registered dataset from its saved pkl file."""
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        return jsonify({"error": "Dataset not found in registry"}), 404
+
+    pkl_path = entry.get("pkl_path", "")
+    if not pkl_path or not Path(pkl_path).is_file():
+        return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
+
+    importer = get_importer("pickle")
+    if importer is None:
+        return jsonify({"error": "pickle importer not available"}), 500
+
+    def load_task():
+        try:
+            clear_dataset()
+            _reg_set_loaded(None)
+            gc.collect()
+            importer.run({"pkl_path": pkl_path}, medias)
+            collapse_duplicates(medias)
+            _load_embedder_for_clips()
+            build_diversity_tree()
+            _reg_set_loaded(dataset_id)
+            # Update item count in case it changed
+            _reg_update(dataset_id, num_items=len(medias))
+            set_dataset_display_name(entry.get("name", ""))
+        except MemoryError:
+            medias.clear()
+            gc.collect()
+            update_progress("idle", "", 0, 0, "Out of memory — dataset too large.")
+        except Exception as e:
+            update_progress("idle", "", 0, 0, str(e))
+
+    thread = threading.Thread(target=load_task, daemon=True)
+    thread.start()
+    return jsonify({"ok": True, "message": "Loading started"})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
+def unload_registered_dataset(dataset_id: str):
+    """Unload the currently loaded dataset (clear from memory)."""
+    loaded = _reg_loaded_id()
+    if loaded != dataset_id:
+        return jsonify({"error": "This dataset is not currently loaded"}), 400
+    clear_dataset()
+    _reg_set_loaded(None)
+    return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
+def delete_registered_dataset(dataset_id: str):
+    """Remove a dataset from the registry and delete its pkl file."""
+    loaded = _reg_loaded_id()
+    if loaded == dataset_id:
+        clear_dataset()
+        _reg_set_loaded(None)
+    ok = _reg_unregister(dataset_id)
+    if not ok:
+        return jsonify({"error": "Dataset not found"}), 404
+    return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
+def rename_registered_dataset(dataset_id: str):
+    """Rename a registered dataset."""
+    data = request.get_json(force=True, silent=True) or {}
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return jsonify({"error": "name is required"}), 400
+    ok = _reg_rename(dataset_id, new_name)
+    if not ok:
+        return jsonify({"error": "Dataset not found"}), 404
+    # Also update display name if this is the loaded dataset
+    if _reg_loaded_id() == dataset_id:
+        set_dataset_display_name(new_name)
+    return jsonify({"ok": True, "name": new_name})
+
+
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
 def load_dataset_from_source():
     """Reload a dataset from a stored source origin dict.
@@ -869,10 +1050,16 @@ def _load_from_origin(source: dict):
                 clear_dataset()
                 gc.collect()
                 load_demo_dataset(demo_name, medias)
-                _set_clip_origins(medias, {"importer": "demo", "params": {"name": demo_name}})
+                demo_origin = {"importer": "demo", "params": {"name": demo_name}}
+                _set_clip_origins(medias, demo_origin)
                 collapse_duplicates(medias)
                 _load_embedder_for_clips()
                 build_diversity_tree()
+                _auto_register_dataset(
+                    name=demo_name,
+                    origin_str=f"demo:{demo_name}",
+                    source=demo_origin,
+                )
             except MemoryError:
                 medias.clear()
                 gc.collect()

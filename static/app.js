@@ -31,6 +31,11 @@
   // Dashboard state
   let dashSelectedDataset = null;    // { name, label, ... } from demo list, or null
   let dashSelectedDetector = null;   // detector name string, or null
+  // Registry-based multi-select state
+  let dashSelectedDatasetIds = [];   // array of registry dataset IDs (for multi-select)
+  let dashSelectedModelIds = [];     // array of registry model IDs (for multi-select)
+  let dashRegisteredDatasets = [];   // cached from /api/datasets/registry
+  let dashRegisteredModels = [];     // cached from /api/models/registry
   let dashDemoDatasets = null;       // cached demo dataset list from API
   let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
   let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
@@ -1203,46 +1208,291 @@
   }
 
   function updateDashboardButtons() {
-    const hasDataset = datasetLoaded || dashSelectedDataset;
-    if (dashLabelBtn) dashLabelBtn.disabled = !hasDataset;
-    if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
+    // --- Label button validation ---
+    // Requires: exactly one dataset selected, exactly one model selected,
+    // MediaTypes match, model is trainable
+    if (dashLabelBtn) {
+      const selDs = dashRegisteredDatasets.filter(d => dashSelectedDatasetIds.includes(d.id));
+      const selMs = dashRegisteredModels.filter(m => dashSelectedModelIds.includes(m.id));
+      let labelDisabled = false;
+      let labelHint = "";
+
+      if (selDs.length === 0 && !dashSelectedDataset) {
+        labelDisabled = true;
+        labelHint = "No dataset selected";
+      } else if (selDs.length > 1) {
+        labelDisabled = true;
+        labelHint = "Select exactly one dataset";
+      } else if (selMs.length === 0) {
+        labelDisabled = true;
+        labelHint = "No model selected";
+      } else if (selMs.length > 1) {
+        labelDisabled = true;
+        labelHint = "Select exactly one model";
+      } else if (selDs.length === 1 && selMs.length === 1) {
+        const dsType = selDs[0].media_type;
+        const mType = selMs[0].media_type;
+        if (mType !== "any" && dsType !== mType) {
+          labelDisabled = true;
+          labelHint = "Dataset and Model types don't match";
+        } else if (!selMs[0].trainable) {
+          labelDisabled = true;
+          labelHint = "Model is not trainable";
+        }
+      }
+
+      dashLabelBtn.disabled = labelDisabled;
+      // Show/hide hint text
+      let hintEl = dashLabelBtn.parentElement.querySelector(".dash-btn-hint-label");
+      if (!hintEl) {
+        hintEl = document.createElement("span");
+        hintEl.className = "dash-btn-hint dash-btn-hint-label";
+        dashLabelBtn.parentElement.insertBefore(hintEl, dashLabelBtn.nextSibling);
+      }
+      hintEl.textContent = labelHint;
+    }
+
+    // --- Find button validation ---
+    // Requires: >= 1 dataset selected, >= 1 model selected, all same MediaType
+    if (dashDetectBtn) {
+      const selDs = dashRegisteredDatasets.filter(d => dashSelectedDatasetIds.includes(d.id));
+      const selMs = dashRegisteredModels.filter(m => dashSelectedModelIds.includes(m.id));
+      let findDisabled = false;
+      let findHint = "";
+
+      if (selDs.length === 0 && !dashSelectedDataset) {
+        findDisabled = true;
+        findHint = "Must select at least one dataset";
+      } else if (selMs.length === 0) {
+        findDisabled = true;
+        findHint = "Must select at least one model";
+      } else if (selDs.length >= 1 && selMs.length >= 1) {
+        const allTypes = new Set([
+          ...selDs.map(d => d.media_type),
+          ...selMs.filter(m => m.media_type !== "any").map(m => m.media_type),
+        ]);
+        if (allTypes.size > 1) {
+          findDisabled = true;
+          findHint = "All selections must have the same media type";
+        }
+      }
+
+      dashDetectBtn.disabled = findDisabled;
+      let hintEl = dashDetectBtn.parentElement.querySelector(".dash-btn-hint-find");
+      if (!hintEl) {
+        hintEl = document.createElement("span");
+        hintEl.className = "dash-btn-hint dash-btn-hint-find";
+        dashDetectBtn.parentElement.insertBefore(hintEl, dashDetectBtn.nextSibling);
+      }
+      hintEl.textContent = findHint;
+    }
   }
 
   async function renderDashboardDatasets() {
     if (!dashDatasetGrid) return;
 
-    if (datasetLoaded) {
-      // Fetch dataset info and display it in the grid
-      try {
-        const res = await fetch("/api/dashboard/dataset-info");
-        const info = await res.json();
-        const mtInfo = mediaTypesMap[info.media_type];
-        const icon = mtInfo ? mtInfo.icon : "";
-        const typeName = mtInfo ? mtInfo.name : info.media_type || "media";
-        const dupeSuffix = info.num_dupes ? ` (${info.num_dupes} dupes)` : "";
-        dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
-          <thead><tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Items</th>
-            <th>Origin</th>
-            <th class="col-actions-header"></th>
-          </tr></thead>
-          <tbody></tbody></table>`;
+    // Fetch the full dataset registry
+    try {
+      const res = await fetch("/api/datasets/registry");
+      const data = await res.json();
+      dashRegisteredDatasets = data.datasets || [];
+    } catch (_) {
+      dashRegisteredDatasets = [];
+    }
+
+    if (dashRegisteredDatasets.length === 0) {
+      dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No datasets yet. Use "+" to load one.</p>';
+      return;
+    }
+
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
+
+    dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
+      <thead><tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Items</th>
+        <th>Loaded</th>
+        <th class="col-actions-header"></th>
+      </tr></thead>
+      <tbody></tbody></table>`;
+
+    const tbody = dashDatasetGrid.querySelector("tbody");
+
+    dashRegisteredDatasets.forEach(ds => {
+      const icon = mediaIcons[ds.media_type] || "";
+      const typeName = mediaTypesMap[ds.media_type] ? mediaTypesMap[ds.media_type].name : ds.media_type || "media";
+      const isSelected = dashSelectedDatasetIds.includes(ds.id);
+      const isLoaded = !!ds.loaded;
+      const tr = document.createElement("tr");
+      tr.className = "dash-dataset-row" + (isSelected ? " dash-selected" : "");
+      tr.setAttribute("role", "button");
+      tr.setAttribute("tabindex", "0");
+
+      const nameTd = document.createElement("td");
+      nameTd.className = "col-name";
+      nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+      tr.appendChild(nameTd);
+      tr.insertAdjacentHTML("beforeend", `
+        <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
+        <td class="col-count">${ds.num_items || 0}</td>
+        <td class="col-loaded">${isLoaded ? '<span style="color:var(--good-color)">✓</span>' : ''}</td>
+        <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+      `);
+
+      // Inline rename
+      const renameBtn = tr.querySelector(".dash-rename-btn");
+      renameBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nameSpan = nameTd.querySelector(".dash-name-text");
+        const current = nameSpan.textContent;
+        nameSpan.style.display = "none";
+        renameBtn.style.display = "none";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "dash-rename-input";
+        input.value = current;
+        nameTd.insertBefore(input, nameSpan);
+        input.focus();
+        input.select();
+        const commit = async () => {
+          const newName = input.value.trim();
+          if (newName && newName !== current) {
+            try {
+              await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}/rename`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: newName }),
+              });
+              ds.name = newName;
+              nameSpan.textContent = newName;
+            } catch (_) {}
+          }
+          input.remove();
+          nameSpan.style.display = "";
+          renameBtn.style.display = "";
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+          if (ev.key === "Escape") { input.value = current; input.blur(); }
+        });
+      });
+
+      // Delete dataset
+      const deleteBtn = tr.querySelector(".dash-delete-btn");
+      deleteBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!(await vtConfirm("Remove this dataset? Its saved file will be deleted."))) return;
+        try {
+          await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}`, { method: "DELETE" });
+          dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
+          if (ds.loaded) datasetLoaded = false;
+          await renderDashboardDatasets();
+          updateDashboardButtons();
+        } catch (_) {}
+      });
+
+      // Multi-select click (toggle)
+      tr.addEventListener("click", (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          // Toggle individual selection
+          if (dashSelectedDatasetIds.includes(ds.id)) {
+            dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
+          } else {
+            dashSelectedDatasetIds.push(ds.id);
+          }
+        } else {
+          // Single-click replaces selection
+          if (dashSelectedDatasetIds.length === 1 && dashSelectedDatasetIds[0] === ds.id) {
+            dashSelectedDatasetIds = [];
+          } else {
+            dashSelectedDatasetIds = [ds.id];
+          }
+        }
+        renderDashboardDatasets();
+        updateDashboardButtons();
+      });
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function renderDashboardModels() {
+    if (!dashModelGrid) return;
+
+    // Fetch the full model registry
+    try {
+      const res = await fetch("/api/models/registry");
+      const data = await res.json();
+      dashRegisteredModels = data.models || [];
+    } catch (_) {
+      dashRegisteredModels = [];
+    }
+
+    // Also fetch autorun detectors for backward compat
+    try {
+      const res = await fetch("/api/autorun-detectors");
+      const data = await res.json();
+      autorunDetectors = data.detectors || [];
+    } catch (_) {}
+
+    if (dashRegisteredModels.length === 0) {
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No models yet. Use "+" to create one.</p>';
+      return;
+    }
+
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
+
+    dashModelGrid.innerHTML = `<table class="dash-model-table">
+      <thead><tr>
+        <th data-sort="name">Name<span class="sort-arrow"></span></th>
+        <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
+        <th data-sort="num_training" style="text-align:right"># Training<span class="sort-arrow"></span></th>
+        <th>Loaded</th>
+        <th class="col-actions-header"></th>
+      </tr></thead><tbody></tbody></table>`;
+
+    const table = dashModelGrid.querySelector(".dash-model-table");
+    let modelSort = { key: "name", asc: true };
+
+    function renderModelRows() {
+      const sorted = [...dashRegisteredModels].sort((a, b) => {
+        let va = a[modelSort.key], vb = b[modelSort.key];
+        if (modelSort.key === "num_training" || modelSort.key === "created_at") {
+          return modelSort.asc ? ((va || 0) - (vb || 0)) : ((vb || 0) - (va || 0));
+        }
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(m => {
+        const icon = mediaIcons[m.media_type] || "";
+        const isSelected = dashSelectedModelIds.includes(m.id);
+        const isLoaded = !!m.loaded;
+        const trainingText = m.trainable ? String(m.num_training || 0) : "-";
         const tr = document.createElement("tr");
-        tr.className = "dash-dataset-row dash-selected";
+        tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+
         const nameTd = document.createElement("td");
         nameTd.className = "col-name";
-        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(info.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button>`;
         tr.appendChild(nameTd);
         tr.insertAdjacentHTML("beforeend", `
-          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
-          <td class="col-count">${info.num_medias}${escapeHtml(dupeSuffix)}</td>
-          <td class="col-origin">${escapeHtml(info.origin)}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(m.media_type)}</td>
+          <td class="col-num-training" style="text-align:right">${escapeHtml(trainingText)}</td>
+          <td class="col-loaded">${isLoaded ? '<span style="color:var(--good-color)">✓</span>' : ''}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
 
-        // Inline rename for dataset
+        // Inline rename
         const renameBtn = tr.querySelector(".dash-rename-btn");
         renameBtn.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1261,11 +1511,12 @@
             const newName = input.value.trim();
             if (newName && newName !== current) {
               try {
-                await fetch("/api/dashboard/dataset-rename", {
+                await fetch(`/api/models/registry/${encodeURIComponent(m.id)}/rename`, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name: newName }),
                 });
+                m.name = newName;
                 nameSpan.textContent = newName;
               } catch (_) {}
             }
@@ -1280,203 +1531,45 @@
           });
         });
 
-        // Delete dataset
-        const deleteBtn = tr.querySelector(".dash-delete-btn");
-        deleteBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!(await vtConfirm("Remove this dataset? All votes and labels will be cleared."))) return;
-          try {
-            await fetch("/api/dataset/clear", { method: "POST" });
-            datasetLoaded = false;
-            dashDatasetStatus.style.display = "none";
-            await renderDashboardDatasets();
-            updateDashboardButtons();
-          } catch (_) {}
-        });
-
-        dashDatasetGrid.querySelector("tbody").appendChild(tr);
-      } catch (_) {
-        dashDatasetGrid.innerHTML = "";
-      }
-      return;
-    }
-
-    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "+" to load one.</p>';
-  }
-
-  async function renderDashboardModels() {
-    if (!dashModelGrid) return;
-
-    // Fetch fresh autorun detectors
-    try {
-      const res = await fetch("/api/autorun-detectors");
-      const data = await res.json();
-      autorunDetectors = data.detectors || [];
-    } catch (_) {}
-
-    if (autorunDetectors.length === 0) {
-      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
-      return;
-    }
-
-    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
-
-    let html = `<table class="dash-model-table">
-      <thead><tr>
-        <th data-sort="name">Name<span class="sort-arrow"></span></th>
-        <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
-        <th>Examples</th>
-        <th data-sort="num_labels" style="text-align:right">#TrainingLabels<span class="sort-arrow"></span></th>
-        <th data-sort="autodetect" style="text-align:center">Fav<span class="sort-arrow"></span></th>
-        <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
-        <th class="col-actions-header"></th>
-      </tr></thead><tbody></tbody></table>`;
-    dashModelGrid.innerHTML = html;
-
-    const table = dashModelGrid.querySelector(".dash-model-table");
-    let modelSort = { key: "name", asc: true };
-
-    function renderModelRows() {
-      const sorted = [...autorunDetectors].sort((a, b) => {
-        let va = a[modelSort.key], vb = b[modelSort.key];
-        if (modelSort.key === "num_labels") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
-        if (modelSort.key === "created_at") return modelSort.asc ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
-        if (modelSort.key === "autodetect") {
-          va = va ? 1 : 0; vb = vb ? 1 : 0;
-          return modelSort.asc ? va - vb : vb - va;
-        }
-        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
-        return modelSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
-      });
-
-      const tbody = table.querySelector("tbody");
-      tbody.innerHTML = "";
-      sorted.forEach(det => {
-        const icon = mediaIcons[det.media_type] || "\uD83D\uDD0D";
-        const created = det.created_at ? new Date(det.created_at * 1000).toLocaleDateString() : "";
-        const isSelected = dashSelectedDetector === det.name;
-        const isFav = det.autodetect;
-        const numLabels = det.num_labels || 0;
-        const tr = document.createElement("tr");
-        tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
-        tr.setAttribute("role", "button");
-        tr.setAttribute("tabindex", "0");
-        const exArr = det.examples || [];
-        const exSummary = exArr.length === 0
-          ? '<span style="color:var(--text-muted)">none</span>'
-          : escapeHtml(exArr.map(e => e.value).join(", ")).substring(0, 40) + (exArr.map(e => e.value).join(", ").length > 40 ? "\u2026" : "");
-        tr.innerHTML = `
-          <td class="col-name"><span class="dash-name-text">${escapeHtml(det.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button></td>
-          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(det.media_type)}</td>
-          <td class="col-examples"><span class="dash-examples-text">${exSummary}</span><button class="btn-icon dash-edit-examples-btn" title="Edit examples" aria-label="Edit examples">&#9998;</button></td>
-          <td class="col-num-labels" style="text-align:right">${numLabels > 0 ? numLabels : '<span style="color:var(--text-muted)">0</span>'}</td>
-          <td class="col-fav" style="text-align:center"><input type="checkbox" class="fav-checkbox" ${isFav ? "checked" : ""} aria-label="Favorite"></td>
-          <td class="col-date">${escapeHtml(created)}</td>
-          <td class="col-actions"><button class="btn-icon dash-export-btn" title="Export model" aria-label="Export model">&#128230;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
-        `;
-        // Inline rename for model
-        const renameBtn = tr.querySelector(".dash-rename-btn");
-        renameBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const nameTd = tr.querySelector(".col-name");
-          const nameSpan = nameTd.querySelector(".dash-name-text");
-          const current = nameSpan.textContent;
-          nameSpan.style.display = "none";
-          renameBtn.style.display = "none";
-          const input = document.createElement("input");
-          input.type = "text";
-          input.className = "dash-rename-input";
-          input.value = current;
-          nameTd.insertBefore(input, nameSpan);
-          input.focus();
-          input.select();
-          const commit = async () => {
-            const newName = input.value.trim();
-            if (newName && newName !== current) {
-              try {
-                const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(current)}/rename`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ new_name: newName }),
-                });
-                if (res.ok) {
-                  det.name = newName;
-                  if (dashSelectedDetector === current) dashSelectedDetector = newName;
-                  nameSpan.textContent = newName;
-                }
-              } catch (_) {}
-            }
-            input.remove();
-            nameSpan.style.display = "";
-            renameBtn.style.display = "";
-          };
-          input.addEventListener("blur", commit);
-          input.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-            if (ev.key === "Escape") { input.value = current; input.blur(); }
-          });
-        });
-        // Edit examples button
-        const editExBtn = tr.querySelector(".dash-edit-examples-btn");
-        editExBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          openExamplesEditorModal(det);
-        });
-        // Export model
-        const exportBtn = tr.querySelector(".dash-export-btn");
-        exportBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!det.weights) {
-            await vtAlert("This model has no trained weights to export. Label some data first.");
-            return;
-          }
-          await openDetectorExportModal(det.name);
-        });
         // Delete model
         const deleteBtn = tr.querySelector(".dash-delete-btn");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          if (!(await vtConfirm(`Delete model "${det.name}"? This cannot be undone.`))) return;
+          if (!(await vtConfirm(`Delete model "${m.name}"? This cannot be undone.`))) return;
           try {
-            const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(det.name)}`, { method: "DELETE" });
-            if (res.ok) {
-              autorunDetectors = autorunDetectors.filter(d => d.name !== det.name);
-              if (dashSelectedDetector === det.name) dashSelectedDetector = null;
-              renderModelRows();
-              updateDashboardButtons();
-              if (autorunDetectors.length === 0) {
-                dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "+" to create one.</p>';
-              }
-            }
+            await fetch(`/api/models/registry/${encodeURIComponent(m.id)}`, { method: "DELETE" });
+            dashSelectedModelIds = dashSelectedModelIds.filter(id => id !== m.id);
+            await renderDashboardModels();
+            updateDashboardButtons();
           } catch (_) {}
         });
-        // Favorite checkbox toggle
-        const checkbox = tr.querySelector(".fav-checkbox");
-        checkbox.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const newVal = checkbox.checked;
-          try {
-            await fetch(`/api/autorun-detectors/${encodeURIComponent(det.name)}/autodetect`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ autodetect: newVal }),
-            });
-            det.autodetect = newVal;
-          } catch (_) {
-            checkbox.checked = !newVal; // revert on failure
+
+        // Multi-select click (toggle)
+        tr.addEventListener("click", (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            if (dashSelectedModelIds.includes(m.id)) {
+              dashSelectedModelIds = dashSelectedModelIds.filter(id => id !== m.id);
+            } else {
+              dashSelectedModelIds.push(m.id);
+            }
+          } else {
+            if (dashSelectedModelIds.length === 1 && dashSelectedModelIds[0] === m.id) {
+              dashSelectedModelIds = [];
+            } else {
+              dashSelectedModelIds = [m.id];
+            }
           }
-        });
-        tr.addEventListener("click", () => {
-          dashSelectedDetector = det.name;
           renderModelRows();
           updateDashboardButtons();
         });
         tr.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
         });
+
         tbody.appendChild(tr);
       });
 
+      // Sort arrows
       table.querySelectorAll("th[data-sort]").forEach(th => {
         const arrow = th.querySelector(".sort-arrow");
         if (th.dataset.sort === modelSort.key) {
@@ -2974,6 +3067,74 @@
     if (exportersList.length === 0) loadExportersList();
 
     // Show modal
+    autodetectModal.classList.add("show");
+  }
+
+  function displayFindResults(data) {
+    // Display multi-dataset, multi-model Find results
+    const results = data.results || [];
+    const modelNames = data.models || [];
+    const datasetNames = data.datasets || [];
+    const multiDs = data.multiple_datasets;
+    const multiMs = data.multiple_models;
+
+    // Summary
+    autodetectSummary.innerHTML = `
+      <p style="color: var(--text-primary);">
+        <strong>Datasets:</strong> ${datasetNames.join(", ")} &nbsp;|&nbsp;
+        <strong>Models:</strong> ${modelNames.join(", ")} &nbsp;|&nbsp;
+        <strong>Good Results:</strong> ${results.length}
+      </p>
+    `;
+
+    if (results.length === 0) {
+      autodetectResults.innerHTML = '<p style="color: var(--text-muted);">No positive hits found.</p>';
+    } else {
+      let tableHtml = `<table class="results-table"><thead><tr>`;
+      if (multiDs) tableHtml += `<th>Dataset</th>`;
+      tableHtml += `<th>Name</th>`;
+      tableHtml += `<th>MD5</th>`;
+      if (multiMs) {
+        for (const mn of modelNames) {
+          tableHtml += `<th>${escapeHtml(mn)}</th>`;
+        }
+      }
+      tableHtml += `</tr></thead><tbody>`;
+      for (const hit of results) {
+        const name = escapeHtml(hit.origin_name || hit.filename || "");
+        const md5 = escapeHtml(hit.md5 || "");
+        tableHtml += `<tr>`;
+        if (multiDs) tableHtml += `<td class="col-secondary">${escapeHtml(hit.dataset_name || "")}</td>`;
+        tableHtml += `<td>${name}</td>`;
+        tableHtml += `<td class="col-muted">${md5}</td>`;
+        if (multiMs) {
+          for (const mn of modelNames) {
+            const v = (hit.model_verdicts || {})[mn];
+            if (v) {
+              const cls = v.verdict === "Good" ? "style=\"color:var(--good-color)\"" : "";
+              tableHtml += `<td ${cls}>${escapeHtml(v.verdict)}</td>`;
+            } else {
+              tableHtml += `<td>-</td>`;
+            }
+          }
+        }
+        tableHtml += `</tr>`;
+      }
+      tableHtml += `</tbody></table>`;
+      autodetectResults.innerHTML = tableHtml;
+    }
+
+    // Store for copying
+    window.autodetectResultsData = data;
+    window.autodetectAllHits = results;
+
+    // Reset export controls
+    const goodRadio = document.querySelector('input[name="export-sides"][value="good"]');
+    if (goodRadio) goodRadio.checked = true;
+    if (fillFromSortCheckbox) fillFromSortCheckbox.checked = false;
+    if (fillFromSortInfo) fillFromSortInfo.textContent = "";
+    setExportStatus("", "var(--text-muted)");
+    if (exportersList.length === 0) loadExportersList();
     autodetectModal.classList.add("show");
   }
 
@@ -6916,26 +7077,45 @@
   // Dashboard: Label button
   if (dashLabelBtn) {
     dashLabelBtn.addEventListener("click", async () => {
-      // Activate train mode when a model is selected
-      if (dashSelectedDetector) {
-        const det = (favoriteDetectors || []).find(d => d.name === dashSelectedDetector);
-        if (det) {
-          _dashboardTrainMode = { model: det };
-        }
+      // Get the selected model from registry
+      const selMs = dashRegisteredModels.filter(m => dashSelectedModelIds.includes(m.id));
+      if (selMs.length === 1 && selMs[0].trainable) {
+        // Build a model object compatible with _dashboardTrainMode
+        const regModel = selMs[0];
+        _dashboardTrainMode = {
+          model: {
+            name: regModel.trainable_model_name || regModel.name,
+            text_query: regModel.text_query || "",
+            trainable: true,
+          },
+        };
       } else {
         _dashboardTrainMode = null;
       }
 
-      if (datasetLoaded) {
-        // Dataset already loaded — go straight to labeling
-        showMainUI();
-        if (medias.length > 0 && !selected) {
-          selectMedia(medias[0].id);
+      // Get the selected dataset from registry
+      const selDs = dashRegisteredDatasets.filter(d => dashSelectedDatasetIds.includes(d.id));
+
+      if (selDs.length === 1) {
+        if (selDs[0].loaded) {
+          // Already loaded — go straight to labeling
+          showMainUI();
+          if (medias.length > 0 && !selected) {
+            selectMedia(medias[0].id);
+          }
+        } else {
+          // Load from registry, then go to labeling
+          showDashGridProgress("Loading dataset...");
+          try {
+            await fetch(`/api/datasets/registry/${encodeURIComponent(selDs[0].id)}/load`, { method: "POST" });
+          } catch (_) {}
+          pollProgress();
         }
         return;
       }
+
+      // Fallback to old behavior for demo dataset selection
       if (dashSelectedDataset) {
-        // Need to load the selected demo dataset first, then go to labeling
         dashLoadSelectedDataset(() => {
           showMainUI();
           if (medias.length > 0 && !selected) {
@@ -6946,30 +7126,71 @@
     });
   }
 
-  // Dashboard: Detect button
+  // Dashboard: Find button
   if (dashDetectBtn) {
     dashDetectBtn.addEventListener("click", async () => {
-      async function runDetect() {
+      const selDs = dashRegisteredDatasets.filter(d => dashSelectedDatasetIds.includes(d.id));
+      const selMs = dashRegisteredModels.filter(m => dashSelectedModelIds.includes(m.id));
+
+      if (selDs.length === 0 && selMs.length === 0) {
+        // Fallback to old single-detector behavior
         if (!dashSelectedDetector) {
-          await vtAlert("Select a detector from the Model grid first.", "warning");
+          await vtAlert("Select a model from the Model grid first.", "warning");
           return;
         }
-        // Run auto-detect
-        autodetectProgressModal.classList.add("show");
-        autodetectProgressText.textContent = "Running auto-detect...";
-        autodetectProgressBar.style.width = "0%";
+        async function runDetectLegacy() {
+          autodetectProgressModal.classList.add("show");
+          autodetectProgressText.textContent = "Running Find...";
+          autodetectProgressBar.style.width = "0%";
+          let progress = 0;
+          const progressInterval = setInterval(() => {
+            progress += 5;
+            if (progress > 90) progress = 90;
+            autodetectProgressBar.style.width = `${progress}%`;
+          }, 200);
+          const res = await fetch("/api/auto-detect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ detector_name: dashSelectedDetector }),
+          });
+          clearInterval(progressInterval);
+          autodetectProgressBar.style.width = "100%";
+          setTimeout(async () => {
+            autodetectProgressModal.classList.remove("show");
+            if (!res.ok) {
+              await vtAlert("Find failed.", "error");
+              return;
+            }
+            res.json().then(data => displayAutodetectResults(data));
+          }, 500);
+        }
+        if (datasetLoaded) {
+          await runDetectLegacy();
+        } else if (dashSelectedDataset) {
+          dashLoadSelectedDataset(() => runDetectLegacy());
+        }
+        return;
+      }
 
-        let progress = 0;
-        const progressInterval = setInterval(() => {
-          progress += 5;
-          if (progress > 90) progress = 90;
-          autodetectProgressBar.style.width = `${progress}%`;
-        }, 200);
+      // Multi-dataset, multi-model Find via /api/find
+      autodetectProgressModal.classList.add("show");
+      autodetectProgressText.textContent = "Running Find across datasets and models...";
+      autodetectProgressBar.style.width = "0%";
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 3;
+        if (progress > 90) progress = 90;
+        autodetectProgressBar.style.width = `${progress}%`;
+      }, 300);
 
-        const res = await fetch("/api/auto-detect", {
+      try {
+        const res = await fetch("/api/find", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ detector_name: dashSelectedDetector }),
+          body: JSON.stringify({
+            dataset_ids: selDs.map(d => d.id),
+            model_ids: selMs.map(m => m.id),
+          }),
         });
 
         clearInterval(progressInterval);
@@ -6978,17 +7199,17 @@
         setTimeout(async () => {
           autodetectProgressModal.classList.remove("show");
           if (!res.ok) {
-            await vtAlert("Auto-detect failed. Make sure you have saved a detector for this media type.", "error");
+            const err = await res.json().catch(() => ({}));
+            await vtAlert(err.error || "Find failed.", "error");
             return;
           }
-          res.json().then(data => displayAutodetectResults(data));
+          const data = await res.json();
+          displayFindResults(data);
         }, 500);
-      }
-
-      if (datasetLoaded) {
-        await runDetect();
-      } else if (dashSelectedDataset) {
-        dashLoadSelectedDataset(() => runDetect());
+      } catch (e) {
+        clearInterval(progressInterval);
+        autodetectProgressModal.classList.remove("show");
+        await vtAlert("Find failed: " + e.message, "error");
       }
     });
   }
