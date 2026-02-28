@@ -31,11 +31,6 @@
         <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
         <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
       </div>
-      <div class="burger-section" role="group" aria-label="Autodetect">
-        <div class="burger-section-title" id="menu-section-favorites">Autodetect</div>
-        <div class="burger-item" id="menu-favorites-manage" role="menuitem" tabindex="-1">Manage Favorites</div>
-        <div class="burger-status" id="menu-favorites-status" aria-live="polite"></div>
-      </div>
       <div class="burger-section">
         <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
       </div>
@@ -187,6 +182,7 @@
               <th data-col="text_examples">Text Examples<span class="sort-arrow"></span></th>
               <th data-col="media_examples">Media Examples<span class="sort-arrow"></span></th>
               <th data-col="origin">Origin<span class="sort-arrow"></span></th>
+              <th data-col="autodetect">Autodetect<span class="sort-arrow"></span></th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
@@ -300,38 +296,6 @@
     </div>
   </div>
 </div>
-
-<!-- Favorite Detectors Management Modal -->
-<div id="favorites-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
-  <div class="modal-content" style="max-width: 700px;">
-    <div class="modal-header">
-      <h2 id="favorites-modal-title">Manage Favorite Detectors</h2>
-      <button class="modal-close" id="favorites-modal-close" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-body">
-      <!-- Add Detector Section -->
-      <div class="modal-section">
-        <div class="section-title-sm">Add Detector</div>
-        <div style="margin-bottom: 10px;">
-          <label class="form-label" style="font-size: 0.75rem; color: var(--text-muted);">Name (optional — defaults to filename)</label>
-          <input type="text" id="fav-add-name" placeholder="e.g. Dog Barks" class="form-input" style="background: var(--bg-surface);">
-        </div>
-        <div class="fav-btn-row">
-          <button id="fav-add-from-votes-btn" class="fav-import-btn" style="background: var(--accent); color: #fff; border-color: var(--accent);">From Current Labels</button>
-          <button id="fav-pregen-btn" class="fav-import-btn">Pregen Processors</button>
-        </div>
-        <div id="fav-importer-buttons" style="margin-top: 4px;"></div>
-        <div id="fav-add-status" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; min-height: 1.2em;"></div>
-      </div>
-      <!-- Saved Detectors List -->
-      <div class="section-title-sm tight">Saved Detectors</div>
-      <div id="favorites-list">
-        <p style="color: var(--text-muted);">No favorite detectors saved yet.</p>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Hidden file inputs for favorites modal (created dynamically by app.js) -->
 
 <!-- Auto-Detect Results Modal -->
 <div id="autodetect-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="autodetect-modal-title">

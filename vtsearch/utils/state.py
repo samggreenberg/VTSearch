@@ -274,7 +274,14 @@ def get_textsort_suggestions() -> list[str]:
         return list(textsort_suggestions)
 
 
-def add_favorite_detector(name: str, media_type: str, weights: dict[str, Any], threshold: float) -> None:
+def add_favorite_detector(
+    name: str,
+    media_type: str,
+    weights: dict[str, Any],
+    threshold: float,
+    *,
+    autodetect: bool = True,
+) -> None:
     """Add or overwrite a named favorite detector in the global store.
 
     If a detector with the same ``name`` already exists it is replaced.
@@ -287,6 +294,8 @@ def add_favorite_detector(name: str, media_type: str, weights: dict[str, Any], t
             lists of float values, representing the serialised MLP state dict.
         threshold: Decision boundary score in ``[0, 1]``. Clips scoring at or
             above this value are classified as positive.
+        autodetect: Whether this detector should be included when running
+            autodetect.  Defaults to ``True``.
     """
     import time
 
@@ -297,6 +306,7 @@ def add_favorite_detector(name: str, media_type: str, weights: dict[str, Any], t
             "weights": weights,
             "threshold": threshold,
             "created_at": time.time(),
+            "autodetect": autodetect,
         }
 
 
@@ -367,6 +377,43 @@ def get_favorite_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]
     """
     with _state_lock:
         return {name: det for name, det in favorite_detectors.items() if det["media_type"] == media_type}
+
+
+def set_favorite_detector_autodetect(name: str, autodetect: bool) -> bool:
+    """Set the autodetect flag on a named favorite detector.
+
+    Args:
+        name: Name of the detector to update.
+        autodetect: Whether this detector should be included in autodetect.
+
+    Returns:
+        ``True`` if the detector was found and updated; ``False`` otherwise.
+    """
+    with _state_lock:
+        if name in favorite_detectors:
+            favorite_detectors[name]["autodetect"] = autodetect
+            return True
+        return False
+
+
+def get_autodetect_detectors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
+    """Return favorite detectors matching a media type with autodetect enabled.
+
+    Like :func:`get_favorite_detectors_by_media` but also filters to only
+    include detectors whose ``"autodetect"`` flag is ``True``.
+
+    Args:
+        media_type: Media type to filter by.
+
+    Returns:
+        A dict mapping detector name to its data dict.
+    """
+    with _state_lock:
+        return {
+            name: det
+            for name, det in favorite_detectors.items()
+            if det["media_type"] == media_type and det.get("autodetect", True)
+        }
 
 
 # ---------------------------------------------------------------------------

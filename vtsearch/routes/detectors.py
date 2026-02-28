@@ -17,11 +17,11 @@ from vtsearch.utils import (
     add_favorite_detector,
     add_favorite_extractor,
     add_favorite_localizer,
+    get_autodetect_detectors_by_media,
     medias,
     get_calibrate_count,
     get_calibration_fraction,
     get_favorite_detectors,
-    get_favorite_detectors_by_media,
     get_favorite_extractors,
     get_favorite_extractors_by_media,
     get_favorite_localizers,
@@ -34,6 +34,7 @@ from vtsearch.utils import (
     rename_favorite_detector,
     rename_favorite_extractor,
     rename_favorite_localizer,
+    set_favorite_detector_autodetect,
 )
 
 detectors_bp = Blueprint("detectors", __name__)
@@ -341,6 +342,22 @@ def rename_favorite_detector_route(name):
     if rename_favorite_detector(name, new_name):
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Detector not found or new name already exists"}), 400
+
+
+@detectors_bp.route("/api/favorite-detectors/<name>/autodetect", methods=["PUT"])
+def set_favorite_detector_autodetect_route(name):
+    """Set the autodetect flag on a favorite detector."""
+    data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    autodetect = data.get("autodetect")
+    if autodetect is None:
+        return jsonify({"error": "autodetect is required"}), 400
+
+    if set_favorite_detector_autodetect(name, bool(autodetect)):
+        return jsonify({"success": True, "autodetect": bool(autodetect)})
+    return jsonify({"error": "Detector not found"}), 404
 
 
 @detectors_bp.route("/api/favorite-detectors/import-pkl", methods=["POST"])
@@ -667,8 +684,8 @@ def auto_detect():
     # Determine media type from current medias
     media_type = next(iter(medias.values())).get("type", "audio")
 
-    # Get favorite detectors for this media type
-    detectors = get_favorite_detectors_by_media(media_type)
+    # Get favorite detectors for this media type (only those with autodetect enabled)
+    detectors = get_autodetect_detectors_by_media(media_type)
 
     if not detectors:
         return jsonify({"error": f"No favorite detectors found for media type: {media_type}"}), 400
