@@ -6040,7 +6040,7 @@
     });
   }
 
-  // Dashboard: Add Model button — opens the existing Manage Favorites modal
+  // Dashboard: Add Model button — opens the existing Manage Autorun modal
   if (dashAddModelBtn) {
     dashAddModelBtn.addEventListener("click", async () => {
       await loadAutorunDetectors();
@@ -6058,7 +6058,7 @@
     });
   }
 
-  // Re-render dashboard model grid when favorites modal closes (detectors may have changed)
+  // Re-render dashboard model grid when autorun modal closes (detectors may have changed)
   if (favoritesModalClose) {
     const origClose = favoritesModalClose.onclick;
     favoritesModalClose.addEventListener("click", () => {

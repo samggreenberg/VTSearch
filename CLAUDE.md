@@ -42,7 +42,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_labels.py` — Label export/import (via /api/labels/export and /api/labels/import)
   - `test_label_importers.py` — Label importer base class, registry, local/server json_file/csv_file importers, API routes
   - `test_inclusion.py` — Inclusion GET/POST
-  - `test_detectors.py` — Detector export, detector sort, favorites, auto-detect
+  - `test_detectors.py` — Detector export, detector sort, autorun detectors, auto-detect
   - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
   - `test_datasets.py` — Dataset endpoints, startup state, importers, archive extraction
@@ -63,7 +63,7 @@ Media explorer web app for browsing/voting on audio, images, text, or video. Sem
   - `test_eval_visualize.py` — Evaluation visualisation chart generation
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
-  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails_left, show_thumbnails_right, favorites)
+  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails_left, show_thumbnails_right, autorun processors)
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
   - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
   - `test_integration.py` — End-to-end user workflow simulations: chained API calls, state interactions, response format consistency
@@ -109,14 +109,14 @@ All mutable global state is reset automatically before each test via two autouse
 
 1. **`reset_state`** — Clears all mutable state in `vtsearch/utils/state.py`:
    - `good_votes`, `bad_votes`, `label_history`, `textsort_suggestions`, `vote_click_times`, `last_learned_scores`
-   - `autorun_detectors`, `favorite_extractors`, `favorite_localizers`
+   - `autorun_detectors`, `autorun_extractors`, `autorun_localizers`
    - `_click_counter`, `inclusion`, `_diversity_tree`
    - Progress cache
 
 2. **`isolated_settings`** — Redirects `SETTINGS_PATH` to a per-test temp file so settings writes never touch `data/settings.json`. Yields the temp path for tests that need to inspect the file.
 
 **When writing new tests:**
-- Do NOT add per-file or per-class autouse fixtures to clear favorites, reset settings, or reset votes — `conftest.py` handles all of this automatically.
+- Do NOT add per-file or per-class autouse fixtures to clear autorun state, reset settings, or reset votes — `conftest.py` handles all of this automatically.
 - Do NOT add inline `.pop()` or `.clear()` cleanup at the end of tests — the conftest fixtures run before each test regardless of whether the previous test passed or failed.
 - If a test needs to temporarily empty `medias`, use the save/restore pattern with try/finally (since `medias` is intentionally NOT reset between tests to avoid expensive re-generation):
   ```python
@@ -130,7 +130,7 @@ All mutable global state is reset automatically before each test via two autouse
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
 ## Key Details
-- Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `favorite_extractors`, `favorite_localizers` are module-level dicts/lists
+- Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `autorun_extractors`, `autorun_localizers` are module-level dicts/lists
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking

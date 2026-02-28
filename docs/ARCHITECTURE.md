@@ -122,7 +122,7 @@ VTSearch/
 │   │   └── main.py                 Root route
 │   │
 │   ├── utils/
-│   │   ├── state.py                Global state (medias, votes, favorites, history)
+│   │   ├── state.py                Global state (medias, votes, autorun config, history)
 │   │   └── progress.py             Thread-safe progress tracking
 │   │
 │   └── audio/                      WAV/tone generation utilities
@@ -351,8 +351,8 @@ dicts:
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
 | `autorun_detectors` | `dict` | Saved detector configurations |
-| `favorite_extractors` | `dict` | Saved extractor configurations |
-| `favorite_localizers` | `dict` | Saved localizer configurations |
+| `autorun_extractors` | `dict` | Saved extractor configurations |
+| `autorun_localizers` | `dict` | Saved localizer configurations |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,

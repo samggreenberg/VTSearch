@@ -183,7 +183,7 @@ data/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--sentence-transformers--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── settings.json                     # User preferences, favorites, thresholds
+├── settings.json                     # User preferences, autorun config, thresholds
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
 ├── images/                           # Image media files
