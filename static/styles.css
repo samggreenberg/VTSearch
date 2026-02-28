@@ -640,7 +640,7 @@ video { max-width: 100%; }
 }
 .dashboard-table thead th:hover { color: var(--accent-light); }
 .dashboard-table thead th .sort-arrow { font-size: 0.6rem; display: inline-block; width: 1em; text-align: left; }
-.dashboard-table thead th.col-actions { cursor: default; width: 100px; }
+.dashboard-table thead th.col-actions { cursor: default; width: 40px; }
 .dashboard-table tbody td {
   padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
@@ -649,6 +649,12 @@ video { max-width: 100%; }
 .dashboard-table tbody tr:hover { background: var(--bg-subtle); }
 .dashboard-table tbody tr.selected { background: var(--accent-highlight-bg); }
 .dashboard-row-actions { display: flex; gap: 4px; }
+.btn-icon {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 0.85rem; padding: 0 3px; opacity: 0.5; transition: opacity 0.15s, color 0.15s;
+}
+.btn-icon:hover { opacity: 1; color: var(--text-primary); }
+.btn-icon-danger:hover { opacity: 1; color: var(--color-bad); }
 .dashboard-actions {
   display: flex; gap: 12px; justify-content: flex-end; padding-top: 8px;
 }

@@ -5503,14 +5503,11 @@
     dashboardDatasetsTbody.innerHTML = sorted.map(ds => {
       const sel = dashboardSelectedDatasets[ds.id] ? " selected" : "";
       return `<tr data-id="${ds.id}" class="${sel}">
-        <td title="${escapeHtml(ds.name)}">${escapeHtml(ds.name)}</td>
+        <td title="${escapeHtml(ds.name)}">${escapeHtml(ds.name)} <button class="btn-icon" data-action="rename" data-id="${ds.id}" title="Rename">&#9998;</button></td>
         <td>${ds.num_medias}</td>
         <td>${escapeHtml(ds.media_type)}</td>
         <td title="${escapeHtml(ds.origin)}">${escapeHtml(ds.origin)}</td>
-        <td><div class="dashboard-row-actions">
-          <button class="btn-sm" data-action="rename" data-id="${ds.id}">Rename</button>
-          <button class="btn-sm-danger" data-action="remove" data-id="${ds.id}">Remove</button>
-        </div></td>
+        <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${ds.id}" title="Remove">&#128465;</button></td>
       </tr>`;
     }).join("");
 
@@ -5571,16 +5568,13 @@
     dashboardModelsTbody.innerHTML = sorted.map(m => {
       const sel = dashboardSelectedModels[m.id] ? " selected" : "";
       return `<tr data-id="${m.id}" class="${sel}">
-        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)}</td>
+        <td title="${escapeHtml(m.name)}">${escapeHtml(m.name)} <button class="btn-icon" data-action="rename" data-id="${m.id}" title="Rename">&#9998;</button></td>
         <td>${m.num_labels}</td>
         <td>${escapeHtml(m.media_type)}</td>
         <td title="${escapeHtml(m.text_examples)}">${escapeHtml(m.text_examples)}</td>
         <td title="${escapeHtml(m.media_examples)}">${escapeHtml(m.media_examples)}</td>
         <td title="${escapeHtml(m.origin)}">${escapeHtml(m.origin)}</td>
-        <td><div class="dashboard-row-actions">
-          <button class="btn-sm" data-action="rename" data-id="${m.id}">Rename</button>
-          <button class="btn-sm-danger" data-action="remove" data-id="${m.id}">Remove</button>
-        </div></td>
+        <td><button class="btn-icon btn-icon-danger" data-action="remove" data-id="${m.id}" title="Remove">&#128465;</button></td>
       </tr>`;
     }).join("");
 
