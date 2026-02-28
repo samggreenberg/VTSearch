@@ -258,6 +258,31 @@ def dataset_importers():
     return jsonify({"importers": extended})
 
 
+@datasets_bp.route("/api/dataset/all-importers")
+def dataset_all_importers():
+    """List all registered importers (including built-in ones).
+
+    Used by the dashboard's dataset importer picker modal, which needs
+    to show every available way to add a dataset.
+
+    Returns a JSON object::
+
+        {
+          "importers": [
+            {
+              "name": "pickle",
+              "display_name": "Pickle File",
+              "description": "...",
+              "fields": [ ... ]
+            },
+            ...
+          ]
+        }
+    """
+    all_importers = [imp.to_dict() for imp in list_importers()]
+    return jsonify({"importers": all_importers})
+
+
 # ---------------------------------------------------------------------------
 # Available dataset files (for the Combine Existing Datasets UI)
 # ---------------------------------------------------------------------------

@@ -350,15 +350,19 @@
 
   // Dashboard elements
   const dashboardView = document.getElementById("dashboard-view");
-  const dashDatasetTabs = document.getElementById("dash-dataset-tabs");
   const dashDatasetGrid = document.getElementById("dash-dataset-grid");
   const dashModelGrid = document.getElementById("dash-model-grid");
   const dashDatasetStatus = document.getElementById("dash-dataset-status");
   const dashLabelBtn = document.getElementById("dash-label-btn");
   const dashDetectBtn = document.getElementById("dash-detect-btn");
-  const dashLoadFileBtn = document.getElementById("dash-load-file-btn");
+  const dashAddDatasetBtn = document.getElementById("dash-add-dataset-btn");
   const dashChangeDatasetBtn = document.getElementById("dash-change-dataset-btn");
   const dashAddModelBtn = document.getElementById("dash-add-model-btn");
+  const datasetImporterModal = document.getElementById("dataset-importer-modal");
+  const datasetImporterModalClose = document.getElementById("dataset-importer-modal-close");
+  const datasetImporterList = document.getElementById("dataset-importer-list");
+  const datasetImporterFormDiv = document.getElementById("dataset-importer-form");
+  const datasetImporterBack = document.getElementById("dataset-importer-back");
   const dashFileInput = document.getElementById("dash-file-input");
   const dashProgress = document.getElementById("dash-progress");
   const dashProgressFill = document.getElementById("dash-progress-fill");
@@ -922,7 +926,7 @@
     }
 
     // Populate grids
-    await renderDashboardDatasets();
+    renderDashboardDatasets();
     await renderDashboardModels();
     updateDashboardButtons();
   }
@@ -933,173 +937,16 @@
     if (dashDetectBtn) dashDetectBtn.disabled = !(hasDataset && dashSelectedDetector);
   }
 
-  async function renderDashboardDatasets() {
+  function renderDashboardDatasets() {
     if (!dashDatasetGrid) return;
 
-    // Fetch demo datasets if not cached
-    if (!dashDemoDatasets) {
-      try {
-        const res = await fetch("/api/dataset/demo-list");
-        if (res.ok) {
-          const data = await res.json();
-          dashDemoDatasets = data.datasets || [];
-        } else {
-          dashDemoDatasets = [];
-        }
-      } catch (_) {
-        dashDemoDatasets = [];
-      }
-    }
-
-    if (dashDemoDatasets.length === 0) {
-      dashDatasetTabs.innerHTML = "";
-      dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No demo datasets available. Use "Load File" to load a .pkl dataset.</p>';
+    if (datasetLoaded) {
+      // Dataset is already loaded — status bar shows the info; grid can be minimal
+      dashDatasetGrid.innerHTML = "";
       return;
     }
 
-    const grouped = {};
-    dashDemoDatasets.forEach(ds => {
-      const mt = ds.media_type || "audio";
-      if (!grouped[mt]) grouped[mt] = [];
-      grouped[mt].push(ds);
-    });
-    const mediaOrder = Object.keys(mediaTypesMap).filter(mt => (grouped[mt] || []).length > 0);
-
-    const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
-    const sortColumns = [
-      { key: "label",          label: "Name" },
-      { key: "num_files",      label: "# Media" },
-      { key: "num_categories", label: "# Cat." },
-      { key: "description",    label: "Description" },
-      { key: "status",         label: "Readiness" },
-    ];
-
-    function buildStatusBadge(st) {
-      if (st === "ready") return '<span class="ready-badge">Ready</span>';
-      if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
-      return '<span class="download-badge">Needs Download</span>';
-    }
-
-    function renderTable(items, section) {
-      const sortState = section._demoSort || { key: "label", asc: true };
-      const sorted = [...items].sort((a, b) => {
-        let va = a[sortState.key], vb = b[sortState.key];
-        if (sortState.key === "status") { va = statusOrder[va] ?? 3; vb = statusOrder[vb] ?? 3; }
-        if (typeof va === "number" && typeof vb === "number") return sortState.asc ? va - vb : vb - va;
-        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
-        return sortState.asc ? va.localeCompare(vb) : vb.localeCompare(va);
-      });
-
-      const tbody = section.querySelector("tbody");
-      tbody.innerHTML = "";
-      sorted.forEach(ds => {
-        const st = ds.status || (ds.ready ? "ready" : "needs_download");
-        const tr = document.createElement("tr");
-        const isSelected = dashSelectedDataset && dashSelectedDataset.name === ds.name;
-        tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "") + (isSelected ? " dash-selected" : "");
-        tr.setAttribute("role", "button");
-        tr.setAttribute("tabindex", "0");
-        tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
-        tr.addEventListener("click", () => {
-          dashSelectedDataset = ds;
-          // Re-render all tables to update selection highlight
-          Object.values(dashSections).forEach(sec => renderTable(grouped[sec._mt], sec));
-          updateDashboardButtons();
-        });
-        tr.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            tr.click();
-          }
-        });
-        const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "\u2026" : ds.description;
-        tr.innerHTML = `
-          <td class="col-name">${escapeHtml(ds.label)}</td>
-          <td class="col-num">${ds.num_files}</td>
-          <td class="col-num">${ds.num_categories}</td>
-          <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
-          <td class="col-status">${buildStatusBadge(st)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      section.querySelectorAll("th[data-sort]").forEach(th => {
-        const arrow = th.querySelector(".sort-arrow");
-        if (th.dataset.sort === sortState.key) {
-          arrow.textContent = sortState.asc ? " \u25B2" : " \u25BC";
-        } else {
-          arrow.textContent = "";
-        }
-      });
-    }
-
-    // Pick initial tab
-    let initialTab = mediaOrder[0] || Object.keys(mediaTypesMap)[0] || "audio";
-    try {
-      const settingsRes = await fetch("/api/settings");
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
-        const favs = settingsData.favorite_media_types || [];
-        const firstFav = favs.find(f => mediaOrder.includes(f));
-        if (firstFav) initialTab = firstFav;
-      }
-    } catch (_) {}
-
-    dashDatasetTabs.innerHTML = "";
-    dashDatasetGrid.innerHTML = "";
-
-    const dashSections = {};
-
-    mediaOrder.forEach(mt => {
-      const items = grouped[mt];
-      const mtInfo = mediaTypesMap[mt] || { icon: "\uD83D\uDCC1", tab_title: mt };
-
-      const tab = document.createElement("button");
-      tab.className = "demo-tab";
-      tab.dataset.mediaType = mt;
-      tab.textContent = `${mtInfo.icon} ${mtInfo.tab_title}`;
-      tab.addEventListener("click", () => {
-        dashDatasetTabs.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
-        tab.classList.add("active");
-        Object.keys(dashSections).forEach(k => {
-          dashSections[k].style.display = k === mt ? "" : "none";
-        });
-      });
-      dashDatasetTabs.appendChild(tab);
-
-      const section = document.createElement("div");
-      section.className = "demo-section";
-      section._demoSort = { key: "num_files", asc: true };
-      section._mt = mt;
-      section.style.display = "none";
-
-      const headerRow = sortColumns.map(col =>
-        `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
-      ).join("");
-      section.innerHTML = `<table class="demo-table"><thead><tr>${headerRow}</tr></thead><tbody></tbody></table>`;
-
-      section.querySelectorAll("th[data-sort]").forEach(th => {
-        th.addEventListener("click", () => {
-          const key = th.dataset.sort;
-          if (section._demoSort.key === key) {
-            section._demoSort.asc = !section._demoSort.asc;
-          } else {
-            section._demoSort = { key, asc: true };
-          }
-          renderTable(items, section);
-        });
-      });
-
-      renderTable(items, section);
-      dashSections[mt] = section;
-      dashDatasetGrid.appendChild(section);
-    });
-
-    const initialTabBtn = dashDatasetTabs.querySelector(`.demo-tab[data-media-type="${initialTab}"]`);
-    if (initialTabBtn) {
-      initialTabBtn.classList.add("active");
-      if (dashSections[initialTab]) dashSections[initialTab].style.display = "";
-    }
+    dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No dataset loaded yet. Use "Add" to load one.</p>';
   }
 
   async function renderDashboardModels() {
@@ -1113,7 +960,7 @@
     } catch (_) {}
 
     if (favoriteDetectors.length === 0) {
-      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors saved yet. Use "Add" to create one.</p>';
+      dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No detectors loaded yet. Use "Add" to create one.</p>';
       return;
     }
 
@@ -5843,9 +5690,382 @@
     });
   }
 
-  // Dashboard: Load File button
-  if (dashLoadFileBtn && dashFileInput) {
-    dashLoadFileBtn.addEventListener("click", () => dashFileInput.click());
+  // Dashboard: Add Dataset button — opens the dataset importer picker modal
+  if (dashAddDatasetBtn) {
+    dashAddDatasetBtn.addEventListener("click", () => openDatasetImporterPicker());
+  }
+
+  // Dataset importer picker modal — close / back buttons
+  if (datasetImporterModalClose) {
+    datasetImporterModalClose.addEventListener("click", () => {
+      datasetImporterModal.classList.remove("show");
+    });
+  }
+  if (datasetImporterBack) {
+    datasetImporterBack.addEventListener("click", () => {
+      datasetImporterFormDiv.style.display = "none";
+      datasetImporterFormDiv.innerHTML = "";
+      datasetImporterBack.style.display = "none";
+      datasetImporterList.style.display = "";
+    });
+  }
+
+  async function openDatasetImporterPicker() {
+    // Reset to list view
+    datasetImporterFormDiv.style.display = "none";
+    datasetImporterFormDiv.innerHTML = "";
+    datasetImporterBack.style.display = "none";
+    datasetImporterList.style.display = "";
+
+    // Fetch all importers
+    let importers = [];
+    try {
+      const res = await fetch("/api/dataset/all-importers");
+      if (res.ok) {
+        const data = await res.json();
+        importers = data.importers || [];
+      }
+    } catch (_) {}
+
+    // Also add demo datasets as an option
+    const options = importers.map(imp => `
+      <div class="dataset-importer-option option-card" data-name="${escapeHtml(imp.name)}" data-type="importer">
+        <span class="option-card-icon">${escapeHtml(imp.icon || '\uD83D\uDD0C')}</span>
+        <div>
+          <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
+          <div class="option-card-desc">${escapeHtml(imp.description)}</div>
+        </div>
+      </div>
+    `).join("");
+
+    // Add demo dataset option
+    const demoOption = `
+      <div class="dataset-importer-option option-card" data-name="demo" data-type="demo">
+        <span class="option-card-icon">\uD83C\uDFC6</span>
+        <div>
+          <div class="option-card-title">Load Demo Dataset</div>
+          <div class="option-card-desc">Choose from a selection of pre-configured demo datasets</div>
+        </div>
+      </div>
+    `;
+
+    datasetImporterList.innerHTML = options + demoOption;
+
+    // Wire up click handlers
+    datasetImporterList.querySelectorAll(".dataset-importer-option").forEach(el => {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      const name = el.dataset.name;
+      const type = el.dataset.type;
+      el.addEventListener("click", () => {
+        if (type === "demo") {
+          showDashDemoDatasetPicker();
+        } else if (name === "pickle") {
+          // Pickle = file upload — close modal and trigger file input
+          datasetImporterModal.classList.remove("show");
+          dashFileInput.click();
+        } else if (name === "combine_datasets") {
+          // Combine = close modal and go to welcome screen combine flow
+          datasetImporterModal.classList.remove("show");
+          showCombineDatasetsForm();
+          datasetWelcome.style.display = "flex";
+          dashboardView.style.display = "none";
+        } else {
+          const imp = importers.find(i => i.name === name);
+          if (imp) showDashImporterForm(imp);
+        }
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); }
+      });
+    });
+
+    datasetImporterModal.classList.add("show");
+  }
+
+  // Show an importer's form inline within the dataset importer picker modal
+  function showDashImporterForm(importer) {
+    datasetImporterList.style.display = "none";
+    datasetImporterBack.style.display = "";
+
+    let html = `<h3 style="margin-bottom:12px;">${escapeHtml(importer.icon || '\uD83D\uDD0C')} ${escapeHtml(importer.display_name)}</h3>`;
+    html += `<form id="dash-imp-form">`;
+    for (const field of importer.fields) {
+      html += `<div class="form-group">`;
+      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
+      if (field.field_type === "file") {
+        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept || "")}" class="form-input" ${field.required ? "required" : ""}>`;
+      } else if (field.field_type === "select") {
+        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+        for (const opt of field.options) {
+          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
+        }
+        html += `</select>`;
+      } else if (field.field_type === "folder") {
+        html += `<div class="form-row"><input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" class="form-input" style="flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
+        html += `<button type="button" data-browse-btn="true" class="btn-browse">Browse\u2026</button></div>`;
+        html += `<input type="file" data-folder-picker="true" webkitdirectory style="display:none;">`;
+      } else {
+        const itype = field.field_type === "url" ? "url" : "text";
+        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default || "")}" placeholder="${escapeHtml(field.description)}" class="form-input" ${field.required ? "required" : ""}>`;
+      }
+      if (field.description) {
+        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<div id="dash-imp-status" class="status-text" style="min-height:1.2em; margin:8px 0;"></div>`;
+    html += `<button type="submit" class="btn-block-primary">Import</button>`;
+    html += `</form>`;
+
+    datasetImporterFormDiv.innerHTML = html;
+    datasetImporterFormDiv.style.display = "block";
+
+    // Wire up folder browse buttons
+    const browseBtn = datasetImporterFormDiv.querySelector("[data-browse-btn]");
+    const folderPicker = datasetImporterFormDiv.querySelector("[data-folder-picker]");
+    const folderTextInput = datasetImporterFormDiv.querySelector("[data-folder-input]");
+    if (browseBtn && folderPicker && folderTextInput) {
+      browseBtn.addEventListener("click", () => folderPicker.click());
+      folderPicker.addEventListener("change", () => {
+        if (folderPicker.files.length > 0) {
+          const topFolder = folderPicker.files[0].webkitRelativePath.split("/")[0];
+          if (!folderTextInput.value) {
+            folderTextInput.placeholder = `Selected: ${topFolder} \u2014 enter full path below`;
+          }
+        }
+      });
+    }
+
+    document.getElementById("dash-imp-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formEl = e.target;
+      const statusEl = document.getElementById("dash-imp-status");
+      const hasFiles = importer.fields.some(f => f.field_type === "file");
+      let body, headers = {};
+      if (hasFiles) {
+        body = new FormData(formEl);
+      } else {
+        const obj = {};
+        for (const field of importer.fields) {
+          obj[field.key] = formEl.elements[field.key].value;
+        }
+        body = JSON.stringify(obj);
+        headers["Content-Type"] = "application/json";
+      }
+
+      statusEl.textContent = "Importing\u2026";
+      statusEl.style.color = "var(--text-secondary)";
+
+      // Close modal and show dashboard progress
+      datasetImporterModal.classList.remove("show");
+      dashProgress.style.display = "block";
+      dashProgressFill.style.width = "0%";
+      dashProgressFill.classList.add("indeterminate");
+      dashProgressText.textContent = "";
+      dashProgressMessage.textContent = "Importing\u2026";
+      dashProgressMessage.style.color = "var(--text-secondary)";
+      dashProgressEta.textContent = "";
+
+      try {
+        const res = await fetch(`/api/dataset/import/${importer.name}`, { method: "POST", headers, body });
+        if (!res.ok) {
+          const err = await res.json();
+          dashProgressMessage.textContent = `Error: ${err.error}`;
+          dashProgressMessage.style.color = "var(--color-bad)";
+          return;
+        }
+      } catch (err) {
+        dashProgressMessage.textContent = `Error: ${err.message}`;
+        dashProgressMessage.style.color = "var(--color-bad)";
+        return;
+      }
+
+      dashSelectedDataset = null;
+      dashPendingAction = null;
+      startDashProgressPolling();
+    });
+  }
+
+  // Show demo dataset picker within the dataset importer modal
+  async function showDashDemoDatasetPicker() {
+    datasetImporterList.style.display = "none";
+    datasetImporterBack.style.display = "";
+
+    datasetImporterFormDiv.innerHTML = '<p style="color:var(--text-muted); padding:8px;">Loading demo datasets\u2026</p>';
+    datasetImporterFormDiv.style.display = "block";
+
+    let demos = [];
+    try {
+      const res = await fetch("/api/dataset/demo-list");
+      if (res.ok) {
+        const data = await res.json();
+        demos = data.datasets || [];
+      }
+    } catch (_) {}
+
+    if (demos.length === 0) {
+      datasetImporterFormDiv.innerHTML = '<p style="color:var(--text-muted); padding:8px;">No demo datasets available.</p>';
+      return;
+    }
+
+    // Group by media type
+    const grouped = {};
+    demos.forEach(ds => {
+      const mt = ds.media_type || "audio";
+      if (!grouped[mt]) grouped[mt] = [];
+      grouped[mt].push(ds);
+    });
+    const mediaOrder = Object.keys(mediaTypesMap).filter(mt => (grouped[mt] || []).length > 0);
+
+    const statusOrder = { ready: 0, needs_embedding: 1, needs_download: 2 };
+
+    function buildStatusBadge(st) {
+      if (st === "ready") return '<span class="ready-badge">Ready</span>';
+      if (st === "needs_embedding") return '<span class="embedding-badge">Needs Embed</span>';
+      return '<span class="download-badge">Needs Download</span>';
+    }
+
+    // Build tabs + table content
+    const wrapper = document.createElement("div");
+
+    const tabBar = document.createElement("div");
+    tabBar.className = "demo-tab-bar";
+    wrapper.appendChild(tabBar);
+
+    const contentArea = document.createElement("div");
+    contentArea.className = "demo-content-area";
+    wrapper.appendChild(contentArea);
+
+    const sections = {};
+
+    const sortColumns = [
+      { key: "label", label: "Name" },
+      { key: "num_files", label: "# Media" },
+      { key: "num_categories", label: "# Cat." },
+      { key: "description", label: "Description" },
+      { key: "status", label: "Readiness" },
+    ];
+
+    function renderTable(items, section) {
+      const sortState = section._demoSort || { key: "label", asc: true };
+      const sorted = [...items].sort((a, b) => {
+        let va = a[sortState.key], vb = b[sortState.key];
+        if (sortState.key === "status") { va = statusOrder[va] ?? 3; vb = statusOrder[vb] ?? 3; }
+        if (typeof va === "number" && typeof vb === "number") return sortState.asc ? va - vb : vb - va;
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return sortState.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      const tbody = section.querySelector("tbody");
+      tbody.innerHTML = "";
+      sorted.forEach(ds => {
+        const st = ds.status || (ds.ready ? "ready" : "needs_download");
+        const tr = document.createElement("tr");
+        tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+        tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
+        tr.addEventListener("click", () => {
+          datasetImporterModal.classList.remove("show");
+          dashSelectedDataset = ds;
+          // Load the selected demo dataset immediately from dashboard
+          dashPendingAction = null;
+          dashLoadSelectedDataset();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+        });
+        const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "\u2026" : ds.description;
+        tr.innerHTML = `
+          <td class="col-name">${escapeHtml(ds.label)}</td>
+          <td class="col-num">${ds.num_files}</td>
+          <td class="col-num">${ds.num_categories}</td>
+          <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
+          <td class="col-status">${buildStatusBadge(st)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === sortState.key) {
+          arrow.textContent = sortState.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    // Pick initial tab
+    let initialTab = mediaOrder[0] || Object.keys(mediaTypesMap)[0] || "audio";
+    try {
+      const settingsRes = await fetch("/api/settings");
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const favs = settingsData.favorite_media_types || [];
+        const firstFav = favs.find(f => mediaOrder.includes(f));
+        if (firstFav) initialTab = firstFav;
+      }
+    } catch (_) {}
+
+    mediaOrder.forEach(mt => {
+      const items = grouped[mt];
+      const mtInfo = mediaTypesMap[mt] || { icon: "\uD83D\uDCC1", tab_title: mt };
+
+      const tab = document.createElement("button");
+      tab.className = "demo-tab";
+      tab.dataset.mediaType = mt;
+      tab.textContent = `${mtInfo.icon} ${mtInfo.tab_title}`;
+      tab.addEventListener("click", () => {
+        tabBar.querySelectorAll(".demo-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        Object.keys(sections).forEach(k => {
+          sections[k].style.display = k === mt ? "" : "none";
+        });
+      });
+      tabBar.appendChild(tab);
+
+      const section = document.createElement("div");
+      section.className = "demo-section";
+      section._demoSort = { key: "num_files", asc: true };
+      section._mt = mt;
+      section.style.display = "none";
+
+      const headerRow = sortColumns.map(col =>
+        `<th data-sort="${col.key}">${col.label}<span class="sort-arrow"></span></th>`
+      ).join("");
+      section.innerHTML = `<table class="demo-table"><thead><tr>${headerRow}</tr></thead><tbody></tbody></table>`;
+
+      section.querySelectorAll("th[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          if (section._demoSort.key === key) {
+            section._demoSort.asc = !section._demoSort.asc;
+          } else {
+            section._demoSort = { key, asc: true };
+          }
+          renderTable(items, section);
+        });
+      });
+
+      renderTable(items, section);
+      sections[mt] = section;
+      contentArea.appendChild(section);
+    });
+
+    const initialTabBtn = tabBar.querySelector(`.demo-tab[data-media-type="${initialTab}"]`);
+    if (initialTabBtn) {
+      initialTabBtn.classList.add("active");
+      if (sections[initialTab]) sections[initialTab].style.display = "";
+    }
+
+    datasetImporterFormDiv.innerHTML = "";
+    datasetImporterFormDiv.appendChild(wrapper);
+  }
+
+  // Dashboard: File input for pickle upload (used by pickle importer option)
+  if (dashFileInput) {
     dashFileInput.addEventListener("change", async () => {
       const file = dashFileInput.files[0];
       if (!file) return;

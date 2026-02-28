@@ -128,22 +128,21 @@
         <!-- Dataset grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Dataset</span>
+            <span class="dashboard-section-title">Datasets</span>
             <div class="dashboard-section-actions">
-              <button class="btn-sm" id="dash-load-file-btn">Load File</button>
+              <button class="btn-sm" id="dash-add-dataset-btn">Add</button>
               <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
             </div>
           </div>
           <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
           <div class="dashboard-grid-wrap">
-            <div id="dash-dataset-tabs" class="demo-tab-bar"></div>
-            <div id="dash-dataset-grid" class="dashboard-grid demo-content-area"></div>
+            <div id="dash-dataset-grid" class="dashboard-grid"></div>
           </div>
         </div>
         <!-- Model grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Model</span>
+            <span class="dashboard-section-title">Models</span>
             <div class="dashboard-section-actions">
               <button class="btn-sm" id="dash-add-model-btn">Add</button>
             </div>
@@ -381,6 +380,21 @@
       <div style="background: var(--border); border-radius: 8px; overflow: hidden; height: 24px;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Auto-detect progress">
         <div id="autodetect-progress-bar" style="background: var(--accent); height: 100%; width: 0%; transition: width 0.3s;"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dataset Importer Picker Modal -->
+<div id="dataset-importer-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dataset-importer-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="dataset-importer-modal-title">Add Dataset</h2>
+      <button class="modal-close" id="dataset-importer-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="dataset-importer-list"></div>
+      <div id="dataset-importer-form" style="display:none"></div>
+      <button id="dataset-importer-back" aria-label="Back to importer list" class="btn-sm" style="display:none; margin-top:12px; padding:6px 14px;">&#8592; Back</button>
     </div>
   </div>
 </div>
