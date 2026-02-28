@@ -385,6 +385,70 @@ def set_autorun_detector_autodetect_route(name):
     return jsonify({"error": "Detector not found"}), 404
 
 
+@detectors_bp.route("/api/autorun-detectors/<name>/export", methods=["GET"])
+def export_autorun_detector_route(name):
+    """Return the stored weights for a named autorun detector.
+
+    Unlike ``/api/detector/export`` which trains from current votes, this
+    endpoint returns the already-stored weights for a dashboard model.
+    """
+    detectors = get_autorun_detectors()
+    det = detectors.get(name)
+    if det is None:
+        return jsonify({"error": "Detector not found"}), 404
+    if not det.get("weights"):
+        return jsonify({"error": "Detector has no trained weights"}), 400
+    return jsonify({
+        "weights": det["weights"],
+        "threshold": det.get("threshold", 0.5),
+        "media_type": det.get("media_type", ""),
+        "name": det["name"],
+    })
+
+
+@detectors_bp.route("/api/autorun-detectors/<name>/export-server", methods=["POST"])
+def export_autorun_detector_server_route(name):
+    """Save a named autorun detector to a file on the server filesystem.
+
+    Expects JSON body with optional ``filename`` (defaults to detector name)
+    and ``overwrite`` (bool, default false).
+    """
+    detectors = get_autorun_detectors()
+    det = detectors.get(name)
+    if det is None:
+        return jsonify({"error": "Detector not found"}), 404
+    if not det.get("weights"):
+        return jsonify({"error": "Detector has no trained weights"}), 400
+
+    data = request.get_json(force=True) or {}
+    filename = (data.get("filename") or name).strip()
+    overwrite = data.get("overwrite", False)
+
+    safe_name = "".join(c for c in filename if c.isalnum() or c in "-_ ")
+    if not safe_name:
+        return jsonify({"error": "name contains no valid characters"}), 400
+
+    SERVER_DETECTOR_DIR.mkdir(parents=True, exist_ok=True)
+    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+
+    if filepath.exists() and not overwrite:
+        return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
+
+    detector_data = {
+        "weights": det["weights"],
+        "threshold": det.get("threshold", 0.5),
+        "media_type": det.get("media_type", ""),
+        "name": safe_name,
+    }
+    filepath.write_text(json.dumps(detector_data, indent=2), encoding="utf-8")
+
+    return jsonify({
+        "success": True,
+        "name": safe_name,
+        "path": str(filepath.resolve()),
+    })
+
+
 @detectors_bp.route("/api/autorun-detectors/<name>/examples", methods=["GET"])
 def get_detector_examples_route(name):
     """Get the examples for a autorun detector."""
