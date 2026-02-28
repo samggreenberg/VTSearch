@@ -627,7 +627,24 @@ video { max-width: 100%; }
 .dashboard-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; }
 .dashboard-grid { min-height: 0; }
 
-/* Dashboard uses demo-table styles for dataset grid; model grid uses its own table */
+/* Dashboard dataset table */
+.dashboard-grid .dash-dataset-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; table-layout: fixed; }
+.dashboard-grid .dash-dataset-table thead th {
+  text-align: left; padding: 5px 8px; color: var(--text-secondary);
+  font-size: 0.7rem; font-weight: 600; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dashboard-grid .dash-dataset-table thead th:nth-child(1) { width: 35%; }
+.dashboard-grid .dash-dataset-table thead th:nth-child(2) { width: 20%; }
+.dashboard-grid .dash-dataset-table thead th:nth-child(3) { width: 15%; }
+.dashboard-grid .dash-dataset-table thead th:nth-child(4) { width: 30%; }
+.dash-dataset-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.dash-dataset-row .col-name { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-dataset-row .col-type { white-space: nowrap; }
+.dash-dataset-row .col-count { font-family: monospace; font-size: 0.72rem; color: var(--text-muted); }
+.dash-dataset-row .col-origin { font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Dashboard model table */
 .dashboard-grid .dash-model-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; table-layout: fixed; }
 .dashboard-grid .dash-model-table thead th {
   text-align: left; padding: 5px 8px; color: var(--text-secondary);
