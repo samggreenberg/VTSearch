@@ -108,153 +108,80 @@ def get_all() -> dict[str, Any]:
     return result
 
 
-def get_volume() -> float:
-    """Return the persisted playback volume (0.0–1.0)."""
-    return float(_ensure_loaded().get("volume", _DEFAULTS["volume"]))
-
-
-def set_volume(value: float) -> None:
-    """Set and persist the playback volume."""
-    s = _ensure_loaded()
-    s["volume"] = max(0.0, min(1.0, float(value)))
-    _save(s)
-
-
-def get_inclusion() -> int:
-    """Return the persisted inclusion setting (-10 to +10)."""
-    return int(_ensure_loaded().get("inclusion", _DEFAULTS["inclusion"]))
-
-
-def set_inclusion(value: int) -> None:
-    """Set and persist the inclusion setting."""
-    s = _ensure_loaded()
-    s["inclusion"] = int(max(-10, min(10, int(value))))
-    _save(s)
-
-
 VALID_THEMES = ("dark", "light", "highviz")
 
 
-def get_theme() -> str:
-    """Return the persisted theme ('dark', 'light', or 'highviz')."""
-    return str(_ensure_loaded().get("theme", _DEFAULTS["theme"]))
+# -------------------------------------------------------------------
+# Factory for simple get_<key> / set_<key> pairs
+# -------------------------------------------------------------------
 
 
-def set_theme(value: str) -> None:
-    """Set and persist the theme.  Must be 'dark', 'light', or 'highviz'."""
-    if value not in VALID_THEMES:
-        raise ValueError(f"Invalid theme: {value!r}")
-    s = _ensure_loaded()
-    s["theme"] = value
-    _save(s)
+def _make_accessors(key: str, cast: type, coerce=None):
+    """Create a ``get_<key>`` / ``set_<key>`` pair for a simple setting.
+
+    *cast* converts the stored value on read (e.g. ``float``, ``int``, ``bool``).
+    *coerce* normalises the value on write (e.g. clamping); defaults to *cast*.
+    """
+    if coerce is None:
+        coerce = cast
+
+    def getter():
+        return cast(_ensure_loaded().get(key, _DEFAULTS[key]))
+
+    def setter(value):
+        s = _ensure_loaded()
+        s[key] = coerce(value)
+        _save(s)
+
+    getter.__name__ = f"get_{key}"
+    setter.__name__ = f"set_{key}"
+    return getter, setter
 
 
-def get_enrich_descriptions() -> bool:
-    """Return whether enriched description embedding is enabled."""
-    return bool(_ensure_loaded().get("enrich_descriptions", _DEFAULTS["enrich_descriptions"]))
+def _clamp(cast, lo, hi):
+    """Return a coercion that casts then clamps to ``[lo, hi]``."""
+    return lambda v: cast(max(lo, min(hi, cast(v))))
 
 
-def set_enrich_descriptions(value: bool) -> None:
-    """Set and persist the enrich_descriptions flag."""
-    s = _ensure_loaded()
-    s["enrich_descriptions"] = bool(value)
-    _save(s)
+def _clamp_min(cast, lo):
+    """Return a coercion that casts then clamps to ``>= lo``."""
+    return lambda v: cast(max(lo, cast(v)))
 
 
-def get_calibrate_count() -> int:
-    """Return the number of random Train/Calibrate splits for threshold calibration."""
-    return int(_ensure_loaded().get("calibrate_count", _DEFAULTS["calibrate_count"]))
+def _one_of(key, valid):
+    """Return a coercion that validates membership in *valid*."""
+
+    def _coerce(v):
+        v = str(v)
+        if v not in valid:
+            raise ValueError(f"Invalid {key}: {v!r}")
+        return v
+
+    return _coerce
 
 
-def set_calibrate_count(value: int) -> None:
-    """Set and persist the calibrate_count (clamped to 1–100)."""
-    s = _ensure_loaded()
-    s["calibrate_count"] = int(max(1, min(100, int(value))))
-    _save(s)
+# (key, cast, coerce_or_None)
+_SETTING_SPECS: list[tuple] = [
+    ("volume", float, _clamp(float, 0.0, 1.0)),
+    ("inclusion", int, _clamp(int, -10, 10)),
+    ("theme", str, _one_of("theme", VALID_THEMES)),
+    ("enrich_descriptions", bool, None),
+    ("safe_thresholds", bool, None),
+    ("calibrate_count", int, _clamp(int, 1, 100)),
+    ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
+    ("swipe_animation", bool, None),
+    ("show_thumbnails_left", bool, None),
+    ("show_thumbnails_right", bool, None),
+    ("autopilot_top_greens", int, _clamp_min(int, 1)),
+    ("autopilot_hard_reds", int, _clamp_min(int, 1)),
+]
 
+for _key, _cast, _coerce in _SETTING_SPECS:
+    _g, _s = _make_accessors(_key, _cast, _coerce)
+    globals()[f"get_{_key}"] = _g
+    globals()[f"set_{_key}"] = _s
 
-def get_calibration_fraction() -> float:
-    """Return the calibration fraction (0.0–1.0) for Train/Calibrate splits."""
-    return float(_ensure_loaded().get("calibration_fraction", _DEFAULTS["calibration_fraction"]))
-
-
-def set_calibration_fraction(value: float) -> None:
-    """Set and persist the calibration_fraction (clamped to 0.0–1.0)."""
-    s = _ensure_loaded()
-    s["calibration_fraction"] = max(0.0, min(1.0, float(value)))
-    _save(s)
-
-
-def get_safe_thresholds() -> bool:
-    """Return whether safe thresholds blending is enabled."""
-    return bool(_ensure_loaded().get("safe_thresholds", _DEFAULTS["safe_thresholds"]))
-
-
-def set_safe_thresholds(value: bool) -> None:
-    """Set and persist the safe_thresholds flag."""
-    s = _ensure_loaded()
-    s["safe_thresholds"] = bool(value)
-    _save(s)
-
-
-def get_swipe_animation() -> bool:
-    """Return whether swipe animation on vote is enabled."""
-    return bool(_ensure_loaded().get("swipe_animation", _DEFAULTS["swipe_animation"]))
-
-
-def set_swipe_animation(value: bool) -> None:
-    """Set and persist the swipe_animation flag."""
-    s = _ensure_loaded()
-    s["swipe_animation"] = bool(value)
-    _save(s)
-
-
-def get_show_thumbnails_left() -> bool:
-    """Return whether left-panel (media list) thumbnail display is enabled."""
-    return bool(_ensure_loaded().get("show_thumbnails_left", _DEFAULTS["show_thumbnails_left"]))
-
-
-def set_show_thumbnails_left(value: bool) -> None:
-    """Set and persist the show_thumbnails_left flag."""
-    s = _ensure_loaded()
-    s["show_thumbnails_left"] = bool(value)
-    _save(s)
-
-
-def get_show_thumbnails_right() -> bool:
-    """Return whether right-panel (vote list) thumbnail display is enabled."""
-    return bool(_ensure_loaded().get("show_thumbnails_right", _DEFAULTS["show_thumbnails_right"]))
-
-
-def set_show_thumbnails_right(value: bool) -> None:
-    """Set and persist the show_thumbnails_right flag."""
-    s = _ensure_loaded()
-    s["show_thumbnails_right"] = bool(value)
-    _save(s)
-
-
-def get_autopilot_top_greens() -> int:
-    """Return the autopilot 'Top # Greens' count (positive int)."""
-    return int(_ensure_loaded().get("autopilot_top_greens", _DEFAULTS["autopilot_top_greens"]))
-
-
-def set_autopilot_top_greens(value: int) -> None:
-    """Set and persist the autopilot top greens count (clamped to >= 1)."""
-    s = _ensure_loaded()
-    s["autopilot_top_greens"] = int(max(1, int(value)))
-    _save(s)
-
-
-def get_autopilot_hard_reds() -> int:
-    """Return the autopilot 'Hard # Reds' count (positive int)."""
-    return int(_ensure_loaded().get("autopilot_hard_reds", _DEFAULTS["autopilot_hard_reds"]))
-
-
-def set_autopilot_hard_reds(value: int) -> None:
-    """Set and persist the autopilot hard reds count (clamped to >= 1)."""
-    s = _ensure_loaded()
-    s["autopilot_hard_reds"] = int(max(1, int(value)))
-    _save(s)
+del _key, _cast, _coerce, _g, _s
 
 
 VALID_MEDIA_TYPES = ("audio", "document", "image", "paragraph", "video")
