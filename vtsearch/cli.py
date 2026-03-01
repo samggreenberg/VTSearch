@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
@@ -357,6 +358,128 @@ def _merge_detector_results(
                 accumulated[det_name]["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
 
 
+def _load_pickle_whole(dataset_path: str) -> Iterator[dict[int, dict[str, Any]]]:
+    """Yield a single medias dict loaded from a pickle file."""
+    dataset_file = Path(dataset_path)
+    if not dataset_file.exists():
+        raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+
+    medias: dict[int, dict[str, Any]] = {}
+    load_dataset_from_pickle(dataset_file, medias, thin=True)
+    if not medias:
+        raise ValueError(f"No medias loaded from dataset: {dataset_path}")
+    yield medias
+
+
+def _load_pickle_chunked(dataset_path: str, chunk_size: int) -> Iterator[dict[int, dict[str, Any]]]:
+    """Yield chunks of medias loaded from a pickle file."""
+    from vtsearch.datasets.loader import load_dataset_from_pickle_chunked
+
+    dataset_file = Path(dataset_path)
+    if not dataset_file.exists():
+        raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+
+    yield from load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True)
+
+
+def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> Iterator[dict[int, dict[str, Any]]]:
+    """Yield a single medias dict loaded via a named importer."""
+    from vtsearch.datasets.importers import get_importer
+
+    importer = get_importer(importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+
+    importer.validate_cli_field_values(field_values)
+
+    medias: dict[int, dict[str, Any]] = {}
+    importer.run_cli(field_values, medias, thin=True)
+    if not medias:
+        raise ValueError(f"No medias loaded by importer '{importer_name}'")
+    yield medias
+
+
+def _load_importer_chunked(
+    importer_name: str, field_values: dict[str, Any], chunk_size: int
+) -> Iterator[dict[int, dict[str, Any]]]:
+    """Yield chunks of medias loaded via a named importer."""
+    from vtsearch.datasets.importers import get_importer
+
+    importer = get_importer(importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+
+    importer.validate_cli_field_values(field_values)
+    yield from importer.run_chunked_cli(field_values, chunk_size, thin=True)
+
+
+def _run_pipeline(
+    media_source: Iterator[dict[int, dict[str, Any]]],
+    *,
+    settings_path: str | None = None,
+    exporter_name: str | None = None,
+    exporter_field_values: dict[str, Any] | None = None,
+    empty_error: str = "No medias loaded",
+) -> None:
+    """Shared pipeline: import processors, iterate media chunks, score, export.
+
+    All four CLI entry points (pickle / importer, whole / chunked) delegate
+    to this single function, differing only in the *media_source* iterator
+    they supply.
+
+    Args:
+        media_source: An iterator that yields one or more ``dict[int, dict]``
+            chunks of medias.  A non-chunked source yields exactly one chunk.
+        settings_path: Optional path to a settings JSON file.
+        exporter_name: Optional registered exporter name.
+        exporter_field_values: Optional exporter field values.
+        empty_error: Error message used when the source yields no medias.
+    """
+    _import_autorun_processors(settings_path)
+
+    merged_results: dict[str, dict[str, Any]] = {}
+    media_type: str | None = None
+    detectors: dict[str, dict[str, Any]] | None = None
+    total_medias = 0
+    chunk_num = 0
+
+    for chunk_num, chunk_medias in enumerate(media_source, 1):
+        if not chunk_medias:
+            continue
+
+        total_medias += len(chunk_medias)
+
+        if media_type is None:
+            media_type = _detect_media_type(chunk_medias)
+
+            from vtsearch.utils import get_autodetect_detectors_by_media
+
+            detectors = get_autodetect_detectors_by_media(media_type)
+            if not detectors:
+                raise ValueError(
+                    f"No autorun processors found for media type: {media_type}. "
+                    "Add processors to the settings file or use --settings to specify one."
+                )
+
+        if chunk_num > 1 or total_medias != len(chunk_medias):
+            # Only print chunk progress when there are multiple chunks
+            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
+
+        chunk_results = _score_medias_with_detectors(chunk_medias, detectors)
+        _merge_detector_results(merged_results, chunk_results)
+
+    if not merged_results:
+        raise ValueError(empty_error)
+
+    if chunk_num > 1:
+        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
+
+    results = _build_multi_results_dict(merged_results, media_type or "unknown")
+    _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+
+
 def autodetect_main(
     dataset_path: str,
     settings_path: str | None = None,
@@ -383,32 +506,13 @@ def autodetect_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_autorun_processors(settings_path)
-
-        dataset_file = Path(dataset_path)
-        if not dataset_file.exists():
-            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
-
-        # Thin mode — CLI only needs embeddings for scoring, not media bytes
-        medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_pickle(dataset_file, medias, thin=True)
-        if not medias:
-            raise ValueError(f"No medias loaded from dataset: {dataset_path}")
-
-        media_type = _detect_media_type(medias)
-
-        from vtsearch.utils import get_autodetect_detectors_by_media
-
-        detectors = get_autodetect_detectors_by_media(media_type)
-        if not detectors:
-            raise ValueError(
-                f"No autorun processors found for media type: {media_type}. "
-                "Add processors to the settings file or use --settings to specify one."
-            )
-
-        detector_results = _score_medias_with_detectors(medias, detectors)
-        results = _build_multi_results_dict(detector_results, media_type)
-        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+        _run_pipeline(
+            _load_pickle_whole(dataset_path),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            empty_error=f"No medias loaded from dataset: {dataset_path}",
+        )
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -442,37 +546,13 @@ def autodetect_importer_main(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_autorun_processors(settings_path)
-
-        from vtsearch.datasets.importers import get_importer
-
-        importer = get_importer(importer_name)
-        if importer is None:
-            available = _list_importer_names()
-            raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
-
-        importer.validate_cli_field_values(field_values)
-
-        # Thin mode — CLI only needs embeddings for scoring, not media bytes
-        medias: dict[int, dict[str, Any]] = {}
-        importer.run_cli(field_values, medias, thin=True)
-        if not medias:
-            raise ValueError(f"No medias loaded by importer '{importer_name}'")
-
-        media_type = _detect_media_type(medias)
-
-        from vtsearch.utils import get_autodetect_detectors_by_media
-
-        detectors = get_autodetect_detectors_by_media(media_type)
-        if not detectors:
-            raise ValueError(
-                f"No autorun processors found for media type: {media_type}. "
-                "Add processors to the settings file or use --settings to specify one."
-            )
-
-        detector_results = _score_medias_with_detectors(medias, detectors)
-        results = _build_multi_results_dict(detector_results, media_type)
-        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+        _run_pipeline(
+            _load_importer_whole(importer_name, field_values),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            empty_error=f"No medias loaded by importer '{importer_name}'",
+        )
     except (FileNotFoundError, ValueError, NotADirectoryError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -499,49 +579,13 @@ def autodetect_main_chunked(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_autorun_processors(settings_path)
-
-        from vtsearch.datasets.loader import load_dataset_from_pickle_chunked
-
-        dataset_file = Path(dataset_path)
-        if not dataset_file.exists():
-            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
-
-        merged_results: dict[str, dict[str, Any]] = {}
-        media_type: str | None = None
-        detectors: dict[str, dict[str, Any]] | None = None
-        total_medias = 0
-
-        for chunk_num, chunk_medias in enumerate(
-            load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True), 1
-        ):
-            if not chunk_medias:
-                continue
-
-            total_medias += len(chunk_medias)
-
-            if media_type is None:
-                media_type = _detect_media_type(chunk_medias)
-
-                from vtsearch.utils import get_autodetect_detectors_by_media
-
-                detectors = get_autodetect_detectors_by_media(media_type)
-                if not detectors:
-                    raise ValueError(
-                        f"No autorun processors found for media type: {media_type}. "
-                        "Add processors to the settings file or use --settings to specify one."
-                    )
-
-            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
-            chunk_results = _score_medias_with_detectors(chunk_medias, detectors)
-            _merge_detector_results(merged_results, chunk_results)
-
-        if not merged_results:
-            raise ValueError(f"No medias loaded from dataset: {dataset_path}")
-
-        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
-        results = _build_multi_results_dict(merged_results, media_type or "unknown")
-        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+        _run_pipeline(
+            _load_pickle_chunked(dataset_path, chunk_size),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            empty_error=f"No medias loaded from dataset: {dataset_path}",
+        )
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -571,54 +615,13 @@ def autodetect_importer_main_chunked(
         exporter_field_values: Optional exporter field values.
     """
     try:
-        _import_autorun_processors(settings_path)
-
-        from vtsearch.datasets.importers import get_importer
-
-        importer = get_importer(importer_name)
-        if importer is None:
-            available = _list_importer_names()
-            raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
-
-        importer.validate_cli_field_values(field_values)
-
-        merged_results: dict[str, dict[str, Any]] = {}
-        media_type: str | None = None
-        detectors: dict[str, dict[str, Any]] | None = None
-        total_medias = 0
-
-        for chunk_num, chunk_medias in enumerate(
-            importer.run_chunked_cli(field_values, chunk_size, thin=True), 1
-        ):
-            if not chunk_medias:
-                continue
-
-            total_medias += len(chunk_medias)
-
-            if media_type is None:
-                media_type = _detect_media_type(chunk_medias)
-
-                from vtsearch.utils import get_autodetect_detectors_by_media
-
-                detectors = get_autodetect_detectors_by_media(media_type)
-                if not detectors:
-                    raise ValueError(
-                        f"No autorun processors found for media type: {media_type}. "
-                        "Add processors to the settings file or use --settings to specify one."
-                    )
-
-            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
-            chunk_results = _score_medias_with_detectors(chunk_medias, detectors)
-            _merge_detector_results(merged_results, chunk_results)
-
-        if not merged_results:
-            raise ValueError(f"No medias loaded by importer '{importer_name}'")
-
-        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
-        results = _build_multi_results_dict(merged_results, media_type or "unknown")
-        _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+        _run_pipeline(
+            _load_importer_chunked(importer_name, field_values, chunk_size),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            empty_error=f"No medias loaded by importer '{importer_name}'",
+        )
     except (FileNotFoundError, ValueError, NotADirectoryError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-
-
