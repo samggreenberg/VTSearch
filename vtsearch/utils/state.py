@@ -636,12 +636,16 @@ def get_diversity_tree():
         return _diversity_tree
 
 
-def diversity_tree_next_sample() -> int | None:
-    """Return the next diverse sample ID, or ``None`` if unavailable."""
+def diversity_tree_next_sample(scores: dict[int, float] | None = None) -> int | None:
+    """Return the next diverse sample ID, or ``None`` if unavailable.
+
+    When *scores* is provided, the highest-scored element in the next
+    unseen node is returned (so the sort mode influences selection).
+    """
     with _state_lock:
         if _diversity_tree is None:
             return None
-        return _diversity_tree.next_sample()
+        return _diversity_tree.next_sample(scores=scores)
 
 
 def diversity_tree_label(media_id: int) -> None:

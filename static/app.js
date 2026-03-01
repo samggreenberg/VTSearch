@@ -3876,7 +3876,21 @@
 
   async function fetchDiversityTreeNext() {
     try {
-      const res = await fetch("/api/diversity-tree/next");
+      // Send current sort scores so the diversity tree picks the
+      // highest-ranked element within the next unseen node.
+      const body = {};
+      if (sortOrder && sortOrder.length > 0) {
+        const scores = {};
+        for (const entry of sortOrder) {
+          scores[entry.id] = entry.score ?? entry.similarity ?? 0;
+        }
+        body.scores = scores;
+      }
+      const res = await fetch("/api/diversity-tree/next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
       return data;  // { id: int|null, diversity_level: int, exhausted: bool }
     } catch {
