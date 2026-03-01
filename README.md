@@ -36,23 +36,7 @@ You can also load your own data from pickle files or folders via the same menu.
 
 ## Running the tests
 
-Install dev dependencies (includes pytest):
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Then run:
-
-```bash
-python -m pytest tests/ -v
-```
-
-This runs fast CPU tests only. Additional test modes:
-
-- **Full CPU tests** (includes slow CLI subprocess tests): `python -m pytest tests/ -v -m 'not gpu'`
-- **GPU tests** (requires CUDA): `python -m pytest tests/test_gpu.py -v -m gpu`
-- **All tests**: `python -m pytest tests/ -v -m ''`
+See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including the default fast CPU mode and additional modes for full CPU, GPU, and all tests.
 
 ## Project structure
 
