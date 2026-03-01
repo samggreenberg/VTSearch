@@ -46,7 +46,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_detectors.py` — Detector export, detector sort, autorun detectors, auto-detect
   - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
-  - `test_datasets.py` — Dataset endpoints, startup state, importers, archive extraction
+  - `test_datasets.py` — Dataset endpoints, startup state, importers
   - `test_dataset_split.py` — Train/test dataset splitting
   - `test_csv_webhook_exporters.py` — CSV and Webhook exporter metadata, CLI args, export logic
   - `test_dashboard.py` — Dashboard API endpoint tests
