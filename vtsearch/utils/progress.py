@@ -3,16 +3,81 @@
 import threading
 from typing import Any, Optional
 
-# Progress tracking for long-running operations
-progress_lock = threading.Lock()
-progress_data = {
-    "status": "idle",  # idle, loading, downloading, embedding
-    "message": "",
-    "current": 0,
-    "total": 0,
-    "error": None,
-    "staging_result": None,
-}
+
+class ProgressTracker:
+    """Thread-safe progress tracker for long-running operations.
+
+    Each instance manages its own lock and data dict. The *extra_fields*
+    parameter lets callers declare additional keys (e.g. ``"error"``,
+    ``"staging_result"``) that are tracked alongside the base fields.
+
+    Args:
+        extra_fields: Mapping of extra field names to their default values.
+            These fields can be set via keyword arguments in :meth:`update`
+            and are returned by :meth:`get`.
+    """
+
+    def __init__(self, extra_fields: Optional[dict[str, Any]] = None) -> None:
+        self._lock = threading.Lock()
+        self._extra_defaults = dict(extra_fields) if extra_fields else {}
+        self._data: dict[str, Any] = {
+            "status": "idle",
+            "message": "",
+            "current": 0,
+            "total": 0,
+            **{k: v for k, v in self._extra_defaults.items()},
+        }
+
+    def update(
+        self,
+        status: str,
+        message: str = "",
+        current: int = 0,
+        total: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        """Update progress in a thread-safe manner.
+
+        Args:
+            status: Current operation phase (e.g. ``"idle"``, ``"loading"``).
+            message: Human-readable description of what is happening.
+            current: Number of units completed so far.
+            total: Total number of units expected (0 if unknown).
+            **kwargs: Values for any extra fields declared at construction.
+                Unrecognised keys are silently ignored.
+        """
+        with self._lock:
+            self._data["status"] = status
+            self._data["message"] = message
+            self._data["current"] = current
+            self._data["total"] = total
+            for key, default in self._extra_defaults.items():
+                self._data[key] = kwargs.get(key, default)
+
+    def get(self) -> dict[str, Any]:
+        """Return a snapshot of the current progress data.
+
+        Returns:
+            A shallow copy of the internal data dict.
+        """
+        with self._lock:
+            return dict(self._data)
+
+
+# ---------------------------------------------------------------------------
+# Application-wide singleton trackers
+# ---------------------------------------------------------------------------
+
+#: Dataset / import progress (used by dataset loading, downloading, embedding).
+dataset_progress = ProgressTracker(extra_fields={"error": None, "staging_result": None})
+
+#: Sort-specific progress (used by text-sort operations).
+sort_progress = ProgressTracker()
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible free-function API
+# ---------------------------------------------------------------------------
 
 
 def update_progress(
@@ -23,68 +88,18 @@ def update_progress(
     error: Optional[str] = None,
     staging_result: Optional[dict] = None,
 ) -> None:
-    """Update the global progress tracker in a thread-safe manner.
+    """Update the global dataset progress tracker.
 
-    All write access to ``progress_data`` is serialised with ``progress_lock``
-    so that background threads can safely report progress while the Flask
-    request thread polls :func:`get_progress`.
-
-    Args:
-        status: Current operation phase. Recognised values:
-            ``"idle"``, ``"loading"``, ``"downloading"``, ``"embedding"``.
-        message: Human-readable description of what is currently happening
-            (e.g. ``"Embedding media 12/200..."``). Defaults to ``""``.
-        current: Number of units completed so far (e.g. bytes downloaded,
-            medias embedded). Defaults to 0.
-        total: Total number of units expected (e.g. total bytes, total medias).
-            A value of 0 indicates the total is unknown. Defaults to 0.
-        error: If the operation failed, a string describing the error;
-            otherwise ``None``. Defaults to ``None``.
-        staging_result: When a staging operation completes, a dict with keys
-            ``path``, ``name``, ``count``, ``media_type`` describing the
-            staged dataset.  Otherwise ``None``.
+    All write access is serialised internally so that background threads
+    can safely report progress while the Flask request thread polls
+    :func:`get_progress`.
     """
-    with progress_lock:
-        progress_data["status"] = status
-        progress_data["message"] = message
-        progress_data["current"] = current
-        progress_data["total"] = total
-        progress_data["error"] = error
-        progress_data["staging_result"] = staging_result
+    dataset_progress.update(status, message, current, total, error=error, staging_result=staging_result)
 
 
 def get_progress() -> dict[str, Any]:
-    """Return a snapshot of the current progress data.
-
-    Acquires ``progress_lock`` before reading to ensure a consistent view
-    across threads.
-
-    Returns:
-        A shallow copy of ``progress_data`` as a plain dict with the keys:
-
-        - ``"status"`` (``str``): Current operation phase
-          (``"idle"``, ``"loading"``, ``"downloading"``, or ``"embedding"``).
-        - ``"message"`` (``str``): Human-readable status description.
-        - ``"current"`` (``int``): Units completed so far.
-        - ``"total"`` (``int``): Total units expected (0 if unknown).
-        - ``"error"`` (``Optional[str]``): Error message if the last operation
-          failed, otherwise ``None``.
-    """
-    with progress_lock:
-        return dict(progress_data)
-
-
-# ---------------------------------------------------------------------------
-# Sort-specific progress tracking
-# ---------------------------------------------------------------------------
-
-sort_progress_lock = threading.Lock()
-sort_progress_data: dict[str, Any] = {
-    "status": "idle",  # idle, sorting
-    "message": "",
-    "current": 0,
-    "total": 0,
-}
+    """Return a snapshot of the current dataset progress data."""
+    return dataset_progress.get()
 
 
 def update_sort_progress(
@@ -94,14 +109,9 @@ def update_sort_progress(
     total: int = 0,
 ) -> None:
     """Update the sort progress tracker in a thread-safe manner."""
-    with sort_progress_lock:
-        sort_progress_data["status"] = status
-        sort_progress_data["message"] = message
-        sort_progress_data["current"] = current
-        sort_progress_data["total"] = total
+    sort_progress.update(status, message, current, total)
 
 
 def get_sort_progress() -> dict[str, Any]:
     """Return a snapshot of the current sort progress data."""
-    with sort_progress_lock:
-        return dict(sort_progress_data)
+    return sort_progress.get()
