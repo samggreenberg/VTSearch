@@ -166,7 +166,7 @@ argument parsing. Key startup sequence:
 | Dataset loading and downloading | `vtsearch/datasets/` |
 | Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/` |
 | Constants and model IDs | `vtsearch/config.py` |
-| Frontend | `static/index.html`, `static/app.js`, `static/styles.css` |
+| Frontend | `static/index.html`, `static/js/app.js`, `static/styles.css` |
 | Tests | `tests/` (see test list in CLAUDE.md) |
 
 ### Architectural boundaries
