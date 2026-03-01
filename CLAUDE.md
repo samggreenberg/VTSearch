@@ -33,7 +33,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
 - `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
+- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_audio.py` — WAV generation
