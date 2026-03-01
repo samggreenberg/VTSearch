@@ -142,7 +142,7 @@ class LabelSet:
 
         Args:
             results: A results dict as produced by ``/api/auto-detect`` or
-                :func:`~vtsearch.cli._build_results_dict`.
+                :func:`~vtsearch.cli._build_multi_results_dict`.
             medias: Optional medias dict for enriching hits with origin info.
                 When provided, origin data is looked up from the media; when
                 absent, origin data is taken from the hit dict itself (if

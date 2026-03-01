@@ -12,7 +12,6 @@ import pytest
 import app as app_module
 from vtsearch.cli import (
     _build_multi_results_dict,
-    _build_results_dict,
     _detect_media_type,
     _run_exporter,
     _score_medias_with_detectors,
@@ -25,6 +24,25 @@ from vtsearch.datasets.loader import export_dataset_to_file
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_results_dict(hits, detector_path, media_type="unknown"):
+    """Build a single-detector results dict for testing (same shape as exporter input)."""
+    detector_data = json.loads(Path(detector_path).read_text())
+    detector_name = detector_data.get("name", Path(detector_path).stem)
+    threshold = detector_data.get("threshold", 0.5)
+    return {
+        "media_type": media_type,
+        "detectors_run": 1,
+        "results": {
+            detector_name: {
+                "detector_name": detector_name,
+                "threshold": threshold,
+                "total_hits": len(hits),
+                "hits": hits,
+            }
+        },
+    }
 
 
 def _make_dataset_file(tmp_path, clips_dict):
