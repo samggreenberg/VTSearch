@@ -182,9 +182,43 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml build  # GPU
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
+## Running the tests
+
+Install dev dependencies (includes pytest):
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Then run:
+
+```bash
+python -m pytest tests/ -v
+```
+
+This runs fast CPU tests only. Additional test modes:
+
+**Full CPU tests** (includes slow CLI subprocess tests):
+
+```bash
+python -m pytest tests/ -v -m 'not gpu'
+```
+
+**GPU tests** (requires CUDA):
+
+```bash
+python -m pytest tests/test_gpu.py -v -m gpu
+```
+
+**All tests**:
+
+```bash
+python -m pytest tests/ -v -m ''
+```
+
 ## Next steps
 
 - **Load a dataset**: Click the hamburger menu in the top-left corner to browse demo datasets or import your own data.
-- **Run tests**: `python -m pytest tests/ -v`
+- **Run tests**: See [Running the tests](#running-the-tests) above.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and exporters from the command line.
 - **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media types, importers, or exporters.
