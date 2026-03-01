@@ -813,8 +813,9 @@ def load_dataset_from_pickle(
             bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
             if bytes_val is None:
                 for legacy_key in _legacy_bytes.get(media_type, []):
-                    bytes_val = media_info.get(legacy_key)
-                    if bytes_val is not None:
+                    val = media_info.get(legacy_key)
+                    if isinstance(val, bytes):
+                        bytes_val = val
                         break
 
             # Try media_string (text media), then legacy keys
@@ -996,8 +997,9 @@ def load_dataset_from_pickle_chunked(
             bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
             if bytes_val is None:
                 for legacy_key in _legacy_bytes.get(media_type, []):
-                    bytes_val = media_info.get(legacy_key)
-                    if bytes_val is not None:
+                    val = media_info.get(legacy_key)
+                    if isinstance(val, bytes):
+                        bytes_val = val
                         break
 
             # Try media_string (text media), then legacy keys
