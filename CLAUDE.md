@@ -95,6 +95,21 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **`gpu`**: CUDA-only tests. Run with `-m gpu`.
 - **All tests**: Use `-m ''` to run everything.
 
+## Reading Test Results (IMPORTANT)
+
+Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`, `test_http_error_propagates`, `test_errors_dont_corrupt_state`). These are tests that **verify error-handling behavior** — they are not failures.
+
+**To determine whether tests passed or failed, ONLY look at the pytest summary line at the bottom of the output.** Examples:
+- `== 250 passed in 34.12s ==` → all tests passed (green)
+- `== 3 failed, 247 passed in 35.00s ==` → 3 actual failures
+- `FAILED tests/test_foo.py::TestBar::test_baz` → this specific test failed
+
+**Do NOT scan test names or output for the word "error" to detect failures.** A line like:
+```
+tests/test_memory_errors.py::TestPickleMemoryError::test_importer_background_oom_reports_error PASSED
+```
+means the test **passed** — the word "error" is part of the test name, not an indication of failure.
+
 ## Test Workflow (IMPORTANT)
 
 Testing can crash the session. To avoid losing work, follow this workflow:
