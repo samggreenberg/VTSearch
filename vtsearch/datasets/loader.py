@@ -717,8 +717,7 @@ def load_dataset_from_pickle(
     except MemoryError:
         gc.collect()
         raise MemoryError(
-            f"Out of memory while reading {file_path.name}. "
-            "The pickle file is too large for available RAM."
+            f"Out of memory while reading {file_path.name}. The pickle file is too large for available RAM."
         )
 
     medias.clear()
@@ -741,15 +740,16 @@ def load_dataset_from_pickle(
             "params": creation_info.get("field_values", {}),
         }
 
-    # Build the dir_key mapping dynamically from the media type registry.
-    # Also build the legacy-bytes-key mapping for backward compat with old pickles.
+    # Build lookup tables dynamically from the media type registry.
     from vtsearch.media import all_types
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
+    _extra_fields: dict[str, list[str]] = {}
     for mt in all_types():
         _dir_keys[mt.type_id] = mt.dir_key
         _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
+        _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     # Convert to the app's media format
     missing_media = 0
@@ -793,12 +793,8 @@ def load_dataset_from_pickle(
                     "origin": media_info.get("origin", fallback_origin),
                     "origin_name": media_info.get("origin_name", fname),
                 }
-                if media_type == "image":
-                    media_data["width"] = media_info.get("width")
-                    media_data["height"] = media_info.get("height")
-                elif media_type == "paragraph":
-                    media_data["word_count"] = media_info.get("word_count")
-                    media_data["character_count"] = media_info.get("character_count")
+                for field in _extra_fields.get(media_type, []):
+                    media_data[field] = media_info.get(field)
 
                 medias[media_id] = media_data
                 loaded_count += 1
@@ -817,8 +813,9 @@ def load_dataset_from_pickle(
             bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
             if bytes_val is None:
                 for legacy_key in _legacy_bytes.get(media_type, []):
-                    bytes_val = media_info.get(legacy_key)
-                    if bytes_val is not None:
+                    val = media_info.get(legacy_key)
+                    if isinstance(val, bytes):
+                        bytes_val = val
                         break
 
             # Try media_string (text media), then legacy keys
@@ -869,13 +866,8 @@ def load_dataset_from_pickle(
                     "origin": media_info.get("origin", fallback_origin),
                     "origin_name": media_info.get("origin_name", fname),
                 }
-                # Add media-specific metadata
-                if media_type == "image":
-                    media_data["width"] = media_info.get("width")
-                    media_data["height"] = media_info.get("height")
-                elif media_type == "paragraph":
-                    media_data["word_count"] = media_info.get("word_count")
-                    media_data["character_count"] = media_info.get("character_count")
+                for field in _extra_fields.get(media_type, []):
+                    media_data[field] = media_info.get(field)
 
                 medias[media_id] = media_data
                 loaded_count += 1
@@ -938,12 +930,17 @@ def load_dataset_from_pickle_chunked(
             "params": creation_info.get("field_values", {}),
         }
 
-    _dir_keys = {
-        "audio": "audio_dir",
-        "video": "video_dir",
-        "image": "image_dir",
-        "paragraph": "text_dir",
-    }
+    # Build lookup tables dynamically from the media type registry,
+    # matching the approach used by load_dataset_from_pickle.
+    from vtsearch.media import all_types
+
+    _dir_keys: dict[str, str] = {}
+    _legacy_bytes: dict[str, list[str]] = {}
+    _extra_fields: dict[str, list[str]] = {}
+    for mt in all_types():
+        _dir_keys[mt.type_id] = mt.dir_key
+        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
+        _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     all_media_ids = sorted(medias_data.keys())
 
@@ -984,12 +981,8 @@ def load_dataset_from_pickle_chunked(
                     "origin": media_info.get("origin", fallback_origin),
                     "origin_name": media_info.get("origin_name", fname),
                 }
-                if media_type == "image":
-                    media_data["width"] = media_info.get("width")
-                    media_data["height"] = media_info.get("height")
-                elif media_type == "paragraph":
-                    media_data["word_count"] = media_info.get("word_count")
-                    media_data["character_count"] = media_info.get("character_count")
+                for field in _extra_fields.get(media_type, []):
+                    media_data[field] = media_info.get(field)
 
                 chunk_medias[new_id] = media_data
                 new_id += 1
@@ -1000,60 +993,43 @@ def load_dataset_from_pickle_chunked(
             media_string = None
             media_path = None
 
-            if media_type == "audio":
-                media_bytes = (
-                    media_info.get("media_bytes")
-                    or media_info.get("clip_bytes")
-                    or media_info.get("wav_bytes")
-                )
-                if not media_bytes and "filename" in media_info and "audio_dir" in data:
-                    audio_path = Path(data["audio_dir"]) / media_info["filename"]
-                    if audio_path.exists():
-                        with open(audio_path, "rb") as f:
-                            media_bytes = f.read()
-                        media_path = str(audio_path.resolve())
+            # Try media_bytes first (binary media), then legacy keys via registry
+            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
+            if bytes_val is None:
+                for legacy_key in _legacy_bytes.get(media_type, []):
+                    val = media_info.get(legacy_key)
+                    if isinstance(val, bytes):
+                        bytes_val = val
+                        break
 
-            elif media_type == "video":
-                media_bytes = (
-                    media_info.get("media_bytes")
-                    or media_info.get("clip_bytes")
-                    or media_info.get("video_bytes")
-                )
-                if not media_bytes and "filename" in media_info and "video_dir" in data:
-                    video_path = Path(data["video_dir"]) / media_info["filename"]
-                    if video_path.exists():
-                        with open(video_path, "rb") as f:
-                            media_bytes = f.read()
-                        media_path = str(video_path.resolve())
+            # Try media_string (text media), then legacy keys
+            string_val = media_info.get("media_string") or media_info.get("clip_string")
+            if string_val is None:
+                for legacy_key in _legacy_bytes.get(media_type, []):
+                    val = media_info.get(legacy_key)
+                    if isinstance(val, str):
+                        string_val = val
+                        break
 
-            elif media_type == "image":
-                media_bytes = (
-                    media_info.get("media_bytes")
-                    or media_info.get("clip_bytes")
-                    or media_info.get("image_bytes")
-                )
-                if not media_bytes and "filename" in media_info and "image_dir" in data:
-                    image_path = Path(data["image_dir"]) / media_info["filename"]
-                    if image_path.exists():
-                        with open(image_path, "rb") as f:
-                            media_bytes = f.read()
-                        media_path = str(image_path.resolve())
-
-            elif media_type == "paragraph":
-                media_string = (
-                    media_info.get("media_string")
-                    or media_info.get("clip_string")
-                    or media_info.get("text_content")
-                )
-                if media_string is not None:
-                    media_bytes = media_string.encode("utf-8")
-                elif "filename" in media_info and "text_dir" in data:
-                    text_path = Path(data["text_dir"]) / media_info["filename"]
-                    if text_path.exists():
-                        with open(text_path, "r", encoding="utf-8") as f:
-                            media_string = f.read()
-                            media_bytes = media_string.encode("utf-8")
-                        media_path = str(text_path.resolve())
+            if bytes_val is not None:
+                media_bytes = bytes_val
+            elif string_val is not None:
+                media_string = string_val
+                media_bytes = string_val.encode("utf-8")
+            else:
+                # Try loading from the external directory via registry dir_key
+                dir_key = _dir_keys.get(media_type)
+                if dir_key and dir_key in data and "filename" in media_info:
+                    ext_path = Path(data[dir_key]) / media_info["filename"]
+                    if ext_path.exists():
+                        if media_string is None and ext_path.suffix in (".txt", ".md"):
+                            with open(ext_path, "r", encoding="utf-8") as f:
+                                media_string = f.read()
+                                media_bytes = media_string.encode("utf-8")
+                        else:
+                            with open(ext_path, "rb") as f:
+                                media_bytes = f.read()
+                        media_path = str(ext_path.resolve())
 
             if media_bytes is not None:
                 fname = media_info.get("filename", f"media_{media_id}.{media_type}")
@@ -1072,12 +1048,8 @@ def load_dataset_from_pickle_chunked(
                     "origin": media_info.get("origin", fallback_origin),
                     "origin_name": media_info.get("origin_name", fname),
                 }
-                if media_type == "image":
-                    media_data["width"] = media_info.get("width")
-                    media_data["height"] = media_info.get("height")
-                elif media_type == "paragraph":
-                    media_data["word_count"] = media_info.get("word_count")
-                    media_data["character_count"] = media_info.get("character_count")
+                for field in _extra_fields.get(media_type, []):
+                    media_data[field] = media_info.get(field)
 
                 chunk_medias[new_id] = media_data
                 new_id += 1

@@ -243,6 +243,176 @@ class TestPickleChunked:
         assert media["filename"] == "clip_1.wav"
         assert media["category"] == "cat_1"
 
+    def test_image_extra_fields_preserved(self, tmp_path):
+        """Image-specific fields (width, height) are preserved via the registry."""
+        medias_data = {
+            1: {
+                "type": "image",
+                "embedding": np.random.randn(512).tolist(),
+                "media_bytes": b"\x89PNG fake",
+                "filename": "photo.png",
+                "width": 640,
+                "height": 480,
+                "category": "test",
+            }
+        }
+        pkl_path = tmp_path / "img.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
+
+        # Full mode
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        media = chunks[0][1]
+        assert media["type"] == "image"
+        assert media["width"] == 640
+        assert media["height"] == 480
+
+        # Thin mode
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
+        media = chunks[0][1]
+        assert media["width"] == 640
+        assert media["height"] == 480
+
+    def test_text_extra_fields_preserved(self, tmp_path):
+        """Text-specific fields (word_count, character_count) are preserved via the registry."""
+        medias_data = {
+            1: {
+                "type": "paragraph",
+                "embedding": np.random.randn(512).tolist(),
+                "media_string": "Hello world",
+                "media_bytes": b"Hello world",
+                "filename": "doc.txt",
+                "word_count": 2,
+                "character_count": 11,
+                "category": "test",
+            }
+        }
+        pkl_path = tmp_path / "txt.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
+
+        # Full mode
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        media = chunks[0][1]
+        assert media["type"] == "paragraph"
+        assert media["word_count"] == 2
+        assert media["character_count"] == 11
+
+        # Thin mode
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
+        media = chunks[0][1]
+        assert media["word_count"] == 2
+        assert media["character_count"] == 11
+
+    def test_document_type_loaded_via_registry(self, tmp_path):
+        """Document media type loads correctly in chunked mode (previously silently failed)."""
+        medias_data = {
+            1: {
+                "type": "document",
+                "embedding": np.random.randn(512).tolist(),
+                "media_bytes": b"%PDF-1.4 fake",
+                "filename": "report.pdf",
+                "category": "test",
+            }
+        }
+        pkl_path = tmp_path / "doc.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
+
+        # Full mode — was silently skipped before registry fix
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        assert len(chunks) == 1
+        media = chunks[0][1]
+        assert media["type"] == "document"
+        assert media["media_bytes"] == b"%PDF-1.4 fake"
+
+        # Thin mode
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
+        assert len(chunks) == 1
+        assert chunks[0][1]["type"] == "document"
+
+    def test_legacy_bytes_keys_via_registry(self, tmp_path):
+        """Legacy pickle keys (e.g. wav_bytes, image_bytes) are resolved via the registry."""
+        medias_data = {
+            1: {
+                "type": "audio",
+                "embedding": np.random.randn(512).tolist(),
+                "wav_bytes": _make_wav_bytes(),
+                "filename": "clip.wav",
+                "category": "test",
+            },
+            2: {
+                "type": "image",
+                "embedding": np.random.randn(512).tolist(),
+                "image_bytes": b"\x89PNG fake",
+                "filename": "pic.png",
+                "category": "test",
+            },
+        }
+        pkl_path = tmp_path / "legacy.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
+
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        loaded = chunks[0]
+        assert len(loaded) == 2
+        types = {m["type"] for m in loaded.values()}
+        assert types == {"audio", "image"}
+
+    def test_external_dir_via_registry(self, tmp_path):
+        """External directory loading uses registry dir_key instead of hardcoded keys."""
+        doc_dir = tmp_path / "docs"
+        doc_dir.mkdir()
+        (doc_dir / "report.pdf").write_bytes(b"%PDF fake content")
+
+        medias_data = {
+            1: {
+                "type": "document",
+                "embedding": np.random.randn(512).tolist(),
+                "filename": "report.pdf",
+                "category": "test",
+            }
+        }
+        pkl_path = tmp_path / "ext_doc.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data, "document_dir": str(doc_dir)}, f)
+
+        # Full mode — loads bytes from the external document_dir
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        assert len(chunks) == 1
+        media = chunks[0][1]
+        assert media["type"] == "document"
+        assert media["media_bytes"] == b"%PDF fake content"
+
+        # Thin mode — resolves media_path from document_dir
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
+        assert len(chunks) == 1
+        media = chunks[0][1]
+        assert media["media_path"] is not None
+        assert "report.pdf" in media["media_path"]
+
+    def test_text_legacy_key_via_registry(self, tmp_path):
+        """Legacy text_content key is resolved via the registry for paragraph type."""
+        medias_data = {
+            1: {
+                "type": "paragraph",
+                "embedding": np.random.randn(512).tolist(),
+                "text_content": "Some text paragraph",
+                "filename": "para.txt",
+                "category": "test",
+            }
+        }
+        pkl_path = tmp_path / "txt_legacy.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
+
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
+        assert len(chunks) == 1
+        media = chunks[0][1]
+        assert media["type"] == "paragraph"
+        assert media["media_string"] == "Some text paragraph"
+        assert media["media_bytes"] == b"Some text paragraph"
+
 
 # ======================================================================
 # DatasetImporter.run_chunked / run_chunked_cli (base class default)
