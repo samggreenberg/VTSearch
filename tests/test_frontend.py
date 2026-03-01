@@ -136,10 +136,9 @@ class TestFrontendContentIntegrity:
         resp = self.client.get("/")
         assert b"center" in resp.data
 
-    def test_index_has_vote_buttons(self):
+    def test_index_has_vote_section(self):
         resp = self.client.get("/")
-        assert b"vote-good" in resp.data
-        assert b"vote-bad" in resp.data
+        assert b"vote-section" in resp.data
 
     def test_index_has_sort_controls(self):
         resp = self.client.get("/")
