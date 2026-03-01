@@ -120,7 +120,7 @@ def reset_state():
     autorun entries, and all other mutable state that lives in
     ``vtsearch.utils.state``.  It runs automatically before every test.
     """
-    import vtsearch.utils.state as _state
+    import vtsearch.utils.state_core as _core
 
     good_votes.clear()
     bad_votes.clear()
@@ -128,13 +128,13 @@ def reset_state():
     textsort_suggestions.clear()
     vote_click_times.clear()
     last_learned_scores.clear()
-    _state._click_counter = 0
-    _state.inclusion = None  # reset to "not loaded" so it re-reads from settings
-    _state._dataset_display_name = None
-    _state._diversity_tree = None
-    _state.autorun_detectors.clear()
-    _state.autorun_extractors.clear()
-    _state.autorun_localizers.clear()
+    _core._click_counter = 0
+    _core.inclusion = None  # reset to "not loaded" so it re-reads from settings
+    _core._dataset_display_name = None
+    _core._diversity_tree = None
+    _core.autorun_detectors.clear()
+    _core.autorun_extractors.clear()
+    _core.autorun_localizers.clear()
     clear_progress_cache()
 
     # Reset the dataset and model registries
