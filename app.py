@@ -148,7 +148,7 @@ if __name__ == "__main__":
         # Collect exporter field values if an exporter was specified
         exporter_field_values = None
         if exporter:
-            exporter_field_values = {f.key: getattr(args, f.key, f.default or None) for f in exporter.fields}
+            exporter_field_values = {f.key: getattr(args, f.key, f.default) for f in exporter.fields}
 
         settings_path = getattr(args, "settings", None)
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
         if args.importer:
             # Importer-based path
-            field_values = {f.key: getattr(args, f.key, f.default or None) for f in importer.fields}
+            field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
 
             if chunk_size:
                 from vtsearch.cli import autodetect_importer_main_chunked

@@ -179,51 +179,6 @@ def _list_exporter_names() -> list[str]:
     return [exp.name for exp in list_exporters()]
 
 
-def _print_hits(hits: list[dict[str, Any]]) -> None:
-    """Print autodetect results to stdout."""
-    if not hits:
-        print("No items predicted as Good.")
-        return
-
-    print(f"Predicted Good ({len(hits)} items):\n")
-    for hit in hits:
-        print(f"  {hit['filename']}  (score: {hit['score']}, category: {hit['category']})")
-
-
-def _build_results_dict(
-    hits: list[dict[str, Any]],
-    detector_path: str,
-    media_type: str = "unknown",
-) -> dict[str, Any]:
-    """Build the full results dict expected by exporters.
-
-    Args:
-        hits: List of hit dicts from :func:`_score_clips_with_detector`.
-        detector_path: Path to the detector JSON (re-read for metadata).
-        media_type: The media type string for the dataset.
-
-    Returns:
-        A dict matching the shape expected by
-        :meth:`~vtsearch.exporters.base.LabelsetExporter.export`.
-    """
-    detector_data = json.loads(Path(detector_path).read_text())
-    detector_name = detector_data.get("name", Path(detector_path).stem)
-    threshold = detector_data.get("threshold", 0.5)
-
-    return {
-        "media_type": media_type,
-        "detectors_run": 1,
-        "results": {
-            detector_name: {
-                "detector_name": detector_name,
-                "threshold": threshold,
-                "total_hits": len(hits),
-                "hits": hits,
-            }
-        },
-    }
-
-
 def _score_medias_with_detectors(
     medias: dict[int, dict[str, Any]],
     detectors: dict[str, dict[str, Any]],

@@ -121,7 +121,7 @@ class FolderDatasetImporter(DatasetImporter):
         if media_type == "images":
             _load_pdf_images(folder, medias, thin=thin)
             if not has_regular and not medias:
-                raise ValueError("No images files found in folder")
+                raise ValueError("No image files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
