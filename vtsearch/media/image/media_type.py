@@ -115,6 +115,10 @@ class ImageMediaType(MediaType):
     def legacy_bytes_keys(self) -> list[str]:
         return ["image_bytes"]
 
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["width", "height"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
