@@ -2,7 +2,7 @@
 
 Covers:
 - SPA entry point (GET /)
-- Static file serving (index.html, app.js, styles.css)
+- Static file serving (index.html, js/app.js, styles.css)
 - Favicon variants (smile, frown, surprised) and unknown variants
 - Logo serving (SVG)
 - Content types and cache behavior
@@ -45,7 +45,7 @@ class TestStaticFiles:
         self.client = app_module.app.test_client()
 
     def test_app_js_accessible(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
@@ -55,7 +55,7 @@ class TestStaticFiles:
         assert "css" in resp.content_type
 
     def test_app_js_is_nonempty(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         assert len(resp.data) > 1000
 
     def test_styles_css_is_nonempty(self):
@@ -153,22 +153,22 @@ class TestFrontendContentIntegrity:
         assert b"dashboard-view" in resp.data
 
     def test_app_js_contains_fetch_calls(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         text = resp.data.decode("utf-8")
         assert "fetch(" in text
 
     def test_app_js_contains_api_sort(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         text = resp.data.decode("utf-8")
         assert "/api/sort" in text
 
     def test_app_js_contains_api_votes(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         text = resp.data.decode("utf-8")
         assert "/api/votes" in text
 
     def test_app_js_contains_api_medias(self):
-        resp = self.client.get("/static/app.js")
+        resp = self.client.get("/static/js/app.js")
         text = resp.data.decode("utf-8")
         assert "/api/medias" in text
 

@@ -1,4 +1,11 @@
-(function() {
+/**
+ * VTSearch — main application module.
+ *
+ * Converted from IIFE to ES module. Extracted utility modules live alongside
+ * this file (state.js, api.js, ui.js, plugin-modal.js, sorting.js, voting.js,
+ * media.js, settings.js, progress.js) and can be imported incrementally.
+ */
+
   let medias = [];
   let votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
   let labelSortMode = "time-desc"; // default: newest first
@@ -3013,7 +3020,7 @@
     // Display summary
     autodetectSummary.innerHTML = `
       <p style="color: var(--text-primary);">
-        <strong>Media Type:</strong> ${data.media_type} &nbsp;|&nbsp;
+        <strong>Media Type:</strong> ${escapeHtml(data.media_type)} &nbsp;|&nbsp;
         <strong>Detectors Run:</strong> ${data.detectors_run} &nbsp;|&nbsp;
         <strong>Good Results:</strong> ${allHits.length}
       </p>
@@ -3075,8 +3082,8 @@
     // Summary
     autodetectSummary.innerHTML = `
       <p style="color: var(--text-primary);">
-        <strong>Datasets:</strong> ${datasetNames.join(", ")} &nbsp;|&nbsp;
-        <strong>Models:</strong> ${modelNames.join(", ")} &nbsp;|&nbsp;
+        <strong>Datasets:</strong> ${datasetNames.map(n => escapeHtml(n)).join(", ")} &nbsp;|&nbsp;
+        <strong>Models:</strong> ${modelNames.map(n => escapeHtml(n)).join(", ")} &nbsp;|&nbsp;
         <strong>Good Results:</strong> ${results.length}
       </p>
     `;
@@ -3329,7 +3336,7 @@
     else countText = `<strong>Good:</strong> ${goodTotal} &nbsp; <strong>Bad:</strong> ${badTotal}`;
     autodetectSummary.innerHTML = `
       <p style="color: var(--text-primary);">
-        <strong>Media Type:</strong> ${data.media_type} &nbsp;|&nbsp;
+        <strong>Media Type:</strong> ${escapeHtml(data.media_type)} &nbsp;|&nbsp;
         <strong>Detectors Run:</strong> ${data.detectors_run} &nbsp;|&nbsp;
         ${countText}
       </p>
@@ -7435,4 +7442,3 @@
       media.pause();
     }
   }
-})();
