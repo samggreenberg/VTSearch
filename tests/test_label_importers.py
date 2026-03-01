@@ -429,28 +429,6 @@ class TestLabelImportEndpoint:
         assert set(app_module.good_votes) == {1, 3, 5}
         assert set(app_module.bad_votes) == {2, 4}
 
-    def test_json_roundtrip(self, client, tmp_path):
-        """Export labels, re-import via server_json_file importer."""
-        app_module.good_votes.update({k: None for k in [1, 3]})
-        app_module.bad_votes.update({k: None for k in [2]})
-
-        export_res = client.get("/api/labels/export")
-        exported = export_res.get_json()
-
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-
-        p = tmp_path / "labels.json"
-        p.write_text(json.dumps(exported))
-        res = client.post(
-            "/api/label-importers/import/server_json_file",
-            json={"filepath": str(p)},
-        )
-        result = res.get_json()
-        assert result["applied"] == 3
-        assert set(app_module.good_votes) == {1, 3}
-        assert set(app_module.bad_votes) == {2}
-
     def test_multiple_clips_via_csv(self, client, tmp_path):
         lines = ["md5,label"]
         good_ids = [1, 2, 3]

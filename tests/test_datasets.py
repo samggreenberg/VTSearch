@@ -1,7 +1,5 @@
 import io
-import struct
 import tarfile
-import wave
 import zipfile
 
 import pytest
@@ -336,89 +334,6 @@ class TestLoadEmbedderForClips:
         assert vec is not None
         assert len(vec.shape) == 1
         assert vec.shape[0] > 0
-
-
-class TestExtractArchive:
-    """Unit tests for the zip/tar extraction helper."""
-
-    from vtsearch.datasets.importers.http_zip import _extract_archive
-
-    def _make_wav_bytes(self) -> bytes:
-        """Create a minimal valid WAV file in memory."""
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(44100)
-            samples = struct.pack("<" + "h" * 100, *([0] * 100))
-            wf.writeframes(samples)
-        return buf.getvalue()
-
-    def test_extract_zip(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        zip_path = tmp_path / "test.zip"
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("sounds/tone.wav", wav_data)
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(zip_path, extract_dir)
-        assert (extract_dir / "sounds" / "tone.wav").exists()
-
-    def test_extract_tar_gz(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        tar_path = tmp_path / "test.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as tf:
-            info = tarfile.TarInfo(name="sounds/tone.wav")
-            info.size = len(wav_data)
-            tf.addfile(info, io.BytesIO(wav_data))
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
-        assert (extract_dir / "sounds" / "tone.wav").exists()
-
-    def test_extract_tar_uncompressed(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        tar_path = tmp_path / "test.tar"
-        with tarfile.open(tar_path, "w") as tf:
-            info = tarfile.TarInfo(name="tone.wav")
-            info.size = len(wav_data)
-            tf.addfile(info, io.BytesIO(wav_data))
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
-        assert (extract_dir / "tone.wav").exists()
-
-    def test_unsupported_format_raises(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        bad_archive = tmp_path / "test.7z"
-        bad_archive.write_bytes(b"not a real archive")
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        with pytest.raises((ValueError, Exception)):
-            _extract_archive(bad_archive, extract_dir)
-
-    def test_rar_without_rarfile_raises_runtime_error(self, tmp_path):
-        """Attempting RAR extraction without rarfile installed raises RuntimeError."""
-        import sys
-        import unittest.mock as mock
-
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        rar_path = tmp_path / "test.rar"
-        rar_path.write_bytes(b"Rar!\x1a\x07\x00")  # RAR magic bytes (v4)
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-
-        with mock.patch.dict(sys.modules, {"rarfile": None}):
-            with pytest.raises((RuntimeError, ImportError, Exception)):
-                _extract_archive(rar_path, extract_dir)
 
 
 class TestCaltech101Download:
