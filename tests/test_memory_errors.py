@@ -212,7 +212,7 @@ class TestBackgroundImportMemoryError:
         update_progress("idle", "")
 
         # Patch threading.Thread to run synchronously so we don't race
-        with mock.patch("vtsearch.routes.datasets.threading") as mock_threading:
+        with mock.patch("vtsearch.routes.datasets_loading.threading") as mock_threading:
             captured_target = {}
 
             def fake_thread(target, daemon=True):
