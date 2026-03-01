@@ -31,7 +31,7 @@
       </div>
       <div class="burger-section">
         <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
-        <div class="burger-item" id="menu-settings">Settings</div>
+        <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
       </div>
     </div>
   </nav>
@@ -533,11 +533,11 @@
 </div>
 
 <!-- Settings Modal -->
-<div id="settings-modal" class="modal">
+<div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header">
-      <h2>Settings</h2>
-      <button class="modal-close" id="settings-modal-close">&times;</button>
+      <h2 id="settings-modal-title">Settings</h2>
+      <button class="modal-close" id="settings-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <div class="settings-columns">

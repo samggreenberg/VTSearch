@@ -500,7 +500,6 @@ def example_sort():
         try:
             results, thresh = _example_sort_from_path(temp_path)
         finally:
-            # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
         return jsonify({"results": results, "threshold": thresh})

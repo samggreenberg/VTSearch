@@ -257,7 +257,7 @@ def set_autopilot_hard_reds(value: int) -> None:
     _save(s)
 
 
-VALID_MEDIA_TYPES = ("audio", "image", "paragraph", "video")
+VALID_MEDIA_TYPES = ("audio", "document", "image", "paragraph", "video")
 
 
 def get_autoload_media_types() -> list[str]:

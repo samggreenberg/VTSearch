@@ -1076,13 +1076,13 @@ def multi_find():
                         from vtsearch.models import calculate_cross_calibration_threshold, train_model
 
                         input_dim = X_list[0].shape[0]
-                        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim)
+                        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, get_inclusion())
 
                         import torch
 
                         X_train = torch.tensor(np.array(X_list), dtype=torch.float32)
                         y_train = torch.tensor([[v] for v in y_list], dtype=torch.float32)
-                        model = train_model(X_train, y_train, input_dim)
+                        model = train_model(X_train, y_train, input_dim, get_inclusion())
 
                         with torch.no_grad():
                             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
