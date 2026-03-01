@@ -258,40 +258,6 @@ def _score_medias_with_detectors(
     return results
 
 
-def _build_results_dict(
-    hits: list[dict[str, Any]],
-    detector_path: str,
-    media_type: str = "unknown",
-) -> dict[str, Any]:
-    """Build the full results dict expected by exporters (single detector).
-
-    Args:
-        hits: List of hit dicts from :func:`_score_clips_with_detector`.
-        detector_path: Path to the detector JSON (re-read for metadata).
-        media_type: The media type string for the dataset.
-
-    Returns:
-        A dict matching the shape expected by
-        :meth:`~vtsearch.exporters.base.LabelsetExporter.export`.
-    """
-    detector_data = json.loads(Path(detector_path).read_text())
-    detector_name = detector_data.get("name", Path(detector_path).stem)
-    threshold = detector_data.get("threshold", 0.5)
-
-    return {
-        "media_type": media_type,
-        "detectors_run": 1,
-        "results": {
-            detector_name: {
-                "detector_name": detector_name,
-                "threshold": threshold,
-                "total_hits": len(hits),
-                "hits": hits,
-            }
-        },
-    }
-
-
 def _build_multi_results_dict(
     detector_results: dict[str, dict[str, Any]],
     media_type: str = "unknown",
