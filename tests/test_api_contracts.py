@@ -367,23 +367,25 @@ class TestImportersContract:
         app_module.app.config["TESTING"] = True
         self.client = app_module.app.test_client()
 
-    def test_returns_list(self):
+    def test_returns_importers_dict(self):
         resp = self.client.get("/api/dataset/importers")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "importers" in data
+        assert isinstance(data["importers"], list)
 
-    def test_all_importers_returns_list(self):
+    def test_all_importers_returns_importers_dict(self):
         resp = self.client.get("/api/dataset/all-importers")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "importers" in data
+        assert isinstance(data["importers"], list)
 
     def test_all_importers_is_superset(self):
         resp1 = self.client.get("/api/dataset/importers")
         resp2 = self.client.get("/api/dataset/all-importers")
-        names1 = {i["name"] for i in resp1.get_json()}
-        names2 = {i["name"] for i in resp2.get_json()}
+        names1 = {i["name"] for i in resp1.get_json()["importers"]}
+        names2 = {i["name"] for i in resp2.get_json()["importers"]}
         assert names1.issubset(names2)
 
 
@@ -428,11 +430,12 @@ class TestAutorunDetectorsContract:
         app_module.app.config["TESTING"] = True
         self.client = app_module.app.test_client()
 
-    def test_get_returns_list(self):
+    def test_get_returns_detectors_dict(self):
         resp = self.client.get("/api/autorun-detectors")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "detectors" in data
+        assert isinstance(data["detectors"], list)
 
     def test_create_returns_success(self):
         resp = self.client.post("/api/autorun-detectors", json={
@@ -601,11 +604,12 @@ class TestDatasetRegistryContract:
         app_module.app.config["TESTING"] = True
         self.client = app_module.app.test_client()
 
-    def test_returns_list(self):
+    def test_returns_datasets_dict(self):
         resp = self.client.get("/api/datasets/registry")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "datasets" in data
+        assert isinstance(data["datasets"], list)
 
 
 class TestModelsRegistryContract:
@@ -615,11 +619,12 @@ class TestModelsRegistryContract:
         app_module.app.config["TESTING"] = True
         self.client = app_module.app.test_client()
 
-    def test_returns_list(self):
+    def test_returns_models_dict(self):
         resp = self.client.get("/api/models/registry")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "models" in data
+        assert isinstance(data["models"], list)
 
 
 class TestTrainableModelsContract:
@@ -629,11 +634,12 @@ class TestTrainableModelsContract:
         app_module.app.config["TESTING"] = True
         self.client = app_module.app.test_client()
 
-    def test_list_returns_list(self):
+    def test_list_returns_models_dict(self):
         resp = self.client.get("/api/trainable-models")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data, list)
+        assert "models" in data
+        assert isinstance(data["models"], list)
 
 
 class TestErrorResponseFormat:
