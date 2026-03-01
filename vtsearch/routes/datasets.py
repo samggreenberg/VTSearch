@@ -1,4 +1,13 @@
-"""Blueprint for dataset management routes."""
+"""Blueprint for dataset management routes.
+
+This module is a re-export facade.  The helpers and routes are split across:
+
+* ``datasets_loading`` — Background loading, staging, origin management
+* ``datasets_ui`` — Dashboard, demo list, display name
+
+Route handlers that are tightly coupled to import/load/registry logic
+remain here.
+"""
 
 import gc
 import io
@@ -9,13 +18,11 @@ from uuid import uuid4
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
+from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.datasets.registry import (
-    SAVED_DATASETS_DIR,
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
-    register_dataset as _reg_register,
     rename_dataset as _reg_rename,
     set_loaded_id as _reg_set_loaded,
     unregister_dataset as _reg_unregister,
@@ -25,9 +32,7 @@ from vtsearch.datasets.registry import (
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
-    clear_all,
     collapse_duplicates,
-    get_dataset_display_name,
     medias,
     get_dupe_count,
     get_progress,
@@ -36,7 +41,23 @@ from vtsearch.utils import (
     update_progress,
 )
 
+# Re-export loading helpers so existing importers keep working.
+from vtsearch.routes.datasets_loading import (  # noqa: F401
+    STAGING_DIR,
+    _auto_register_dataset,
+    _load_embedder_for_clips,
+    _origin_to_str,
+    _run_importer_in_background,
+    _set_clip_origins,
+    _stage_importer_in_background,
+    clear_dataset,
+)
+from vtsearch.routes.datasets_ui import datasets_ui_bp  # noqa: F401
+
 datasets_bp = Blueprint("datasets", __name__)
+
+# Register the UI sub-blueprint.
+datasets_bp.register_blueprint(datasets_ui_bp)
 
 # Names of importers that have dedicated, hand-crafted UI sections in the
 # frontend.  They are excluded from the generic /api/dataset/importers list
@@ -44,239 +65,17 @@ datasets_bp = Blueprint("datasets", __name__)
 _BUILTIN_IMPORTER_NAMES = {"pickle", "combine_datasets"}
 
 
+# ---------------------------------------------------------------------------
+# Media types
+# ---------------------------------------------------------------------------
+
+
 @datasets_bp.route("/api/media-types")
 def media_types_list():
-    """Return all registered media types with their metadata.
-
-    The frontend uses this endpoint to render media type UI dynamically
-    (icons, tab titles, clip rendering modes, etc.) instead of hardcoding
-    the available media types.
-
-    Returns a JSON object::
-
-        {
-          "media_types": [
-            {
-              "type_id": "audio",
-              "name": "Audio",
-              "icon": "🔊",
-              "tab_title": "Sounds",
-              "folder_import_name": "sounds",
-              "loops": true,
-              "file_extensions": ["*.wav", "*.mp3", ...]
-            },
-            ...
-          ]
-        }
-    """
+    """Return all registered media types with their metadata."""
     from vtsearch.media import all_types_dict
 
     return jsonify({"media_types": all_types_dict()})
-
-
-def _load_embedder_for_clips() -> None:
-    """Eagerly load the embedder for the current dataset's media type.
-
-    Called right after a dataset finishes loading so the first text sort
-    doesn't have to wait for the model download.  ``load_models()`` is
-    idempotent, so this is a no-op when the model is already warm (e.g.
-    after a folder import that already called ``embed_media()``).
-
-    After loading the model, a dummy text embedding is run to warm up the
-    text encoder branch.  Models like CLAP, CLIP, and X-CLIP have separate
-    media and text encoder sub-networks; data ingest only exercises the
-    media branch, leaving the text branch cold.  Without this warmup the
-    first user-initiated text sort would stall on PyTorch's lazy
-    initialisation for that branch.
-    """
-    if not medias:
-        return
-    media_type = next(iter(medias.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-    except KeyError:
-        return
-    mt.load_models()
-    # Warm up the text encoder so the first text sort is instant.
-    update_progress("loading", "Warming up text encoder…", 0, 0)
-    try:
-        mt.embed_text("warmup")
-    except Exception:
-        pass
-    update_progress("idle", "Ready")
-
-
-def clear_dataset():
-    """Clear the current dataset, votes, and all related state."""
-    clear_all()
-
-
-def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
-    """Set origin and origin_name on medias that don't already have them.
-
-    Called after an importer finishes populating the medias dict.  Clips
-    that already carry their own origin (e.g. loaded from a pickle that
-    recorded per-element provenance) are left untouched.
-    """
-    for media in clips_dict.values():
-        if media.get("origin") is None:
-            media["origin"] = origin
-        if not media.get("origin_name"):
-            media["origin_name"] = media.get("filename", "")
-
-
-def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: dict | None = None) -> None:
-    """Save the current medias as a pkl and register in the dataset registry.
-
-    Called at the end of every successful dataset load.  Skips if medias is
-    empty or if a registry entry with the same pkl path already exists (to
-    avoid duplicating on reload).
-    """
-    if not medias:
-        return
-    from uuid import uuid4
-
-    first = next(iter(medias.values()))
-    media_type = first.get("type", "audio")
-    num_items = len(medias)
-
-    # Derive name from display-name override, origin, or fallback
-    if not name:
-        name = get_dataset_display_name() or origin_str or "Untitled"
-        if ":" in name:
-            name = name.split(":", 1)[1] or name
-
-    # Save to a pkl file in saved_datasets/
-    SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    pkl_path = str(SAVED_DATASETS_DIR / f"ds_{uuid4().hex}.pkl")
-    try:
-        data_bytes = export_dataset_to_file(medias)
-        Path(pkl_path).write_bytes(data_bytes)
-        del data_bytes
-    except Exception:
-        return
-
-    entry = _reg_register(
-        name=name,
-        media_type=media_type,
-        num_items=num_items,
-        pkl_path=pkl_path,
-        origin=origin_str,
-        source=source,
-    )
-    _reg_set_loaded(entry["id"])
-
-
-def _run_importer_in_background(importer, field_values: dict) -> None:
-    """Start *importer*.run() in a daemon thread after clearing the dataset."""
-
-    def load_task():
-        try:
-            clear_dataset()
-            gc.collect()
-            importer.run(field_values, medias)
-            origin = importer.build_origin(field_values)
-            _set_clip_origins(medias, origin)
-            collapse_duplicates(medias)
-            _load_embedder_for_clips()
-            build_diversity_tree()
-            # Auto-register in the dataset registry
-            origin_str = _origin_to_str(origin)
-            _auto_register_dataset(
-                name=importer.display_name,
-                origin_str=origin_str,
-                source=origin,
-            )
-        except MemoryError:
-            medias.clear()
-            gc.collect()
-            update_progress(
-                "idle", "", 0, 0,
-                "Out of memory — this dataset is too large. "
-                "Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
-
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
-
-
-def _origin_to_str(origin: dict | None) -> str:
-    """Convert an origin dict to a human-readable string."""
-    if not origin:
-        return "unknown"
-    importer = origin.get("importer", "")
-    params = origin.get("params", {})
-    if importer == "demo":
-        return f"demo:{params.get('name', '')}"
-    elif importer == "pickle":
-        return f"file:{params.get('filename', '')}"
-    elif importer == "folder":
-        return f"folder:{params.get('path', '')}"
-    elif importer:
-        return importer
-    return "unknown"
-
-
-# ---------------------------------------------------------------------------
-# Staging – import datasets to temporary pkl files for the combine flow
-# ---------------------------------------------------------------------------
-
-STAGING_DIR = DATA_DIR / "staging"
-
-
-def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> None:
-    """Run *importer*.run() in a daemon thread, saving the result to a staging pkl.
-
-    Unlike ``_run_importer_in_background``, this does **not** modify the global
-    ``medias`` dict.  Instead it writes a temporary ``.pkl`` file to
-    :data:`STAGING_DIR` and sets the ``staging_result`` field on the progress
-    tracker when finished.
-    """
-
-    def stage_task():
-        try:
-            temp_medias: dict = {}
-            importer.run(field_values, temp_medias)
-
-            if not temp_medias:
-                update_progress("idle", "", 0, 0, "Import produced no medias.")
-                return
-
-            first = next(iter(temp_medias.values()))
-            media_type = first.get("type", "audio")
-            count = len(temp_medias)
-            name = label or importer.display_name
-
-            data_bytes = export_dataset_to_file(temp_medias)
-            del temp_medias
-            gc.collect()
-
-            STAGING_DIR.mkdir(parents=True, exist_ok=True)
-            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
-            staging_path.write_bytes(data_bytes)
-            del data_bytes
-            gc.collect()
-
-            update_progress(
-                "idle", f"Staged: {name} ({count} medias)", 100, 100,
-                staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
-            )
-        except MemoryError:
-            gc.collect()
-            update_progress(
-                "idle", "", 0, 0,
-                "Out of memory — this dataset is too large. "
-                "Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
-
-    thread = threading.Thread(target=stage_task, daemon=True)
-    thread.start()
 
 
 # ---------------------------------------------------------------------------
@@ -314,51 +113,14 @@ def dataset_progress():
 
 @datasets_bp.route("/api/dataset/importers")
 def dataset_importers():
-    """List all registered importers (excluding those with dedicated UI).
-
-    The frontend uses this endpoint to auto-render any importer that isn't
-    already handled by a hard-coded UI panel (i.e. anything beyond the
-    built-in pickle/folder/demo importers).
-
-    Returns a JSON object::
-
-        {
-          "importers": [
-            {
-              "name": "sftp",
-              "display_name": "SFTP Server",
-              "description": "...",
-              "fields": [ { "key": ..., "label": ..., "field_type": ..., ... }, ... ]
-            },
-            ...
-          ]
-        }
-    """
+    """List all registered importers (excluding those with dedicated UI)."""
     extended = [imp.to_dict() for imp in list_importers() if imp.name not in _BUILTIN_IMPORTER_NAMES]
     return jsonify({"importers": extended})
 
 
 @datasets_bp.route("/api/dataset/all-importers")
 def dataset_all_importers():
-    """List all registered importers (including built-in ones).
-
-    Used by the dashboard's dataset importer picker modal, which needs
-    to show every available way to add a dataset.
-
-    Returns a JSON object::
-
-        {
-          "importers": [
-            {
-              "name": "pickle",
-              "display_name": "Pickle File",
-              "description": "...",
-              "fields": [ ... ]
-            },
-            ...
-          ]
-        }
-    """
+    """List all registered importers (including built-in ones)."""
     all_importers = [imp.to_dict() for imp in list_importers()]
     return jsonify({"importers": all_importers})
 
@@ -370,17 +132,7 @@ def dataset_all_importers():
 
 @datasets_bp.route("/api/dataset/available-files")
 def available_dataset_files():
-    """List ``.pkl`` files in the embeddings directory.
-
-    Returns a JSON object::
-
-        {
-          "files": [
-            {"name": "esc50_animals.pkl", "path": "/abs/path/to/esc50_animals.pkl", "size_mb": 12.3},
-            ...
-          ]
-        }
-    """
+    """List ``.pkl`` files in the embeddings directory."""
     files = []
     if EMBEDDINGS_DIR.exists():
         for pkl in sorted(EMBEDDINGS_DIR.glob("*.pkl")):
@@ -396,16 +148,7 @@ def available_dataset_files():
 
 @datasets_bp.route("/api/dataset/combine", methods=["POST"])
 def combine_datasets_route():
-    """Combine multiple pickle datasets in a background thread.
-
-    Expects a JSON body with a ``"datasets"`` key containing a list of
-    absolute paths to ``.pkl`` files::
-
-        {"datasets": ["/path/to/a.pkl", "/path/to/b.pkl"]}
-
-    Returns ``{"ok": true}`` immediately; poll ``/api/dataset/progress``
-    to track progress.
-    """
+    """Combine multiple pickle datasets in a background thread."""
     body = request.get_json(force=True) or {}
     dataset_paths = body.get("datasets", [])
 
@@ -431,11 +174,7 @@ def combine_datasets_route():
 
 @datasets_bp.route("/api/dataset/stage-file", methods=["POST"])
 def stage_file():
-    """Upload a ``.pkl`` file and save it to the staging directory.
-
-    Returns basic metadata so the frontend can display the staged dataset
-    in the combine list without loading the full dataset into memory.
-    """
+    """Upload a ``.pkl`` file and save it to the staging directory."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -474,13 +213,7 @@ def stage_file():
 
 @datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
 def stage_import(importer_name: str):
-    """Run a registered importer in staging mode.
-
-    Same interface as ``/api/dataset/import/<name>`` but saves the result to
-    a temporary ``.pkl`` file instead of loading it into the app.  Poll
-    ``/api/dataset/progress`` for status; on completion the response will
-    contain a ``staging_result`` object.
-    """
+    """Run a registered importer in staging mode."""
     importer = get_importer(importer_name)
     if importer is None:
         return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
@@ -512,11 +245,7 @@ def stage_import(importer_name: str):
 
 @datasets_bp.route("/api/dataset/stage-demo/<name>", methods=["POST"])
 def stage_demo(name: str):
-    """Stage a demo dataset as a temporary ``.pkl`` file.
-
-    Returns immediately; poll ``/api/dataset/progress`` for status.
-    On completion the response will contain a ``staging_result`` object.
-    """
+    """Stage a demo dataset as a temporary ``.pkl`` file."""
     if name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
@@ -545,15 +274,20 @@ def stage_demo(name: str):
             gc.collect()
 
             update_progress(
-                "idle", f"Staged: {label} ({count} medias)", 100, 100,
+                "idle",
+                f"Staged: {label} ({count} medias)",
+                100,
+                100,
                 staging_result={"path": str(staging_path), "name": label, "count": count, "media_type": media_type},
             )
         except MemoryError:
             gc.collect()
             update_progress(
-                "idle", "", 0, 0,
-                "Out of memory — this dataset is too large. "
-                "Try a smaller dataset or free up system RAM.",
+                "idle",
+                "",
+                0,
+                0,
+                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
             )
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
@@ -579,16 +313,7 @@ def clear_staging():
 
 @datasets_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
 def import_dataset(importer_name: str):
-    """Run a registered importer by name in a background thread.
-
-    For importers that have a field with ``field_type="file"``, the request
-    must be ``multipart/form-data`` with the file stored under the field's
-    ``key``.  All other field values are read from the form data (multipart)
-    or from the JSON body.
-
-    Returns ``{"ok": true, "message": "Loading started"}`` immediately; poll
-    ``/api/dataset/progress`` to track progress.
-    """
+    """Run a registered importer by name in a background thread."""
     importer = get_importer(importer_name)
     if importer is None:
         return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
@@ -622,90 +347,8 @@ def import_dataset(importer_name: str):
 
 
 # ---------------------------------------------------------------------------
-# Demo datasets  (special-cased: their own discovery + load endpoints)
+# Demo dataset load
 # ---------------------------------------------------------------------------
-
-
-def _folder_has_content(folder) -> bool:
-    """Return True if *folder* exists and contains at least one entry."""
-    return folder is not None and folder.exists() and any(folder.iterdir())
-
-
-@datasets_bp.route("/api/dataset/demo-list")
-def demo_dataset_list():
-    """List available demo datasets.
-
-    Each dataset has a ``status`` field with one of three values:
-
-    * ``"ready"`` – embeddings are cached and source data is present.
-    * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
-    * ``"needs_download"`` – source data must be downloaded (and then embedded).
-    """
-    # Only include demo datasets whose media type is currently registered.
-    from vtsearch.media import get as media_get
-
-    demos = []
-    for name, dataset_info in DEMO_DATASETS.items():
-        media_type = dataset_info.get("media_type", "audio")
-
-        # Skip datasets whose media type is not loaded into VTSearch.
-        try:
-            media_get(media_type)
-        except KeyError:
-            continue
-
-        pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
-        has_pkl = pkl_file.exists()
-
-        required_folder = dataset_info.get("required_folder")
-        has_source = _folder_has_content(required_folder)
-
-        # Determine three-state status
-        if has_pkl:
-            if required_folder is not None and not has_source:
-                # Stale pkl – source data was removed since last embed
-                status = "needs_download"
-            else:
-                status = "ready"
-        else:
-            if required_folder is not None and has_source:
-                status = "needs_embedding"
-            else:
-                status = "needs_download"
-
-        # Calculate number of files from slice parameters
-        num_categories = len(dataset_info["categories"])
-        slice_start = dataset_info.get("slice_start", 0)
-        slice_end = dataset_info.get("slice_end")
-        if slice_end is not None:
-            per_cat = slice_end - slice_start
-        else:
-            per_cat = 40  # generic fallback
-        num_files = num_categories * per_cat
-
-        # Calculate download size from the DemoDataset metadata
-        if status == "ready":
-            download_size_mb = pkl_file.stat().st_size / (1024 * 1024)
-        elif status == "needs_embedding":
-            download_size_mb = 0
-        else:
-            # Use the download_size_mb from DemoDataset metadata
-            download_size_mb = dataset_info.get("download_size_mb", 0)
-
-        demos.append(
-            {
-                "name": name,
-                "label": dataset_info.get("label", name),
-                "status": status,
-                "ready": status == "ready",
-                "num_files": num_files,
-                "download_size_mb": round(download_size_mb, 1),
-                "description": dataset_info.get("description", ""),
-                "media_type": media_type,
-                "num_categories": num_categories,
-            }
-        )
-    return jsonify({"datasets": demos})
 
 
 @datasets_bp.route("/api/dataset/load-demo", methods=["POST"])
@@ -740,9 +383,11 @@ def load_demo_dataset_route():
             medias.clear()
             gc.collect()
             update_progress(
-                "idle", "", 0, 0,
-                "Out of memory — this dataset is too large. "
-                "Try a smaller dataset or free up system RAM.",
+                "idle",
+                "",
+                0,
+                0,
+                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
             )
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
@@ -761,11 +406,7 @@ def load_demo_dataset_route():
 
 @datasets_bp.route("/api/dataset/load-file", methods=["POST"])
 def load_dataset_file():
-    """Load a dataset from an uploaded pickle file.
-
-    Delegates to the ``pickle`` importer.  Kept for backward compatibility
-    with existing frontends and scripts.
-    """
+    """Load a dataset from an uploaded pickle file."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -784,11 +425,7 @@ def load_dataset_file():
 
 @datasets_bp.route("/api/dataset/load-folder", methods=["POST"])
 def load_dataset_folder():
-    """Generate dataset from a folder of media files.
-
-    Delegates to the ``folder`` importer.  Kept for backward compatibility
-    with existing frontends and scripts.
-    """
+    """Generate dataset from a folder of media files."""
     data = request.get_json(force=True)
     if data is None:
         return jsonify({"error": "Invalid request body"}), 400
@@ -837,80 +474,6 @@ def clear_dataset_route():
     clear_dataset()
     _reg_set_loaded(None)
     return jsonify({"ok": True})
-
-
-@datasets_bp.route("/api/dashboard/dataset-info")
-def dashboard_dataset_info():
-    """Return metadata about the currently loaded dataset for the dashboard.
-
-    Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
-    ``origin`` extracted from the first media that has origin info.
-    """
-    if not medias:
-        return jsonify({"error": "No dataset loaded"}), 404
-
-    first = next(iter(medias.values()))
-    media_type = first.get("type", "audio")
-    num_medias = len(medias)
-
-    # Determine origin from the first media that has one
-    origin = None
-    for m in medias.values():
-        o = m.get("origin")
-        if o:
-            importer = o.get("importer", "")
-            params = o.get("params", {})
-            # Build a human-readable origin string
-            if importer == "demo":
-                origin = f"demo:{params.get('name', '')}"
-            elif importer == "pickle":
-                origin = f"file:{params.get('filename', '')}"
-            elif importer == "folder":
-                origin = f"folder:{params.get('path', '')}"
-            elif importer:
-                origin = importer
-            break
-
-    # Use display name override if set, otherwise derive from origin
-    display_name = get_dataset_display_name()
-    if display_name:
-        name = display_name
-    else:
-        name = origin or "Untitled"
-        if origin and ":" in origin:
-            name = origin.split(":", 1)[1] or origin
-
-    # Build a source dict that can be used to reload the dataset later
-    source = None
-    for m in medias.values():
-        o = m.get("origin")
-        if isinstance(o, dict):
-            source = o
-            break
-
-    return jsonify({
-        "name": name,
-        "num_medias": num_medias,
-        "num_dupes": get_dupe_count(),
-        "media_type": media_type,
-        "origin": origin or "unknown",
-        "source": source,
-    })
-
-
-@datasets_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
-def dashboard_dataset_rename():
-    """Set a custom display name for the currently loaded dataset."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
-
-    new_name = data.get("name", "").strip()
-    if not new_name:
-        return jsonify({"error": "name is required"}), 400
-
-    set_dataset_display_name(new_name)
-    return jsonify({"success": True, "name": new_name})
 
 
 # ---------------------------------------------------------------------------
@@ -1010,15 +573,7 @@ def rename_registered_dataset(dataset_id: str):
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
 def load_dataset_from_source():
-    """Reload a dataset from a stored source origin dict.
-
-    Accepts JSON with a ``source`` key containing the raw origin dict
-    (as returned by ``/api/dashboard/dataset-info``).  Supports demo,
-    pickle, folder, and other importer origins.
-
-    Returns ``{"ok": true}`` and begins loading in a background thread.
-    Poll ``/api/progress`` for status.
-    """
+    """Reload a dataset from a stored source origin dict."""
     data = request.get_json(force=True, silent=True) or {}
     source = data.get("source")
     if not isinstance(source, dict):
