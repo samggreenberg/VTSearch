@@ -24,6 +24,7 @@ When the app is running, click the hamburger menu in the top-left corner to open
 | **food101_a** | Crowd-sourced food photos across 101 Food-101 categories — a deliberately noisy benchmark |
 | **eurosat_a** | Sentinel-2 satellite imagery across 10 EuroSAT land use categories |
 | **stanford_dogs_a** | Fine-grained dog breed photos across 120 Stanford Dogs categories |
+| **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library — tobacco, food, drug, chemical, fossil fuel, and opioids |
 
 ## Text
 
