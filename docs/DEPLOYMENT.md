@@ -179,7 +179,7 @@ data/
 │   ├── models--laion--clap-htsat-unfused/
 │   ├── models--openai--clip-vit-base-patch32/
 │   ├── models--microsoft--xclip-base-patch32/
-│   └── models--sentence-transformers--e5-base-v2/
+│   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
 ├── trainable_models/                 # Persistent trainable model definitions (.json)
 ├── settings.json                     # User preferences, autorun config, thresholds

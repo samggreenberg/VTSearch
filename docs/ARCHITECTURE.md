@@ -280,7 +280,7 @@ audio.load_models()
 To use an exporter standalone:
 
 ```python
-from vtsearch.exporters.file import EXPORTER
+from vtsearch.exporters.server_json_file import EXPORTER
 
 result = EXPORTER.export(
     results={"media_type": "audio", "results": {...}},
