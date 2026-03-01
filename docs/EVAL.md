@@ -49,7 +49,7 @@ python -m vtsearch.eval [OPTIONS]
 
 ```bash
 # Text sort only, on image datasets, save JSON
-python -m vtsearch.eval --mode text --datasets animals_images vehicles_images --output results.json --plot-dir eval_output
+python -m vtsearch.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
 
 # Learned sort with a different train/test split
 python -m vtsearch.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
