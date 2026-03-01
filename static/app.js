@@ -46,6 +46,7 @@
   let _dashboardAddDatasetMode = false;
   // Local copy of favorite detectors list
   let favoriteDetectors = [];
+  let autorunDetectors = [];
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -1336,7 +1337,7 @@
       tr.insertAdjacentHTML("beforeend", `
         <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
         <td class="col-count">${ds.num_items || 0}</td>
-        <td class="col-loaded">${isLoaded ? '<span style="color:var(--good-color)">✓</span>' : ''}</td>
+        <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
         <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
       `);
 
@@ -1488,7 +1489,7 @@
         tr.insertAdjacentHTML("beforeend", `
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(m.media_type)}</td>
           <td class="col-num-training" style="text-align:right">${escapeHtml(trainingText)}</td>
-          <td class="col-loaded">${isLoaded ? '<span style="color:var(--good-color)">✓</span>' : ''}</td>
+          <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
           <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
 
@@ -1712,8 +1713,13 @@
   }
 
   async function pollProgress() {
-    const res = await fetch("/api/dataset/progress");
-    const progress = await res.json();
+    let res, progress;
+    try {
+      res = await fetch("/api/dataset/progress");
+      progress = await res.json();
+    } catch (_) {
+      return; // Network error — retry on next poll interval
+    }
 
     if (progress.error) {
       stopProgressPolling();
@@ -1748,21 +1754,8 @@
         // Dashboard add-dataset mode: capture info and return to dashboard
         if (_dashboardAddDatasetMode) {
           _dashboardAddDatasetMode = false;
-          try {
-            const infoRes = await fetch("/api/dashboard/dataset-info");
-            if (infoRes.ok) {
-              const info = await infoRes.json();
-              dashboardDatasets.push({
-                id: _dashboardNextId++,
-                name: info.name,
-                num_medias: info.num_medias,
-                media_type: info.media_type,
-                origin: info.origin,
-                source: info.source || null,
-              });
-            }
-          } catch (_) { /* ignore */ }
-          // Clear the dataset from the backend
+          // Dataset is auto-registered by the backend on load;
+          // clear from active memory so the dashboard can manage it.
           await fetch("/api/dataset/clear", { method: "POST" });
           medias = [];
           votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
@@ -2559,7 +2552,7 @@
     }
     // If we were in a training session, save labels and return to dashboard
     if (_dashboardTrainMode) {
-      saveTrainableModelLabels();
+      await saveTrainableModelLabels();
       showDashboard();
       return;
     }
@@ -2992,9 +2985,10 @@
   }
 
   function escapeHtml(text) {
+    if (text == null) return "";
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML.replace(/'/g, '&#39;');
+    return div.innerHTML.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
   }
 
   function formatOrigin(hit) {
@@ -3111,7 +3105,7 @@
           for (const mn of modelNames) {
             const v = (hit.model_verdicts || {})[mn];
             if (v) {
-              const cls = v.verdict === "Good" ? "style=\"color:var(--good-color)\"" : "";
+              const cls = v.verdict === "Good" ? "style=\"color:var(--color-good)\"" : "";
               tableHtml += `<td ${cls}>${escapeHtml(v.verdict)}</td>`;
             } else {
               tableHtml += `<td>-</td>`;
@@ -4240,6 +4234,11 @@
     }
   }
 
+  // Stored references for window-level mouse handlers used by image pan,
+  // so they can be removed before re-adding to avoid listener leaks.
+  let _ivcWindowMoveHandler = null;
+  let _ivcWindowUpHandler = null;
+
   function renderCenter() {
     const c = medias.find(x => x.id === selected);
     if (!c) return;
@@ -4473,19 +4472,24 @@
           wrap.style.cursor = 'grabbing';
           e.preventDefault();
         });
-        window.addEventListener("mousemove", (e) => {
+        // Remove previous window-level handlers before adding new ones
+        if (_ivcWindowMoveHandler) window.removeEventListener("mousemove", _ivcWindowMoveHandler);
+        if (_ivcWindowUpHandler) window.removeEventListener("mouseup", _ivcWindowUpHandler);
+        _ivcWindowMoveHandler = (e) => {
           if (!isPanning) return;
           ivcPanX = panOriginX + (e.clientX - panStartX);
           ivcPanY = panOriginY + (e.clientY - panStartY);
           applyTransform();
           wrap.style.cursor = 'grabbing';
-        });
-        window.addEventListener("mouseup", () => {
+        };
+        _ivcWindowUpHandler = () => {
           if (!isPanning) return;
           isPanning = false;
           const max = getMaxPan();
           wrap.style.cursor = (max.x > 0 || max.y > 0) ? 'grab' : '';
-        });
+        };
+        window.addEventListener("mousemove", _ivcWindowMoveHandler);
+        window.addEventListener("mouseup", _ivcWindowUpHandler);
       }
     }
   }
@@ -4720,11 +4724,11 @@
       if (media.type === "video") {
         html += `<video class="vote-thumbnail" src="${thumbnailUrl(media)}" muted preload="metadata"></video>`;
       } else {
-        html += `<img class="vote-thumbnail" src="${thumbnailUrl(media)}" alt="${entry.name}" loading="lazy">`;
+        html += `<img class="vote-thumbnail" src="${thumbnailUrl(media)}" alt="${escapeHtml(entry.name)}" loading="lazy">`;
       }
       html += `<div class="vote-thumb-info">`;
     }
-    html += `<span class="vote-name">${entry.name}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
+    html += `<span class="vote-name">${escapeHtml(entry.name)}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
     if (useThumbnail) {
       html += `</div>`;
     }
@@ -5637,7 +5641,7 @@
     });
   }
 
-  function showLabelImporterForm(importer) {
+  function showProcessorLabelImporterForm(importer) {
     processorImporterList.style.display = "none";
     processorImporterBack.style.display = "inline-block";
 
@@ -6840,7 +6844,7 @@
         } else if (name.startsWith("__label_imp__")) {
           const impName = name.slice("__label_imp__".length);
           const imp = labelImporters.find(i => i.name === impName);
-          if (imp) showLabelImporterForm(imp);
+          if (imp) showProcessorLabelImporterForm(imp);
         } else {
           const imp = importers.find(i => i.name === name);
           if (imp) showProcessorImporterForm(imp);

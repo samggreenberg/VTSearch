@@ -497,10 +497,10 @@ def example_sort():
         DATA_DIR.mkdir(exist_ok=True)
         file.save(temp_path)
 
-        results, thresh = _example_sort_from_path(temp_path)
-
-        # Clean up temp file
-        temp_path.unlink(missing_ok=True)
+        try:
+            results, thresh = _example_sort_from_path(temp_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
 
         return jsonify({"results": results, "threshold": thresh})
 
