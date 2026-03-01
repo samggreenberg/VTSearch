@@ -211,6 +211,14 @@ def rename_trainable_model(name: str):
     if new_path != old_path:
         old_path.unlink(missing_ok=True)
 
+    # Update the model registry entry that references this trainable model
+    from vtsearch.models.registry import find_by_trainable_model_name, rename_model, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        update_model(reg_entry["id"], trainable_model_name=new_name)
+        rename_model(reg_entry["id"], new_name)
+
     return jsonify({"success": True, "old_name": name, "new_name": new_name})
 
 
