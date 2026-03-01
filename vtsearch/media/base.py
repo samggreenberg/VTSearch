@@ -278,6 +278,21 @@ class MediaType(ABC):
         """
         return []
 
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        """Extra field names to preserve when loading media from pickle files.
+
+        When a pickle stores type-specific metadata beyond the standard
+        fields (id, type, duration, file_size, md5, embedding, etc.),
+        list the field names here so the loader copies them automatically.
+
+        For example, the image type returns ``["width", "height"]`` and
+        the text type returns ``["word_count", "character_count"]``.
+
+        Defaults to an empty list (no extra fields).
+        """
+        return []
+
     # ------------------------------------------------------------------
     # Viewer behaviour
     # ------------------------------------------------------------------

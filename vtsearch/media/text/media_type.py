@@ -76,6 +76,10 @@ class TextMediaType(MediaType):
     def legacy_bytes_keys(self) -> list[str]:
         return ["text_content"]
 
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["word_count", "character_count"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
