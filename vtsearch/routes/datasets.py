@@ -371,14 +371,15 @@ def load_demo_dataset_route():
             demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
             _set_clip_origins(medias, demo_origin)
             collapse_duplicates(medias)
-            _load_embedder_for_clips()
             build_diversity_tree()
-            # Auto-register in the dataset registry
+            # Auto-register in the dataset registry before signalling idle
+            # so the frontend sees the new entry when it refreshes the grid.
             _auto_register_dataset(
                 name=dataset_name,
                 origin_str=f"demo:{dataset_name}",
                 source=demo_origin,
             )
+            _load_embedder_for_clips()
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -513,12 +514,12 @@ def load_registered_dataset(dataset_id: str):
             gc.collect()
             importer.run({"pkl_path": pkl_path}, medias)
             collapse_duplicates(medias)
-            _load_embedder_for_clips()
             build_diversity_tree()
             _reg_set_loaded(dataset_id)
             # Update item count in case it changed
             _reg_update(dataset_id, num_items=len(medias))
             set_dataset_display_name(entry.get("name", ""))
+            _load_embedder_for_clips()
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -607,13 +608,13 @@ def _load_from_origin(source: dict):
                 demo_origin = {"importer": "demo", "params": {"name": demo_name}}
                 _set_clip_origins(medias, demo_origin)
                 collapse_duplicates(medias)
-                _load_embedder_for_clips()
                 build_diversity_tree()
                 _auto_register_dataset(
                     name=demo_name,
                     origin_str=f"demo:{demo_name}",
                     source=demo_origin,
                 )
+                _load_embedder_for_clips()
             except MemoryError:
                 medias.clear()
                 gc.collect()

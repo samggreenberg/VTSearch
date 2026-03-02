@@ -458,6 +458,18 @@ def train_from_label_import(importer_name: str):
     media_type = next(iter(medias.values())).get("type", "audio")
     add_autorun_detector(name, media_type, weights, threshold)
 
+    # Register in the persistent model registry for the dashboard grid.
+    from vtsearch.models.registry import find_by_detector_name, register_model
+
+    if not find_by_detector_name(name):
+        register_model(
+            name=name,
+            media_type=media_type,
+            trainable=False,
+            num_training=loaded_count,
+            detector_name=name,
+        )
+
     return jsonify(
         {
             "success": True,
