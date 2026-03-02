@@ -182,6 +182,41 @@ class TestDiversityTreeNextEndpoint:
         data = resp.get_json()
         assert data["id"] == target_id
 
+    def test_threshold_flips_to_lowest(self, client):
+        """When threshold is below the node median, the lowest-scored element is returned."""
+        tree = _build_tree()
+        all_ids = list(tree.vector_to_leaf.keys())
+        # Give all media high scores (above threshold) so median > threshold
+        scores = {str(vid): 0.9 for vid in all_ids}
+        lowest_id = all_ids[0]
+        scores[str(lowest_id)] = 0.1  # one outlier low score
+
+        resp = client.post(
+            "/api/diversity-tree/next",
+            json={"scores": scores, "threshold": 0.5},
+        )
+        data = resp.get_json()
+        # Median of the node is 0.9 (most elements) which is >= 0.5,
+        # so the lowest-scored element should be returned
+        assert data["id"] == lowest_id
+
+    def test_threshold_keeps_highest_when_below(self, client):
+        """When threshold is above the node median, the highest-scored element is returned."""
+        tree = _build_tree()
+        all_ids = list(tree.vector_to_leaf.keys())
+        # Give all media low scores (below threshold)
+        scores = {str(vid): 0.1 for vid in all_ids}
+        highest_id = all_ids[-1]
+        scores[str(highest_id)] = 0.3  # still below threshold
+
+        resp = client.post(
+            "/api/diversity-tree/next",
+            json={"scores": scores, "threshold": 0.5},
+        )
+        data = resp.get_json()
+        # Median is ~0.1 which is < 0.5, so highest-scored element returned
+        assert data["id"] == highest_id
+
 
 # ---------------------------------------------------------------------------
 # Vote integration: voting via the API should update the tree

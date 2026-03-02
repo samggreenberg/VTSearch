@@ -48,16 +48,21 @@ def get_diversity_tree():
         return _core._diversity_tree
 
 
-def diversity_tree_next_sample(scores: dict[int, float] | None = None) -> int | None:
+def diversity_tree_next_sample(
+    scores: dict[int, float] | None = None,
+    threshold: float | None = None,
+) -> int | None:
     """Return the next diverse sample ID, or ``None`` if unavailable.
 
-    When *scores* is provided, the highest-scored element in the next
-    unseen node is returned (so the sort mode influences selection).
+    When *scores* and *threshold* are provided, the selection picks the
+    element most likely to surprise the user: the lowest-scored element
+    if the node's median score is above the threshold, or the highest-
+    scored element otherwise.
     """
     with _state_lock:
         if _core._diversity_tree is None:
             return None
-        return _core._diversity_tree.next_sample(scores=scores)
+        return _core._diversity_tree.next_sample(scores=scores, threshold=threshold)
 
 
 def diversity_tree_label(media_id: int) -> None:
