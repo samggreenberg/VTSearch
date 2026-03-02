@@ -229,7 +229,7 @@ class DiversityTree:
             name = queue.popleft()
             if name not in self.seen:
                 ids = self.nodes[name]["ids"]
-                if scores:
+                if scores is not None:
                     return max(ids, key=lambda i: scores.get(i, 0.0))
                 return ids[0]
             children = self.nodes[name]["children"]

@@ -157,7 +157,7 @@ def combine_datasets_route():
 
     for p in dataset_paths:
         if not Path(p).exists():
-            return jsonify({"error": f"File not found: {p}"}), 404
+            return jsonify({"error": f"File not found: {p}"}), 400
 
     importer = get_importer("combine_datasets")
     if importer is None:

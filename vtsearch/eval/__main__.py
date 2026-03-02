@@ -115,6 +115,12 @@ def main() -> None:
         metavar="K",
         help="Number of random Train/Calibrate splits for threshold calibration (default: 2).",
     )
+    parser.add_argument(
+        "--calibration-fraction",
+        type=float,
+        default=0.5,
+        help="Fraction of training data used for calibration (default: 0.5).",
+    )
 
     args = parser.parse_args()
 
@@ -139,6 +145,7 @@ def main() -> None:
         enrich=args.enrich_descriptions,
         safe_thresholds=args.safe_thresholds,
         calibrate_count=args.calibrate_count,
+        calibration_fraction=args.calibration_fraction,
     )
 
     # Print summary

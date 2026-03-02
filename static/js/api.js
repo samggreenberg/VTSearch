@@ -65,7 +65,7 @@ export const getMediaTypes    = ()           => fetchJSON("/api/media-types");
 export const getLabelingStatus = ()          => fetchJSON("/api/labeling-status").catch(() => null);
 
 export const getServerMediaFiles    = () => fetchJSON("/api/server-media-files");
-export const getServerDetectorFiles = () => fetchJSON("/api/server-detector-files");
+export const getServerDetectorFiles = () => fetchJSON("/api/detector/server-files");
 
 export const postExampleSort  = (formData) =>
   fetchJSON("/api/example-sort", { method: "POST", body: formData });
