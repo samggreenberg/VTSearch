@@ -45,6 +45,7 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
     ".webm": "video/webm",
     ".mov": "video/quicktime",
     ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
 }
 
 
@@ -297,7 +298,6 @@ class VideoMediaType(MediaType):
             try:
                 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 if frame_count <= 0:
-                    cap.release()
                     print(f"Error: could not determine frame count for {file_path}")
                     return None
                 num_frames = min(8, max(1, frame_count))

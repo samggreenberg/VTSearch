@@ -78,7 +78,7 @@ def _ensure_loaded() -> list[dict[str, Any]]:
 def list_models() -> list[dict[str, Any]]:
     """Return summary info for all registered models."""
     with _lock:
-        return list(_ensure_loaded())
+        return [dict(e) for e in _ensure_loaded()]
 
 
 def get_model(model_id: str) -> dict[str, Any] | None:

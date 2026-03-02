@@ -133,11 +133,11 @@ def _ensure_cache(
             X_list: list[np.ndarray] = []
             y_list: list[float] = []
             for cid in _cache_good_ids:
-                if cid in clips_dict:
+                if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
                     X_list.append(clips_dict[cid]["embedding"])
                     y_list.append(1.0)
             for cid in _cache_bad_ids:
-                if cid in clips_dict:
+                if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
                     X_list.append(clips_dict[cid]["embedding"])
                     y_list.append(0.0)
 
@@ -156,7 +156,10 @@ def _ensure_cache(
 
                 # --- Stability ---
                 labeled_ids = _cache_good_ids | _cache_bad_ids
-                unlabeled_ids = [cid for cid in all_media_ids if cid not in labeled_ids]
+                unlabeled_ids = [
+                    cid for cid in all_media_ids
+                    if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
+                ]
 
                 if not unlabeled_ids:
                     stability = {

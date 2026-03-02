@@ -2034,17 +2034,18 @@
             tr.className = "demo-row" + (st === "ready" ? " ready" : st === "needs_embedding" ? " needs-embedding" : "");
             tr.setAttribute("role", "button");
             tr.setAttribute("tabindex", "0");
-            tr.setAttribute("aria-label", `${ds.label}: ${ds.description}`);
+            tr.setAttribute("aria-label", `${ds.label}: ${ds.description || ""}`);
             tr.onclick = () => loadDemo(ds.name);
             tr.addEventListener("keydown", (e) => {
               if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadDemo(ds.name); }
             });
-            const descShort = ds.description.length > 60 ? ds.description.slice(0, 57) + "…" : ds.description;
+            const desc = ds.description || "";
+            const descShort = desc.length > 60 ? desc.slice(0, 57) + "…" : desc;
             tr.innerHTML = `
               <td class="col-name">${escapeHtml(ds.label)}</td>
               <td class="col-num">${ds.num_files}</td>
               <td class="col-num">${ds.num_categories}</td>
-              <td class="col-desc" title="${escapeHtml(ds.description)}">${escapeHtml(descShort)}</td>
+              <td class="col-desc" title="${escapeHtml(desc)}">${escapeHtml(descShort)}</td>
               <td class="col-status">${buildStatusBadge(st)}</td>
             `;
             tbody.appendChild(tr);
@@ -2537,7 +2538,7 @@
 
   loadExtendedImporters();
 
-  backButton.addEventListener("click", () => {
+  backButton.addEventListener("click", async () => {
     // If we are inside a staging sub-form (importer or demo) within the
     // combine flow, go back to the combine form instead of the welcome screen.
     const stageForm = document.getElementById("combine-stage-form");
@@ -4129,12 +4130,14 @@
 
   async function fetchMedias() {
     const res = await fetch("/api/medias");
+    if (!res.ok) { console.error("fetchMedias failed:", res.status); return; }
     medias = await res.json();
     renderMediaList();
   }
 
   async function fetchVotes() {
     const res = await fetch("/api/votes");
+    if (!res.ok) { console.error("fetchVotes failed:", res.status); return; }
     votes = await res.json();
     renderVotes();
     renderStripe();
@@ -4144,6 +4147,7 @@
 
   async function fetchInclusion() {
     const res = await fetch("/api/inclusion");
+    if (!res.ok) { console.error("fetchInclusion failed:", res.status); return; }
     const data = await res.json();
     inclusion = data.inclusion;
     inclusionSlider.value = inclusion;
@@ -4307,7 +4311,7 @@
         ${c.frequency ? `
         <div class="metadata-item">
           <span class="metadata-label">Frequency</span>
-          <span class="metadata-value">${c.frequency} Hz</span>
+          <span class="metadata-value">${escapeHtml(String(c.frequency))} Hz</span>
         </div>` : ''}
         ${c.category && c.category !== 'unknown' ? `
         <div class="metadata-item">
@@ -4316,7 +4320,7 @@
         </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">Media Type</span>
-          <span class="metadata-value">${mtInfo ? mtInfo.name : mediaType}</span>
+          <span class="metadata-value">${escapeHtml(mtInfo ? mtInfo.name : mediaType)}</span>
         </div>
         ${(c.duration && c.duration > 0) ? `
         <div class="metadata-item">
@@ -4337,10 +4341,10 @@
           <span class="metadata-label">Characters</span>
           <span class="metadata-value">${c.character_count}</span>
         </div>` : ''}
-        <div class="metadata-item">
+        ${c.file_size ? `<div class="metadata-item">
           <span class="metadata-label">File Size</span>
           <span class="metadata-value">${(c.file_size / 1024).toFixed(1)} KB</span>
-        </div>
+        </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
           <span class="metadata-value metadata-md5">${escapeHtml(c.md5)}</span>
@@ -4519,11 +4523,12 @@
       }
 
       const mediaName = (medias.find(c => c.id === id) || {}).filename || `Clip #${id}`;
-      await fetch(`/api/medias/${id}/vote`, {
+      const voteRes = await fetch(`/api/medias/${id}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vote }),
       });
+      if (!voteRes.ok) { console.error("castVote failed:", voteRes.status); return; }
       announce(`Voted ${vote} on ${mediaName}`);
       await fetchVotes();
 

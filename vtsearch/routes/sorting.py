@@ -542,14 +542,15 @@ def example_sort_server():
         return jsonify({"error": "filename is required"}), 400
 
     file_path = SERVER_MEDIA_DIR / filename
-    if not file_path.is_file():
-        return jsonify({"error": f"File not found: {filename}"}), 404
 
     # Ensure path doesn't escape the server media directory
     try:
         file_path.resolve().relative_to(SERVER_MEDIA_DIR.resolve())
     except ValueError:
         return jsonify({"error": "Invalid filename"}), 400
+
+    if not file_path.is_file():
+        return jsonify({"error": f"File not found: {filename}"}), 404
 
     try:
         results, thresh = _example_sort_from_path(file_path)
@@ -735,7 +736,10 @@ def diversity_tree_next():
         data = request.get_json(force=True, silent=True) or {}
         raw_scores = data.get("scores")
         if isinstance(raw_scores, dict):
-            scores = {int(k): float(v) for k, v in raw_scores.items()}
+            try:
+                scores = {int(k): float(v) for k, v in raw_scores.items()}
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid score keys or values"}), 400
 
     tree = get_diversity_tree()
     next_id = diversity_tree_next_sample(scores=scores)
