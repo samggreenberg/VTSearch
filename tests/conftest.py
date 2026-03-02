@@ -33,7 +33,8 @@ def _fake_embed_audio(path):
     import hashlib
 
     try:
-        data = open(path, "rb").read(1000)
+        with open(path, "rb") as f:
+            data = f.read(1000)
         seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
     except Exception:
         seed = hash(str(path)) % 2**31

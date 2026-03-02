@@ -45,6 +45,7 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
     ".webm": "video/webm",
     ".mov": "video/quicktime",
     ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
 }
 
 
