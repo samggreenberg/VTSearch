@@ -146,15 +146,16 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
             origin = importer.build_origin(field_values)
             _set_clip_origins(medias, origin)
             collapse_duplicates(medias)
-            _load_embedder_for_clips()
             build_diversity_tree()
-            # Auto-register in the dataset registry
+            # Auto-register in the dataset registry before signalling idle
+            # so the frontend sees the new entry when it refreshes the grid.
             origin_str = _origin_to_str(origin)
             _auto_register_dataset(
                 name=importer.display_name,
                 origin_str=origin_str,
                 source=origin,
             )
+            _load_embedder_for_clips()
         except MemoryError:
             medias.clear()
             gc.collect()

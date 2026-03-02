@@ -70,6 +70,20 @@ def add_autorun_detector_route():
     add_autorun_detector(
         name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels
     )
+
+    # Also register in the persistent model registry so the dashboard grid
+    # picks up the new model immediately.
+    from vtsearch.models.registry import find_by_detector_name, register_model
+
+    if not find_by_detector_name(name):
+        register_model(
+            name=name,
+            media_type=media_type,
+            trainable=not weights,
+            num_training=num_labels,
+            detector_name=name,
+        )
+
     return jsonify({"success": True, "name": name})
 
 
@@ -77,6 +91,12 @@ def add_autorun_detector_route():
 def delete_autorun_detector_route(name):
     """Delete a autorun detector."""
     if remove_autorun_detector(name):
+        # Also remove from the persistent model registry.
+        from vtsearch.models.registry import find_by_detector_name, unregister_model
+
+        entry = find_by_detector_name(name)
+        if entry:
+            unregister_model(entry["id"])
         return jsonify({"success": True})
     return jsonify({"error": "Detector not found"}), 404
 
@@ -93,6 +113,12 @@ def rename_autorun_detector_route(name):
         return jsonify({"error": "new_name is required"}), 400
 
     if rename_autorun_detector(name, new_name):
+        # Keep the model registry in sync.
+        from vtsearch.models.registry import find_by_detector_name, update_model
+
+        entry = find_by_detector_name(name)
+        if entry:
+            update_model(entry["id"], name=new_name, detector_name=new_name)
         return jsonify({"success": True, "new_name": new_name})
     return jsonify({"error": "Detector not found or new name already exists"}), 400
 
