@@ -3,11 +3,14 @@
 Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + vanilla JS + PyTorch.
 
 ## Commands
-- **Run tests (CPU, fast)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -v`
-- **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -v -m 'not gpu'`
-- **Run slow CLI subprocess tests only**: `python -m pytest tests/ -v -m slow`
-- **Run GPU tests**: `python -m pytest tests/test_gpu.py -v -m gpu` (requires CUDA GPU; downloads models on first run)
-- **Run all tests (CPU + GPU)**: `python -m pytest tests/ -v -m ''`
+- **Run tests (CPU, fast)**: `./run-tests.sh`
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below)
+- **Run multiple groups**: `./run-tests.sh core sorting api`
+- **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
+- **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -q --tb=short -m 'not gpu'`
+- **Run slow CLI subprocess tests only**: `python -m pytest tests/ -q --tb=short -m slow`
+- **Run GPU tests**: `python -m pytest tests/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
+- **Run all tests (CPU + GPU)**: `python -m pytest tests/ -q --tb=short -m ''`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
@@ -89,20 +92,38 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_ucsf_documents_download.py` — UCSF Industry Documents demo dataset download and load_demo_source integration
   - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
 
+## Test Groups
+
+Tests are auto-grouped by area. Run a focused subset instead of the full suite:
+
+| Group | Files | Description |
+|-------|-------|-------------|
+| `core` | audio, medias, votes, inclusion, settings, frontend | Basic app functionality |
+| `api` | api_contracts, error_recovery, dashboard | API contracts and error handling |
+| `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
+| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors | Dataset loading and management |
+| `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import | Import/export |
+| `models` | detectors, extractors, processors, trainable_models, clippers, eval* | ML models and evaluation |
+| `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract | Demo dataset downloads |
+| `integration` | integration, slow_integration, thread_safety | End-to-end workflows |
+| `cli` | cli_autodetect, load_sort_window, preload_progress, tqdm_progress | CLI and progress |
+| `converters` | document_and_converters | Media converters |
+
+**Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
+
 ## Test Markers
-- **Default** (`pytest tests/ -v`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
+- **Default** (`./run-tests.sh` or `pytest tests/`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
 - **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (each ~16s, total ~290s). Run with `-m slow` or include with `-m 'not gpu'`.
 - **`gpu`**: CUDA-only tests. Run with `-m gpu`.
 - **All tests**: Use `-m ''` to run everything.
 
 ## Reading Test Results (IMPORTANT)
 
-Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`, `test_http_error_propagates`, `test_errors_dont_corrupt_state`). These are tests that **verify error-handling behavior** — they are not failures.
+The test suite prints a clear summary as its very last output:
+- `ALL 1600 TESTS PASSED (3 skipped, total: 1603)` → all good
+- `TESTS FAILED: 2 failed, 0 errors, 1598 passed, 3 skipped (total: 1603)` → 2 failures
 
-**To determine whether tests passed or failed, ONLY look at the pytest summary line at the bottom of the output.** Examples:
-- `== 250 passed in 34.12s ==` → all tests passed (green)
-- `== 3 failed, 247 passed in 35.00s ==` → 3 actual failures
-- `FAILED tests/test_foo.py::TestBar::test_baz` → this specific test failed
+**ONLY look at this final summary block** (bordered by `====` lines) to determine pass/fail. Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`). These test **error-handling behavior** — they are not failures.
 
 **Do NOT scan test names or output for the word "error" to detect failures.** A line like:
 ```
