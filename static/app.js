@@ -1,11 +1,4 @@
-/**
- * VTSearch — main application module.
- *
- * Converted from IIFE to ES module. Extracted utility modules live alongside
- * this file (state.js, api.js, ui.js, plugin-modal.js, sorting.js, voting.js,
- * media.js, settings.js, progress.js) and can be imported incrementally.
- */
-
+(function() {
   let medias = [];
   let votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
   let labelSortMode = "time-desc"; // default: newest first
@@ -7447,3 +7440,5 @@
       media.pause();
     }
   }
+
+})();
