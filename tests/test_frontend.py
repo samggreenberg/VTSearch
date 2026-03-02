@@ -32,6 +32,17 @@ class TestIndexRoute:
         resp = self.client.get("/")
         assert b"app.js" in resp.data
 
+    def test_index_contains_charts_js_reference(self):
+        resp = self.client.get("/")
+        assert b"charts.js" in resp.data
+
+    def test_charts_js_loaded_before_app_js(self):
+        resp = self.client.get("/")
+        text = resp.data.decode("utf-8")
+        charts_pos = text.index("charts.js")
+        app_pos = text.index("app.js")
+        assert charts_pos < app_pos
+
     def test_index_contains_doctype(self):
         resp = self.client.get("/")
         assert resp.data.strip().startswith(b"<!DOCTYPE html>") or resp.data.strip().startswith(b"<!doctype html>")
@@ -49,6 +60,11 @@ class TestStaticFiles:
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
+    def test_charts_js_accessible(self):
+        resp = self.client.get("/static/charts.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.content_type
+
     def test_styles_css_accessible(self):
         resp = self.client.get("/static/styles.css")
         assert resp.status_code == 200
@@ -56,6 +72,10 @@ class TestStaticFiles:
 
     def test_app_js_is_nonempty(self):
         resp = self.client.get("/static/app.js")
+        assert len(resp.data) > 1000
+
+    def test_charts_js_is_nonempty(self):
+        resp = self.client.get("/static/charts.js")
         assert len(resp.data) > 1000
 
     def test_styles_css_is_nonempty(self):
@@ -181,6 +201,23 @@ class TestFrontendContentIntegrity:
         resp = self.client.get("/static/styles.css")
         text = resp.data.decode("utf-8")
         assert ".media-item" in text
+
+    def test_charts_js_exports_vtcharts(self):
+        resp = self.client.get("/static/charts.js")
+        text = resp.data.decode("utf-8")
+        assert "window.VTCharts" in text
+
+    def test_charts_js_has_render_functions(self):
+        resp = self.client.get("/static/charts.js")
+        text = resp.data.decode("utf-8")
+        assert "renderErrorCostChart" in text
+        assert "renderStabilityChart" in text
+        assert "renderDiversityChart" in text
+
+    def test_app_js_references_vtcharts(self):
+        resp = self.client.get("/static/app.js")
+        text = resp.data.decode("utf-8")
+        assert "VTCharts" in text
 
     def test_styles_has_dark_and_light_themes(self):
         resp = self.client.get("/static/styles.css")
