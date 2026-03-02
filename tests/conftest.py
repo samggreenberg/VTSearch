@@ -282,36 +282,7 @@ def client():
         yield c
 
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    """Print an unmistakable PASS/FAIL summary that is easy to parse.
-
-    This avoids confusion from test names containing words like 'error' or
-    'fail' — the only thing that matters is this final summary block.
-    """
-    passed = len(terminalreporter.stats.get("passed", []))
-    failed = len(terminalreporter.stats.get("failed", []))
-    errors = len(terminalreporter.stats.get("error", []))
-    skipped = len(terminalreporter.stats.get("skipped", []))
-    total = passed + failed + errors + skipped
-
-    terminalreporter.write_line("")
-    terminalreporter.write_line("=" * 60)
-    if failed or errors:
-        terminalreporter.write_line(
-            f"TESTS FAILED: {failed} failed, {errors} errors, "
-            f"{passed} passed, {skipped} skipped (total: {total})",
-            red=True,
-            bold=True,
-        )
-    else:
-        terminalreporter.write_line(
-            f"ALL {passed} TESTS PASSED ({skipped} skipped, total: {total})",
-            green=True,
-            bold=True,
-        )
-    terminalreporter.write_line("=" * 60)
-
-
+@pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Force-exit to avoid SIGABRT (exit code 134) from native library cleanup.
 
@@ -322,5 +293,36 @@ def pytest_sessionfinish(session, exitstatus):
 
     ``os._exit()`` skips the normal interpreter teardown (atexit handlers,
     C++ static destructors) so the problematic cleanup never runs.
+
+    Prints a clear PASS/FAIL summary right before exiting, since os._exit()
+    prevents the normal pytest summary from being flushed.
     """
+    import sys
+
+    # Grab stats from the terminal reporter (if available)
+    reporter = session.config.pluginmanager.getplugin("terminalreporter")
+    if reporter:
+        passed = len(reporter.stats.get("passed", []))
+        failed = len(reporter.stats.get("failed", []))
+        errors = len(reporter.stats.get("error", []))
+        skipped = len(reporter.stats.get("skipped", []))
+        total = passed + failed + errors + skipped
+
+        print("", flush=True)
+        print("=" * 60, flush=True)
+        if failed or errors:
+            print(
+                f"TESTS FAILED: {failed} failed, {errors} errors, "
+                f"{passed} passed, {skipped} skipped (total: {total})",
+                flush=True,
+            )
+        else:
+            print(
+                f"ALL {passed} TESTS PASSED ({skipped} skipped, total: {total})",
+                flush=True,
+            )
+        print("=" * 60, flush=True)
+
+    sys.stdout.flush()
+    sys.stderr.flush()
     os._exit(exitstatus)

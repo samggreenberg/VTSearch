@@ -20,7 +20,7 @@ cd "$(dirname "$0")"
 bash .claude/hooks/ensure-test-deps.sh
 
 # Split arguments into groups and extra pytest args
-GROUPS=()
+TEST_GROUPS=()
 EXTRA_ARGS=()
 PAST_SEPARATOR=false
 
@@ -32,17 +32,24 @@ for arg in "$@"; do
     if $PAST_SEPARATOR; then
         EXTRA_ARGS+=("$arg")
     else
-        GROUPS+=("$arg")
+        TEST_GROUPS+=("$arg")
     fi
 done
 
 # Build the pytest marker expression
-if [[ ${#GROUPS[@]} -eq 0 ]]; then
+if [[ ${#TEST_GROUPS[@]} -eq 0 ]]; then
     # Default: run all fast tests
     MARKER_EXPR=""
 else
     # Combine groups with OR: -m "core or sorting"
-    MARKER_EXPR=$(IFS=" or "; echo "${GROUPS[*]}")
+    MARKER_EXPR=""
+    for g in "${TEST_GROUPS[@]}"; do
+        if [[ -n "$MARKER_EXPR" ]]; then
+            MARKER_EXPR="$MARKER_EXPR or $g"
+        else
+            MARKER_EXPR="$g"
+        fi
+    done
 fi
 
 # Run pytest with:
