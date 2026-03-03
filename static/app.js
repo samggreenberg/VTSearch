@@ -210,6 +210,8 @@
   const trainDatasetName = document.getElementById("train-dataset-name");
   const trainDetectorBar = document.getElementById("train-detector-bar");
   const trainDetectorName = document.getElementById("train-detector-name");
+  const trainExportDetectorBtn = document.getElementById("train-export-detector");
+  const trainExportLabelsBtn = document.getElementById("train-export-labels");
 
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
@@ -2620,7 +2622,9 @@
   }
 
   // Labels export – open modal (used by detector export modal)
-  async function openLabelExporterModal() {
+  // Options: { goodsOnly: bool } — when true, only export "good" labels
+  async function openLabelExporterModal(options) {
+    const goodsOnly = options && options.goodsOnly;
     let exporters = [];
     try {
       const res = await fetch("/api/exporters");
@@ -2647,23 +2651,28 @@
         const exp = exporters.find(e => e.name === name);
         el.addEventListener("click", () => {
           labelExporterModal.classList.remove("show");
-          runLabelExport(exp);
+          runLabelExport(exp, { goodsOnly });
         });
         el.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             labelExporterModal.classList.remove("show");
-            runLabelExport(exp);
+            runLabelExport(exp, { goodsOnly });
           }
         });
       });
     }
 
+    // Update modal title to reflect what's being exported
+    const titleEl = document.getElementById("label-exporter-modal-title");
+    if (titleEl) titleEl.textContent = goodsOnly ? "Export Labels (Goods)" : "Export Labels";
+
     labelExporterModal.classList.add("show");
   }
 
-  async function runLabelExport(exp) {
+  async function runLabelExport(exp, options) {
     menuLabelsStatus.textContent = "";
+    const goodsOnly = options && options.goodsOnly;
     // Collect required field values via prompts
     const fieldValues = {};
     for (const field of exp.fields) {
@@ -2682,7 +2691,8 @@
 
     menuLabelsStatus.textContent = "Exporting labels\u2026";
     try {
-      const labelsRes = await fetch("/api/labels/export");
+      const labelsUrl = goodsOnly ? "/api/labels/export?goods_only=1" : "/api/labels/export";
+      const labelsRes = await fetch(labelsUrl);
       const labelsData = await labelsRes.json();
 
       const exportRes = await fetch("/api/exporters/export", {
@@ -2947,6 +2957,19 @@
       const err = await res.json().catch(() => ({}));
       if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Server export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
     }
+  }
+
+  // Train-context-bar export buttons
+  if (trainExportDetectorBtn) {
+    trainExportDetectorBtn.addEventListener("click", () => {
+      const name = trainDetectorName ? trainDetectorName.textContent : "";
+      if (name) openDetectorExportModal(name);
+    });
+  }
+  if (trainExportLabelsBtn) {
+    trainExportLabelsBtn.addEventListener("click", () => {
+      openLabelExporterModal({ goodsOnly: true });
+    });
   }
 
   // Results display, export controls, escapeHtml, formatOrigin
