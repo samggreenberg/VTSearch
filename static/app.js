@@ -34,6 +34,11 @@
   let dashDemoDatasets = null;       // cached demo dataset list from API
   let dashPendingAction = null;      // "label" | "detect" — set before loading a dataset
   let currentView = "welcome";       // "welcome" | "dashboard" | "labeling"
+  let _dashboardTrainMode = null;    // { model } when in dashboard train mode
+  let _dashboardAddDatasetMode = false; // true when adding a dataset from dashboard
+  let dashboardDatasets = [];        // datasets added in dashboard mode
+  let _dashboardNextId = 1;          // auto-increment ID for dashboard datasets
+  let favoriteDetectors = [];        // cached list of favorite detectors
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -414,6 +419,35 @@
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ examples: model.examples || [] }),
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  /**
+   * Persist current labels to a trainable model's labelset (fire-and-forget).
+   * Called after each vote in dashboard train mode.
+   */
+  function _persistTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {}); // fire-and-forget
+  }
+
+  /**
+   * Save trainable model labels (awaited version for explicit save points).
+   */
+  async function saveTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    try {
+      await fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
     } catch (_) { /* ignore */ }
   }

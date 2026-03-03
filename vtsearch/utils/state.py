@@ -886,12 +886,13 @@ def get_dupe_count(media_dict: dict[int, dict[str, Any]] | None = None) -> int:
 
     Each media whose origin is ``"dupe_set"`` represents one group.
     """
-    source = media_dict if media_dict is not None else medias
-    return sum(
-        1
-        for m in source.values()
-        if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
-    )
+    with _state_lock:
+        source = media_dict if media_dict is not None else medias
+        return sum(
+            1
+            for m in source.values()
+            if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
+        )
 
 
 def next_media_id(media_dict: dict[int, dict[str, Any]]) -> int:

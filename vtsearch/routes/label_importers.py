@@ -132,7 +132,7 @@ def run_label_import(importer_name: str):
     missing_fields = [
         f.key
         for f in importer.fields
-        if f.required and f.field_type != "file" and not field_values.get(f.key, "").strip()
+        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
     ]
     if missing_fields:
         return (

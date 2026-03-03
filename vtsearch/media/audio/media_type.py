@@ -7,7 +7,16 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MODEL_ID, DATA_DIR, ESC50_DOWNLOAD_SIZE_MB, MODELS_CACHE_DIR, SAMPLE_RATE
+from vtsearch.config import (
+    CLAP_MODEL_ID,
+    DATA_DIR,
+    ESC50_DOWNLOAD_SIZE_MB,
+    GTZAN_DOWNLOAD_SIZE_MB,
+    MODELS_CACHE_DIR,
+    SAMPLE_RATE,
+    SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+    URBANSOUND8K_DOWNLOAD_SIZE_MB,
+)
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -258,7 +267,7 @@ class AudioMediaType(MediaType):
                 source="gtzan",
                 slice_start=0,
                 slice_end=100,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_a",
@@ -268,7 +277,7 @@ class AudioMediaType(MediaType):
                 source="speech_commands_v2",
                 slice_start=0,
                 slice_end=3000,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_a",
@@ -278,7 +287,7 @@ class AudioMediaType(MediaType):
                 source="urbansound8k",
                 slice_start=0,
                 slice_end=873,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
         ]
 

@@ -67,7 +67,8 @@ class Video2AudioMediaConverter(MediaConverter):
                 print("Video2AudioMediaConverter requires ffmpeg on $PATH")
                 return []
             except subprocess.CalledProcessError as e:
-                print(f"ffmpeg failed for {filename}: {e.stderr[:500] if e.stderr else ''}")
+                stderr_text = e.stderr[:500].decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")[:500]
+                print(f"ffmpeg failed for {filename}: {stderr_text}")
                 return []
             except subprocess.TimeoutExpired:
                 print(f"ffmpeg timed out for {filename}")

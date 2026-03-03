@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.config import DATA_DIR
 from vtsearch.models import (
     build_model_from_weights,
     calculate_cross_calibration_threshold,
@@ -69,6 +70,14 @@ def export_detector():
             X_list.append(medias[cid]["embedding"])
             y_list.append(0.0)
 
+    if not X_list:
+        return jsonify({"error": "voted medias no longer loaded — reload the dataset"}), 400
+
+    num_good = sum(1 for y_val in y_list if y_val == 1.0)
+    num_bad = len(y_list) - num_good
+    if num_good == 0 or num_bad == 0:
+        return jsonify({"error": "need at least one good and one bad vote with loaded medias"}), 400
+
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
@@ -110,7 +119,7 @@ def export_detector():
 # ---------------------------------------------------------------------------
 
 #: Default directory for server-side detector files.
-SERVER_DETECTOR_DIR = Path("data/detectors")
+SERVER_DETECTOR_DIR = DATA_DIR / "detectors"
 
 
 @detectors_bp.route("/api/detector/export-server", methods=["POST"])
@@ -163,6 +172,14 @@ def export_detector_server():
         if cid in medias:
             X_list.append(medias[cid]["embedding"])
             y_list.append(0.0)
+
+    if not X_list:
+        return jsonify({"error": "voted medias no longer loaded — reload the dataset"}), 400
+
+    num_good = sum(1 for y_val in y_list if y_val == 1.0)
+    num_bad = len(y_list) - num_good
+    if num_good == 0 or num_bad == 0:
+        return jsonify({"error": "need at least one good and one bad vote with loaded medias"}), 400
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -546,7 +563,14 @@ def import_detector_labels():
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
         input_dim = X.shape[1]
 
-        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, get_inclusion())
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            get_inclusion(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+        )
         model = train_model(X, y, input_dim, get_inclusion())
 
         # Apply safe thresholds blending if enabled
