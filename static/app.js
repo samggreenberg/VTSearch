@@ -1207,6 +1207,11 @@
       dashRegisteredDatasets = [];
     }
 
+    // Auto-select when exactly one dataset exists
+    if (dashRegisteredDatasets.length === 1 && dashSelectedDatasetIds.length === 0) {
+      dashSelectedDatasetIds = [dashRegisteredDatasets[0].id];
+    }
+
     if (dashRegisteredDatasets.length === 0) {
       dashDatasetGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No datasets yet. Use "+" to load one.</p>';
       return;
@@ -1346,6 +1351,11 @@
       const data = await res.json();
       autorunDetectors = data.detectors || [];
     } catch (_) {}
+
+    // Auto-select when exactly one model exists
+    if (dashRegisteredModels.length === 1 && dashSelectedModelIds.length === 0) {
+      dashSelectedModelIds = [dashRegisteredModels[0].id];
+    }
 
     if (dashRegisteredModels.length === 0) {
       dashModelGrid.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No models yet. Use "+" to create one.</p>';
