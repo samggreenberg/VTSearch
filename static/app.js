@@ -213,16 +213,17 @@
   const trainDatasetName = document.getElementById("train-dataset-name");
   const trainDetectorBar = document.getElementById("train-detector-bar");
   const trainDetectorName = document.getElementById("train-detector-name");
-  const trainExportDetectorBtn = document.getElementById("train-export-detector");
-  const trainExportLabelsBtn = document.getElementById("train-export-labels");
+  // Export Detector / Export Labels buttons removed from right panel;
+  // now accessible via burger menu items (menu-detector-export, menu-labels-export)
 
   // Burger menu elements
   const burgerBtn = document.getElementById("burger-btn");
   const burgerDropdown = document.getElementById("burger-dropdown");
   const menuLabelsImport = document.getElementById("menu-labels-import");
   const menuLabelsStatus = document.getElementById("menu-labels-status");
-  const menuDetectorImport = document.getElementById("menu-detector-import");
+  const menuDetectorExport = document.getElementById("menu-detector-export");
   const menuDetectorStatus = document.getElementById("menu-detector-status");
+  const menuLabelsExport = document.getElementById("menu-labels-export");
   const labelImporterModal = document.getElementById("label-importer-modal");
   const labelImporterModalClose = document.getElementById("label-importer-modal-close");
   const labelImporterList = document.getElementById("label-importer-list");
@@ -303,7 +304,6 @@
   const dashProgressFill = document.getElementById("dash-progress-fill");
   const dashProgressText = document.getElementById("dash-progress-text");
   const dashProgressMessage = document.getElementById("dash-progress-message");
-  const headerDashboardBtn = document.getElementById("header-dashboard-btn");
   const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
@@ -1091,11 +1091,11 @@
     mediaList.innerHTML = "";
     leftPanel.style.display = "none";
     if (rightPanel) rightPanel.style.display = "none";
-    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
     stripeContainer.innerHTML = "";
-    if (menuDashboard) menuDashboard.classList.remove("disabled");
+    if (menuDashboard) menuDashboard.classList.add("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
-    if (menuDetectorImport) menuDetectorImport.classList.add("disabled");
+    if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
+    if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
   }
 
   function showMainUI() {
@@ -1106,7 +1106,6 @@
     if (rightPanel) rightPanel.style.display = "";
     sortBar.style.display = "block";
     datasetBar.style.display = "flex";
-    if (headerDashboardBtn) headerDashboardBtn.style.display = "";
     // Show train context bar when in dashboard train mode
     if (_dashboardTrainMode && _dashboardTrainMode.model) {
       if (trainDetectorBar) trainDetectorBar.style.display = "";
@@ -1121,7 +1120,8 @@
     }
     if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
-    if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
+    if (menuDetectorExport) menuDetectorExport.classList.remove("disabled");
+    if (menuLabelsExport) menuLabelsExport.classList.remove("disabled");
     // Start autopilot if the autopilot tab is the active one
     if (tabAutopilot && tabAutopilot.classList.contains("active")) {
       refreshAutopilotExamples();
@@ -1141,10 +1141,11 @@
     if (rightPanel) rightPanel.style.display = "none";
     sortBar.style.display = "none";
     datasetBar.style.display = "none";
-    if (headerDashboardBtn) headerDashboardBtn.style.display = "none";
-    // Import Labels is only for the labeling interface
+    // These menu items are only for the labeling interface
     if (menuLabelsImport) menuLabelsImport.classList.add("disabled");
     if (menuDashboard) menuDashboard.classList.add("disabled");
+    if (menuDetectorExport) menuDetectorExport.classList.add("disabled");
+    if (menuLabelsExport) menuLabelsExport.classList.add("disabled");
 
     // Show dashboard
     center.innerHTML = "";
@@ -2755,12 +2756,22 @@
     });
   }
 
-  // Detector import — open Load Sort modal
-  if (menuDetectorImport && burgerDropdown) {
-    menuDetectorImport.addEventListener("click", () => {
-      if (menuDetectorImport.classList.contains("disabled")) return;
+  // Export Detector — burger menu item
+  if (menuDetectorExport && burgerDropdown) {
+    menuDetectorExport.addEventListener("click", () => {
+      if (menuDetectorExport.classList.contains("disabled")) return;
       closeBurgerMenu();
-      openLoadSortModal();
+      const name = trainDetectorName ? trainDetectorName.textContent : "";
+      openDetectorExportModal(name);
+    });
+  }
+
+  // Export Labels — burger menu item
+  if (menuLabelsExport && burgerDropdown) {
+    menuLabelsExport.addEventListener("click", () => {
+      if (menuLabelsExport.classList.contains("disabled")) return;
+      closeBurgerMenu();
+      openLabelExporterModal({ goodsOnly: true });
     });
   }
 
@@ -2977,18 +2988,7 @@
     }
   }
 
-  // Train-context-bar export buttons
-  if (trainExportDetectorBtn) {
-    trainExportDetectorBtn.addEventListener("click", () => {
-      const name = trainDetectorName ? trainDetectorName.textContent : "";
-      if (name) openDetectorExportModal(name);
-    });
-  }
-  if (trainExportLabelsBtn) {
-    trainExportLabelsBtn.addEventListener("click", () => {
-      openLabelExporterModal({ goodsOnly: true });
-    });
-  }
+  // Train-context-bar export buttons moved to burger menu
 
   // Results display, export controls, escapeHtml, formatOrigin
   // delegated to static/results.js (window.VTResults)
@@ -5613,11 +5613,6 @@
     }
   });
   // ---- Dashboard event handlers ----
-
-  // Header "Dashboard" button — visible during labeling
-  if (headerDashboardBtn) {
-    headerDashboardBtn.addEventListener("click", () => showDashboard());
-  }
 
   // Burger menu "Dashboard" item
   if (menuDashboard) {

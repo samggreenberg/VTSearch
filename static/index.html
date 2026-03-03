@@ -16,17 +16,17 @@
       <span aria-hidden="true"></span>
     </button>
     <div class="burger-dropdown" id="burger-dropdown" role="menu" aria-label="Main menu">
+      <div class="burger-item disabled" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
       <div class="burger-item disabled" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
       <div class="burger-status" id="menu-labels-status" aria-live="polite"></div>
-      <div class="burger-item disabled" id="menu-detector-import" role="menuitem" tabindex="-1">Load Sort</div>
+      <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
       <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
-      <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
+      <div class="burger-item disabled" id="menu-labels-export" role="menuitem" tabindex="-1">Export Labels</div>
       <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
     </div>
   </nav>
-  <h1>VTSearch</h1>
-  <button class="header-nav-btn" id="header-dashboard-btn" style="display:none">Dashboard</button>
   <img src="/static/logo.png" alt="VTSearch logo" class="header-logo">
+  <h1>VTSearch</h1>
 </header>
 <div class="layout" role="presentation">
   <!-- Left panel -->
@@ -210,10 +210,6 @@
         <div>
           <span class="train-context-label">Detector</span>
           <span class="train-context-name" id="train-detector-name"></span>
-        </div>
-        <div class="train-context-actions">
-          <button class="train-context-btn" id="train-export-detector" title="Export detector weights and labels">Export Detector</button>
-          <button class="train-context-btn" id="train-export-labels" title="Export labels (goods)">Export Labels</button>
         </div>
       </div>
     </div>
