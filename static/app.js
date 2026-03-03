@@ -1,6 +1,12 @@
 (function() {
   let medias = [];
   let votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+  let goodVoteSet = new Set();
+  let badVoteSet = new Set();
+  function _rebuildVoteSets() {
+    goodVoteSet = new Set(votes.good);
+    badVoteSet = new Set(votes.bad);
+  }
   let labelSortMode = "time-desc"; // default: newest first
   let selected = null;
   let sortOrder = null;   // null = default, or [{id, score}, ...]
@@ -2969,7 +2975,9 @@
     getSortOrder: () => sortOrder,
     getThreshold: () => threshold,
     getVotes: () => votes,
-    setVotes: (v) => { votes = v; },
+    getGoodVoteSet: () => goodVoteSet,
+    getBadVoteSet: () => badVoteSet,
+    setVotes: (v) => { votes = v; _rebuildVoteSets(); },
     renderVotes: () => renderVotes(),
   });
 
@@ -3590,7 +3598,7 @@
 
     // Get unlabeled medias (not voted on)
     const unlabeled = ordered.filter(item => {
-      return !votes.good.includes(item.id) && !votes.bad.includes(item.id);
+      return !goodVoteSet.has(item.id) && !badVoteSet.has(item.id);
     });
 
     if (unlabeled.length === 0) {
@@ -3648,6 +3656,7 @@
     const res = await fetch("/api/votes");
     if (!res.ok) { console.error("fetchVotes failed:", res.status); return; }
     votes = await res.json();
+    _rebuildVoteSets();
     renderVotes();
     renderStripe();
     updateSortModeAvailability();
@@ -3698,8 +3707,8 @@
       }
 
       const div = document.createElement("div");
-      const isGood = votes.good.includes(c.id);
-      const isBad = votes.bad.includes(c.id);
+      const isGood = goodVoteSet.has(c.id);
+      const isBad = badVoteSet.has(c.id);
       let className = "media-item";
       if (selected === c.id) className += " active";
       if (isGood) className += " labeled-good";
@@ -3762,8 +3771,8 @@
   function renderCenter() {
     const c = medias.find(x => x.id === selected);
     if (!c) return;
-    const isGood = votes.good.includes(c.id);
-    const isBad = votes.bad.includes(c.id);
+    const isGood = goodVoteSet.has(c.id);
+    const isBad = badVoteSet.has(c.id);
     center.className = "panel-center";
 
     const mediaType = c.type || "audio";
@@ -4291,8 +4300,8 @@
 
     // Render dots for each labeled media
     sortOrder.forEach((item, index) => {
-      const isGood = votes.good.includes(item.id);
-      const isBad = votes.bad.includes(item.id);
+      const isGood = goodVoteSet.has(item.id);
+      const isBad = badVoteSet.has(item.id);
       const isSelected = item.id === selected;
 
       if (isGood || isBad) {
