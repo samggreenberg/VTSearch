@@ -617,7 +617,7 @@ video { max-width: 100%; }
 /* ---- Dashboard view ---- */
 .dashboard-view {
   display: flex; flex-direction: column; width: 100%;
-  padding: 8px 32px 24px; gap: 12px; flex: 1; min-height: 0;
+  padding: 0 32px 24px; gap: 12px; flex: 1; min-height: 0;
 }
 .dashboard-header h2 { font-size: 1.4rem; color: var(--accent); margin: 0; }
 .dashboard-grids { display: grid; grid-template-columns: 1fr; gap: 20px; flex: 1; min-height: 0; }
@@ -703,19 +703,10 @@ video { max-width: 100%; }
 .dashboard-action-btn .dash-btn-title { line-height: 1.3; }
 .dashboard-action-btn .dash-btn-hint {
   display: block; font-size: 0.68rem; font-weight: 400; opacity: 0.85;
-  line-height: 1.2; min-height: 0;
+  line-height: 1.2; min-height: 1.2em;
 }
-.dashboard-action-btn .dash-btn-hint:empty { display: none; }
 .dashboard-action-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .dashboard-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-/* Label button is always the dominant button */
-.dashboard-action-btn:first-child { flex: 2; font-size: 1.1rem; padding: 12px 24px; }
-.dashboard-action-btn.secondary {
-  background: transparent; color: var(--accent);
-}
-.dashboard-action-btn.secondary .dash-btn-hint { opacity: 0.7; color: var(--text-muted); }
-.dashboard-action-btn.secondary:hover { background: var(--accent-highlight-bg); }
-.dashboard-action-btn.secondary:disabled { background: transparent; }
 
 /* Header nav button (Dashboard link visible during labeling) */
 .header-nav-btn {
