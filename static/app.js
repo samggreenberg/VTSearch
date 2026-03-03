@@ -1694,7 +1694,9 @@
 
           await fetchVotes();
 
-          // Set text sort mode and trigger sort with the model's text query
+          // Set text sort mode and trigger sort with the model's text query or first text example
+          const exQuery = trainInfo.model.text_query
+            || (trainInfo.model.examples && trainInfo.model.examples.length > 0 && trainInfo.model.examples[0].type === "text" ? trainInfo.model.examples[0].value : "");
           sortMode = "text";
           textSortWrap.style.display = "";
           learnedSortWrap.style.display = "none";
@@ -1703,9 +1705,9 @@
           document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
             r.checked = r.value === "text";
           });
-          textSortInput.value = trainInfo.model.text_query || "";
-          if (trainInfo.model.text_query) {
-            fetchTextSort(trainInfo.model.text_query);
+          textSortInput.value = exQuery;
+          if (exQuery) {
+            fetchTextSort(exQuery);
           }
 
           // Select first media
@@ -6254,6 +6256,31 @@
             trainable: true,
           },
         };
+
+        // Fetch examples from the trainable model or autorun detector so
+        // that Autopilot mode has the data it needs to start.
+        const modelName = _dashboardTrainMode.model.name;
+        try {
+          const tmRes = await fetch(`/api/trainable-models/${encodeURIComponent(modelName)}`);
+          if (tmRes.ok) {
+            const tmData = await tmRes.json();
+            _dashboardTrainMode.model.examples = tmData.examples || [];
+            if (!_dashboardTrainMode.model.text_query && tmData.text_query) {
+              _dashboardTrainMode.model.text_query = tmData.text_query;
+            }
+          }
+        } catch (_) { /* ignore */ }
+        // Fallback: try the autorun detector if no examples yet
+        if (!_dashboardTrainMode.model.examples || _dashboardTrainMode.model.examples.length === 0) {
+          const detName = regModel.detector_name || regModel.name;
+          try {
+            const detRes = await fetch(`/api/autorun-detectors/${encodeURIComponent(detName)}/examples`);
+            if (detRes.ok) {
+              const detData = await detRes.json();
+              _dashboardTrainMode.model.examples = detData.examples || [];
+            }
+          } catch (_) { /* ignore */ }
+        }
       } else {
         _dashboardTrainMode = null;
       }
@@ -6263,7 +6290,44 @@
 
       if (selDs.length === 1) {
         if (selDs[0].loaded) {
-          // Already loaded — go straight to labeling
+          // Already loaded — set up labeling (import labels, text sort, etc.)
+          await fetchMedias();
+
+          if (_dashboardTrainMode && _dashboardTrainMode.model) {
+            // Import labels from the trainable model's labelset
+            try {
+              const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(_dashboardTrainMode.model.name)}`);
+              if (modelRes.ok) {
+                const modelData = await modelRes.json();
+                const labels = modelData.labelset && modelData.labelset.labels;
+                if (labels && labels.length > 0) {
+                  await fetch("/api/labels/import", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ labels }),
+                  });
+                }
+              }
+            } catch (_) { /* ignore label import errors */ }
+
+            await fetchVotes();
+
+            // Set text sort mode and trigger sort with the model's first example or text_query
+            const exQuery = _dashboardTrainMode.model.text_query
+              || (_dashboardTrainMode.model.examples && _dashboardTrainMode.model.examples.length > 0 && _dashboardTrainMode.model.examples[0].type === "text" ? _dashboardTrainMode.model.examples[0].value : "");
+            sortMode = "text";
+            textSortWrap.style.display = "";
+            learnedSortWrap.style.display = "none";
+            loadSortWrap.style.display = "none";
+            document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+              r.checked = r.value === "text";
+            });
+            textSortInput.value = exQuery;
+            if (exQuery) {
+              fetchTextSort(exQuery);
+            }
+          }
+
           showMainUI();
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);

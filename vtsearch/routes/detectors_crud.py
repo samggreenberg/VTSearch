@@ -71,17 +71,47 @@ def add_autorun_detector_route():
         name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels
     )
 
+    # Extract text_query from examples (first text example) for the registry
+    text_query = ""
+    if examples:
+        for ex in examples:
+            if isinstance(ex, dict) and ex.get("type") == "text" and ex.get("value"):
+                text_query = ex["value"]
+                break
+
     # Also register in the persistent model registry so the dashboard grid
     # picks up the new model immediately.
     from vtsearch.models.registry import find_by_detector_name, register_model
 
     if not find_by_detector_name(name):
+        # When trainable (no pre-existing weights), also create a trainable
+        # model file so that labels and examples persist across restarts.
+        trainable_model_name = ""
+        if not weights:
+            from vtsearch.routes.trainable_models import _model_path, _write_model
+            import time as _time
+
+            trainable_model_name = name
+            tm_path = _model_path(name)
+            if not tm_path.exists():
+                model_data = {
+                    "name": name,
+                    "text_query": text_query,
+                    "media_type": media_type or "any",
+                    "examples": examples or [],
+                    "created_at": _time.time(),
+                    "labelset": {"labels": []},
+                }
+                _write_model(tm_path, model_data)
+
         register_model(
             name=name,
             media_type=media_type,
             trainable=not weights,
             num_training=num_labels,
             detector_name=name,
+            text_query=text_query,
+            trainable_model_name=trainable_model_name,
         )
 
     return jsonify({"success": True, "name": name})
