@@ -7,6 +7,7 @@ models that have already been computed.
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -31,6 +32,11 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_diversity_tree: Any = None  # DiversityTree | None
 
+# Reentrant lock protecting all module-level cache variables.
+# RLock is used because public functions call _ensure_cache which may
+# call clear_progress_cache internally when the inclusion value changes.
+_progress_lock = threading.RLock()
+
 
 def clear_progress_cache() -> None:
     """Clear all cached progress data.
@@ -39,12 +45,13 @@ def clear_progress_cache() -> None:
     is altered so that stale models are not reused.
     """
     global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
-    _cached_steps.clear()
-    _cache_good_ids.clear()
-    _cache_bad_ids.clear()
-    _cache_prev_predictions = None
-    _cache_inclusion = None
-    _cache_diversity_tree = None
+    with _progress_lock:
+        _cached_steps.clear()
+        _cache_good_ids.clear()
+        _cache_bad_ids.clear()
+        _cache_prev_predictions = None
+        _cache_inclusion = None
+        _cache_diversity_tree = None
 
 
 def _ensure_cache(
@@ -329,10 +336,11 @@ def recreate_model_at_time(
     if time_index < 0 or time_index >= len(label_history):
         return None, None, [], []
 
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    step = _cached_steps[time_index]
-    return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
+        step = _cached_steps[time_index]
+        return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
 
 
 def calculate_error_cost_over_time(
@@ -346,8 +354,9 @@ def calculate_error_cost_over_time(
 
     Uses cached models — no retraining.
     """
-    _ensure_cache(clips_dict, label_history, inclusion_value)
-    return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
+        return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
 
 def calculate_prediction_stability_over_time(
@@ -356,8 +365,9 @@ def calculate_prediction_stability_over_time(
     inclusion_value: int = 0,
 ) -> list[dict[str, Any]]:
     """Return cached prediction-stability metrics for every step."""
-    _ensure_cache(clips_dict, label_history, inclusion_value)
-    return [step["stability"] for step in _cached_steps if step["stability"] is not None]
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
+        return [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
 
 def _compute_smart_status(
@@ -478,12 +488,13 @@ def compute_labeling_status(
     bad = len(current_bad_votes)
     total = good + bad
 
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    smart = _compute_smart_status(
-        clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
-    )
-    stable = _compute_stable_status(good, bad, total)
+        smart = _compute_smart_status(
+            clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
+        )
+        stable = _compute_stable_status(good, bad, total)
 
     # Span status from diversity tree info (passed in from the route)
     if span_info is None:
@@ -545,7 +556,8 @@ def calculate_diversity_level_over_time(
     ``_ensure_cache`` before calling this function, so the cache is always
     current by the time we arrive here.
     """
-    return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+    with _progress_lock:
+        return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
 
 
 def analyze_labeling_progress(
@@ -560,13 +572,14 @@ def analyze_labeling_progress(
     Models and stability metrics are read from the per-step cache.  Error
     cost is recomputed cheaply using cached models (forward passes only).
     """
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    error_cost = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+        error_cost = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
-    stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+        stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
-    diversity = calculate_diversity_level_over_time(clips_dict, label_history)
+        diversity = calculate_diversity_level_over_time(clips_dict, label_history)
 
     return {
         "error_cost_over_time": error_cost,

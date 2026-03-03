@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,11 @@ _DEFAULTS: dict[str, Any] = {
 
 # In-memory cache — loaded once, written on every mutation.
 _settings: dict[str, Any] | None = None
+
+# Reentrant lock protecting the in-memory cache.  RLock is used because
+# some public functions (e.g. toggle_autoload_media_type) call other public
+# functions that also acquire the lock.
+_settings_lock = threading.RLock()
 
 
 def _load() -> dict[str, Any]:
@@ -85,9 +91,10 @@ def _save(data: dict[str, Any]) -> None:
 
 def _ensure_loaded() -> dict[str, Any]:
     global _settings
-    if _settings is None:
-        _settings = _load()
-    return _settings
+    with _settings_lock:
+        if _settings is None:
+            _settings = _load()
+        return _settings
 
 
 # -------------------------------------------------------------------
@@ -102,10 +109,11 @@ def get_defaults() -> dict[str, Any]:
 
 def get_all() -> dict[str, Any]:
     """Return the full settings dict (with defaults filled in)."""
-    s = _ensure_loaded()
-    result = dict(_DEFAULTS)
-    result.update(s)
-    return result
+    with _settings_lock:
+        s = _ensure_loaded()
+        result = dict(_DEFAULTS)
+        result.update(s)
+        return result
 
 
 VALID_THEMES = ("dark", "light", "highviz")
@@ -126,12 +134,14 @@ def _make_accessors(key: str, cast: type, coerce=None):
         coerce = cast
 
     def getter():
-        return cast(_ensure_loaded().get(key, _DEFAULTS[key]))
+        with _settings_lock:
+            return cast(_ensure_loaded().get(key, _DEFAULTS[key]))
 
     def setter(value):
-        s = _ensure_loaded()
-        s[key] = coerce(value)
-        _save(s)
+        with _settings_lock:
+            s = _ensure_loaded()
+            s[key] = coerce(value)
+            _save(s)
 
     getter.__name__ = f"get_{key}"
     setter.__name__ = f"set_{key}"
@@ -189,10 +199,11 @@ VALID_MEDIA_TYPES = ("audio", "document", "image", "paragraph", "video")
 
 def get_autoload_media_types() -> list[str]:
     """Return the list of autoload media type IDs (empty list if none set)."""
-    raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
-    if isinstance(raw, list):
-        return [v for v in raw if v in VALID_MEDIA_TYPES]
-    return []
+    with _settings_lock:
+        raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
+        if isinstance(raw, list):
+            return [v for v in raw if v in VALID_MEDIA_TYPES]
+        return []
 
 
 def set_autoload_media_types(value: list[str]) -> None:
@@ -200,27 +211,30 @@ def set_autoload_media_types(value: list[str]) -> None:
     for v in value:
         if v not in VALID_MEDIA_TYPES:
             raise ValueError(f"Invalid media type: {v!r}")
-    s = _ensure_loaded()
-    s["autoload_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
-    _save(s)
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autoload_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
+        _save(s)
 
 
 def toggle_autoload_media_type(type_id: str) -> list[str]:
     """Toggle a single media type's autoload status.  Returns the updated list."""
     if type_id not in VALID_MEDIA_TYPES:
         raise ValueError(f"Invalid media type: {type_id!r}")
-    current = get_autoload_media_types()
-    if type_id in current:
-        current.remove(type_id)
-    else:
-        current.append(type_id)
-    set_autoload_media_types(current)
-    return current
+    with _settings_lock:
+        current = get_autoload_media_types()
+        if type_id in current:
+            current.remove(type_id)
+        else:
+            current.append(type_id)
+        set_autoload_media_types(current)
+        return current
 
 
 def get_autorun_processors() -> list[dict[str, Any]]:
     """Return the list of autorun processor recipes."""
-    return list(_ensure_loaded().get("autorun_processors", []))
+    with _settings_lock:
+        return list(_ensure_loaded().get("autorun_processors", []))
 
 
 def add_autorun_processor(
@@ -229,31 +243,33 @@ def add_autorun_processor(
     field_values: dict[str, Any],
 ) -> None:
     """Add a autorun processor recipe (or overwrite one with the same name)."""
-    s = _ensure_loaded()
-    procs: list[dict[str, Any]] = s.setdefault("autorun_processors", [])
-    # Remove existing entry with same name
-    procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
-    procs.append(
-        {
-            "processor_name": processor_name,
-            "processor_importer": processor_importer,
-            "field_values": field_values,
-        }
-    )
-    _save(s)
+    with _settings_lock:
+        s = _ensure_loaded()
+        procs: list[dict[str, Any]] = s.setdefault("autorun_processors", [])
+        # Remove existing entry with same name
+        procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
+        procs.append(
+            {
+                "processor_name": processor_name,
+                "processor_importer": processor_importer,
+                "field_values": field_values,
+            }
+        )
+        _save(s)
 
 
 def remove_autorun_processor(processor_name: str) -> bool:
     """Remove a autorun processor by name.  Returns True if found."""
-    s = _ensure_loaded()
-    procs: list[dict[str, Any]] = s.get("autorun_processors", [])
-    before = len(procs)
-    procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
-    if len(procs) < before:
-        s["autorun_processors"] = procs
-        _save(s)
-        return True
-    return False
+    with _settings_lock:
+        s = _ensure_loaded()
+        procs: list[dict[str, Any]] = s.get("autorun_processors", [])
+        before = len(procs)
+        procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
+        if len(procs) < before:
+            s["autorun_processors"] = procs
+            _save(s)
+            return True
+        return False
 
 
 def to_settings_json(entry: dict[str, Any]) -> str:
@@ -337,11 +353,13 @@ def set_settings_path(path: str | Path) -> None:
     CLI flag).
     """
     global SETTINGS_PATH, _settings
-    SETTINGS_PATH = Path(path)
-    _settings = None  # force reload on next access
+    with _settings_lock:
+        SETTINGS_PATH = Path(path)
+        _settings = None  # force reload on next access
 
 
 def reset() -> None:
     """Reset the in-memory cache (for testing)."""
     global _settings
-    _settings = None
+    with _settings_lock:
+        _settings = None
