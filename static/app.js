@@ -1733,6 +1733,9 @@
           const trainInfo = _dashboardTrainMode;
           await fetchMedias();
 
+          // Clear any leftover votes so only this model's labels are active
+          try { await fetch("/api/votes/clear", { method: "POST" }); } catch (_) {}
+
           // Import labels from the trainable model's labelset
           try {
             const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(trainInfo.model.name)}`);
@@ -6396,6 +6399,10 @@
           await fetchMedias();
 
           if (_dashboardTrainMode && _dashboardTrainMode.model) {
+            // Clear any votes from a previous session so they don't
+            // contaminate this model's labelset.
+            try { await fetch("/api/votes/clear", { method: "POST" }); } catch (_) {}
+
             // Import labels from the trainable model's labelset
             try {
               const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(_dashboardTrainMode.model.name)}`);

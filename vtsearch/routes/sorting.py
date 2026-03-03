@@ -179,6 +179,19 @@ def get_votes():
     )
 
 
+@sorting_bp.route("/api/votes/clear", methods=["POST"])
+def clear_votes_route():
+    """Clear all votes without clearing medias.
+
+    Used by the Label flow to reset votes before importing a model's labelset
+    so that labels from a previous session don't contaminate the new model.
+    """
+    from vtsearch.utils import clear_votes
+
+    clear_votes()
+    return jsonify({"ok": True})
+
+
 @sorting_bp.route("/api/textsort-suggestions")
 def get_textsort_suggestions_route():
     """Return stored text-sort suggestions (most recent last)."""
