@@ -64,6 +64,7 @@ See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including 
 │   ├── HANDOFF.md                  # Project handoff & orientation guide
 │   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
 │   ├── ARCHITECTURE.md             # Architecture deep-dive
+│   ├── API.md                      # HTTP API reference (all REST endpoints)
 │   ├── EXTENDING.md                # Plugin authoring guide
 │   ├── EVAL.md                     # Evaluation framework guide
 │   ├── CLI.md                      # CLI reference
@@ -74,6 +75,10 @@ See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including 
 │   └── old_io.md                   # Retired IO module reference implementations
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
+
+## HTTP API
+
+VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector/exporter/importer operations, settings, and trainable models.
 
 ## Deployment
 

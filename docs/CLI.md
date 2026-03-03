@@ -18,10 +18,10 @@ python app.py --autodetect --dataset path/to/dataset.pkl --settings settings.jso
 
 ```bash
 python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings settings.json
-python app.py --autodetect --importer http_zip --url https://example.com/data.zip --settings settings.json
+python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_zip`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them.
+Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them.
 
 **Chunked loading** — for large datasets, use `--chunk-size N` to process in batches to limit memory:
 

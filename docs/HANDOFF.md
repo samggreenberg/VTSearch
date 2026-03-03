@@ -43,6 +43,7 @@ runs locally or in Docker.
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
+| [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
 | [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
