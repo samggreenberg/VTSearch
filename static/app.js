@@ -1173,14 +1173,9 @@
       }
 
       dashLabelBtn.disabled = labelDisabled;
-      // Show/hide hint text
-      let hintEl = dashLabelBtn.parentElement.querySelector(".dash-btn-hint-label");
-      if (!hintEl) {
-        hintEl = document.createElement("span");
-        hintEl.className = "dash-btn-hint dash-btn-hint-label";
-        dashLabelBtn.parentElement.insertBefore(hintEl, dashLabelBtn.nextSibling);
-      }
-      hintEl.textContent = labelHint;
+      // Show hint inside button
+      const labelHintEl = dashLabelBtn.querySelector(".dash-btn-hint");
+      if (labelHintEl) labelHintEl.textContent = labelHint;
     }
 
     // --- Find button validation ---
@@ -1209,13 +1204,9 @@
       }
 
       dashDetectBtn.disabled = findDisabled;
-      let hintEl = dashDetectBtn.parentElement.querySelector(".dash-btn-hint-find");
-      if (!hintEl) {
-        hintEl = document.createElement("span");
-        hintEl.className = "dash-btn-hint dash-btn-hint-find";
-        dashDetectBtn.parentElement.insertBefore(hintEl, dashDetectBtn.nextSibling);
-      }
-      hintEl.textContent = findHint;
+      // Show hint inside button
+      const findHintEl = dashDetectBtn.querySelector(".dash-btn-hint");
+      if (findHintEl) findHintEl.textContent = findHint;
     }
   }
 
