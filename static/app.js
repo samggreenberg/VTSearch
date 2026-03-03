@@ -213,6 +213,7 @@
   const trainDatasetName = document.getElementById("train-dataset-name");
   const trainDetectorBar = document.getElementById("train-detector-bar");
   const trainDetectorName = document.getElementById("train-detector-name");
+  const trainRenameBtn = document.getElementById("train-rename-btn");
   // Export Detector / Export Labels buttons removed from right panel;
   // now accessible via burger menu items (menu-detector-export, menu-labels-export)
 
@@ -1127,6 +1128,74 @@
       refreshAutopilotExamples();
       startAutopilot();
     }
+  }
+
+  // ---- Inline rename for detector in labeling bar ----
+  if (trainRenameBtn) {
+    trainRenameBtn.addEventListener("click", () => {
+      if (!trainDetectorName || !_dashboardTrainMode || !_dashboardTrainMode.model) return;
+      const current = trainDetectorName.textContent;
+      trainDetectorName.style.display = "none";
+      trainRenameBtn.style.display = "none";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "train-rename-input";
+      input.value = current;
+      trainDetectorName.parentNode.insertBefore(input, trainDetectorName);
+      input.focus();
+      input.select();
+      const commit = async () => {
+        const newName = input.value.trim();
+        if (newName && newName !== current) {
+          const model = _dashboardTrainMode.model;
+          const registryId = model.registry_id;
+          if (registryId) {
+            try {
+              const res = await fetch(`/api/models/registry/${encodeURIComponent(registryId)}/rename`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: newName }),
+              });
+              if (res.ok) {
+                model.name = newName;
+                model.detector_name = newName;
+                trainDetectorName.textContent = newName;
+                // Sync dashboard grid if cached
+                const regEntry = dashRegisteredModels.find(m => m.id === registryId);
+                if (regEntry) {
+                  regEntry.name = newName;
+                  regEntry.detector_name = newName;
+                  regEntry.trainable_model_name = newName;
+                }
+              }
+            } catch (_) { /* ignore */ }
+          } else {
+            // Fallback: rename via autorun-detectors API
+            try {
+              const detName = model.detector_name || current;
+              const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(detName)}/rename`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ new_name: newName }),
+              });
+              if (res.ok) {
+                model.name = newName;
+                model.detector_name = newName;
+                trainDetectorName.textContent = newName;
+              }
+            } catch (_) { /* ignore */ }
+          }
+        }
+        input.remove();
+        trainDetectorName.style.display = "";
+        trainRenameBtn.style.display = "";
+      };
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+        if (ev.key === "Escape") { input.value = current; input.blur(); }
+      });
+    });
   }
 
   // ---- Dashboard view ----
@@ -6450,6 +6519,8 @@
             name: regModel.trainable_model_name || regModel.name,
             text_query: regModel.text_query || "",
             trainable: true,
+            registry_id: regModel.id,
+            detector_name: regModel.detector_name || regModel.name,
           },
         };
 

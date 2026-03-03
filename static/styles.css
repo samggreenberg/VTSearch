@@ -323,7 +323,9 @@ video { max-width: 100%; }
 /* Training context bar – dataset / detector name shown during training */
 .train-context-bar { padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--accent-highlight-bg); flex-shrink: 0; overflow: hidden; }
 .train-context-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; line-height: 1; margin-bottom: 2px; }
-.train-context-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.train-context-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); display: inline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.train-rename-btn { vertical-align: middle; margin-left: 4px; font-size: 0.68rem; }
+.train-rename-input { width: 140px; padding: 1px 4px; font-size: 0.8rem; font-weight: 600; border: 1px solid var(--accent); border-radius: 3px; outline: none; background: var(--bg-panel); color: var(--text-primary); }
 .train-context-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .train-context-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .train-context-btn { font-size: 0.6rem; padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-panel); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
