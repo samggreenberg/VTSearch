@@ -28,7 +28,7 @@
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
   let _combineState = null;          // When non-null, we are in combine-datasets staging mode
-  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart, hardLabels, ...}
+  // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart, ...}
   // phase: "good" | "bad" | "hard" | "new" | "done"
   let _autopilotState = null;
   // Pending autopilot transition: deferred until the current vote finishes so
@@ -755,10 +755,10 @@
         + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
     }
     if (st.phase === "hard") {
-      const n = st.hardLabels || 0;
+      const n = votes.good.length + votes.bad.length;
       const smartSt = st.smartStatus || "";
       const stableSt = st.stableStatus || "";
-      return `${n} hard labels applied `
+      return `${n} labels applied `
         + `<span class="ap-indicator-dot" data-status="${smartSt}" title="Smart"></span>`
         + `<span class="ap-indicator-dot" data-status="${stableSt}" title="Stable"></span>`
         + ` Smart + Stable`;
@@ -825,7 +825,7 @@
 
     _autopilotState = {
       phase: "good", goodToStart, badToStart,
-      hardLabels: 0, smartStatus: "", stableStatus: "", spanStatus: "",
+      smartStatus: "", stableStatus: "", spanStatus: "",
       fracDiversity: 0,
     };
 
@@ -918,7 +918,6 @@
         if (isVoting) {
           _pendingAutopilotTransition = () => {
             st.phase = "hard";
-            st.hardLabels = 0;
             _apActivateLearnedSort();
             _apSetSelectMode("hard");
             fetchLearnedSort(true);
@@ -928,7 +927,6 @@
           return;
         }
         st.phase = "hard";
-        st.hardLabels = 0;
         _apActivateLearnedSort();
         _apSetSelectMode("hard");
         fetchLearnedSort(true);
@@ -984,16 +982,6 @@
       }
     }
     checkAutopilotPhase();
-  }
-
-  /**
-   * Increment the hard-labels counter.  Called from castVote when
-   * autopilot is in the "hard" phase.
-   */
-  function _autopilotCountHardLabel() {
-    if (_autopilotState && _autopilotState.phase === "hard") {
-      _autopilotState.hardLabels = (_autopilotState.hardLabels || 0) + 1;
-    }
   }
 
   /** Fetch a diversity-tree sample and navigate to it. */
@@ -4222,8 +4210,7 @@
         }
       }
 
-      // Autopilot: count hard labels and check if the phase should advance.
-      _autopilotCountHardLabel();
+      // Autopilot: check if the phase should advance.
       checkAutopilotPhase();
 
       // Auto-advance to next media.  When swipe animation is enabled, play a
