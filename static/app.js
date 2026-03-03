@@ -284,7 +284,6 @@
   const dashboardView = document.getElementById("dashboard-view");
   const dashDatasetGrid = document.getElementById("dash-dataset-grid");
   const dashModelGrid = document.getElementById("dash-model-grid");
-  const dashDatasetStatus = document.getElementById("dash-dataset-status");
   const dashLabelBtn = document.getElementById("dash-label-btn");
   const dashDetectBtn = document.getElementById("dash-detect-btn");
   const dashAddDatasetBtn = document.getElementById("dash-add-dataset-btn");
@@ -1117,20 +1116,6 @@
     dashboardView.style.display = "flex";
     // Only hide the in-grid progress if no load is actively running
     if (!dashProgressTimer) hideDashGridProgress();
-
-    // Update dataset status bar
-    if (datasetLoaded) {
-      const res = await fetch("/api/dataset/status");
-      const status = await res.json();
-      const mtInfo = mediaTypesMap[status.media_type];
-      const dupeSuffix = status.num_dupes ? ` (${status.num_dupes} dupes)` : "";
-      dashDatasetStatus.textContent = mtInfo
-        ? `${mtInfo.icon} ${status.num_medias} ${mtInfo.name.toLowerCase()} loaded${dupeSuffix}`
-        : `${status.num_medias} medias loaded${dupeSuffix}`;
-      dashDatasetStatus.style.display = "";
-    } else {
-      dashDatasetStatus.style.display = "none";
-    }
 
     // Populate grids
     await renderDashboardDatasets();
