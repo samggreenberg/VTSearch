@@ -609,10 +609,11 @@ class TestLoadProgressRaceCondition:
         try:
             # First, export current medias to a pkl for registration
             from vtsearch.datasets.loader import export_dataset_to_file
-            from vtsearch.datasets.registry import SAVED_DATASETS_DIR
+            from vtsearch.settings import get_saved_datasets_dir
 
-            SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-            pkl_path = str(SAVED_DATASETS_DIR / "test_race.pkl")
+            ds_dir = get_saved_datasets_dir()
+            ds_dir.mkdir(parents=True, exist_ok=True)
+            pkl_path = str(ds_dir / "test_race.pkl")
             from pathlib import Path
 
             Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))

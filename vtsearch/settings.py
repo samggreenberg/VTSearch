@@ -51,7 +51,14 @@ _DEFAULTS: dict[str, Any] = {
     "autorun_processors": [],
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
+    "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
+    "detectors_dir": str(DATA_DIR / "detectors"),
+    "trainable_models_dir": str(DATA_DIR / "trainable_models"),
 }
+
+#: Keys excluded from the "defaults" endpoint (infrastructure settings that
+#: should not be reset by the Default button).
+_EXCLUDE_FROM_DEFAULTS = {"autorun_processors", "saved_datasets_dir", "detectors_dir", "trainable_models_dir"}
 
 # In-memory cache — loaded once, written on every mutation.
 _settings: dict[str, Any] | None = None
@@ -103,8 +110,8 @@ def _ensure_loaded() -> dict[str, Any]:
 
 
 def get_defaults() -> dict[str, Any]:
-    """Return a copy of the default settings (excluding autorun_processors)."""
-    return {k: v for k, v in _DEFAULTS.items() if k != "autorun_processors"}
+    """Return a copy of the default settings (excluding infrastructure keys)."""
+    return {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
 
 
 def get_all() -> dict[str, Any]:
@@ -343,6 +350,56 @@ def ensure_autorun_processors_imported() -> list[str]:
             logger.warning("Autorun processor '%s': import failed: %s", name, exc)
 
     return imported
+
+
+# -------------------------------------------------------------------
+# Directory path settings
+# -------------------------------------------------------------------
+
+
+def _get_dir(key: str) -> Path:
+    """Return a directory path setting as a :class:`~pathlib.Path`."""
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    return Path(raw)
+
+
+def _set_dir(key: str, value: str | Path) -> None:
+    """Persist a directory path setting."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = str(value)
+        _save(s)
+
+
+def get_saved_datasets_dir() -> Path:
+    """Return the configured saved-datasets directory."""
+    return _get_dir("saved_datasets_dir")
+
+
+def set_saved_datasets_dir(value: str | Path) -> None:
+    """Set the saved-datasets directory."""
+    _set_dir("saved_datasets_dir", value)
+
+
+def get_detectors_dir() -> Path:
+    """Return the configured detectors directory."""
+    return _get_dir("detectors_dir")
+
+
+def set_detectors_dir(value: str | Path) -> None:
+    """Set the detectors directory."""
+    _set_dir("detectors_dir", value)
+
+
+def get_trainable_models_dir() -> Path:
+    """Return the configured trainable-models directory."""
+    return _get_dir("trainable_models_dir")
+
+
+def set_trainable_models_dir(value: str | Path) -> None:
+    """Set the trainable-models directory."""
+    _set_dir("trainable_models_dir", value)
 
 
 def set_settings_path(path: str | Path) -> None:

@@ -264,8 +264,13 @@ def isolated_settings(tmp_path, monkeypatch):
     from vtsearch.models import registry as model_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
-    monkeypatch.setattr(ds_reg_mod, "SAVED_DATASETS_DIR", tmp_path / "saved_datasets")
     monkeypatch.setattr(model_reg_mod, "REGISTRY_PATH", tmp_path / "model_registry.json")
+
+    # Redirect storage directories to temp paths via settings
+    settings_mod.set_saved_datasets_dir(str(tmp_path / "saved_datasets"))
+    settings_mod.set_detectors_dir(str(tmp_path / "detectors"))
+    settings_mod.set_trainable_models_dir(str(tmp_path / "trainable_models"))
+
     ds_reg_mod.reset_for_tests()
     model_reg_mod.reset_for_tests()
 

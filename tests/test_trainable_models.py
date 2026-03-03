@@ -5,17 +5,19 @@ import shutil
 
 import pytest
 
-from vtsearch.routes.trainable_models import TRAINABLE_MODELS_DIR
+from vtsearch.settings import get_trainable_models_dir
 
 
 @pytest.fixture(autouse=True)
 def clean_trainable_models_dir():
     """Remove the trainable models directory before and after each test."""
-    if TRAINABLE_MODELS_DIR.is_dir():
-        shutil.rmtree(TRAINABLE_MODELS_DIR)
+    tm_dir = get_trainable_models_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
     yield
-    if TRAINABLE_MODELS_DIR.is_dir():
-        shutil.rmtree(TRAINABLE_MODELS_DIR)
+    tm_dir = get_trainable_models_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
 
 
 class TestCreateTrainableModel:
@@ -63,7 +65,7 @@ class TestCreateTrainableModel:
             "/api/trainable-models",
             json={"name": "Test Model", "text_query": "test"},
         )
-        files = list(TRAINABLE_MODELS_DIR.glob("*.json"))
+        files = list(get_trainable_models_dir().glob("*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text())
         assert data["name"] == "Test Model"

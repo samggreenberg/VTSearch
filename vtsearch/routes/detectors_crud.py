@@ -28,7 +28,15 @@ from vtsearch.utils import (
 
 detectors_crud_bp = Blueprint("detectors_crud", __name__)
 
-#: Default directory for server-side detector files.
+
+def get_detectors_dir() -> Path:
+    """Return the configured detectors directory from settings."""
+    from vtsearch.settings import get_detectors_dir as _get
+
+    return _get()
+
+
+#: Backward-compat alias — prefer :func:`get_detectors_dir` for live value.
 SERVER_DETECTOR_DIR = DATA_DIR / "detectors"
 
 
@@ -216,8 +224,9 @@ def export_autorun_detector_server_route(name):
     if not safe_name:
         return jsonify({"error": "name contains no valid characters"}), 400
 
-    SERVER_DETECTOR_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    det_dir = get_detectors_dir()
+    det_dir.mkdir(parents=True, exist_ok=True)
+    filepath = det_dir / f"{safe_name}.json"
 
     if filepath.exists() and not overwrite:
         return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
@@ -309,12 +318,13 @@ def import_detector_pkl():
 
 @detectors_crud_bp.route("/api/detector/server-files", methods=["GET"])
 def list_server_detector_files():
-    """List detector JSON files saved on the server in data/detectors/."""
-    if not SERVER_DETECTOR_DIR.is_dir():
+    """List detector JSON files saved on the server."""
+    det_dir = get_detectors_dir()
+    if not det_dir.is_dir():
         return jsonify({"files": []})
 
     files = []
-    for p in sorted(SERVER_DETECTOR_DIR.glob("*.json")):
+    for p in sorted(det_dir.glob("*.json")):
         files.append(
             {
                 "name": p.stem,
@@ -332,12 +342,13 @@ def get_server_detector_file(name: str):
     if not safe_name:
         return jsonify({"error": "Invalid name"}), 400
 
-    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    det_dir = get_detectors_dir()
+    filepath = det_dir / f"{safe_name}.json"
     if not filepath.is_file():
         return jsonify({"error": "Detector file not found"}), 404
 
     try:
-        filepath.resolve().relative_to(SERVER_DETECTOR_DIR.resolve())
+        filepath.resolve().relative_to(det_dir.resolve())
     except ValueError:
         return jsonify({"error": "Invalid name"}), 400
 

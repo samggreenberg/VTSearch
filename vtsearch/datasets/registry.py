@@ -22,6 +22,16 @@ from vtsearch.config import DATA_DIR
 logger = logging.getLogger(__name__)
 
 REGISTRY_PATH = DATA_DIR / "dataset_registry.json"
+
+
+def get_saved_datasets_dir() -> Path:
+    """Return the saved-datasets directory from settings."""
+    from vtsearch.settings import get_saved_datasets_dir as _get
+
+    return _get()
+
+
+# Backward-compat alias — prefer :func:`get_saved_datasets_dir` for live value.
 SAVED_DATASETS_DIR = DATA_DIR / "saved_datasets"
 
 _lock = threading.RLock()
