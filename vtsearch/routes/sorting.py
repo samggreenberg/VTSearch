@@ -571,6 +571,12 @@ def label_file_sort():
                 continue
 
             audio_path = Path(audio_path)
+            # Ensure the path doesn't escape the data directory
+            try:
+                audio_path.resolve().relative_to(DATA_DIR.resolve())
+            except ValueError:
+                skipped_count += 1
+                continue
             if not audio_path.exists():
                 skipped_count += 1
                 continue

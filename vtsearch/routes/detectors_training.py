@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.config import DATA_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.models import (
     build_model_from_weights,
@@ -284,6 +285,12 @@ def import_detector_labels():
                 continue
 
             file_path = Path(file_path_str)
+            # Ensure the path doesn't escape the data directory
+            try:
+                file_path.resolve().relative_to(DATA_DIR.resolve())
+            except ValueError:
+                skipped_count += 1
+                continue
             if not file_path.exists():
                 skipped_count += 1
                 continue
