@@ -1,5 +1,6 @@
 """Utility modules for progress tracking and state management."""
 
+from vtsearch.utils.hits import build_media_hit
 from vtsearch.utils.progress import get_progress, get_sort_progress, update_progress, update_sort_progress
 from vtsearch.utils.state import (
     _state_lock,
@@ -146,4 +147,6 @@ __all__ = [
     "diversity_tree_next_sample",
     "diversity_tree_label",
     "diversity_tree_unlabel",
+    # Hit building
+    "build_media_hit",
 ]

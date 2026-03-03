@@ -8,6 +8,7 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.models import build_model_from_weights
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
@@ -29,9 +30,9 @@ def detector_sort():
     """Score all medias using a loaded detector model."""
     import torch  # noqa: PLC0415
 
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     detector = data.get("detector")
     if not detector:
@@ -163,9 +164,9 @@ def auto_detect():
 @detectors_scoring_bp.route("/api/extract", methods=["POST"])
 def run_extract():
     """Run a single extractor on all medias and return per-media extraction results."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     extractor_name = data.get("name", "").strip()
     extractor_type = data.get("extractor_type", "").strip()
@@ -273,9 +274,9 @@ def auto_extract():
 @detectors_scoring_bp.route("/api/localize", methods=["POST"])
 def run_localize():
     """Run a single localizer on all clips and return per-clip localization results."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     localizer_name = data.get("name", "").strip()
     localizer_type = data.get("localizer_type", "").strip()

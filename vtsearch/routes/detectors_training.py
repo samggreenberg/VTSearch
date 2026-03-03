@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.models import (
     build_model_from_weights,
     calculate_cross_calibration_threshold,
@@ -114,9 +115,9 @@ def export_detector_server():
 
     from vtsearch.utils import bad_votes, good_votes
 
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     name = (data.get("name") or "").strip()
     if not name:

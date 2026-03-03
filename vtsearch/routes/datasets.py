@@ -19,6 +19,7 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
 from vtsearch.datasets.loader import load_dataset_from_pickle
 from vtsearch.datasets.registry import (
@@ -355,9 +356,9 @@ def import_dataset(importer_name: str):
 @datasets_bp.route("/api/dataset/load-demo", methods=["POST"])
 def load_demo_dataset_route():
     """Load a demo dataset in a background thread."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     dataset_name = data.get("name")
 
@@ -428,9 +429,9 @@ def load_dataset_file():
 @datasets_bp.route("/api/dataset/load-folder", methods=["POST"])
 def load_dataset_folder():
     """Generate dataset from a folder of media files."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     folder_path = data.get("path")
     media_type = data.get("media_type", "sounds")  # Default to sounds for backward compatibility
