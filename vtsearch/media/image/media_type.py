@@ -686,7 +686,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -706,12 +706,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -742,7 +742,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -762,12 +762,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -801,7 +801,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -821,12 +821,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -867,7 +867,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -887,12 +887,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -938,6 +938,7 @@ class ImageMediaType(MediaType):
                 img_buffer = _io.BytesIO()
                 pil_image.save(img_buffer, format="PNG")
                 image_bytes = img_buffer.getvalue()
+                rel_name = f"{category}/{page_name}"
                 clips[clip_id] = {
                     "id": clip_id,
                     "type": self.type_id,
@@ -947,12 +948,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": f"{page_name}.png",
+                    "filename": f"{rel_name}.png",
                     "category": category,
                     "width": pil_image.width,
                     "height": pil_image.height,
                     "origin": demo_origin,
-                    "origin_name": page_name,
+                    "origin_name": rel_name,
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -995,7 +996,7 @@ class ImageMediaType(MediaType):
                 embedding = embed_image_file_from_pil(img)
                 if embedding is None:
                     continue
-                fname = f"{category}_{clip_id}.png"
+                fname = f"{category}/{category}_{clip_id}.png"
                 clips[clip_id] = {
                     "id": clip_id,
                     "type": self.type_id,

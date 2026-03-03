@@ -211,9 +211,10 @@ class VideoMediaType(MediaType):
         demo_origin: dict = {"importer": "demo", "params": {}}
 
         for i, (video_path, meta) in enumerate(video_files):
+            rel_name = f"{meta['category']}/{video_path.name}"
             on_progress(
                 "embedding",
-                f"Embedding {meta['category']}: {video_path.name} ({i + 1}/{total})",
+                f"Embedding {rel_name} ({i + 1}/{total})",
                 i + 1,
                 total,
             )
@@ -223,7 +224,6 @@ class VideoMediaType(MediaType):
             with open(video_path, "rb") as f:
                 video_bytes = f.read()
             media_fields = self.load_media_data(video_path)
-            rel_filename = str(video_path.relative_to(video_dir))
             clips[clip_id] = {
                 "id": clip_id,
                 "type": self.type_id,
@@ -232,10 +232,10 @@ class VideoMediaType(MediaType):
                 "md5": hashlib.md5(video_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": video_bytes,
-                "filename": rel_filename,
+                "filename": rel_name,
                 "category": meta["category"],
                 "origin": demo_origin,
-                "origin_name": video_path.name,
+                "origin_name": rel_name,
             }
             clip_id += 1
 

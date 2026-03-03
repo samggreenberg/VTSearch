@@ -390,9 +390,12 @@ class AudioMediaType(MediaType):
         demo_origin: dict = {"importer": "demo", "params": {}}
 
         for i, (audio_path, meta) in enumerate(audio_files):
+            # Preserve category/filename so that identically-named files
+            # in different category folders remain distinguishable.
+            rel_name = f"{meta['category']}/{audio_path.name}"
             on_progress(
                 "embedding",
-                f"Embedding {meta['category']}: {audio_path.name} ({i + 1}/{total})",
+                f"Embedding {rel_name} ({i + 1}/{total})",
                 i + 1,
                 total,
             )
@@ -412,10 +415,10 @@ class AudioMediaType(MediaType):
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": wav_bytes,
-                "filename": audio_path.name,
+                "filename": rel_name,
                 "category": meta["category"],
                 "origin": demo_origin,
-                "origin_name": audio_path.name,
+                "origin_name": rel_name,
             }
             clip_id += 1
 

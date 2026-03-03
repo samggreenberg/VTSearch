@@ -290,7 +290,7 @@ def load_image_metadata_from_folders(image_dir: Path, categories: list[str]) -> 
             not in this list are skipped.
 
     Returns:
-        A dict mapping image filename (basename only) to a dict with the keys:
+        A dict mapping ``category/filename`` to a dict with the keys:
 
         - ``"category"`` (``str``): Name of the category folder.
         - ``"path"`` (``Path``): Full path to the image file.
@@ -400,18 +400,19 @@ def load_dataset_from_folder(
     without any changes to this function.
 
     Args:
-        folder_path: Path to a flat directory containing media files.
+        folder_path: Path to the root directory containing media files.
+            Subdirectories are scanned recursively.
         media_type: Folder-import alias for the media type (e.g. ``"sounds"``).
         medias: Dict to populate in-place. Existing entries are removed before
             loading. Keys are sequential integer media IDs starting from 1.
-        content_vectors: Optional mapping of filename (basename) to a
-            pre-computed embedding ``numpy.ndarray``.  When a file's name is
-            found in this dict the supplied vector is used directly and the
-            embedding model is not invoked for that file.
-        content_md5s: Optional mapping of filename (basename) to a
-            pre-computed MD5 hex digest string.  When a file's name is found
-            in this dict the supplied hash is used directly and no MD5
-            calculation is performed for that file.
+        content_vectors: Optional mapping of filename to a pre-computed
+            embedding ``numpy.ndarray``.  Keys may be relative paths
+            (``"subdir/file.wav"``) or basenames (``"file.wav"``); relative
+            paths are checked first for an exact match, then basenames as a
+            fallback.
+        content_md5s: Optional mapping of filename to a pre-computed MD5 hex
+            digest string.  Keys follow the same lookup logic as
+            ``content_vectors`` (relative path first, then basename).
         origin: Optional serialised
             :class:`~vtsearch.datasets.origin.Origin` dict to attach to each
             media (as ``media["origin"]``).  When ``None`` no origin is set
@@ -442,10 +443,11 @@ def load_dataset_from_folder(
     if getattr(mt, "_model", None) is None:
         mt.load_models()
 
-    # Find all files of the specified media type
+    # Find all files of the specified media type (recursive so that
+    # subdirectory structures are preserved).
     media_files = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.glob(ext))
+        media_files.extend(folder_path.rglob(ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -456,14 +458,22 @@ def load_dataset_from_folder(
 
     try:
         for i, file_path in enumerate(media_files):
+            # Preserve relative path from the import root so that files in
+            # different subdirectories with the same basename stay distinct.
+            rel_path = file_path.relative_to(folder_path).as_posix()
+
             on_progress(
                 "embedding",
-                f"Embedding {media_type} {file_path.name}...",
+                f"Embedding {media_type} {rel_path}...",
                 i + 1,
                 total_files,
             )
 
-            if content_vectors and file_path.name in content_vectors:
+            # Look up pre-computed vectors by relative path first, then
+            # fall back to basename for backward compatibility.
+            if content_vectors and rel_path in content_vectors:
+                embedding = content_vectors[rel_path]
+            elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
             else:
                 embedding = mt.embed_media(file_path)
@@ -473,7 +483,9 @@ def load_dataset_from_folder(
             if thin:
                 # Thin mode: store file path reference, skip loading bytes.
                 # Use stat for file_size and streaming hash for MD5.
-                if content_md5s and file_path.name in content_md5s:
+                if content_md5s and rel_path in content_md5s:
+                    md5 = content_md5s[rel_path]
+                elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = _streaming_md5(file_path)
@@ -483,10 +495,10 @@ def load_dataset_from_folder(
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
                     "embedding": embedding,
-                    "filename": file_path.name,
+                    "filename": rel_path,
                     "category": "custom",
                     "origin": origin,
-                    "origin_name": file_path.name,
+                    "origin_name": rel_path,
                     "media_bytes": None,
                     "media_string": None,
                     "media_path": str(file_path.resolve()),
@@ -496,7 +508,9 @@ def load_dataset_from_folder(
                 with open(file_path, "rb") as f:
                     file_bytes = f.read()
 
-                if content_md5s and file_path.name in content_md5s:
+                if content_md5s and rel_path in content_md5s:
+                    md5 = content_md5s[rel_path]
+                elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = hashlib.md5(file_bytes).hexdigest()
@@ -508,10 +522,10 @@ def load_dataset_from_folder(
                     "file_size": len(file_bytes),
                     "md5": md5,
                     "embedding": embedding,
-                    "filename": file_path.name,
+                    "filename": rel_path,
                     "category": "custom",
                     "origin": origin,
-                    "origin_name": file_path.name,
+                    "origin_name": rel_path,
                     # Null-out optional media fields so medias from different types
                     # stored in the same dict have consistent keys.
                     "media_bytes": None,
@@ -546,7 +560,7 @@ def load_dataset_from_folder_chunked(
     origin: dict[str, Any] | None = None,
     thin: bool = False,
 ) -> Iterator[dict[int, dict[str, Any]]]:
-    """Yield chunks of medias from a flat folder of media files.
+    """Yield chunks of medias from a folder of media files.
 
     Works identically to :func:`load_dataset_from_folder` but yields the
     medias in groups of at most *chunk_size*.  Each yielded dict is a
@@ -554,11 +568,14 @@ def load_dataset_from_folder_chunked(
     has processed a chunk, the dict can be discarded to free memory.
 
     Args:
-        folder_path: Path to a flat directory containing media files.
+        folder_path: Path to the root directory containing media files.
+            Subdirectories are scanned recursively.
         media_type: Folder-import alias (e.g. ``"sounds"``).
         chunk_size: Maximum number of medias per chunk.
-        content_vectors: Optional pre-computed embeddings keyed by filename.
-        content_md5s: Optional pre-computed MD5s keyed by filename.
+        content_vectors: Optional pre-computed embeddings keyed by filename
+            (relative path or basename; relative path is tried first).
+        content_md5s: Optional pre-computed MD5s keyed by filename (same
+            lookup logic as *content_vectors*).
         origin: Optional origin dict to attach to each media.
         thin: When ``True``, store ``media_path`` instead of ``media_bytes``.
 
@@ -587,10 +604,11 @@ def load_dataset_from_folder_chunked(
     if getattr(mt, "_model", None) is None:
         mt.load_models()
 
-    # Find all files of the specified media type
+    # Find all files of the specified media type (recursive so that
+    # subdirectory structures are preserved).
     media_files: list[Path] = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.glob(ext))
+        media_files.extend(folder_path.rglob(ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -605,14 +623,18 @@ def load_dataset_from_folder_chunked(
 
         for i, file_path in enumerate(batch):
             global_idx = start + i
+            rel_path = file_path.relative_to(folder_path).as_posix()
+
             on_progress(
                 "embedding",
-                f"Embedding {media_type} {file_path.name} (chunk {start // chunk_size + 1})...",
+                f"Embedding {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
                 global_idx + 1,
                 total_files,
             )
 
-            if content_vectors and file_path.name in content_vectors:
+            if content_vectors and rel_path in content_vectors:
+                embedding = content_vectors[rel_path]
+            elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
             else:
                 embedding = mt.embed_media(file_path)
@@ -620,7 +642,9 @@ def load_dataset_from_folder_chunked(
                     continue
 
             if thin:
-                if content_md5s and file_path.name in content_md5s:
+                if content_md5s and rel_path in content_md5s:
+                    md5 = content_md5s[rel_path]
+                elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = _streaming_md5(file_path)
@@ -630,10 +654,10 @@ def load_dataset_from_folder_chunked(
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
                     "embedding": embedding,
-                    "filename": file_path.name,
+                    "filename": rel_path,
                     "category": "custom",
                     "origin": origin,
-                    "origin_name": file_path.name,
+                    "origin_name": rel_path,
                     "media_bytes": None,
                     "media_string": None,
                     "media_path": str(file_path.resolve()),
@@ -643,7 +667,9 @@ def load_dataset_from_folder_chunked(
                 with open(file_path, "rb") as f:
                     file_bytes = f.read()
 
-                if content_md5s and file_path.name in content_md5s:
+                if content_md5s and rel_path in content_md5s:
+                    md5 = content_md5s[rel_path]
+                elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
                 else:
                     md5 = hashlib.md5(file_bytes).hexdigest()
@@ -654,10 +680,10 @@ def load_dataset_from_folder_chunked(
                     "file_size": len(file_bytes),
                     "md5": md5,
                     "embedding": embedding,
-                    "filename": file_path.name,
+                    "filename": rel_path,
                     "category": "custom",
                     "origin": origin,
-                    "origin_name": file_path.name,
+                    "origin_name": rel_path,
                     "media_bytes": None,
                     "media_string": None,
                     "media_path": str(file_path.resolve()),
