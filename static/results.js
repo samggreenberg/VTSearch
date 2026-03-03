@@ -471,7 +471,7 @@
           const sortOrder = _deps.getSortOrder();
           const threshold = _deps.getThreshold();
           if (!sortOrder || threshold === null) {
-            await _deps.vtAlert("No sort results available. Run a sort first.", "warning");
+            await window.VTDialogs.vtAlert("No sort results available. Run a sort first.", "warning");
             return;
           }
 
@@ -493,7 +493,7 @@
           const counts = await dryRes.json();
           const total = (counts.good_count || 0) + (counts.bad_count || 0);
           if (total === 0) {
-            await _deps.vtAlert("No unlabeled elements to fill. All elements in the sort results are already labeled.", "info");
+            await window.VTDialogs.vtAlert("No unlabeled elements to fill. All elements in the sort results are already labeled.", "info");
             return;
           }
 
@@ -502,7 +502,7 @@
           else if (sides === "bad") desc = `${counts.bad_count} Bad label${counts.bad_count !== 1 ? "s" : ""}`;
           else desc = `${counts.good_count} Good + ${counts.bad_count} Bad label${total !== 1 ? "s" : ""}`;
 
-          const confirmed = await _deps.vtConfirm(`This will add ${desc} to the LabelSet and export. Continue?`);
+          const confirmed = await window.VTDialogs.vtConfirm(`This will add ${desc} to the LabelSet and export. Continue?`);
           if (!confirmed) return;
 
           setExportStatus("Filling labels\u2026", "var(--text-muted)");
