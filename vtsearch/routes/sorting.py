@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.routes.helpers import get_json_or_400
+
 from vtsearch.config import DATA_DIR
 from vtsearch.models import (
     analyze_labeling_progress,
@@ -24,6 +26,7 @@ from vtsearch.utils import (
     apply_label,
     apply_label_with_click_time,
     bad_votes,
+    build_media_hit,
     build_media_lookup,
     medias,
     diversity_tree_next_sample,
@@ -104,15 +107,10 @@ def _load_embedder_with_progress(media_type, total_steps):
 @sorting_bp.route("/api/sort", methods=["POST"])
 def sort_clips():
     """Return medias sorted by cosine similarity to a text query."""
-    try:
-        data = request.get_json(force=True)
-    except Exception:
+    data = get_json_or_400()
+    if not isinstance(data, dict):
         update_sort_progress("idle")
-        return jsonify({"error": "Invalid request body"}), 400
-
-    if data is None:
-        update_sort_progress("idle")
-        return jsonify({"error": "Invalid request body"}), 400
+        return data
 
     text = data.get("text", "").strip()
     if not text:
@@ -198,12 +196,9 @@ def get_textsort_suggestions_route():
 @sorting_bp.route("/api/textsort-suggestions", methods=["POST"])
 def add_textsort_suggestion_route():
     """Store a text-sort query as a suggested name for detectors/labelsets."""
-    try:
-        data = request.get_json(force=True)
-    except Exception:
-        return jsonify({"error": "Invalid request body"}), 400
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
     text = data.get("text", "").strip()
     if not text:
         return jsonify({"error": "text is required"}), 400
@@ -235,9 +230,9 @@ def export_labels():
 @sorting_bp.route("/api/labels/import", methods=["POST"])
 def import_labels():
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     labels = data.get("labels")
     if not isinstance(labels, list):
@@ -342,43 +337,14 @@ def fill_labels_from_sort():
         apply_label_with_click_time(entry["id"], "bad")
 
     # Build a results dict compatible with exporters
-    good_hits = []
-    for entry in good_candidates:
-        cid = entry["id"]
-        media = medias.get(cid, {})
-        hit = {
-            "id": cid,
-            "filename": media.get("filename", f"media_{cid}"),
-            "category": media.get("category", "unknown"),
-            "score": round(entry["score"], 4),
-            "label": "good",
-        }
-        if media.get("origin") is not None:
-            hit["origin"] = media["origin"]
-        if media.get("origin_name"):
-            hit["origin_name"] = media["origin_name"]
-        if media.get("md5"):
-            hit["md5"] = media["md5"]
-        good_hits.append(hit)
-
-    bad_hits = []
-    for entry in bad_candidates:
-        cid = entry["id"]
-        media = medias.get(cid, {})
-        hit = {
-            "id": cid,
-            "filename": media.get("filename", f"media_{cid}"),
-            "category": media.get("category", "unknown"),
-            "score": round(entry["score"], 4),
-            "label": "bad",
-        }
-        if media.get("origin") is not None:
-            hit["origin"] = media["origin"]
-        if media.get("origin_name"):
-            hit["origin_name"] = media["origin_name"]
-        if media.get("md5"):
-            hit["md5"] = media["md5"]
-        bad_hits.append(hit)
+    good_hits = [
+        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="good")
+        for e in good_candidates
+    ]
+    bad_hits = [
+        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="bad")
+        for e in bad_candidates
+    ]
 
     media_type = "unknown"
     for media in medias.values():
@@ -415,9 +381,9 @@ def get_inclusion_route():
 @sorting_bp.route("/api/inclusion", methods=["POST"])
 def set_inclusion_route():
     """Set the Inclusion setting."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_inclusion = data.get("inclusion")
 
@@ -440,9 +406,9 @@ def get_safe_thresholds_route():
 @sorting_bp.route("/api/safe-thresholds", methods=["POST"])
 def set_safe_thresholds_route():
     """Set the Safe Thresholds setting."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     value = data.get("safe_thresholds")
     if not isinstance(value, bool):
@@ -533,9 +499,9 @@ def list_server_media_files():
 @sorting_bp.route("/api/example-sort-server", methods=["POST"])
 def example_sort_server():
     """Sort medias by similarity to a server-side media file."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     filename = data.get("filename", "").strip()
     if not filename:

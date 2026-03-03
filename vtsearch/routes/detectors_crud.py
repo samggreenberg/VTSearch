@@ -8,6 +8,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from vtsearch.config import DATA_DIR
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
     add_autorun_detector,
     add_autorun_extractor,
@@ -50,9 +51,9 @@ def add_autorun_detector_route():
     Weights are optional: when omitted the detector is created as an untrained
     stub that can be trained later through labeling.
     """
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     name = data.get("name", "").strip()
     media_type = data.get("media_type", "").strip()
@@ -135,9 +136,9 @@ def delete_autorun_detector_route(name):
 @detectors_crud_bp.route("/api/autorun-detectors/<name>/rename", methods=["PUT"])
 def rename_autorun_detector_route(name):
     """Rename a autorun detector."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_name = data.get("new_name", "").strip()
     if not new_name:
@@ -157,9 +158,9 @@ def rename_autorun_detector_route(name):
 @detectors_crud_bp.route("/api/autorun-detectors/<name>/autodetect", methods=["PUT"])
 def set_autorun_detector_autodetect_route(name):
     """Set the autodetect flag on a autorun detector."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     autodetect = data.get("autodetect")
     if autodetect is None:
@@ -252,9 +253,9 @@ def set_detector_examples_route(name):
     """Set/replace the examples for a autorun detector."""
     from vtsearch.utils import set_autorun_detector_examples
 
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     examples = data.get("examples")
     if examples is None:
@@ -392,9 +393,9 @@ def get_autorun_extractors_route():
 @detectors_crud_bp.route("/api/autorun-extractors", methods=["POST"])
 def add_autorun_extractor_route():
     """Add a new autorun extractor."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     name = data.get("name", "").strip()
     extractor_type = data.get("extractor_type", "").strip()
@@ -431,9 +432,9 @@ def delete_autorun_extractor_route(name):
 @detectors_crud_bp.route("/api/autorun-extractors/<name>/rename", methods=["PUT"])
 def rename_autorun_extractor_route(name):
     """Rename a autorun extractor."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_name = data.get("new_name", "").strip()
     if not new_name:
@@ -480,9 +481,9 @@ def get_autorun_localizers_route():
 @detectors_crud_bp.route("/api/autorun-localizers", methods=["POST"])
 def add_autorun_localizer_route():
     """Add a new autorun localizer."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     name = data.get("name", "").strip()
     localizer_type = data.get("localizer_type", "").strip()
@@ -518,9 +519,9 @@ def delete_autorun_localizer_route(name):
 @detectors_crud_bp.route("/api/autorun-localizers/<name>/rename", methods=["PUT"])
 def rename_autorun_localizer_route(name):
     """Rename a autorun localizer."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_name = data.get("new_name", "").strip()
     if not new_name:

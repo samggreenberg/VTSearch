@@ -1,6 +1,6 @@
 # Core application dependencies
 flask
-numpy
+numpy<2
 torch
 torchvision
 transformers

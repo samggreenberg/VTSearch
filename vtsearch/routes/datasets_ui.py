@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.utils import (
     get_dataset_display_name,
@@ -172,9 +173,9 @@ def dashboard_dataset_info():
 @datasets_ui_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
 def dashboard_dataset_rename():
     """Set a custom display name for the currently loaded dataset."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_name = data.get("name", "").strip()
     if not new_name:

@@ -18,6 +18,7 @@ from typing import Any
 import numpy as np
 
 from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.utils.hits import build_media_hit
 
 
 def _score_clips_with_detector(
@@ -73,20 +74,7 @@ def _score_clips_with_detector(
     positive_hits = []
     for cid, score in zip(all_ids, scores):
         if score >= threshold:
-            media = medias[cid]
-            hit: dict[str, Any] = {
-                "id": cid,
-                "filename": media.get("filename", f"media_{cid}"),
-                "category": media.get("category", "unknown"),
-                "score": round(score, 4),
-            }
-            if media.get("origin") is not None:
-                hit["origin"] = media["origin"]
-            if media.get("origin_name"):
-                hit["origin_name"] = media["origin_name"]
-            if media.get("md5"):
-                hit["md5"] = media["md5"]
-            positive_hits.append(hit)
+            positive_hits.append(build_media_hit(cid, medias[cid], score))
 
     # Sort by score descending
     positive_hits.sort(key=lambda x: x["score"], reverse=True)
@@ -226,19 +214,7 @@ def _score_medias_with_detectors(
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
         for cid, score in zip(all_ids, scores):
-            media = medias[cid]
-            hit: dict[str, Any] = {
-                "id": cid,
-                "filename": media.get("filename", f"media_{cid}"),
-                "category": media.get("category", "unknown"),
-                "score": round(score, 4),
-            }
-            if media.get("origin") is not None:
-                hit["origin"] = media["origin"]
-            if media.get("origin_name"):
-                hit["origin_name"] = media["origin_name"]
-            if media.get("md5"):
-                hit["md5"] = media["md5"]
+            hit = build_media_hit(cid, medias[cid], score)
             if score >= threshold:
                 positive_hits.append(hit)
             else:

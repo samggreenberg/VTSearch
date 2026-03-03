@@ -9,6 +9,7 @@ from typing import Any
 from flask import Blueprint, Response, jsonify, request, send_file
 
 from vtsearch.media.base import MediaResponse
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
     medias,
     toggle_vote,
@@ -289,13 +290,9 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
     if media_id not in medias:
         return jsonify({"error": "not found"}), 404
 
-    try:
-        data = request.get_json(force=True)
-    except Exception:
-        return jsonify({"error": "Invalid request body"}), 400
-
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     vote = data.get("vote")
     if vote not in ("good", "bad"):
