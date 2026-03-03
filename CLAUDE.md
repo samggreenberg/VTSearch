@@ -25,7 +25,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors, autopilot_top_greens, autopilot_hard_reds); auto-saves to `data/settings.json`
-- `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py`, `datasets.py`, `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
+- `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
@@ -35,10 +35,11 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
-- `static/` — Frontend (index.html, app.js, styles.css) and assets (favicons, logo.svg, logo.png)
+- `static/` — Frontend (index.html, app.js, dialogs.js, charts.js, results.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
+  - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
   - `test_audio.py` — WAV generation
   - `test_medias.py` — Media init, listing, audio endpoint, MD5
   - `test_votes.py` — Voting and vote retrieval
@@ -63,6 +64,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_creation_info.py` — Legacy creation_info handling in pickle datasets
   - `test_duplicates.py` — Duplicate-content collapsing: collapse_duplicates function, dupe counting, label export/import integration
   - `test_enrich_descriptions.py` — Enriched text-sort description embedding
+  - `test_error_recovery.py` — Error handling and edge cases: invalid requests, missing fields, type mismatches, empty state, nonexistent resources
   - `test_eval.py` — Evaluation framework runner and metrics
   - `test_eval_visualize.py` — Evaluation visualisation chart generation
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
@@ -75,10 +77,12 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_diversity_tree.py` — DiversityTree: hierarchical k-means clustering, seen tracking, diversity level, next sample
   - `test_diversity_tree_integration.py` — DiversityTree integration with Flask app: build, rebuild, voting, diversity-level endpoint
   - `test_document_and_converters.py` — Document media type and media converters (document→image, document→text, video→audio, video→image)
+  - `test_download_and_extract.py` — Generic _download_and_extract() helper: tar.gz, zip, nested archives
   - `test_tqdm_progress.py` — tqdm-based progress bar tracking
   - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
   - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
+  - `test_frontend.py` — Frontend serving: SPA entry point, static files, favicon variants, logo, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
   - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration

@@ -114,7 +114,12 @@ VTSearch/
 │   │   ├── medias.py               Media listing, serving, voting
 │   │   ├── sorting.py              Text/learned/example sort, labels, diversity
 │   │   ├── detectors.py            Detector/extractor/localizer management, autodetect
+│   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
+│   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
+│   │   ├── detectors_training.py   Detector training from votes
 │   │   ├── datasets.py             Dataset loading, demos, dashboard
+│   │   ├── datasets_loading.py     Dataset loading and import orchestration
+│   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
 │   │   ├── exporters.py            Exporter registry & execution
 │   │   ├── label_importers.py      Label importer registry & execution
 │   │   ├── processor_importers.py  Processor importer registry & execution
