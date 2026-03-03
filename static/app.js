@@ -1122,6 +1122,11 @@
     if (menuDashboard) menuDashboard.classList.remove("disabled");
     if (menuLabelsImport) menuLabelsImport.classList.remove("disabled");
     if (menuDetectorImport) menuDetectorImport.classList.remove("disabled");
+    // Start autopilot if the autopilot tab is the active one
+    if (tabAutopilot && tabAutopilot.classList.contains("active")) {
+      refreshAutopilotExamples();
+      startAutopilot();
+    }
   }
 
   // ---- Dashboard view ----
@@ -1779,9 +1784,6 @@
           }
 
           showMainUI();
-          if (tabAutopilot) {
-            tabAutopilot.click();
-          }
           // Select first media
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
@@ -6471,9 +6473,6 @@
           }
 
           showMainUI();
-          if (_dashboardTrainMode && tabAutopilot) {
-            tabAutopilot.click();
-          }
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
           }
@@ -6536,9 +6535,6 @@
       if (dashSelectedDataset) {
         dashLoadSelectedDataset(() => {
           showMainUI();
-          if (_dashboardTrainMode && tabAutopilot) {
-            tabAutopilot.click();
-          }
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
           }
