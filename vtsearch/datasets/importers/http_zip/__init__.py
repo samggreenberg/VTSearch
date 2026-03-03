@@ -8,10 +8,12 @@ Requires only ``requests``, which is already a core dependency.
 
 from __future__ import annotations
 
+import shutil
 import tarfile
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
+from uuid import uuid4
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
@@ -100,9 +102,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     """Download a publicly-accessible archive and load its media files.
 
     The archive is streamed to a temporary file in ``DATA_DIR``, extracted
-    to ``DATA_DIR/http_archive_extract/``, then scanned with the standard
+    to a unique ``DATA_DIR/http_archive_extract_<id>/`` directory, then
+    scanned with the standard
     :func:`~vtsearch.datasets.loader.load_dataset_from_folder` pipeline.
-    Both temporary paths are cleaned up after a successful run.
+    Both temporary paths are cleaned up after the run completes.
 
     Supported archive formats: ``.zip``, ``.tar``, ``.tar.gz``,
     ``.tar.bz2``, ``.tar.xz``, ``.rar`` (requires ``rarfile`` package).
@@ -140,8 +143,9 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         # Derive a local filename from the URL so we preserve the extension
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
+        run_id = uuid4().hex[:12]
         archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
-        extract_dir = DATA_DIR / "http_archive_extract"
+        extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
         download_file_with_progress(url, archive_path, on_progress=progress)
@@ -151,7 +155,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
-        load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
+        try:
+            load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         url = field_values.get("url", "")
@@ -164,7 +171,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         return True
 
     def _download_and_extract(self, field_values: dict[str, Any]) -> Path:
-        """Download and extract the archive, returning the extraction dir."""
+        """Download and extract the archive, returning the extraction dir.
+
+        Each call creates a unique extraction directory so concurrent imports
+        do not interfere with each other.  Callers are responsible for cleaning
+        up the returned directory when they are done with it.
+        """
         url = field_values["url"]
 
         DATA_DIR.mkdir(exist_ok=True)
@@ -172,8 +184,9 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
+        run_id = uuid4().hex[:12]
         archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
-        extract_dir = DATA_DIR / "http_archive_extract"
+        extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
         download_file_with_progress(url, archive_path, on_progress=progress)
@@ -192,7 +205,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         extract_dir = self._download_and_extract(field_values)
         media_type = field_values.get("media_type", "sounds")
-        yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+        try:
+            yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_chunked_cli(
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
