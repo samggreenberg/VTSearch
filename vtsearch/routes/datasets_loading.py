@@ -153,6 +153,10 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
         ``_origin_to_str(origin)`` when empty.
     """
 
+    # Set progress to "loading" synchronously so the frontend never sees a
+    # stale "idle" status from a previous operation before the thread starts.
+    update_progress("loading", "Preparing dataset...")
+
     def task():
         try:
             clear_dataset()

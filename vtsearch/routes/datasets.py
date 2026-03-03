@@ -366,6 +366,10 @@ def load_demo_dataset_route():
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
+    # Set progress to "loading" synchronously so the frontend never sees a
+    # stale "idle" status from a previous operation before the thread starts.
+    update_progress("loading", "Loading demo dataset...")
+
     def load_task():
         try:
             clear_dataset()
@@ -506,12 +510,15 @@ def load_registered_dataset(dataset_id: str):
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
+    # Set progress to "loading" synchronously so the frontend never sees a
+    # stale "idle" status from a previous operation before the thread starts.
+    update_progress("loading", "Loading dataset from file...")
+
     def load_task():
         try:
             clear_dataset()
             _reg_set_loaded(None)
             gc.collect()
-            update_progress("loading", "Loading dataset from file...", 0, 0)
             load_dataset_from_pickle(Path(pkl_path), medias)
             collapse_duplicates(medias)
             build_diversity_tree()
