@@ -39,6 +39,11 @@
   let dashboardDatasets = [];        // datasets added in dashboard mode
   let _dashboardNextId = 1;          // auto-increment ID for dashboard datasets
   let favoriteDetectors = [];        // cached list of favorite detectors
+
+  // Favorites modal elements (may not exist in all HTML builds)
+  const favoritesModal = document.getElementById("favorites-modal");
+  const favoritesModalClose = document.getElementById("favorites-modal-close");
+  const favAddName = document.getElementById("fav-add-name");
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -450,6 +455,46 @@
         headers: { "Content-Type": "application/json" },
       });
     } catch (_) { /* ignore */ }
+  }
+
+  // Stub functions for features that require the favorites modal HTML
+  // (not yet present in index.html).  These prevent ReferenceErrors when
+  // dashboard buttons or autopilot code call into the favorites UI.
+  async function loadFavoriteDetectors() {
+    try {
+      const res = await fetch("/api/favorite-detectors");
+      const data = await res.json();
+      favoriteDetectors = data.detectors || [];
+    } catch (_) {}
+  }
+
+  function loadFavImporterButtons() { /* no-op until favorites modal HTML is added */ }
+
+  function renderExamplesGrid(container, examples, onUpdate) {
+    if (!container) return;
+    container.innerHTML = "";
+    examples.forEach((ex, i) => {
+      const div = document.createElement("div");
+      div.className = "example-chip";
+      div.textContent = ex.value || ex.type || "example";
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "\u00d7";
+      removeBtn.className = "example-remove";
+      removeBtn.onclick = () => {
+        const updated = examples.filter((_, j) => j !== i);
+        if (onUpdate) onUpdate(updated);
+      };
+      div.appendChild(removeBtn);
+      container.appendChild(div);
+    });
+  }
+
+  async function promptForExample(type) {
+    if (type === "text") {
+      const value = prompt("Enter a text example:");
+      return value ? { type: "text", value } : null;
+    }
+    return null;
   }
 
   if (autopilotExampleAdd) {
@@ -4243,11 +4288,11 @@
       if (media.type === "video") {
         html += `<video class="vote-thumbnail" src="${thumbnailUrl(media)}" muted preload="metadata"></video>`;
       } else {
-        html += `<img class="vote-thumbnail" src="${thumbnailUrl(media)}" alt="${entry.name}" loading="lazy">`;
+        html += `<img class="vote-thumbnail" src="${thumbnailUrl(media)}" alt="${escapeHtml(entry.name)}" loading="lazy">`;
       }
       html += `<div class="vote-thumb-info">`;
     }
-    html += `<span class="vote-name">${entry.name}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
+    html += `<span class="vote-name">${escapeHtml(entry.name)}</span><span class="vote-meta">${metaParts.join(" \u00b7 ")}</span>`;
     if (useThumbnail) {
       html += `</div>`;
     }
