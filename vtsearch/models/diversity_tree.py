@@ -8,7 +8,7 @@ The tree supports:
 - Labeling: when a vector is labeled, mark its leaf and all ancestors as seen.
 - Unlabeling: when a label is removed, propagate unseen status upward.
 - Diversity level: the deepest tree level at which every node is seen.
-- Next sample: the highest-scored element of the first unseen node in BFS order.
+- Next sample: a surprise-maximising element of the first unseen node in BFS order.
 """
 
 from __future__ import annotations
@@ -211,13 +211,24 @@ class DiversityTree:
         seen_count = sum(1 for name in nodes_at_next if name in self.seen)
         return level + seen_count / len(nodes_at_next)
 
-    def next_sample(self, scores: dict[int, float] | None = None) -> int | None:
+    def next_sample(
+        self,
+        scores: dict[int, float] | None = None,
+        threshold: float | None = None,
+    ) -> int | None:
         """Return an element from the first unseen node in BFS order.
 
-        When *scores* is provided, returns the highest-scored element in the
-        node (so the sort mode influences which element is picked from the
-        diverse region).  When *scores* is ``None``, returns the first element
-        in the node's ID list.
+        When *scores* is provided, the selection depends on the node's median
+        score relative to *threshold*:
+
+        - If *threshold* is given and the median score in the node is **at or
+          above** it, the **lowest**-scored element is returned (the one most
+          likely to surprise the user in a predominantly-good region).
+        - Otherwise the **highest**-scored element is returned (the one most
+          likely to surprise the user in a predominantly-bad region).
+
+        When *scores* is ``None``, returns the first element in the node's ID
+        list.
 
         Returns ``None`` if all nodes have been seen.
         """
@@ -230,6 +241,11 @@ class DiversityTree:
             if name not in self.seen:
                 ids = self.nodes[name]["ids"]
                 if scores is not None:
+                    node_scores = [scores.get(i, 0.0) for i in ids]
+                    if threshold is not None:
+                        median = float(np.median(node_scores))
+                        if median >= threshold:
+                            return min(ids, key=lambda i: scores.get(i, 0.0))
                     return max(ids, key=lambda i: scores.get(i, 0.0))
                 return ids[0]
             children = self.nodes[name]["children"]

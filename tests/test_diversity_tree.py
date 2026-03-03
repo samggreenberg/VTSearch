@@ -477,6 +477,44 @@ class TestNextSample:
         # Should pick a high-scoring element
         assert scores[s1] == 0.9
 
+    def test_threshold_above_median_picks_lowest(self):
+        """When the node's median score is >= threshold, return the lowest-scored element."""
+        vecs = _make_vectors(50)
+        tree = DiversityTree(vecs, k=2, min_node_size=20)
+        # Single node tree; scores 1..50
+        scores = {i: float(i) for i in range(1, 51)}
+        # Median of 1..50 is 25.5 — set threshold below that
+        sample = tree.next_sample(scores=scores, threshold=20.0)
+        # Median (25.5) >= 20.0, so we pick the lowest-scored element
+        assert sample == 1
+
+    def test_threshold_below_median_picks_highest(self):
+        """When the node's median score is below threshold, return the highest-scored element."""
+        vecs = _make_vectors(50)
+        tree = DiversityTree(vecs, k=2, min_node_size=20)
+        scores = {i: float(i) for i in range(1, 51)}
+        # Median of 1..50 is 25.5 — set threshold above that
+        sample = tree.next_sample(scores=scores, threshold=30.0)
+        # Median (25.5) < 30.0, so we pick the highest-scored element
+        assert sample == 50
+
+    def test_threshold_none_always_picks_highest(self):
+        """When threshold is None, always return the highest-scored element (original behavior)."""
+        vecs = _make_vectors(50)
+        tree = DiversityTree(vecs, k=2, min_node_size=20)
+        scores = {i: float(i) for i in range(1, 51)}
+        sample = tree.next_sample(scores=scores, threshold=None)
+        assert sample == 50
+
+    def test_threshold_at_median_picks_lowest(self):
+        """When threshold equals the median exactly, treat as above — pick lowest."""
+        vecs = _make_vectors(50)
+        tree = DiversityTree(vecs, k=2, min_node_size=20)
+        scores = {i: float(i) for i in range(1, 51)}
+        # Median of 1..50 is 25.5
+        sample = tree.next_sample(scores=scores, threshold=25.5)
+        assert sample == 1
+
 
 # ---------------------------------------------------------------------------
 # Integration / workflow

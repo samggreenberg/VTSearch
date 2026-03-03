@@ -721,9 +721,13 @@ def labeling_status_indicator():
 def diversity_tree_next():
     """Return the next diverse sample from the Diversity Tree.
 
-    Accepts an optional POST body with ``{"scores": {id: score, ...}}``
-    so the sort mode influences which element is picked from the next
-    unseen node.  Without scores the first element in the node is returned.
+    Accepts an optional POST body with ``{"scores": {id: score, ...},
+    "threshold": <float>}`` so the sort mode influences which element is
+    picked from the next unseen node.  When a threshold is provided, the
+    node's median score determines direction: above-threshold nodes yield
+    the lowest-scored element (surprise in a "good" region), while
+    below-threshold nodes yield the highest-scored element (surprise in a
+    "bad" region).  Without scores the first element in the node is returned.
 
     Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
     exhausted or not yet built.  Also includes ``diversity_level`` so the
@@ -732,6 +736,7 @@ def diversity_tree_next():
     node has already been seen.
     """
     scores = None
+    threshold = None
     if request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
         raw_scores = data.get("scores")
@@ -740,9 +745,15 @@ def diversity_tree_next():
                 scores = {int(k): float(v) for k, v in raw_scores.items()}
             except (ValueError, TypeError):
                 return jsonify({"error": "Invalid score keys or values"}), 400
+        raw_threshold = data.get("threshold")
+        if raw_threshold is not None:
+            try:
+                threshold = float(raw_threshold)
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid threshold value"}), 400
 
     tree = get_diversity_tree()
-    next_id = diversity_tree_next_sample(scores=scores)
+    next_id = diversity_tree_next_sample(scores=scores, threshold=threshold)
     level = tree.diversity_level() if tree is not None else -1
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})

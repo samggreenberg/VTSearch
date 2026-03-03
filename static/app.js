@@ -4032,8 +4032,9 @@
 
   async function fetchDiversityTreeNext() {
     try {
-      // Send current sort scores so the diversity tree picks the
-      // highest-ranked element within the next unseen node.
+      // Send current sort scores and threshold so the diversity tree picks
+      // the most surprising element within the next unseen node: the lowest-
+      // scored element in above-threshold nodes, the highest in below.
       const body = {};
       if (sortOrder && sortOrder.length > 0) {
         const scores = {};
@@ -4041,6 +4042,9 @@
           scores[entry.id] = entry.score ?? entry.similarity ?? 0;
         }
         body.scores = scores;
+      }
+      if (threshold !== null) {
+        body.threshold = threshold;
       }
       const res = await fetch("/api/diversity-tree/next", {
         method: "POST",
