@@ -1,4 +1,5 @@
 import io
+import unittest.mock
 
 import numpy as np
 import torch
@@ -374,3 +375,67 @@ class TestTextsortSuggestions:
 
         resp = client.get("/api/textsort-suggestions")
         assert resp.get_json()["suggestions"] == []
+
+
+class TestLoadEmbedderConcurrentCallback:
+    """Verify _load_embedder_with_progress does not trample _on_progress."""
+
+    def test_lock_exists(self):
+        """The module-level lock must exist to serialise concurrent callers."""
+        import threading
+
+        from vtsearch.routes.sorting import _embedder_load_lock
+
+        assert isinstance(_embedder_load_lock, type(threading.Lock()))
+
+    def test_concurrent_calls_restore_original_callback(self):
+        """Two threads calling _load_embedder_with_progress must leave
+        _on_progress set to the *original* callback, not a stale lambda."""
+        import threading
+        import time
+        from unittest.mock import MagicMock
+
+        from vtsearch.routes.sorting import _load_embedder_with_progress
+
+        original_cb = MagicMock(name="original_cb")
+        mock_mt = MagicMock()
+        mock_mt._model = None  # force "needs loading"
+        mock_mt._on_progress = original_cb
+
+        def slow_load_models():
+            """Simulate a slow load; first call loads, second sees it loaded."""
+            time.sleep(0.05)
+            mock_mt._model = True  # mark as loaded
+
+        mock_mt.load_models = slow_load_models
+
+        with unittest.mock.patch("vtsearch.media.get", return_value=mock_mt):
+            t1 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
+            t2 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
+            t1.start()
+            t2.start()
+            t1.join(timeout=10)
+            t2.join(timeout=10)
+
+        # The lock ensures thread 1 finishes (restores original_cb) before
+        # thread 2 enters; thread 2 sees _model is loaded and returns early.
+        assert mock_mt._on_progress is original_cb, (
+            "_on_progress was not restored to the original callback after concurrent calls"
+        )
+
+    def test_callback_restored_after_load_error(self):
+        """_on_progress must be restored even when load_models raises."""
+        from unittest.mock import MagicMock
+
+        from vtsearch.routes.sorting import _load_embedder_with_progress
+
+        original_cb = MagicMock(name="original_cb")
+        mock_mt = MagicMock()
+        mock_mt._model = None
+        mock_mt._on_progress = original_cb
+        mock_mt.load_models.side_effect = RuntimeError("boom")
+
+        with unittest.mock.patch("vtsearch.media.get", return_value=mock_mt):
+            _load_embedder_with_progress("audio", 5)
+
+        assert mock_mt._on_progress is original_cb
