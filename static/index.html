@@ -76,6 +76,24 @@
           </div>
         </div>
       </div>
+      <div class="progress-check-bar">
+        <span class="progress-check-label">Progress</span>
+        <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness" title="Has the model stopped learning over time?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Smart</span>
+          <span class="indicator-subtext" id="smart-subtext"></span>
+        </button>
+        <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability" title="Has the model stopped changing predicted labels?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Stable</span>
+          <span class="indicator-subtext" id="stable-subtext"></span>
+        </button>
+        <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Diverse</span>
+          <span class="indicator-subtext" id="span-subtext"></span>
+        </button>
+      </div>
       <div class="dataset-bar" id="dataset-bar" style="display:none">
         <span class="dataset-info" id="dataset-info">No dataset loaded</span>
       </div>
@@ -188,24 +206,6 @@
       </div>
     </div>
     <!-- import-file removed: label import now uses the label importer modal -->
-    <div class="progress-check-bar">
-      <span class="progress-check-label">Progress</span>
-      <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness" title="Has the model stopped learning over time?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Smart</span>
-        <span class="indicator-subtext" id="smart-subtext"></span>
-      </button>
-      <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability" title="Has the model stopped changing predicted labels?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Stable</span>
-        <span class="indicator-subtext" id="stable-subtext"></span>
-      </button>
-      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Diverse</span>
-        <span class="indicator-subtext" id="span-subtext"></span>
-      </button>
-    </div>
     <div class="label-sort-bar">
       <span class="sort-label" style="font-size:0.7rem; color:var(--text-dim);">Sort labels</span>
       <label for="label-sort-select" class="sr-only">Sort labels</label>
