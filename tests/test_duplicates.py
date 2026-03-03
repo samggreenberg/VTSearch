@@ -317,3 +317,25 @@ class TestCollapseDuplicatesIntegration:
         assert len(good_labels) == 2
         assert len(bad_labels) == 1
         assert {el["filename"] for el in good_labels} == {"x.wav", "y.wav"}
+
+    def test_collapse_then_vote_no_expand(self):
+        """With expand_dupes=False, dupe-set reps emit a single label entry."""
+        media_dict = {
+            1: _make_media(1, md5="same", filename="x.wav"),
+            2: _make_media(2, md5="same", filename="y.wav"),
+            3: _make_media(3, md5="other", filename="z.wav"),
+        }
+        collapse_duplicates(media_dict)
+
+        good = {1: None}
+        bad = {3: None}
+        ls = LabelSet.from_clips_and_votes(media_dict, good, bad, expand_dupes=False)
+        exported = ls.to_dict()
+
+        # Without expansion the dupe-set representative produces 1 label, not 2
+        good_labels = [e for e in exported["labels"] if e["label"] == "good"]
+        bad_labels = [e for e in exported["labels"] if e["label"] == "bad"]
+        assert len(good_labels) == 1
+        assert len(bad_labels) == 1
+        # The single good label uses the representative's MD5
+        assert good_labels[0]["md5"] == "same"
