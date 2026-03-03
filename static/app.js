@@ -1343,7 +1343,7 @@
       });
 
       // Multi-select click (toggle)
-      tr.addEventListener("click", (e) => {
+      tr.addEventListener("click", async (e) => {
         if (e.ctrlKey || e.metaKey) {
           // Toggle individual selection
           if (dashSelectedDatasetIds.includes(ds.id)) {
@@ -1359,7 +1359,7 @@
             dashSelectedDatasetIds = [ds.id];
           }
         }
-        renderDashboardDatasets();
+        await renderDashboardDatasets();
         updateDashboardButtons();
       });
       tr.addEventListener("keydown", (e) => {
