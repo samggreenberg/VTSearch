@@ -44,6 +44,7 @@ _TEST_GROUPS = {
         "test_thin_loading",
         "test_chunked_loading",
         "test_memory_errors",
+        "test_pickle_safety",
     ],
     "io": [
         "test_exporters",

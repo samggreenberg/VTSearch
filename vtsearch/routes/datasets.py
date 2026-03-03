@@ -21,7 +21,7 @@ from flask import Blueprint, jsonify, request, send_file
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
-from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
@@ -192,7 +192,7 @@ def stage_file():
     # Peek inside the pkl to get count and media type.
     try:
         with open(staging_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+            data = safe_pickle_load(f)
         if isinstance(data, dict) and "medias" in data:
             media_dict = data["medias"]
         elif isinstance(data, dict):
