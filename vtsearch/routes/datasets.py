@@ -500,6 +500,10 @@ def list_registered_datasets():
     loaded_id = _reg_loaded_id()
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
+        if entry["loaded"]:
+            entry["num_dupes"] = get_dupe_count()
+        else:
+            entry.setdefault("num_dupes", 0)
     return jsonify({"datasets": entries})
 
 
@@ -527,8 +531,8 @@ def load_registered_dataset(dataset_id: str):
             collapse_duplicates(medias)
             build_diversity_tree()
             _reg_set_loaded(dataset_id)
-            # Update item count in case it changed
-            _reg_update(dataset_id, num_items=len(medias))
+            # Update item count and dupe count in case they changed
+            _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
             set_dataset_display_name(entry.get("name", ""))
             _load_embedder_for_clips()
         except MemoryError:

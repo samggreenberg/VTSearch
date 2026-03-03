@@ -282,9 +282,11 @@ def save_trainable_model_labels(name: str):
     # Also update the model registry entry if one exists
     from vtsearch.models.registry import find_by_trainable_model_name, update_model
 
+    import time as _time
+
     reg_entry = find_by_trainable_model_name(name)
     if reg_entry:
-        update_model(reg_entry["id"], num_training=len(labelset))
+        update_model(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
     return jsonify({
         "success": True,
@@ -312,6 +314,7 @@ def list_registered_models():
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
         entry["autodetect"] = bool(det.get("autodetect")) if det else False
+        entry.setdefault("last_trained_at", None)
     return jsonify({"models": entries})
 
 

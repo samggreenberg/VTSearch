@@ -1262,6 +1262,7 @@
         <th>Name</th>
         <th>Type</th>
         <th>Items</th>
+        <th>#Dupes</th>
         <th>Created</th>
         <th>Origin</th>
         <th>Details</th>
@@ -1295,9 +1296,11 @@
         const parts = Object.values(params).filter(Boolean);
         dsDetails = parts.length ? parts.join(", ") : dsSource.importer || "-";
       }
+      const dsDupes = ds.num_dupes || 0;
       tr.insertAdjacentHTML("beforeend", `
         <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
         <td class="col-count">${ds.num_items || 0}</td>
+        <td class="col-dupes" style="text-align:right">${dsDupes}</td>
         <td class="col-date">${escapeHtml(dsCreated)}</td>
         <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
         <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
@@ -1422,6 +1425,8 @@
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
         <th data-sort="num_training" style="text-align:right"># Training<span class="sort-arrow"></span></th>
+        <th>Trainable?</th>
+        <th data-sort="last_trained_at">Last Trained<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
         <th>Autorun?</th>
         <th>Loaded?</th>
@@ -1434,7 +1439,7 @@
     function renderModelRows() {
       const sorted = [...dashRegisteredModels].sort((a, b) => {
         let va = a[modelSort.key], vb = b[modelSort.key];
-        if (modelSort.key === "num_training" || modelSort.key === "created_at") {
+        if (modelSort.key === "num_training" || modelSort.key === "created_at" || modelSort.key === "last_trained_at") {
           return modelSort.asc ? ((va || 0) - (vb || 0)) : ((vb || 0) - (va || 0));
         }
         va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
@@ -1458,10 +1463,13 @@
         nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button>`;
         tr.appendChild(nameTd);
         const mCreated = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : "-";
+        const mLastTrained = m.last_trained_at ? new Date(m.last_trained_at * 1000).toLocaleDateString() : "-";
         const isAutorun = !!m.autodetect;
         tr.insertAdjacentHTML("beforeend", `
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(m.media_type)}</td>
           <td class="col-num-training" style="text-align:right">${escapeHtml(trainingText)}</td>
+          <td class="col-trainable">${m.trainable ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
+          <td class="col-last-trained">${escapeHtml(mLastTrained)}</td>
           <td class="col-date">${escapeHtml(mCreated)}</td>
           <td class="col-autorun"><input type="checkbox" class="dash-autorun-cb" ${isAutorun ? "checked" : ""} title="Include in CLI autorun" aria-label="Autorun"></td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>

@@ -261,6 +261,37 @@ class TestDashboardDatasetRegistryColumns:
         assert isinstance(ds["loaded"], bool)
 
 
+class TestDashboardDatasetDupesColumn:
+    """Tests that the dataset registry API returns the num_dupes field."""
+
+    def test_dataset_registry_includes_num_dupes(self, client):
+        """Registered datasets include a num_dupes integer."""
+        register_dataset(name="dupes-ds", media_type="audio", num_items=10, pkl_path="/tmp/dupes.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "num_dupes" in ds
+        assert isinstance(ds["num_dupes"], int)
+
+    def test_dataset_registry_num_dupes_defaults_to_zero(self, client):
+        """Datasets registered without num_dupes default to 0."""
+        register_dataset(name="no-dupes", media_type="audio", num_items=5, pkl_path="/tmp/nodupes.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["num_dupes"] == 0
+
+    def test_dataset_registry_stores_explicit_num_dupes(self, client):
+        """Datasets registered with explicit num_dupes retain the value."""
+        register_dataset(
+            name="with-dupes", media_type="audio", num_items=20, pkl_path="/tmp/wdupes.pkl", num_dupes=3
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["num_dupes"] == 3
+
+
 class TestDashboardModelRegistryColumns:
     """Tests that the model registry API returns fields needed for new columns."""
 
@@ -333,6 +364,40 @@ class TestDashboardModelRegistryColumns:
         assert "loaded" in m
         assert isinstance(m["loaded"], bool)
 
+    def test_model_registry_includes_trainable_field(self, client):
+        """Registered models include the trainable boolean."""
+        register_model(name="trainable-m", media_type="audio", trainable=True)
+        register_model(name="pregen-m", media_type="audio", trainable=False)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        by_name = {m["name"]: m for m in data["models"]}
+        assert by_name["trainable-m"]["trainable"] is True
+        assert by_name["pregen-m"]["trainable"] is False
+
+    def test_model_registry_includes_last_trained_at(self, client):
+        """Registered models include the last_trained_at field (None by default)."""
+        register_model(name="lt-model", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert "last_trained_at" in m
+        assert m["last_trained_at"] is None
+
+    def test_model_registry_last_trained_at_set_on_label_save(self, client):
+        """Saving labels updates last_trained_at to a timestamp."""
+        from vtsearch.models.registry import register_model as reg_model, update_model
+
+        entry = reg_model(name="lt-save", media_type="audio", trainable=True, trainable_model_name="lt_save")
+        import time
+
+        now = time.time()
+        update_model(entry["id"], last_trained_at=now)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert isinstance(m["last_trained_at"], (int, float))
+        assert m["last_trained_at"] >= now
+
 
 class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
@@ -345,6 +410,7 @@ class TestDashboardColumnHeaders:
         assert ">Origin<" in text
         assert ">Details<" in text
         assert ">Loaded?<" in text
+        assert ">#Dupes<" in text
 
     def test_model_grid_has_new_column_headers(self, client):
         """app.js should include the new model column headers."""
@@ -352,3 +418,5 @@ class TestDashboardColumnHeaders:
         text = resp.data.decode("utf-8")
         assert ">Autorun?<" in text
         assert "dash-autorun-cb" in text
+        assert ">Trainable?<" in text
+        assert ">Last Trained<" in text

@@ -97,6 +97,7 @@ def register_dataset(
     pkl_path: str,
     origin: str = "unknown",
     source: dict[str, Any] | None = None,
+    num_dupes: int = 0,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -109,6 +110,7 @@ def register_dataset(
         "name": name,
         "media_type": media_type,
         "num_items": num_items,
+        "num_dupes": num_dupes,
         "pkl_path": pkl_path,
         "origin": origin,
         "source": source,
