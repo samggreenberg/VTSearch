@@ -1262,7 +1262,10 @@
         <th>Name</th>
         <th>Type</th>
         <th>Items</th>
-        <th>Loaded</th>
+        <th>Created</th>
+        <th>Origin</th>
+        <th>Details</th>
+        <th>Loaded?</th>
         <th class="col-actions-header"></th>
       </tr></thead>
       <tbody></tbody></table>`;
@@ -1283,9 +1286,21 @@
       nameTd.className = "col-name";
       nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
       tr.appendChild(nameTd);
+      const dsCreated = ds.created_at ? new Date(ds.created_at * 1000).toLocaleDateString() : "-";
+      const dsOrigin = ds.origin || "unknown";
+      const dsSource = ds.source;
+      let dsDetails = "-";
+      if (dsSource && typeof dsSource === "object") {
+        const params = dsSource.params || {};
+        const parts = Object.values(params).filter(Boolean);
+        dsDetails = parts.length ? parts.join(", ") : dsSource.importer || "-";
+      }
       tr.insertAdjacentHTML("beforeend", `
         <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
         <td class="col-count">${ds.num_items || 0}</td>
+        <td class="col-date">${escapeHtml(dsCreated)}</td>
+        <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
+        <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
         <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
         <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
       `);
@@ -1407,7 +1422,9 @@
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
         <th data-sort="num_training" style="text-align:right"># Training<span class="sort-arrow"></span></th>
-        <th>Loaded</th>
+        <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+        <th>Autorun?</th>
+        <th>Loaded?</th>
         <th class="col-actions-header"></th>
       </tr></thead><tbody></tbody></table>`;
 
@@ -1440,9 +1457,13 @@
         nameTd.className = "col-name";
         nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button>`;
         tr.appendChild(nameTd);
+        const mCreated = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : "-";
+        const isAutorun = !!m.autodetect;
         tr.insertAdjacentHTML("beforeend", `
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(m.media_type)}</td>
           <td class="col-num-training" style="text-align:right">${escapeHtml(trainingText)}</td>
+          <td class="col-date">${escapeHtml(mCreated)}</td>
+          <td class="col-autorun"><input type="checkbox" class="dash-autorun-cb" ${isAutorun ? "checked" : ""} title="Include in CLI autorun" aria-label="Autorun"></td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
           <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
@@ -1498,6 +1519,26 @@
             updateDashboardButtons();
           } catch (_) {}
         });
+
+        // Autorun toggle
+        const autorunCb = tr.querySelector(".dash-autorun-cb");
+        if (autorunCb) {
+          autorunCb.addEventListener("click", (e) => e.stopPropagation());
+          autorunCb.addEventListener("change", async (e) => {
+            const checked = e.target.checked;
+            const detName = m.detector_name || m.name;
+            try {
+              await fetch(`/api/autorun-detectors/${encodeURIComponent(detName)}/autodetect`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ autodetect: checked }),
+              });
+              m.autodetect = checked;
+            } catch (_) {
+              e.target.checked = !checked; // revert on failure
+            }
+          });
+        }
 
         // Multi-select click (toggle)
         tr.addEventListener("click", (e) => {
