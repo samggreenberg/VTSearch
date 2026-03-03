@@ -1584,6 +1584,7 @@
     });
 
     renderModelRows();
+    updateDashboardButtons();
   }
 
   // Show a progress row inside the dataset table (keeps existing rows visible)
