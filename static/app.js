@@ -1300,7 +1300,7 @@
       tr.insertAdjacentHTML("beforeend", `
         <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
         <td class="col-count">${ds.num_items || 0}</td>
-        <td class="col-dupes" style="text-align:right">${dsDupes}</td>
+        <td class="col-dupes">${dsDupes}</td>
         <td class="col-date">${escapeHtml(dsCreated)}</td>
         <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
         <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
@@ -1424,7 +1424,7 @@
       <thead><tr>
         <th data-sort="name">Name<span class="sort-arrow"></span></th>
         <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
-        <th data-sort="num_training" style="text-align:right"># Training<span class="sort-arrow"></span></th>
+        <th data-sort="num_training"># Training<span class="sort-arrow"></span></th>
         <th>Trainable?</th>
         <th data-sort="last_trained_at">Last Trained<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
@@ -1467,7 +1467,7 @@
         const isAutorun = !!m.autodetect;
         tr.insertAdjacentHTML("beforeend", `
           <td class="col-type">${escapeHtml(icon)} ${escapeHtml(m.media_type)}</td>
-          <td class="col-num-training" style="text-align:right">${escapeHtml(trainingText)}</td>
+          <td class="col-num-training">${escapeHtml(trainingText)}</td>
           <td class="col-trainable">${m.trainable ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
           <td class="col-last-trained">${escapeHtml(mLastTrained)}</td>
           <td class="col-date">${escapeHtml(mCreated)}</td>
