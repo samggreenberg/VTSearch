@@ -9,6 +9,7 @@ These tests verify:
 - Folder importer is not in _BUILTIN_IMPORTER_NAMES
 - load_dataset_from_folder content_vectors support
 - load_dataset_from_folder content_md5s support
+- load_dataset_from_folder preserves relative paths for files in subdirs
 """
 
 from __future__ import annotations
@@ -744,3 +745,128 @@ class TestLoadDatasetContentMD5s:
 
         assert len(medias) == 1
         assert medias[1]["md5"] == pre_md5
+
+
+# ---------------------------------------------------------------------------
+# load_dataset_from_folder – relative path preservation
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDatasetRelativePaths:
+    """Verify that load_dataset_from_folder preserves relative paths."""
+
+    def _write_wav(self, path):
+        path.write_bytes(_make_wav_bytes())
+
+    def _make_fake_media_type(self, embed_return):
+        import unittest.mock as mock
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.embed_media.return_value = embed_return
+        mt.load_media_data.return_value = {"duration": 1.0}
+        return mt
+
+    def test_flat_files_use_basename(self, tmp_path):
+        """Files directly in the root folder should have basename-only filenames."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        self._write_wav(tmp_path / "a.wav")
+        mt = self._make_fake_media_type(embed_return=np.zeros(3))
+        medias: dict = {}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+
+        assert medias[1]["filename"] == "a.wav"
+        assert medias[1]["origin_name"] == "a.wav"
+
+    def test_subdir_files_use_relative_path(self, tmp_path):
+        """Files in subdirectories should keep the relative path."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        sub = tmp_path / "cat_a"
+        sub.mkdir()
+        self._write_wav(sub / "clip.wav")
+        mt = self._make_fake_media_type(embed_return=np.zeros(3))
+        medias: dict = {}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+
+        assert medias[1]["filename"] == "cat_a/clip.wav"
+        assert medias[1]["origin_name"] == "cat_a/clip.wav"
+
+    def test_same_name_different_dirs_are_distinct(self, tmp_path):
+        """Identically named files in different subdirs get distinct filenames."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        (tmp_path / "dir_a").mkdir()
+        (tmp_path / "dir_b").mkdir()
+        self._write_wav(tmp_path / "dir_a" / "clip.wav")
+        self._write_wav(tmp_path / "dir_b" / "clip.wav")
+        mt = self._make_fake_media_type(embed_return=np.zeros(3))
+        medias: dict = {}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+
+        filenames = {m["filename"] for m in medias.values()}
+        assert "dir_a/clip.wav" in filenames
+        assert "dir_b/clip.wav" in filenames
+        assert len(filenames) == 2
+
+    def test_content_vectors_fallback_to_basename(self, tmp_path):
+        """content_vectors keyed by basename should still work for flat files."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        self._write_wav(tmp_path / "x.wav")
+        pre = np.array([99.0, 99.0, 99.0])
+        mt = self._make_fake_media_type(embed_return=np.zeros(3))
+        medias: dict = {}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias, content_vectors={"x.wav": pre}, on_progress=lambda *a: None
+            )
+
+        np.testing.assert_array_equal(medias[1]["embedding"], pre)
+
+    def test_chunked_preserves_relative_paths(self, tmp_path):
+        """Chunked loader should also preserve relative paths."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        self._write_wav(sub / "chunk.wav")
+        mt = self._make_fake_media_type(embed_return=np.zeros(3))
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+            chunks = list(
+                load_dataset_from_folder_chunked(tmp_path, "sounds", 10, on_progress=lambda *a: None)
+            )
+
+        media = chunks[0][1]
+        assert media["filename"] == "sub/chunk.wav"
+        assert media["origin_name"] == "sub/chunk.wav"
