@@ -126,8 +126,11 @@ class TestBuildModel:
         X = torch.ones(1, 32) * 100.0
         with torch.no_grad():
             logit = model(X).item()
-        # Raw logit can be any real number (not clamped to [0, 1])
+        # Raw logit is unbounded — with extreme input it should land outside [0, 1]
         assert isinstance(logit, float)
+        assert logit < 0.0 or logit > 1.0, (
+            f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
+        )
 
     def test_build_model_has_no_sigmoid_layer(self):
         from vtsearch.models.training import build_model
