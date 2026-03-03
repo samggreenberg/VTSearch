@@ -460,16 +460,17 @@ video { max-width: 100%; }
 .vt-dialog-btn.secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Settings modal */
-.settings-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
-.settings-section { margin-bottom: 20px; }
+.settings-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 24px; }
+.settings-columns > div { display: flex; flex-direction: column; }
+.settings-section { margin-bottom: 16px; }
 .settings-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
 .settings-row + .settings-row { border-top: 1px solid var(--border-subtle); }
 .settings-label { font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; }
 .settings-number-input { width: 72px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-primary); font-size: 0.85rem; text-align: center; outline: none; }
 .settings-number-input:focus { border-color: var(--accent); }
-.settings-actions { display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
-.settings-btn { flex: 1; padding: 8px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border); }
+.settings-actions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.settings-btn { padding: 7px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border); }
 .settings-btn.secondary { background: var(--bg-surface); color: var(--text-secondary); }
 .settings-btn.secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
 
