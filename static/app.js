@@ -1742,6 +1742,7 @@
             fetchTextSort(exQuery);
           }
 
+          showMainUI();
           // Select first media
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
