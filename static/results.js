@@ -154,18 +154,18 @@
     }
     const sortOrder = _deps.getSortOrder();
     const threshold = _deps.getThreshold();
-    const votes = _deps.getVotes();
     if (!sortOrder || threshold === null) {
       fillFromSortInfo.textContent = "No sort results available. Run a sort first.";
       fillFromSortInfo.style.color = "var(--text-muted)";
       return;
     }
     const sides = getSelectedExportSides();
-    const votedIds = new Set([...votes.good, ...votes.bad]);
+    const goodSet = _deps.getGoodVoteSet();
+    const badSet = _deps.getBadVoteSet();
     let goodCount = 0;
     let badCount = 0;
     for (const entry of sortOrder) {
-      if (votedIds.has(entry.id)) continue;
+      if (goodSet.has(entry.id) || badSet.has(entry.id)) continue;
       if (entry.score >= threshold) goodCount++;
       else badCount++;
     }
