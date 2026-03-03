@@ -166,8 +166,8 @@ def get_votes():
     learned_scores = get_learned_scores()
     return jsonify(
         {
-            "good": list(good_votes),  # Maintains insertion order (dict keys)
-            "bad": list(bad_votes),  # Maintains insertion order (dict keys)
+            "good": sorted(good_votes),
+            "bad": sorted(bad_votes),
             "click_times": {str(k): v for k, v in click_times.items()},
             "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
         }

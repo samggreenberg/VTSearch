@@ -80,16 +80,16 @@ class TestGetVotes:
         assert data["learned_scores"] == {}
 
     def test_returns_good_votes(self, client):
-        app_module.good_votes.update({k: None for k in [1, 3, 5]})
+        app_module.good_votes.update({k: None for k in [5, 1, 3]})
         resp = client.get("/api/votes")
         data = resp.get_json()
-        assert data["good"] == [1, 3, 5]  # sorted
+        assert data["good"] == [1, 3, 5]  # sorted regardless of insertion order
 
     def test_returns_bad_votes(self, client):
-        app_module.bad_votes.update({k: None for k in [2, 4]})
+        app_module.bad_votes.update({k: None for k in [4, 2]})
         resp = client.get("/api/votes")
         data = resp.get_json()
-        assert data["bad"] == [2, 4]  # sorted
+        assert data["bad"] == [2, 4]  # sorted regardless of insertion order
 
     def test_returns_both(self, client):
         app_module.good_votes[1] = None
