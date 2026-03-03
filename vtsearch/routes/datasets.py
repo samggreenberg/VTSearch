@@ -396,6 +396,10 @@ def load_demo_dataset_route():
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
+    # Signal "loading" before the thread starts so frontend polling never
+    # sees a stale "idle" from a previous load and prematurely stops.
+    update_progress("loading", "Preparing to load dataset…", 0, 0)
+
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
 
@@ -526,6 +530,10 @@ def load_registered_dataset(dataset_id: str):
             update_progress("idle", "", 0, 0, "Out of memory — dataset too large.")
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
+
+    # Signal "loading" before the thread starts so frontend polling never
+    # sees a stale "idle" from a previous load and prematurely stops.
+    update_progress("loading", "Preparing to load dataset…", 0, 0)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
