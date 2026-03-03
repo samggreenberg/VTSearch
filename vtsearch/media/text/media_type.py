@@ -273,7 +273,7 @@ class TextMediaType(MediaType):
         clip_id = 1
         total = len(selected_texts)
         on_progress("embedding", f"Starting embedding for {total} paragraphs...", 0, total)
-        demo_origin: dict = {"importer": "demo", "params": {}}
+        demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
             on_progress("embedding", f"Embedding {category}: paragraph {i + 1}/{total}", i + 1, total)
@@ -304,7 +304,7 @@ class TextMediaType(MediaType):
                 "category": category,
                 "word_count": word_count,
                 "character_count": character_count,
-                "origin": demo_origin,
+                "origin": {**demo_origin_template},
                 "origin_name": fname,
             }
             clip_id += 1

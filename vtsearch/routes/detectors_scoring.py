@@ -47,6 +47,9 @@ def detector_sort():
     # Reconstruct the model from weights
     model = build_model_from_weights(weights)
 
+    if not medias:
+        return jsonify({"error": "no medias loaded"}), 400
+
     # Score every media
     all_ids = sorted(medias.keys())
     all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])

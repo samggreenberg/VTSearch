@@ -6800,7 +6800,8 @@
     if (e.key !== "Escape") return;
 
     // VT dialog gets priority (it's an alertdialog)
-    if (vtDialogModal.classList.contains("show")) return;
+    const vtDlg = document.getElementById("vt-dialog-modal");
+    if (vtDlg && vtDlg.classList.contains("show")) return;
 
     // Close any open modal on Escape, from most specific to least
     const modalClosePairs = [

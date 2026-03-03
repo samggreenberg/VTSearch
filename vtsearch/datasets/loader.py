@@ -1180,10 +1180,9 @@ def load_demo_dataset(
         on_progress=on_progress,
     )
 
-    # Stamp the demo origin on all medias
-    demo_origin: dict[str, Any] = {"importer": "demo", "params": {"name": dataset_name}}
+    # Stamp the demo origin on all medias (fresh dict per media to avoid shared-reference mutation bugs)
     for media in medias.values():
-        media["origin"] = demo_origin
+        media["origin"] = {"importer": "demo", "params": {"name": dataset_name}}
 
     # Build the pickle cache payload
     # For types with external media dirs (audio, video), exclude media_bytes

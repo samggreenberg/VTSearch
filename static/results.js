@@ -196,7 +196,7 @@
     autodetectSummary.innerHTML = `
       <p style="color: var(--text-primary);">
         <strong>Media Type:</strong> ${escapeHtml(data.media_type)} &nbsp;|&nbsp;
-        <strong>Detectors Run:</strong> ${data.detectors_run} &nbsp;|&nbsp;
+        <strong>Detectors Run:</strong> ${escapeHtml(data.detectors_run)} &nbsp;|&nbsp;
         ${countText}
       </p>
     `;
@@ -256,7 +256,7 @@
     autodetectSummary.innerHTML = `
       <p style="color: var(--text-primary);">
         <strong>Media Type:</strong> ${escapeHtml(data.media_type)} &nbsp;|&nbsp;
-        <strong>Detectors Run:</strong> ${data.detectors_run} &nbsp;|&nbsp;
+        <strong>Detectors Run:</strong> ${escapeHtml(data.detectors_run)} &nbsp;|&nbsp;
         <strong>Good Results:</strong> ${allHits.length}
       </p>
     `;
@@ -435,6 +435,11 @@
         const text = values.join(sep);
         navigator.clipboard.writeText(text).then(() => {
           copyResultsBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyResultsBtn.textContent = "Copy To Clipboard";
+          }, 2000);
+        }).catch(() => {
+          copyResultsBtn.textContent = "Copy failed";
           setTimeout(() => {
             copyResultsBtn.textContent = "Copy To Clipboard";
           }, 2000);

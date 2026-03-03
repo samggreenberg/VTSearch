@@ -305,7 +305,8 @@ def clear_staging():
     """Remove all files from the staging directory."""
     if STAGING_DIR.exists():
         for f in STAGING_DIR.iterdir():
-            f.unlink(missing_ok=True)
+            if f.is_file():
+                f.unlink(missing_ok=True)
     return jsonify({"ok": True})
 
 

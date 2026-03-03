@@ -208,7 +208,7 @@ class VideoMediaType(MediaType):
         clip_id = 1
         total = len(video_files)
         on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
-        demo_origin: dict = {"importer": "demo", "params": {}}
+        demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         for i, (video_path, meta) in enumerate(video_files):
             rel_name = f"{meta['category']}/{video_path.name}"
@@ -234,7 +234,7 @@ class VideoMediaType(MediaType):
                 "media_bytes": video_bytes,
                 "filename": rel_name,
                 "category": meta["category"],
-                "origin": demo_origin,
+                "origin": {**demo_origin_template},
                 "origin_name": rel_name,
             }
             clip_id += 1
