@@ -87,16 +87,11 @@
     <div id="tab-panel-autopilot" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-autopilot" style="display:none">
       <div class="autopilot-panel">
         <div id="autopilot-examples-section" style="display:none">
-          <span class="sort-label">Examples</span>
-          <div id="autopilot-examples-grid" class="examples-grid"></div>
-          <div class="examples-add-bar">
-            <select id="autopilot-example-type" class="form-select-inline" style="font-size:0.75rem">
-              <option value="text">Text</option>
-              <option value="media">Media</option>
-              <option value="detector">Detector</option>
-            </select>
-            <button id="autopilot-example-add" class="btn-sm" style="font-size:0.7rem">+ Add</button>
+          <div class="ap-examples-header">
+            <span class="sort-label">Examples</span>
+            <button id="autopilot-examples-edit" class="btn-sm ap-examples-edit-btn">Edit</button>
           </div>
+          <div id="autopilot-examples-summary" class="ap-examples-summary"></div>
         </div>
         <div id="autopilot-steps" class="autopilot-steps"></div>
       </div>

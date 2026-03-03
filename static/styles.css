@@ -205,6 +205,17 @@ header h1 { margin-left: 48px; }
 .left-tab-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
 /* Autopilot panel */
 .autopilot-panel { padding: 8px 10px; }
+.ap-examples-header { display: flex; align-items: center; justify-content: space-between; }
+.ap-examples-edit-btn { font-size: 0.65rem; padding: 2px 8px; }
+.ap-examples-summary { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+.ap-example-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 0.65rem; padding: 1px 6px; border-radius: 3px;
+  background: var(--bg-hover); color: var(--text-secondary);
+  max-width: 100%; overflow: hidden;
+}
+.ap-example-chip .ap-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-examples-empty { font-size: 0.72rem; color: var(--text-muted); padding: 4px 0; }
 .autopilot-status-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; outline: none; margin-top: 4px; }
 .autopilot-status-input:focus { border-color: var(--accent); }
 /* Autopilot checklist */
@@ -665,8 +676,6 @@ video { max-width: 100%; }
 .dashboard-grid .dash-model-table thead th:nth-child(3) { width: 20%; }
 .dashboard-grid .dash-model-table thead th:nth-child(4) { width: 12%; }
 .dashboard-grid .dash-model-table thead th:nth-child(5) { width: 8%; }
-.dashboard-grid .dash-model-table thead th:nth-child(6) { width: 14%; }
-.dashboard-grid .dash-model-table thead th:nth-child(7) { width: 32px; }
 
 .dash-model-row { cursor: pointer; transition: background 0.15s; }
 .dash-model-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
@@ -725,9 +734,6 @@ video { max-width: 100%; }
 .col-actions { width: 56px; text-align: center; white-space: nowrap; }
 .dash-name-text { vertical-align: middle; }
 .dash-rename-btn { vertical-align: middle; margin-left: 4px; font-size: 0.72rem; }
-.col-examples { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dash-examples-text { vertical-align: middle; font-size: 0.72rem; color: var(--text-muted); }
-.dash-edit-examples-btn { vertical-align: middle; margin-left: 4px; font-size: 0.72rem; }
 .dash-rename-input {
   width: calc(100% - 4px); padding: 2px 4px; font-size: 0.75rem; font-weight: 600;
   border: 1px solid var(--accent); border-radius: 3px; outline: none;

@@ -254,9 +254,8 @@
 
   // Autopilot examples elements
   const autopilotExamplesSection = document.getElementById("autopilot-examples-section");
-  const autopilotExamplesGrid = document.getElementById("autopilot-examples-grid");
-  const autopilotExampleType = document.getElementById("autopilot-example-type");
-  const autopilotExampleAdd = document.getElementById("autopilot-example-add");
+  const autopilotExamplesEdit = document.getElementById("autopilot-examples-edit");
+  const autopilotExamplesSummary = document.getElementById("autopilot-examples-summary");
   const autopilotStepsDiv = document.getElementById("autopilot-steps");
 
   // Settings modal elements
@@ -604,32 +603,15 @@
     }
     const model = _dashboardTrainMode.model;
     if (autopilotExamplesSection) autopilotExamplesSection.style.display = "";
-    if (autopilotExamplesGrid) {
-      renderExamplesGrid(autopilotExamplesGrid, model.examples || [], (updated) => {
-        model.examples = updated;
-        saveAutopilotExamples(model);
-      });
-    }
-    // Populate autopilot example type dropdown with importer options (once)
-    if (autopilotExampleType && !autopilotExampleType._importersLoaded) {
-      autopilotExampleType._importersLoaded = true;
-      Promise.all([
-        fetch("/api/processor-importers").then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch("/api/label-importers").then(r => r.ok ? r.json() : []).catch(() => []),
-      ]).then(([procImps, lblImps]) => {
-        for (const imp of procImps) {
-          const opt = document.createElement("option");
-          opt.value = `proc_imp:${imp.name}`;
-          opt.textContent = `${imp.icon || '\u{1F9E9}'} ${imp.display_name}`;
-          autopilotExampleType.appendChild(opt);
-        }
-        for (const imp of lblImps) {
-          const opt = document.createElement("option");
-          opt.value = `label_imp:${imp.name}`;
-          opt.textContent = `${imp.icon || '\uD83C\uDFF7\uFE0F'} ${imp.display_name}`;
-          autopilotExampleType.appendChild(opt);
-        }
-      });
+    if (autopilotExamplesSummary) {
+      const examples = model.examples || [];
+      if (examples.length === 0) {
+        autopilotExamplesSummary.innerHTML = '<span class="ap-examples-empty">None yet</span>';
+      } else {
+        autopilotExamplesSummary.innerHTML = examples.map(ex =>
+          `<span class="ap-example-chip"><span class="ap-chip-label">${escapeHtml(ex.value || ex.type || "example")}</span></span>`
+        ).join("");
+      }
     }
   }
 
@@ -646,17 +628,52 @@
     } catch (_) { /* ignore */ }
   }
 
-  if (autopilotExampleAdd) {
-    autopilotExampleAdd.addEventListener("click", async () => {
+  /**
+   * Persist current labels to a trainable model's labelset (fire-and-forget).
+   * Called after each vote in dashboard train mode.
+   */
+  function _persistTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {}); // fire-and-forget
+  }
+
+  /**
+   * Save trainable model labels (awaited version for explicit save points).
+   */
+  async function saveTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    try {
+      await fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  // Stub functions for features that require the favorites modal HTML
+  // (not yet present in index.html).  These prevent ReferenceErrors when
+  // dashboard buttons or autopilot code call into the favorites UI.
+  async function loadFavoriteDetectors() {
+    try {
+      const res = await fetch("/api/favorite-detectors");
+      const data = await res.json();
+      favoriteDetectors = data.detectors || [];
+    } catch (_) {}
+  }
+
+  function loadFavImporterButtons() { /* no-op until favorites modal HTML is added */ }
+
+  if (autopilotExamplesEdit) {
+    autopilotExamplesEdit.addEventListener("click", () => {
       if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
-      const model = _dashboardTrainMode.model;
-      if (!model.examples) model.examples = [];
-      const ex = await promptForExample(autopilotExampleType.value);
-      if (ex) {
-        model.examples.push(ex);
-        refreshAutopilotExamples();
-        saveAutopilotExamples(model);
-      }
+      openExamplesEditorModal(_dashboardTrainMode.model);
     });
   }
 
@@ -6205,6 +6222,28 @@
     refresh();
     examplesEditorModal.classList.add("show");
 
+    // Populate editor type dropdown with importer options (once)
+    if (examplesEditorType && !examplesEditorType._importersLoaded) {
+      examplesEditorType._importersLoaded = true;
+      Promise.all([
+        fetch("/api/processor-importers").then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/label-importers").then(r => r.ok ? r.json() : []).catch(() => []),
+      ]).then(([procImps, lblImps]) => {
+        for (const imp of procImps) {
+          const opt = document.createElement("option");
+          opt.value = `proc_imp:${imp.name}`;
+          opt.textContent = `${imp.icon || '\u{1F9E9}'} ${imp.display_name}`;
+          examplesEditorType.appendChild(opt);
+        }
+        for (const imp of lblImps) {
+          const opt = document.createElement("option");
+          opt.value = `label_imp:${imp.name}`;
+          opt.textContent = `${imp.icon || '\uD83C\uDFF7\uFE0F'} ${imp.display_name}`;
+          examplesEditorType.appendChild(opt);
+        }
+      });
+    }
+
     // Wire Add button (replace handler to avoid stacking)
     const addHandler = async () => {
       const type = examplesEditorType.value;
@@ -6225,7 +6264,9 @@
         examplesEditorStatus.style.color = "var(--text-muted)";
       }
       try {
-        const url = `/api/autorun-detectors/${encodeURIComponent(det.name)}/examples`;
+        const url = det.trainable
+          ? `/api/trainable-models/${encodeURIComponent(det.name)}/examples`
+          : `/api/autorun-detectors/${encodeURIComponent(det.name)}/examples`;
         const res = await fetch(url, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
