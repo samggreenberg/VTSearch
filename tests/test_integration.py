@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -882,3 +883,178 @@ class TestSafeThresholdsWorkflow:
         # Both should be valid floats
         assert isinstance(threshold_off, (int, float))
         assert isinstance(threshold_on, (int, float))
+
+
+# ---------------------------------------------------------------------------
+# 18. Dashboard → Create Model → Label → Autopilot Workflow
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardToAutopilotWorkflow:
+    """Simulates the full dashboard workflow: create a trainable model via
+    the autorun-detectors endpoint (as the "New Model" form does), verify it
+    appears in the model registry with examples and text_query, then enter
+    labeling with the model, vote, and verify autopilot-related state."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_trainable_models(self):
+        """Remove trainable model files created during tests."""
+        from vtsearch.routes.trainable_models import TRAINABLE_MODELS_DIR
+
+        if TRAINABLE_MODELS_DIR.is_dir():
+            shutil.rmtree(TRAINABLE_MODELS_DIR)
+        yield
+        if TRAINABLE_MODELS_DIR.is_dir():
+            shutil.rmtree(TRAINABLE_MODELS_DIR)
+
+    def test_create_model_registers_with_examples_and_text_query(self, client):
+        """Creating a model via POST /api/autorun-detectors should register
+        the model in the model registry with text_query and create a
+        trainable model file with examples."""
+        # Step 1: Create a model via the same endpoint the GUI "New Model" form uses
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Bird Songs",
+                "media_type": "audio",
+                "examples": [
+                    {"type": "text", "value": "bird singing in the morning"},
+                    {"type": "text", "value": "chirping sounds"},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+
+        # Step 2: Verify model appears in the model registry
+        resp = client.get("/api/models/registry")
+        assert resp.status_code == 200
+        models = resp.get_json()["models"]
+        bird_model = [m for m in models if m["name"] == "Bird Songs"]
+        assert len(bird_model) == 1
+        entry = bird_model[0]
+        assert entry["trainable"] is True
+        assert entry["media_type"] == "audio"
+        # text_query should be populated from the first text example
+        assert entry.get("text_query") == "bird singing in the morning"
+        # trainable_model_name should be set so the Label button can find it
+        assert entry.get("trainable_model_name") == "Bird Songs"
+
+        # Step 3: Verify trainable model file was created with examples
+        resp = client.get("/api/trainable-models/Bird Songs")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        assert tm_data["name"] == "Bird Songs"
+        assert tm_data["text_query"] == "bird singing in the morning"
+        assert len(tm_data["examples"]) == 2
+        assert tm_data["examples"][0]["type"] == "text"
+        assert tm_data["examples"][0]["value"] == "bird singing in the morning"
+        assert tm_data["examples"][1]["value"] == "chirping sounds"
+
+    def test_create_model_then_fetch_examples_for_autopilot(self, client):
+        """After creating a model, the examples should be fetchable from both
+        the autorun detector and the trainable model endpoints — this is the
+        path the Label button + Autopilot tab use."""
+        # Create model
+        client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Ocean Waves",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "ocean waves crashing"}],
+            },
+        )
+
+        # Fetch examples from the autorun detector
+        resp = client.get("/api/autorun-detectors/Ocean Waves/examples")
+        assert resp.status_code == 200
+        det_examples = resp.get_json()["examples"]
+        assert len(det_examples) == 1
+        assert det_examples[0]["value"] == "ocean waves crashing"
+
+        # Fetch examples from the trainable model
+        resp = client.get("/api/trainable-models/Ocean Waves")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        assert len(tm_data["examples"]) == 1
+        assert tm_data["examples"][0]["value"] == "ocean waves crashing"
+
+    def test_label_workflow_with_trainable_model(self, client):
+        """Simulates: create model → enter labeling → vote → save labels →
+        verify labels persist on the trainable model."""
+        # Step 1: Create model
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Thunder",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "thunder rumbling"}],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Step 2: List medias (as the GUI does when entering labeling)
+        resp = client.get("/api/medias")
+        assert resp.status_code == 200
+        all_medias = resp.get_json()
+        assert len(all_medias) >= 4
+
+        # Step 3: Text sort with model's text query
+        resp = client.post("/api/sort", json={"text": "thunder rumbling"})
+        assert resp.status_code == 200
+        sort_data = resp.get_json()
+        assert "results" in sort_data
+        assert len(sort_data["results"]) > 0
+
+        # Step 4: Vote on some medias
+        top_ids = [r["id"] for r in sort_data["results"][:3]]
+        bottom_ids = [r["id"] for r in sort_data["results"][-4:]]
+        _vote_clips(client, top_ids, bottom_ids)
+
+        # Step 5: Save labels to the trainable model
+        resp = client.post("/api/trainable-models/Thunder/labels")
+        assert resp.status_code == 200
+        label_data = resp.get_json()
+        assert label_data["success"] is True
+        assert label_data["num_labels"] == 7  # 3 good + 4 bad
+
+        # Step 6: Verify model registry shows updated training count
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        thunder = [m for m in models if m["name"] == "Thunder"]
+        assert len(thunder) == 1
+        assert thunder[0]["num_training"] == 7
+
+        # Step 7: Verify trainable model has the labels persisted
+        resp = client.get("/api/trainable-models/Thunder")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        labels = tm_data["labelset"]["labels"]
+        assert len(labels) == 7
+        good_labels = [lb for lb in labels if lb["label"] == "good"]
+        bad_labels = [lb for lb in labels if lb["label"] == "bad"]
+        assert len(good_labels) == 3
+        assert len(bad_labels) == 4
+
+    def test_autopilot_indicators_after_voting(self, client):
+        """After enough votes, the labeling-status endpoint should return
+        indicator statuses that autopilot uses for phase transitions."""
+        # Get medias
+        resp = client.get("/api/medias")
+        all_medias = resp.get_json()
+        ids = [m["id"] for m in all_medias]
+
+        # Vote: 5 good, 5 bad
+        _vote_clips(client, ids[:5], ids[5:10])
+
+        # Check labeling status — should now return indicator data
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert "smart" in status
+        assert "stable" in status
+        assert "span" in status
+        assert status["smart"]["status"] in ("red", "yellow", "green")
+        assert status["stable"]["status"] in ("red", "yellow", "green")
+        assert status["span"]["status"] in ("red", "yellow", "green")
