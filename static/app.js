@@ -2866,8 +2866,8 @@
     `;
 
     if (labelsetExporters.length > 0) {
-      html += `<h3 style="margin:1.2em 0 0.3em;font-size:1em;color:var(--text-muted);">Export Labels</h3>
-        <p style="margin:0 0 0.6em;font-size:0.85em;color:var(--text-muted);">Export votes as a label set (sufficient to retrain the detector later).</p>`;
+      html += `<h3 style="margin:1.2rem 0 0.3rem;font-size:1rem;color:var(--text-muted);">Export Labels</h3>
+        <p style="margin:0 0 0.6rem;font-size:0.85rem;color:var(--text-muted);">Export votes as a label set (sufficient to retrain the detector later).</p>`;
       html += labelsetExporters.map(exp => `
         <div class="detector-labelset-export-option option-card" data-name="${escapeHtml(exp.name)}" role="button" tabindex="0">
           <span class="option-card-icon">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
@@ -4279,7 +4279,7 @@
       console.error("Error drawing waveform:", error);
       // Draw error message
       ctx.fillStyle = themeColor("--color-bad");
-      ctx.font = "12px monospace";
+      ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("Unable to load waveform", width / 2, height / 2);
     }

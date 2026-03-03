@@ -730,7 +730,7 @@ video { max-width: 100%; }
 .dash-rename-btn { vertical-align: middle; margin-left: 4px; font-size: 0.72rem; }
 .dash-rename-input {
   width: calc(100% - 4px); padding: 2px 4px; font-size: 0.75rem; font-weight: 600;
-  border: 1px solid var(--accent); border-radius: 3px; outline: none;
+  border: 1px solid var(--accent); border-radius: 4px; outline: none;
   background: var(--bg-panel); color: var(--text-primary);
 }
 .dash-delete-btn { font-size: 0.78rem; }
@@ -770,7 +770,7 @@ video { max-width: 100%; }
 }
 .example-picker-panel {
   background: var(--bg-surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 16px; min-width: 280px; max-width: 420px;
+  border-radius: 8px; padding: 16px; min-width: 280px; max-width: 420px;
   max-height: 80vh; display: flex; flex-direction: column; gap: 8px;
 }
 .example-picker-header { font-size: 0.95rem; margin-bottom: 4px; }
