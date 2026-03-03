@@ -169,6 +169,10 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
+    # Signal "loading" before the thread starts so frontend polling never
+    # sees a stale "idle" from a previous load and prematurely stops.
+    update_progress("loading", "Preparing to load dataset…", 0, 0)
+
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
 

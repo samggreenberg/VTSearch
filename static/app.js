@@ -6484,6 +6484,10 @@
             _dashboardTrainMode = savedTrainMode;
 
             if (_dashboardTrainMode && _dashboardTrainMode.model) {
+              // Clear any votes from a previous session so they don't
+              // contaminate this model's labelset.
+              try { await fetch("/api/votes/clear", { method: "POST" }); } catch (_) {}
+
               // Import labels from the trainable model's labelset
               try {
                 const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(_dashboardTrainMode.model.name)}`);
