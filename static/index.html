@@ -530,9 +530,8 @@
     </div>
     <div class="modal-body">
       <div class="settings-columns">
-        <!-- Left column: Appearance + Sorting -->
+        <!-- Column 1: Appearance -->
         <div>
-          <!-- Appearance -->
           <div class="settings-section">
             <div class="settings-section-title">Appearance</div>
             <div class="settings-row">
@@ -556,7 +555,9 @@
               <input type="checkbox" id="show-thumbnails-right-checkbox" checked style="accent-color:var(--accent)">
             </div>
           </div>
-          <!-- Sorting -->
+        </div>
+        <!-- Column 2: Sorting + Calibration -->
+        <div>
           <div class="settings-section">
             <div class="settings-section-title">Sorting</div>
             <div class="settings-row">
@@ -564,10 +565,6 @@
               <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
-        </div>
-        <!-- Right column: Calibration + Autoload Media Types -->
-        <div>
-          <!-- Calibration -->
           <div class="settings-section">
             <div class="settings-section-title">Calibration</div>
             <div class="settings-row">
@@ -583,7 +580,9 @@
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
-          <!-- Autopilot -->
+        </div>
+        <!-- Column 3: Autopilot + Autoload Media Types + Actions -->
+        <div>
           <div class="settings-section">
             <div class="settings-section-title">Autopilot</div>
             <div class="settings-row">
@@ -595,7 +594,6 @@
               <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
             </div>
           </div>
-          <!-- Autoload Media Types -->
           <div class="settings-section">
             <div class="settings-section-title">Autoload Media Types</div>
             <div class="settings-row">
@@ -615,14 +613,13 @@
               <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
             </div>
           </div>
+          <div class="settings-actions">
+            <button id="settings-default-btn" class="settings-btn secondary">Default</button>
+            <input type="file" id="settings-import-file" accept=".json" style="display:none">
+            <button id="settings-import-btn" class="settings-btn secondary">Import</button>
+            <button id="settings-export-btn" class="settings-btn secondary">Export</button>
+          </div>
         </div>
-      </div>
-      <!-- Actions -->
-      <div class="settings-actions">
-        <button id="settings-default-btn" class="settings-btn secondary">Default</button>
-        <input type="file" id="settings-import-file" accept=".json" style="display:none">
-        <button id="settings-import-btn" class="settings-btn secondary">Import</button>
-        <button id="settings-export-btn" class="settings-btn secondary">Export</button>
       </div>
     </div>
   </div>
