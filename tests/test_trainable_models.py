@@ -276,3 +276,46 @@ class TestSaveLabels:
     def test_save_labels_nonexistent_model(self, client):
         res = client.post("/api/trainable-models/nonexistent/labels")
         assert res.status_code == 404
+
+    def test_save_labels_does_not_expand_dupes(self, client):
+        """Saving labels for a dupe-set representative should NOT expand members.
+
+        Regression test: previously, a vote on a dupe-set representative
+        with N members produced N label entries, inflating the stored
+        label count.  Trainable model persistence should store one entry
+        per vote, not one per duplicate.
+        """
+        import copy
+
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        first_id = next(iter(medias))
+        original = copy.deepcopy(medias[first_id])
+
+        # Turn the first media into a dupe-set representative with 5 members
+        medias[first_id]["origin"] = {
+            "importer": "dupe_set",
+            "params": {"name": original.get("filename", "a.wav")},
+            "members": [
+                {"origin": {"importer": "test", "params": {}}, "origin_name": f"dup_{i}.wav", "filename": f"dup_{i}.wav", "category": "c"}
+                for i in range(5)
+            ],
+        }
+        try:
+            client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+            client.post("/api/trainable-models", json={"name": "DupeTest", "text_query": "test"})
+
+            res = client.post("/api/trainable-models/DupeTest/labels")
+            assert res.status_code == 200
+            data = res.get_json()
+            # Should be 1 label (the vote), NOT 5 (the dupe members)
+            assert data["num_labels"] == 1
+
+            model_res = client.get("/api/trainable-models/DupeTest")
+            labels = model_res.get_json()["labelset"]["labels"]
+            assert len(labels) == 1
+        finally:
+            medias[first_id] = original

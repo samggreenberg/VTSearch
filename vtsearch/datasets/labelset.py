@@ -106,6 +106,8 @@ class LabelSet:
         medias: dict[int, dict[str, Any]],
         good_votes: dict[int, None],
         bad_votes: dict[int, None],
+        *,
+        expand_dupes: bool = True,
     ) -> LabelSet:
         """Build a ``LabelSet`` from the current media and vote state.
 
@@ -113,6 +115,12 @@ class LabelSet:
             medias: The global medias dict.
             good_votes: Dict of media IDs voted "good".
             bad_votes: Dict of media IDs voted "bad".
+            expand_dupes: When ``True`` (default), dupe-set representatives
+                are expanded into one element per member so that an exported
+                labelset records full provenance.  Set to ``False`` when the
+                labelset will be re-imported into the same system (e.g.
+                trainable-model persistence) to avoid inflating the label
+                count.
 
         Returns:
             A new ``LabelSet`` containing one :class:`LabeledElement` per
@@ -122,11 +130,11 @@ class LabelSet:
         for cid in good_votes:
             media = medias.get(cid)
             if media:
-                elements.extend(_clip_to_elements(media, "good"))
+                elements.extend(_clip_to_elements(media, "good", expand_dupes=expand_dupes))
         for cid in bad_votes:
             media = medias.get(cid)
             if media:
-                elements.extend(_clip_to_elements(media, "bad"))
+                elements.extend(_clip_to_elements(media, "bad", expand_dupes=expand_dupes))
         return cls(elements)
 
     @classmethod
@@ -205,15 +213,21 @@ class LabelSet:
         return cls(elements)
 
 
-def _clip_to_elements(media: dict[str, Any], label: str) -> list[LabeledElement]:
+def _clip_to_elements(
+    media: dict[str, Any], label: str, *, expand_dupes: bool = True
+) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.
 
-    When the media is a dupe-set representative (origin importer is
-    ``"dupe_set"``), one element is produced for each original member so
-    that an exported labelset reflects the full duplicate set.
+    When *expand_dupes* is ``True`` and the media is a dupe-set
+    representative (origin importer is ``"dupe_set"``), one element is
+    produced for each original member so that an exported labelset reflects
+    the full duplicate set.  When ``False``, a single element is emitted
+    using the representative's own MD5 and origin, which avoids inflating
+    the label count for internal round-trip use cases (e.g. trainable-model
+    persistence).
     """
     origin = media.get("origin")
-    if isinstance(origin, dict) and origin.get("importer") == "dupe_set":
+    if expand_dupes and isinstance(origin, dict) and origin.get("importer") == "dupe_set":
         members = origin.get("members", [])
         if members:
             md5 = media["md5"]
