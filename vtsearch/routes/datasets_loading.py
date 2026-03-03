@@ -19,6 +19,7 @@ from vtsearch.utils import (
     clear_all,
     collapse_duplicates,
     get_dataset_display_name,
+    get_dupe_count,
     medias,
     update_progress,
 )
@@ -128,6 +129,7 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
         name=name,
         media_type=media_type,
         num_items=num_items,
+        num_dupes=get_dupe_count(),
         pkl_path=pkl_path,
         origin=origin_str,
         source=source,
