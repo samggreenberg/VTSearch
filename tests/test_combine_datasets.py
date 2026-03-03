@@ -383,20 +383,24 @@ class TestCombineEndpoint:
             "/api/dataset/combine",
             json={"datasets": ["/nonexistent_a.pkl", "/nonexistent_b.pkl"]},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     def test_accepts_valid_request(self, client, tmp_path):
         """A valid request returns 200 with ok=True."""
+        from unittest.mock import patch
+
         ds1 = {1: _make_audio_clip(1)}
         ds2 = {1: _make_audio_clip(2)}
         p1, p2 = tmp_path / "ds1.pkl", tmp_path / "ds2.pkl"
         _write_pickle_dataset(p1, ds1)
         _write_pickle_dataset(p2, ds2)
 
-        resp = client.post(
-            "/api/dataset/combine",
-            json={"datasets": [str(p1), str(p2)]},
-        )
+        # Mock the background loader to prevent it from clearing global medias
+        with patch("vtsearch.routes.datasets._run_importer_in_background"):
+            resp = client.post(
+                "/api/dataset/combine",
+                json={"datasets": [str(p1), str(p2)]},
+            )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True

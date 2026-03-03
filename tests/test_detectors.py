@@ -111,8 +111,8 @@ class TestDetectorSort:
         assert avg_good > avg_bad
 
 
-class TestFavoriteDetectors:
-    """Tests for the favorite-detectors management endpoints."""
+class TestAutorunDetectors:
+    """Tests for the autorun-detectors management endpoints."""
 
     def _export_detector(self, client):
         """Helper: vote on some medias and export a valid detector payload."""
@@ -122,9 +122,9 @@ class TestFavoriteDetectors:
         assert resp.status_code == 200
         return resp.get_json()
 
-    def _post_favorite(self, client, name, detector):
+    def _post_autorun(self, client, name, detector):
         return client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": name,
                 "media_type": "audio",
@@ -136,15 +136,15 @@ class TestFavoriteDetectors:
     # -- GET list --
 
     def test_get_empty_list(self, client):
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         assert resp.status_code == 200
         assert resp.get_json()["detectors"] == []
 
     def test_get_list_after_add(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "my-detector", det)
+        self._post_autorun(client, "my-detector", det)
 
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         data = resp.get_json()
         assert len(data["detectors"]) == 1
         d = data["detectors"][0]
@@ -156,14 +156,14 @@ class TestFavoriteDetectors:
 
     def test_add_detector_returns_success(self, client):
         det = self._export_detector(client)
-        resp = self._post_favorite(client, "test-det", det)
+        resp = self._post_autorun(client, "test-det", det)
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
     def test_add_missing_name_returns_400(self, client):
         det = self._export_detector(client)
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={"media_type": "audio", "weights": det["weights"]},
         )
         assert resp.status_code == 400
@@ -171,97 +171,102 @@ class TestFavoriteDetectors:
     def test_add_missing_media_type_returns_400(self, client):
         det = self._export_detector(client)
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={"name": "test", "weights": det["weights"]},
         )
         assert resp.status_code == 400
 
-    def test_add_missing_weights_returns_400(self, client):
+    def test_add_without_weights_creates_untrained(self, client):
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={"name": "test", "media_type": "audio"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+
+        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
+        det = [d for d in detectors if d["name"] == "test"][0]
+        assert det["weights"] is None
+        assert det["autodetect"] is False
 
     def test_add_multiple_detectors(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "det-a", det)
+        self._post_autorun(client, "det-a", det)
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
-        self._post_favorite(client, "det-b", det)
+        self._post_autorun(client, "det-b", det)
 
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         names = {d["name"] for d in resp.get_json()["detectors"]}
         assert names == {"det-a", "det-b"}
 
     def test_add_overwrites_existing_name(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "dup", det)
-        self._post_favorite(client, "dup", det)
+        self._post_autorun(client, "dup", det)
+        self._post_autorun(client, "dup", det)
 
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         assert len(resp.get_json()["detectors"]) == 1
 
     # -- DELETE --
 
     def test_delete_detector(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "to-delete", det)
+        self._post_autorun(client, "to-delete", det)
 
-        resp = client.delete("/api/favorite-detectors/to-delete")
+        resp = client.delete("/api/autorun-detectors/to-delete")
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         assert resp.get_json()["detectors"] == []
 
     def test_delete_nonexistent_returns_404(self, client):
-        resp = client.delete("/api/favorite-detectors/does-not-exist")
+        resp = client.delete("/api/autorun-detectors/does-not-exist")
         assert resp.status_code == 404
 
     # -- RENAME --
 
     def test_rename_detector(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "old-name", det)
+        self._post_autorun(client, "old-name", det)
 
         resp = client.put(
-            "/api/favorite-detectors/old-name/rename",
+            "/api/autorun-detectors/old-name/rename",
             json={"new_name": "new-name"},
         )
         assert resp.status_code == 200
         assert resp.get_json()["new_name"] == "new-name"
 
-        names = [d["name"] for d in client.get("/api/favorite-detectors").get_json()["detectors"]]
+        names = [d["name"] for d in client.get("/api/autorun-detectors").get_json()["detectors"]]
         assert "new-name" in names
         assert "old-name" not in names
 
     def test_rename_nonexistent_returns_400(self, client):
         resp = client.put(
-            "/api/favorite-detectors/ghost/rename",
+            "/api/autorun-detectors/ghost/rename",
             json={"new_name": "anything"},
         )
         assert resp.status_code == 400
 
     def test_rename_to_existing_name_returns_400(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "det-a", det)
+        self._post_autorun(client, "det-a", det)
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
-        self._post_favorite(client, "det-b", det)
+        self._post_autorun(client, "det-b", det)
 
         resp = client.put(
-            "/api/favorite-detectors/det-a/rename",
+            "/api/autorun-detectors/det-a/rename",
             json={"new_name": "det-b"},
         )
         assert resp.status_code == 400
 
     def test_rename_missing_new_name_returns_400(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "some-det", det)
+        self._post_autorun(client, "some-det", det)
 
         resp = client.put(
-            "/api/favorite-detectors/some-det/rename",
+            "/api/autorun-detectors/some-det/rename",
             json={},
         )
         assert resp.status_code == 400
@@ -276,7 +281,7 @@ class TestFavoriteDetectors:
             "name": "imported",
         }
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data=data,
             content_type="multipart/form-data",
         )
@@ -290,7 +295,7 @@ class TestFavoriteDetectors:
         json_bytes = json.dumps(det).encode("utf-8")
         data = {"file": (io.BytesIO(json_bytes), "my_detector.json")}
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data=data,
             content_type="multipart/form-data",
         )
@@ -307,7 +312,7 @@ class TestFavoriteDetectors:
             "name": "img-det",
         }
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data=data,
             content_type="multipart/form-data",
         )
@@ -315,13 +320,13 @@ class TestFavoriteDetectors:
         assert resp.get_json()["media_type"] == "image"
 
     def test_import_pkl_no_file_returns_400(self, client):
-        resp = client.post("/api/favorite-detectors/import-pkl", data={})
+        resp = client.post("/api/autorun-detectors/import-pkl", data={})
         assert resp.status_code == 400
 
     def test_import_pkl_invalid_format_returns_400(self, client):
         data = {"file": (io.BytesIO(b'{"not_a_detector": true}'), "bad.json")}
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data=data,
             content_type="multipart/form-data",
         )
@@ -331,12 +336,12 @@ class TestFavoriteDetectors:
 
     def test_stored_detector_has_correct_fields(self, client):
         det = self._export_detector(client)
-        self._post_favorite(client, "field-check", det)
+        self._post_autorun(client, "field-check", det)
 
-        from vtsearch.utils.state import favorite_detectors
+        from vtsearch.utils.state import autorun_detectors
 
-        assert "field-check" in favorite_detectors
-        stored = favorite_detectors["field-check"]
+        assert "field-check" in autorun_detectors
+        stored = autorun_detectors["field-check"]
         assert stored["name"] == "field-check"
         assert stored["media_type"] == "audio"
         assert "weights" in stored
@@ -348,7 +353,7 @@ class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
 
     def _add_audio_detector(self, client, name="test-detector"):
-        """Helper: create and save an audio detector."""
+        """Helper: create and save an audio detector with autodetect enabled."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
         export_resp = client.post("/api/detector/export")
@@ -356,12 +361,13 @@ class TestAutoDetect:
         detector = export_resp.get_json()
 
         save_resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": name,
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert save_resp.status_code == 200
@@ -370,10 +376,10 @@ class TestAutoDetect:
 
     # -- no matching detectors --
 
-    def test_no_favorites_returns_400(self, client):
+    def test_no_autorun_detectors_returns_400(self, client):
         resp = client.post("/api/auto-detect")
         assert resp.status_code == 400
-        assert "No favorite detectors" in resp.get_json()["error"]
+        assert "No autorun detectors" in resp.get_json()["error"]
 
     def test_no_matching_media_type_returns_400(self, client):
         """A detector for a different media type should not match audio medias."""
@@ -384,14 +390,15 @@ class TestAutoDetect:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Save as "image" type — medias are audio, so it won't match
+        # Save as "image" type with autodetect — medias are audio, so it won't match
         client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "image-detector",
                 "media_type": "image",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         resp = client.post("/api/auto-detect")
@@ -537,9 +544,14 @@ class TestServerDetectorExport:
     def _setup_server_dir(self, tmp_path, monkeypatch):
         """Point SERVER_DETECTOR_DIR at a temp directory for each test."""
         from vtsearch.routes import detectors as det_module
+        from vtsearch.routes import detectors_crud as crud_module
+        from vtsearch.routes import detectors_training as train_module
 
-        monkeypatch.setattr(det_module, "SERVER_DETECTOR_DIR", tmp_path / "detectors")
-        self._det_dir = tmp_path / "detectors"
+        det_dir = tmp_path / "detectors"
+        monkeypatch.setattr(det_module, "SERVER_DETECTOR_DIR", det_dir)
+        monkeypatch.setattr(crud_module, "SERVER_DETECTOR_DIR", det_dir)
+        monkeypatch.setattr(train_module, "SERVER_DETECTOR_DIR", det_dir)
+        self._det_dir = det_dir
         yield
 
     def _vote(self):
@@ -667,12 +679,11 @@ class TestDetectorLabelsetExport:
         resp = client.get("/api/exporters")
         assert resp.status_code == 200
         names = {e["name"] for e in resp.get_json()}
-        # At least the JSON-based exporters should be present
-        assert "local_json_file" in names
+        # At least the server JSON exporter should be present
         assert "server_json_file" in names
 
-    def test_labelset_export_local_json(self, client):
-        """Full flow: votes -> labelset -> local_json_file exporter -> download content."""
+    def test_labelset_export_server_json_full(self, client, tmp_path):
+        """Full flow: votes -> labelset -> server_json_file exporter -> file on disk."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19]})
 
@@ -683,22 +694,22 @@ class TestDetectorLabelsetExport:
         assert "labels" in labels_data
         assert len(labels_data["labels"]) == 5
 
-        # Step 2: export through local_json_file exporter
+        # Step 2: export through server_json_file exporter
+        fpath = tmp_path / "exported_labels.json"
         export_resp = client.post(
             "/api/exporters/export",
             json={
-                "exporter_name": "local_json_file",
-                "field_values": {},
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": str(fpath)},
                 "results": labels_data,
             },
         )
         assert export_resp.status_code == 200
         data = export_resp.get_json()
         assert data["success"] is True
-        assert "download_content" in data
 
-        # The download should contain valid JSON with the labels
-        downloaded = json.loads(data["download_content"])
+        # The file should contain valid JSON with the labels
+        downloaded = json.loads(fpath.read_text())
         assert "labels" in downloaded
         assert len(downloaded["labels"]) == 5
 

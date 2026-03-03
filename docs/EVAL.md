@@ -43,13 +43,17 @@ python -m vtsearch.eval [OPTIONS]
 | `--output FILE` | Write JSON results to FILE | none |
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
 | `--no-plot` | Disable plot generation | off |
+| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
+| `--safe-thresholds` | Blend cross-calibration threshold with GMM for robustness | off |
+| `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
+| `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
 | `--list` | List available eval datasets and exit | — |
 
 ### Examples
 
 ```bash
 # Text sort only, on image datasets, save JSON
-python -m vtsearch.eval --mode text --datasets animals_images vehicles_images --output results.json --plot-dir eval_output
+python -m vtsearch.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
 
 # Learned sort with a different train/test split
 python -m vtsearch.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output

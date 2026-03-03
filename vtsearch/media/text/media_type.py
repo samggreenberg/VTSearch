@@ -76,6 +76,10 @@ class TextMediaType(MediaType):
     def legacy_bytes_keys(self) -> list[str]:
         return ["text_content"]
 
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["word_count", "character_count"]
+
     # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
@@ -286,7 +290,7 @@ class TextMediaType(MediaType):
             word_count = len(text_content.split())
             character_count = len(text_content)
             text_bytes = text_content.encode("utf-8")
-            fname = f"{category}_{clip_id}.txt"
+            fname = f"{category}/{category}_{clip_id}.txt"
             clips[clip_id] = {
                 "id": clip_id,
                 "type": self.type_id,

@@ -7,7 +7,16 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MODEL_ID, DATA_DIR, ESC50_DOWNLOAD_SIZE_MB, MODELS_CACHE_DIR, SAMPLE_RATE
+from vtsearch.config import (
+    CLAP_MODEL_ID,
+    DATA_DIR,
+    ESC50_DOWNLOAD_SIZE_MB,
+    GTZAN_DOWNLOAD_SIZE_MB,
+    MODELS_CACHE_DIR,
+    SAMPLE_RATE,
+    SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+    URBANSOUND8K_DOWNLOAD_SIZE_MB,
+)
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -258,7 +267,7 @@ class AudioMediaType(MediaType):
                 source="gtzan",
                 slice_start=0,
                 slice_end=100,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_a",
@@ -268,7 +277,7 @@ class AudioMediaType(MediaType):
                 source="speech_commands_v2",
                 slice_start=0,
                 slice_end=3000,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_a",
@@ -278,7 +287,7 @@ class AudioMediaType(MediaType):
                 source="urbansound8k",
                 slice_start=0,
                 slice_end=873,
-                download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
         ]
 
@@ -381,9 +390,12 @@ class AudioMediaType(MediaType):
         demo_origin: dict = {"importer": "demo", "params": {}}
 
         for i, (audio_path, meta) in enumerate(audio_files):
+            # Preserve category/filename so that identically-named files
+            # in different category folders remain distinguishable.
+            rel_name = f"{meta['category']}/{audio_path.name}"
             on_progress(
                 "embedding",
-                f"Embedding {meta['category']}: {audio_path.name} ({i + 1}/{total})",
+                f"Embedding {rel_name} ({i + 1}/{total})",
                 i + 1,
                 total,
             )
@@ -403,10 +415,10 @@ class AudioMediaType(MediaType):
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": wav_bytes,
-                "filename": audio_path.name,
+                "filename": rel_name,
                 "category": meta["category"],
                 "origin": demo_origin,
-                "origin_name": audio_path.name,
+                "origin_name": rel_name,
             }
             clip_id += 1
 
@@ -443,6 +455,8 @@ class AudioMediaType(MediaType):
             self._model = ClapModel.from_pretrained(
                 CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
+        # Materialize any tensors left on the ``meta`` device.
+        self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLAP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
@@ -472,6 +486,8 @@ class AudioMediaType(MediaType):
             truncation=True,
         )
         self._on_progress("loading", "Warming up audio pipeline: running model…", 3, 3)
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self._model.audio_model(**inputs)
             self._model.audio_projection(outputs.pooler_output)
@@ -494,6 +510,8 @@ class AudioMediaType(MediaType):
                 max_length=480000,
                 truncation=True,
             )
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.audio_model(**inputs)
                 embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
@@ -511,6 +529,8 @@ class AudioMediaType(MediaType):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.text_model(**inputs)
                 text_vec = self._model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]

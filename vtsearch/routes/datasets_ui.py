@@ -1,0 +1,185 @@
+"""Dashboard, demo dataset listing, and other UI helper routes."""
+
+from __future__ import annotations
+
+from flask import Blueprint, jsonify, request
+
+from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.datasets import DEMO_DATASETS
+from vtsearch.utils import (
+    get_dataset_display_name,
+    get_dupe_count,
+    medias,
+    set_dataset_display_name,
+)
+
+datasets_ui_bp = Blueprint("datasets_ui", __name__)
+
+
+# ---------------------------------------------------------------------------
+# Demo dataset listing
+# ---------------------------------------------------------------------------
+
+
+def _folder_has_content(folder) -> bool:
+    """Return True if *folder* exists and contains at least one entry."""
+    return folder is not None and folder.exists() and any(folder.iterdir())
+
+
+@datasets_ui_bp.route("/api/dataset/demo-list")
+def demo_dataset_list():
+    """List available demo datasets.
+
+    Each dataset has a ``status`` field with one of three values:
+
+    * ``"ready"`` – embeddings are cached and source data is present.
+    * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
+    * ``"needs_download"`` – source data must be downloaded (and then embedded).
+    """
+    # Only include demo datasets whose media type is currently registered.
+    from vtsearch.media import get as media_get
+
+    demos = []
+    for name, dataset_info in DEMO_DATASETS.items():
+        media_type = dataset_info.get("media_type", "audio")
+
+        # Skip datasets whose media type is not loaded into VTSearch.
+        try:
+            media_get(media_type)
+        except KeyError:
+            continue
+
+        pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
+        has_pkl = pkl_file.exists()
+
+        required_folder = dataset_info.get("required_folder")
+        has_source = _folder_has_content(required_folder)
+
+        # Determine three-state status
+        if has_pkl:
+            if required_folder is not None and not has_source:
+                # Stale pkl – source data was removed since last embed
+                status = "needs_download"
+            else:
+                status = "ready"
+        else:
+            if required_folder is not None and has_source:
+                status = "needs_embedding"
+            else:
+                status = "needs_download"
+
+        # Calculate number of files from slice parameters
+        num_categories = len(dataset_info["categories"])
+        slice_start = dataset_info.get("slice_start", 0)
+        slice_end = dataset_info.get("slice_end")
+        if slice_end is not None:
+            per_cat = slice_end - slice_start
+        else:
+            per_cat = 40  # generic fallback
+        num_files = num_categories * per_cat
+
+        # Calculate download size from the DemoDataset metadata
+        if status == "ready":
+            download_size_mb = pkl_file.stat().st_size / (1024 * 1024)
+        elif status == "needs_embedding":
+            download_size_mb = 0
+        else:
+            # Use the download_size_mb from DemoDataset metadata
+            download_size_mb = dataset_info.get("download_size_mb", 0)
+
+        demos.append(
+            {
+                "name": name,
+                "label": dataset_info.get("label", name),
+                "status": status,
+                "ready": status == "ready",
+                "num_files": num_files,
+                "download_size_mb": round(download_size_mb, 1),
+                "description": dataset_info.get("description", ""),
+                "media_type": media_type,
+                "num_categories": num_categories,
+            }
+        )
+    return jsonify({"datasets": demos})
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+@datasets_ui_bp.route("/api/dashboard/dataset-info")
+def dashboard_dataset_info():
+    """Return metadata about the currently loaded dataset for the dashboard.
+
+    Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
+    ``origin`` extracted from the first media that has origin info.
+    """
+    if not medias:
+        return jsonify({"error": "No dataset loaded"}), 404
+
+    first = next(iter(medias.values()))
+    media_type = first.get("type", "audio")
+    num_medias = len(medias)
+
+    # Determine origin from the first media that has one
+    origin = None
+    for m in medias.values():
+        o = m.get("origin")
+        if o:
+            importer = o.get("importer", "")
+            params = o.get("params", {})
+            # Build a human-readable origin string
+            if importer == "demo":
+                origin = f"demo:{params.get('name', '')}"
+            elif importer == "pickle":
+                origin = f"file:{params.get('filename', '')}"
+            elif importer == "folder":
+                origin = f"folder:{params.get('path', '')}"
+            elif importer:
+                origin = importer
+            break
+
+    # Use display name override if set, otherwise derive from origin
+    display_name = get_dataset_display_name()
+    if display_name:
+        name = display_name
+    else:
+        name = origin or "Untitled"
+        if origin and ":" in origin:
+            name = origin.split(":", 1)[1] or origin
+
+    # Build a source dict that can be used to reload the dataset later
+    source = None
+    for m in medias.values():
+        o = m.get("origin")
+        if isinstance(o, dict):
+            source = o
+            break
+
+    return jsonify(
+        {
+            "name": name,
+            "num_medias": num_medias,
+            "num_dupes": get_dupe_count(),
+            "media_type": media_type,
+            "origin": origin or "unknown",
+            "source": source,
+        }
+    )
+
+
+@datasets_ui_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
+def dashboard_dataset_rename():
+    """Set a custom display name for the currently loaded dataset."""
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return jsonify({"error": "name is required"}), 400
+
+    set_dataset_display_name(new_name)
+    return jsonify({"success": True, "name": new_name})

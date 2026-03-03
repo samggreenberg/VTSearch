@@ -16,31 +16,17 @@
       <span aria-hidden="true"></span>
     </button>
     <div class="burger-dropdown" id="burger-dropdown" role="menu" aria-label="Main menu">
-      <div class="burger-section" role="group" aria-label="Dataset">
-        <div class="burger-section-title" id="menu-section-dataset">Dataset</div>
-        <div class="burger-item" id="menu-dataset-change" role="menuitem" tabindex="-1">Change Dataset</div>
-      </div>
-      <div class="burger-section" role="group" aria-label="Labels">
-        <div class="burger-section-title" id="menu-section-labels">Labels</div>
-        <div class="burger-item disabled" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
-        <div class="burger-item disabled" id="menu-labels-export" role="menuitem" tabindex="-1">Export Labels</div>
-        <div class="burger-status" id="menu-labels-status" aria-live="polite"></div>
-      </div>
-      <div class="burger-section" role="group" aria-label="Detector">
-        <div class="burger-section-title" id="menu-section-detector">Detector</div>
-        <div class="burger-item disabled" id="menu-detector-import" role="menuitem" tabindex="-1">Load Sort</div>
-        <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
-        <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
-      </div>
-      <div class="burger-section">
-        <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
-        <div class="burger-item" id="menu-settings">Settings</div>
-      </div>
+      <div class="burger-item disabled" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
+      <div class="burger-item disabled" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
+      <div class="burger-status" id="menu-labels-status" aria-live="polite"></div>
+      <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
+      <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
+      <div class="burger-item disabled" id="menu-labels-export" role="menuitem" tabindex="-1">Export Labels</div>
+      <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
     </div>
   </nav>
-  <h1>VTSearch</h1>
-  <button class="header-nav-btn" id="header-dashboard-btn" style="display:none">Dashboard</button>
   <img src="/static/logo.png" alt="VTSearch logo" class="header-logo">
+  <h1>VTSearch</h1>
 </header>
 <div class="layout" role="presentation">
   <!-- Left panel -->
@@ -50,10 +36,10 @@
       <span class="train-context-name" id="train-dataset-name"></span>
     </div>
     <div class="left-tabs" role="tablist" aria-label="Panel mode">
-      <button class="left-tab active" id="tab-manual" role="tab" aria-selected="true" aria-controls="tab-panel-manual">Manual</button>
-      <button class="left-tab" id="tab-autopilot" role="tab" aria-selected="false" aria-controls="tab-panel-autopilot">Autopilot</button>
+      <button class="left-tab" id="tab-manual" role="tab" aria-selected="false" aria-controls="tab-panel-manual">Manual</button>
+      <button class="left-tab active" id="tab-autopilot" role="tab" aria-selected="true" aria-controls="tab-panel-autopilot">Autopilot</button>
     </div>
-    <div id="tab-panel-manual" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-manual">
+    <div id="tab-panel-manual" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-manual" style="display:none">
       <div class="sort-bar" id="sort-bar">
         <span class="sort-label">Sort</span>
         <div class="sort-mode">
@@ -90,6 +76,24 @@
           </div>
         </div>
       </div>
+      <div class="progress-check-bar">
+        <span class="progress-check-label">Progress</span>
+        <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness" title="Has the model stopped learning over time?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Smart</span>
+          <span class="indicator-subtext" id="smart-subtext"></span>
+        </button>
+        <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability" title="Has the model stopped changing predicted labels?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Stable</span>
+          <span class="indicator-subtext" id="stable-subtext"></span>
+        </button>
+        <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
+          <span class="indicator-dot" aria-hidden="true"></span>
+          <span class="indicator-label">Diverse</span>
+          <span class="indicator-subtext" id="span-subtext"></span>
+        </button>
+      </div>
       <div class="dataset-bar" id="dataset-bar" style="display:none">
         <span class="dataset-info" id="dataset-info">No dataset loaded</span>
       </div>
@@ -98,19 +102,14 @@
         <div class="stripe-container" id="stripe-container" aria-hidden="true"></div>
       </div>
     </div>
-    <div id="tab-panel-autopilot" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-autopilot" style="display:none">
+    <div id="tab-panel-autopilot" class="left-tab-panel" role="tabpanel" aria-labelledby="tab-autopilot">
       <div class="autopilot-panel">
         <div id="autopilot-examples-section" style="display:none">
-          <span class="sort-label">Examples</span>
-          <div id="autopilot-examples-grid" class="examples-grid"></div>
-          <div class="examples-add-bar">
-            <select id="autopilot-example-type" class="form-select-inline" style="font-size:0.75rem">
-              <option value="text">Text</option>
-              <option value="media">Media</option>
-              <option value="detector">Detector</option>
-            </select>
-            <button id="autopilot-example-add" class="btn-sm" style="font-size:0.7rem">+ Add</button>
+          <div class="ap-examples-header">
+            <span class="sort-label">Examples</span>
+            <button id="autopilot-examples-edit" class="ap-examples-edit-btn" title="Edit examples">&#9998;</button>
           </div>
+          <div id="autopilot-examples-summary" class="ap-examples-summary"></div>
         </div>
         <div id="autopilot-steps" class="autopilot-steps"></div>
       </div>
@@ -128,24 +127,28 @@
         <!-- Dataset grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Dataset</span>
+            <span class="dashboard-section-title">Datasets</span>
+            <div class="dash-header-progress" id="dash-header-progress" style="display:none" role="status" aria-live="polite">
+              <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+                <div class="progress-text" id="dash-progress-text" aria-hidden="true"></div>
+              </div>
+              <span class="progress-message" id="dash-progress-message">Loading...</span>
+            </div>
             <div class="dashboard-section-actions">
-              <button class="btn-sm" id="dash-load-file-btn">Load File</button>
-              <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
+              <button class="btn-sm" id="dash-add-dataset-btn">+</button>
             </div>
           </div>
-          <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
           <div class="dashboard-grid-wrap">
-            <div id="dash-dataset-tabs" class="demo-tab-bar"></div>
-            <div id="dash-dataset-grid" class="dashboard-grid demo-content-area"></div>
+            <div id="dash-dataset-grid" class="dashboard-grid"></div>
           </div>
         </div>
         <!-- Model grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Model</span>
+            <span class="dashboard-section-title">Models</span>
             <div class="dashboard-section-actions">
-              <button class="btn-sm" id="dash-add-model-btn">Add</button>
+              <button class="btn-sm" id="dash-add-model-btn">+</button>
             </div>
           </div>
           <div class="dashboard-grid-wrap">
@@ -154,17 +157,14 @@
         </div>
       </div>
       <div class="dashboard-actions">
-        <button class="dashboard-action-btn" id="dash-label-btn" disabled>Label</button>
-        <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Detect</button>
-      </div>
-      <!-- Reuse the progress bar for dataset loading within the dashboard -->
-      <div class="dataset-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
-        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
-          <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
-        </div>
-        <div class="progress-message" id="dash-progress-message">Loading...</div>
-        <div class="progress-eta" id="dash-progress-eta"></div>
+        <button class="dashboard-action-btn" id="dash-label-btn" disabled>
+          <span class="dash-btn-title">Label</span>
+          <span class="dash-btn-hint" id="dash-label-hint"></span>
+        </button>
+        <button class="dashboard-action-btn" id="dash-detect-btn" disabled>
+          <span class="dash-btn-title">Find</span>
+          <span class="dash-btn-hint" id="dash-detect-hint"></span>
+        </button>
       </div>
       <input type="file" id="dash-file-input" accept=".pkl" style="display:none">
     </div>
@@ -206,28 +206,14 @@
   <!-- Right panel -->
   <aside class="panel-right" aria-label="Labels">
     <div class="train-context-bar" id="train-detector-bar" style="display:none">
-      <span class="train-context-label">Detector</span>
-      <span class="train-context-name" id="train-detector-name"></span>
+      <div class="train-context-header">
+        <div>
+          <span class="train-context-label">Detector</span>
+          <span class="train-context-name" id="train-detector-name"></span>
+        </div>
+      </div>
     </div>
     <!-- import-file removed: label import now uses the label importer modal -->
-    <div class="progress-check-bar">
-      <span class="progress-check-label">Progress</span>
-      <button id="smart-indicator" class="labeling-indicator" data-status="" aria-label="Smart level: error cost flatness" title="Has the model stopped learning over time?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Smart</span>
-        <span class="indicator-subtext" id="smart-subtext"></span>
-      </button>
-      <button id="stable-indicator" class="labeling-indicator" data-status="" aria-label="Stable level: prediction flip stability" title="Has the model stopped changing predicted labels?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Stable</span>
-        <span class="indicator-subtext" id="stable-subtext"></span>
-      </button>
-      <button id="span-indicator" class="labeling-indicator" data-status="" aria-label="Diverse level: diversity tree coverage" title="Do we have good label coverage over the dataset?">
-        <span class="indicator-dot" aria-hidden="true"></span>
-        <span class="indicator-label">Diverse</span>
-        <span class="indicator-subtext" id="span-subtext"></span>
-      </button>
-    </div>
     <div class="label-sort-bar">
       <span class="sort-label" style="font-size:0.7rem; color:var(--text-dim);">Sort labels</span>
       <label for="label-sort-select" class="sr-only">Sort labels</label>
@@ -385,6 +371,21 @@
   </div>
 </div>
 
+<!-- Dataset Importer Picker Modal -->
+<div id="dataset-importer-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dataset-importer-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="dataset-importer-modal-title">Add Dataset</h2>
+      <button class="modal-close" id="dataset-importer-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="dataset-importer-list"></div>
+      <div id="dataset-importer-form" style="display:none"></div>
+      <button id="dataset-importer-back" aria-label="Back to importer list" class="btn-sm" style="display:none; margin-top:12px; padding:6px 14px;">&#8592; Back</button>
+    </div>
+  </div>
+</div>
+
 <!-- Label Importer Picker Modal -->
 <div id="label-importer-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="label-importer-modal-title">
   <div class="modal-content" style="max-width: 600px;">
@@ -523,17 +524,16 @@
 </div>
 
 <!-- Settings Modal -->
-<div id="settings-modal" class="modal">
+<div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header">
-      <h2>Settings</h2>
-      <button class="modal-close" id="settings-modal-close">&times;</button>
+      <h2 id="settings-modal-title">Settings</h2>
+      <button class="modal-close" id="settings-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <div class="settings-columns">
-        <!-- Left column: Appearance + Sorting -->
+        <!-- Column 1: Appearance -->
         <div>
-          <!-- Appearance -->
           <div class="settings-section">
             <div class="settings-section-title">Appearance</div>
             <div class="settings-row">
@@ -557,7 +557,9 @@
               <input type="checkbox" id="show-thumbnails-right-checkbox" checked style="accent-color:var(--accent)">
             </div>
           </div>
-          <!-- Sorting -->
+        </div>
+        <!-- Column 2: Sorting + Calibration -->
+        <div>
           <div class="settings-section">
             <div class="settings-section-title">Sorting</div>
             <div class="settings-row">
@@ -565,10 +567,6 @@
               <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
-        </div>
-        <!-- Right column: Calibration + Favorite Media Types -->
-        <div>
-          <!-- Calibration -->
           <div class="settings-section">
             <div class="settings-section-title">Calibration</div>
             <div class="settings-row">
@@ -584,7 +582,9 @@
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
-          <!-- Autopilot -->
+        </div>
+        <!-- Column 3: Autopilot + Autoload Media Types + Actions -->
+        <div>
           <div class="settings-section">
             <div class="settings-section-title">Autopilot</div>
             <div class="settings-row">
@@ -596,9 +596,8 @@
               <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
             </div>
           </div>
-          <!-- Favorite Media Types -->
           <div class="settings-section">
-            <div class="settings-section-title">Favorite Media Types</div>
+            <div class="settings-section-title">Autoload Media Types</div>
             <div class="settings-row">
               <label for="fav-mt-audio" class="settings-label">Audio</label>
               <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
@@ -616,19 +615,21 @@
               <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
             </div>
           </div>
+          <div class="settings-actions">
+            <button id="settings-default-btn" class="settings-btn secondary">Default</button>
+            <input type="file" id="settings-import-file" accept=".json" style="display:none">
+            <button id="settings-import-btn" class="settings-btn secondary">Import</button>
+            <button id="settings-export-btn" class="settings-btn secondary">Export</button>
+          </div>
         </div>
-      </div>
-      <!-- Actions -->
-      <div class="settings-actions">
-        <button id="settings-default-btn" class="settings-btn secondary">Default</button>
-        <input type="file" id="settings-import-file" accept=".json" style="display:none">
-        <button id="settings-import-btn" class="settings-btn secondary">Import</button>
-        <button id="settings-export-btn" class="settings-btn secondary">Export</button>
       </div>
     </div>
   </div>
 </div>
 
+<script src="/static/dialogs.js"></script>
+<script src="/static/charts.js"></script>
+<script src="/static/results.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

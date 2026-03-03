@@ -15,5 +15,15 @@ testpaths = ["tests"]
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
     "slow: CLI subprocess tests that spawn a fresh Python process (~16s each)",
+    "core: basic app functionality (audio, medias, votes, inclusion, settings, frontend)",
+    "api: API contracts, error handling, dashboard",
+    "sorting: text sort, learned sort, diversity, safe thresholds",
+    "datasets: dataset loading, splitting, combining, origins, dedup",
+    "io: importers, exporters, labels, processors",
+    "models: detectors, extractors, processors, clippers, eval",
+    "downloads: demo dataset download tests (network-dependent)",
+    "integration: end-to-end workflows, thread safety",
+    "cli: CLI autodetect, load sort window, progress",
+    "converters: document and media converters",
 ]
 addopts = "-m 'not gpu and not slow'"

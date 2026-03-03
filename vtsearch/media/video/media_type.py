@@ -45,6 +45,7 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
     ".webm": "video/webm",
     ".mov": "video/quicktime",
     ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
 }
 
 
@@ -210,9 +211,10 @@ class VideoMediaType(MediaType):
         demo_origin: dict = {"importer": "demo", "params": {}}
 
         for i, (video_path, meta) in enumerate(video_files):
+            rel_name = f"{meta['category']}/{video_path.name}"
             on_progress(
                 "embedding",
-                f"Embedding {meta['category']}: {video_path.name} ({i + 1}/{total})",
+                f"Embedding {rel_name} ({i + 1}/{total})",
                 i + 1,
                 total,
             )
@@ -222,7 +224,6 @@ class VideoMediaType(MediaType):
             with open(video_path, "rb") as f:
                 video_bytes = f.read()
             media_fields = self.load_media_data(video_path)
-            rel_filename = str(video_path.relative_to(video_dir))
             clips[clip_id] = {
                 "id": clip_id,
                 "type": self.type_id,
@@ -231,10 +232,10 @@ class VideoMediaType(MediaType):
                 "md5": hashlib.md5(video_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": video_bytes,
-                "filename": rel_filename,
+                "filename": rel_name,
                 "category": meta["category"],
                 "origin": demo_origin,
-                "origin_name": video_path.name,
+                "origin_name": rel_name,
             }
             clip_id += 1
 
@@ -271,6 +272,8 @@ class VideoMediaType(MediaType):
             self._model = XCLIPModel.from_pretrained(
                 XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
+        # Materialize any tensors left on the ``meta`` device.
+        self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = XCLIPProcessor.from_pretrained(
@@ -295,7 +298,6 @@ class VideoMediaType(MediaType):
             try:
                 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 if frame_count <= 0:
-                    cap.release()
                     print(f"Error: could not determine frame count for {file_path}")
                     return None
                 num_frames = min(8, max(1, frame_count))
@@ -316,6 +318,8 @@ class VideoMediaType(MediaType):
                 return None
 
             inputs = self._processor(videos=list(frames), return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.get_video_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
@@ -333,6 +337,8 @@ class VideoMediaType(MediaType):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec

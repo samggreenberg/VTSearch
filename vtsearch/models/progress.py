@@ -7,6 +7,7 @@ models that have already been computed.
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -31,6 +32,11 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_diversity_tree: Any = None  # DiversityTree | None
 
+# Reentrant lock protecting all module-level cache variables.
+# RLock is used because public functions call _ensure_cache which may
+# call clear_progress_cache internally when the inclusion value changes.
+_progress_lock = threading.RLock()
+
 
 def clear_progress_cache() -> None:
     """Clear all cached progress data.
@@ -39,12 +45,172 @@ def clear_progress_cache() -> None:
     is altered so that stale models are not reused.
     """
     global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
-    _cached_steps.clear()
-    _cache_good_ids.clear()
-    _cache_bad_ids.clear()
-    _cache_prev_predictions = None
-    _cache_inclusion = None
-    _cache_diversity_tree = None
+    with _progress_lock:
+        _cached_steps.clear()
+        _cache_good_ids.clear()
+        _cache_bad_ids.clear()
+        _cache_prev_predictions = None
+        _cache_inclusion = None
+        _cache_diversity_tree = None
+
+
+def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
+    """Build a DiversityTree from clip embeddings, or ``None`` if no embeddings."""
+    vectors: dict[int, np.ndarray] = {
+        cid: np.asarray(media["embedding"], dtype=np.float32)
+        for cid, media in clips_dict.items()
+        if media.get("embedding") is not None
+    }
+    if not vectors:
+        return None
+    from vtsearch.models.diversity_tree import DiversityTree  # noqa: PLC0415
+
+    return DiversityTree(vectors, k=3)
+
+
+def _apply_label_event(media_id: int, label: str) -> bool:
+    """Update ``_cache_good_ids`` / ``_cache_bad_ids`` for one label event.
+
+    Returns ``True`` if *media_id* was already labeled before this event.
+    """
+    was_labeled = media_id in _cache_good_ids or media_id in _cache_bad_ids
+    if label == "unlabel":
+        _cache_good_ids.discard(media_id)
+        _cache_bad_ids.discard(media_id)
+    elif label == "good":
+        _cache_bad_ids.discard(media_id)
+        _cache_good_ids.add(media_id)
+    else:
+        _cache_good_ids.discard(media_id)
+        _cache_bad_ids.add(media_id)
+    return was_labeled
+
+
+def _sync_diversity_tree(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
+    """Mirror a label event onto the diversity tree and return level info."""
+    if _cache_diversity_tree is None:
+        return None
+    if label == "unlabel":
+        # Only unlabel on the tree when the item is no longer labeled at all
+        # (guards against good→bad re-labels going through "unlabel").
+        if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
+            if media_id in _cache_diversity_tree.vector_to_leaf:
+                _cache_diversity_tree.unlabel(media_id)
+    else:
+        if media_id in _cache_diversity_tree.vector_to_leaf:
+            _cache_diversity_tree.label(media_id)
+    return {
+        "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
+        "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
+        "depth": _cache_diversity_tree.depth(),
+    }
+
+
+def _collect_training_data(
+    clips_dict: dict[int, dict[str, Any]],
+) -> tuple[list[np.ndarray], list[float]]:
+    """Gather embeddings and labels from the current good/bad ID sets."""
+    X_list: list[np.ndarray] = []
+    y_list: list[float] = []
+    for cid in _cache_good_ids:
+        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
+            X_list.append(clips_dict[cid]["embedding"])
+            y_list.append(1.0)
+    for cid in _cache_bad_ids:
+        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
+            X_list.append(clips_dict[cid]["embedding"])
+            y_list.append(0.0)
+    return X_list, y_list
+
+
+def _compute_step_stability(
+    model: nn.Sequential,
+    threshold: float,
+    clips_dict: dict[int, dict[str, Any]],
+    all_media_ids: list[int],
+    t: int,
+    num_labels: int,
+) -> Optional[dict[str, Any]]:
+    """Compute prediction stability by comparing to the previous step's predictions."""
+    global _cache_prev_predictions
+    import torch  # noqa: PLC0415
+
+    labeled_ids = _cache_good_ids | _cache_bad_ids
+    unlabeled_ids = [
+        cid
+        for cid in all_media_ids
+        if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
+    ]
+
+    if not unlabeled_ids:
+        return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
+
+    unlabeled_embs = np.array([clips_dict[cid]["embedding"] for cid in unlabeled_ids])
+    X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
+
+    with torch.no_grad():
+        scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).tolist()
+
+    predictions: dict[int, int] = {
+        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)
+    }
+
+    stability: Optional[dict[str, Any]] = None
+    if _cache_prev_predictions is not None:
+        num_flips = sum(
+            1
+            for cid in predictions.keys() & _cache_prev_predictions.keys()
+            if predictions[cid] != _cache_prev_predictions[cid]
+        )
+        stability = {
+            "time_index": t,
+            "num_labels": num_labels,
+            "num_flips": num_flips,
+            "num_unlabeled": len(unlabeled_ids),
+        }
+    # else: no prior predictions to compare — leave stability as None.
+
+    _cache_prev_predictions = predictions
+    return stability
+
+
+def _train_step(
+    clips_dict: dict[int, dict[str, Any]],
+    all_media_ids: list[int],
+    t: int,
+    num_labels: int,
+    inclusion_value: int,
+) -> tuple[Optional[nn.Sequential], Optional[float], Optional[dict[str, Any]]]:
+    """Train a model for one cache step and compute stability.
+
+    Returns ``(model, threshold, stability)``.  All three are ``None`` when
+    training is not possible (e.g. only one label polarity present).
+    """
+    global _cache_prev_predictions
+
+    if not _cache_good_ids or not _cache_bad_ids:
+        # No model possible — clear prediction baseline so the first step
+        # after regaining a model doesn't produce a misleading flip count.
+        _cache_prev_predictions = None
+        return None, None, None
+
+    X_list, y_list = _collect_training_data(clips_dict)
+    if len(X_list) < 2:
+        return None, None, None
+
+    import torch  # noqa: PLC0415
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+
+    model = train_model(X, y, X.shape[1], inclusion_value)
+
+    with torch.no_grad():
+        scores = torch.sigmoid(model(X)).squeeze(1).tolist()
+    threshold = find_optimal_threshold(scores, y_list, inclusion_value)
+
+    stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+    return model, threshold, stability
 
 
 def _ensure_cache(
@@ -58,7 +224,7 @@ def _ensure_cache(
     differs from the value used for existing cache entries the entire cache
     is rebuilt.
     """
-    global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
+    global _cache_inclusion, _cache_diversity_tree
 
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
         clear_progress_cache()
@@ -72,134 +238,20 @@ def _ensure_cache(
 
     all_media_ids = sorted(clips_dict.keys())
 
-    # Build the diversity tree once when starting from scratch.  On subsequent
-    # calls (warm cache) the tree is already up-to-date through step start-1.
     if _cache_diversity_tree is None:
-        vectors: dict[int, np.ndarray] = {
-            cid: np.asarray(media["embedding"], dtype=np.float32)
-            for cid, media in clips_dict.items()
-            if media.get("embedding") is not None
-        }
-        if vectors:
-            from vtsearch.models.diversity_tree import DiversityTree  # noqa: PLC0415
-
-            _cache_diversity_tree = DiversityTree(vectors, k=3)
+        _cache_diversity_tree = _build_diversity_tree(clips_dict)
 
     for t in range(start, len(label_history)):
         media_id, label, _ = label_history[t]
 
-        # Track whether this media was labeled *before* the current event so we
-        # can decide whether an "unlabel" event should remove it from the tree.
-        was_labeled = media_id in _cache_good_ids or media_id in _cache_bad_ids
-
-        # Incrementally update running label sets
-        if label == "unlabel":
-            _cache_good_ids.discard(media_id)
-            _cache_bad_ids.discard(media_id)
-        elif label == "good":
-            _cache_bad_ids.discard(media_id)
-            _cache_good_ids.add(media_id)
-        else:
-            _cache_good_ids.discard(media_id)
-            _cache_bad_ids.add(media_id)
-
-        # Mirror label events onto the diversity tree and record the level.
-        diversity_info: Optional[dict[str, Any]] = None
-        if _cache_diversity_tree is not None:
-            if label == "unlabel":
-                # Only call unlabel on the tree when the item is no longer labeled
-                # at all (guards against good→bad re-labels going through "unlabel").
-                if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
-                    if media_id in _cache_diversity_tree.vector_to_leaf:
-                        _cache_diversity_tree.unlabel(media_id)
-            else:
-                if media_id in _cache_diversity_tree.vector_to_leaf:
-                    _cache_diversity_tree.label(media_id)
-            diversity_info = {
-                "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-                "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
-                "depth": _cache_diversity_tree.depth(),
-            }
+        was_labeled = _apply_label_event(media_id, label)
+        diversity_info = _sync_diversity_tree(media_id, label, was_labeled)
 
         good_ids = list(_cache_good_ids)
         bad_ids = list(_cache_bad_ids)
+        num_labels = len(good_ids) + len(bad_ids)
 
-        model: Optional[nn.Sequential] = None
-        threshold: Optional[float] = None
-        stability: Optional[dict[str, Any]] = None
-
-        if _cache_good_ids and _cache_bad_ids:
-            # Build training data
-            X_list: list[np.ndarray] = []
-            y_list: list[float] = []
-            for cid in _cache_good_ids:
-                if cid in clips_dict:
-                    X_list.append(clips_dict[cid]["embedding"])
-                    y_list.append(1.0)
-            for cid in _cache_bad_ids:
-                if cid in clips_dict:
-                    X_list.append(clips_dict[cid]["embedding"])
-                    y_list.append(0.0)
-
-            if len(X_list) >= 2:
-                import torch  # noqa: PLC0415
-
-                X = torch.tensor(np.array(X_list), dtype=torch.float32)
-                y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-                input_dim = X.shape[1]
-
-                model = train_model(X, y, input_dim, inclusion_value)
-
-                with torch.no_grad():
-                    scores = torch.sigmoid(model(X)).squeeze(1).tolist()
-                threshold = find_optimal_threshold(scores, y_list, inclusion_value)
-
-                # --- Stability ---
-                labeled_ids = _cache_good_ids | _cache_bad_ids
-                unlabeled_ids = [cid for cid in all_media_ids if cid not in labeled_ids]
-
-                if not unlabeled_ids:
-                    stability = {
-                        "time_index": t,
-                        "num_labels": len(good_ids) + len(bad_ids),
-                        "num_flips": 0,
-                        "num_unlabeled": 0,
-                    }
-                else:
-                    unlabeled_embs = np.array([clips_dict[cid]["embedding"] for cid in unlabeled_ids])
-                    X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
-
-                    with torch.no_grad():
-                        scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).tolist()
-
-                    predictions: dict[int, int] = {
-                        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)
-                    }
-
-                    if _cache_prev_predictions is not None:
-                        num_flips = 0
-                        common = predictions.keys() & _cache_prev_predictions.keys()
-                        for cid in common:
-                            if predictions[cid] != _cache_prev_predictions[cid]:
-                                num_flips += 1
-
-                        stability = {
-                            "time_index": t,
-                            "num_labels": len(good_ids) + len(bad_ids),
-                            "num_flips": num_flips,
-                            "num_unlabeled": len(unlabeled_ids),
-                        }
-                    # else: no prior model predictions to compare against —
-                    # a "0 changes" result would be meaningless, so leave
-                    # stability as None for this step.
-
-                    _cache_prev_predictions = predictions
-
-        else:
-            # No model at this step — clear previous predictions so the
-            # first step after regaining a model doesn't produce a
-            # misleading flip count.
-            _cache_prev_predictions = None
+        model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
 
         _cached_steps.append(
             {
@@ -326,10 +378,11 @@ def recreate_model_at_time(
     if time_index < 0 or time_index >= len(label_history):
         return None, None, [], []
 
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    step = _cached_steps[time_index]
-    return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
+        step = _cached_steps[time_index]
+        return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
 
 
 def calculate_error_cost_over_time(
@@ -343,8 +396,9 @@ def calculate_error_cost_over_time(
 
     Uses cached models — no retraining.
     """
-    _ensure_cache(clips_dict, label_history, inclusion_value)
-    return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
+        return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
 
 def calculate_prediction_stability_over_time(
@@ -353,8 +407,9 @@ def calculate_prediction_stability_over_time(
     inclusion_value: int = 0,
 ) -> list[dict[str, Any]]:
     """Return cached prediction-stability metrics for every step."""
-    _ensure_cache(clips_dict, label_history, inclusion_value)
-    return [step["stability"] for step in _cached_steps if step["stability"] is not None]
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
+        return [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
 
 def _compute_smart_status(
@@ -475,12 +530,13 @@ def compute_labeling_status(
     bad = len(current_bad_votes)
     total = good + bad
 
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    smart = _compute_smart_status(
-        clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
-    )
-    stable = _compute_stable_status(good, bad, total)
+        smart = _compute_smart_status(
+            clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
+        )
+        stable = _compute_stable_status(good, bad, total)
 
     # Span status from diversity tree info (passed in from the route)
     if span_info is None:
@@ -542,7 +598,8 @@ def calculate_diversity_level_over_time(
     ``_ensure_cache`` before calling this function, so the cache is always
     current by the time we arrive here.
     """
-    return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+    with _progress_lock:
+        return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
 
 
 def analyze_labeling_progress(
@@ -557,13 +614,14 @@ def analyze_labeling_progress(
     Models and stability metrics are read from the per-step cache.  Error
     cost is recomputed cheaply using cached models (forward passes only).
     """
-    _ensure_cache(clips_dict, label_history, inclusion_value)
+    with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
 
-    error_cost = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+        error_cost = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
-    stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+        stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
-    diversity = calculate_diversity_level_over_time(clips_dict, label_history)
+        diversity = calculate_diversity_level_over_time(clips_dict, label_history)
 
     return {
         "error_cost_over_time": error_cost,

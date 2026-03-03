@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.routes.helpers import get_json_or_400
+
 from vtsearch.config import DATA_DIR
 from vtsearch.models import (
     analyze_labeling_progress,
@@ -24,6 +26,7 @@ from vtsearch.utils import (
     apply_label,
     apply_label_with_click_time,
     bad_votes,
+    build_media_hit,
     build_media_lookup,
     medias,
     diversity_tree_next_sample,
@@ -54,96 +57,88 @@ def sort_progress():
     return jsonify(get_sort_progress())
 
 
-@sorting_bp.route("/api/sort", methods=["POST"])
-def sort_clips():
-    """Return medias sorted by cosine similarity to a text query."""
-    try:
-        data = request.get_json(force=True)
-    except Exception:
-        update_sort_progress("idle")
-        return jsonify({"error": "Invalid request body"}), 400
+def _cosine_sort(query_vec):
+    """Sort all loaded medias by cosine similarity to *query_vec*.
 
-    if data is None:
-        update_sort_progress("idle")
-        return jsonify({"error": "Invalid request body"}), 400
+    Returns ``(results, threshold)`` where *results* is a list of
+    ``{"id": …, "similarity": …}`` dicts sorted descending, and
+    *threshold* is the GMM-based boundary (rounded to 4 decimals).
+    """
+    all_ids = list(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    query_norm = np.linalg.norm(query_vec)
+    emb_norms = np.linalg.norm(all_embs, axis=1)
+    norm_products = emb_norms * query_norm
+    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
+    similarities = np.dot(all_embs, query_vec) / safe_norms
+    similarities = np.where(norm_products == 0, 0.0, similarities)
 
-    text = data.get("text", "").strip()
+    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
+    threshold = calculate_gmm_threshold(similarities.tolist())
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return results, round(threshold, 4)
 
-    if not text:
-        update_sort_progress("idle")
-        return jsonify({"error": "text is required"}), 400
 
-    # Determine media type from current medias
-    if not medias:
-        update_sort_progress("idle")
-        return jsonify({"error": "No medias loaded"}), 400
+def _load_embedder_with_progress(media_type, total_steps):
+    """Load the embedding model for *media_type*, forwarding progress to the sort progress bar.
 
-    media_type = next(iter(medias.values())).get("type", "audio")
-
-    # Total steps: 1 (embed) + len(medias) (similarities) + 1 (threshold)
-    total_steps = 1 + len(medias) + 1
-
-    # Check if the embedder needs loading (first use of this media type)
+    If the model is already loaded this is a no-op.
+    """
     from vtsearch.media import get as media_get
 
     try:
         mt = media_get(media_type)
         needs_loading = getattr(mt, "_model", None) is None
     except KeyError:
-        needs_loading = False
+        return
 
-    if needs_loading:
-        # Temporarily redirect the media type's progress callback to the
-        # sort progress system so the GUI's sort progress bar shows real
-        # download / weight-loading percentages instead of an indeterminate
-        # animation.
-        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
-        original_cb = mt._on_progress
-        mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
-        try:
-            mt.load_models()
-        finally:
-            mt._on_progress = original_cb
-        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
-    else:
-        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
+    if not needs_loading:
+        return
 
-    # Embed text query using refactored module
+    update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+    original_cb = mt._on_progress
+    mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+    try:
+        mt.load_models()
+    finally:
+        mt._on_progress = original_cb
+
+
+@sorting_bp.route("/api/sort", methods=["POST"])
+def sort_clips():
+    """Return medias sorted by cosine similarity to a text query."""
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        update_sort_progress("idle")
+        return data
+
+    text = data.get("text", "").strip()
+    if not text:
+        update_sort_progress("idle")
+        return jsonify({"error": "text is required"}), 400
+
+    if not medias:
+        update_sort_progress("idle")
+        return jsonify({"error": "No medias loaded"}), 400
+
+    media_type = next(iter(medias.values())).get("type", "audio")
+    total_steps = 1 + len(medias) + 1
+
+    _load_embedder_with_progress(media_type, total_steps)
+    update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
+
     from vtsearch import settings
 
     enrich = settings.get_enrich_descriptions()
     text_vec = embed_text_query(text, media_type, enrich=enrich)
     if text_vec is None:
         update_sort_progress("idle")
-        return (
-            jsonify({"error": f"Could not embed text for media type {media_type}"}),
-            500,
-        )
+        return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
 
     update_sort_progress("sorting", "Computing similarities…", 1, total_steps)
-
-    # Vectorized cosine similarity: batch all embeddings into a matrix
-    all_ids = list(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-    text_norm = np.linalg.norm(text_vec)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * text_norm
-    # Avoid division by zero
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, text_vec) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
-
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    scores = similarities.tolist()
-    update_sort_progress("sorting", "Computing similarities…", 1 + len(medias), total_steps)
-
-    # Calculate GMM-based threshold
-    update_sort_progress("sorting", "Calculating threshold…", total_steps - 1, total_steps)
-    threshold = calculate_gmm_threshold(scores)
-
-    results.sort(key=lambda x: x["similarity"], reverse=True)
+    results, threshold = _cosine_sort(text_vec)
     update_sort_progress("idle")
-    return jsonify({"results": results, "threshold": round(threshold, 4)})
+    return jsonify({"results": results, "threshold": threshold})
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
@@ -179,6 +174,19 @@ def get_votes():
     )
 
 
+@sorting_bp.route("/api/votes/clear", methods=["POST"])
+def clear_votes_route():
+    """Clear all votes without clearing medias.
+
+    Used by the Label flow to reset votes before importing a model's labelset
+    so that labels from a previous session don't contaminate the new model.
+    """
+    from vtsearch.utils import clear_votes
+
+    clear_votes()
+    return jsonify({"ok": True})
+
+
 @sorting_bp.route("/api/textsort-suggestions")
 def get_textsort_suggestions_route():
     """Return stored text-sort suggestions (most recent last)."""
@@ -188,12 +196,9 @@ def get_textsort_suggestions_route():
 @sorting_bp.route("/api/textsort-suggestions", methods=["POST"])
 def add_textsort_suggestion_route():
     """Store a text-sort query as a suggested name for detectors/labelsets."""
-    try:
-        data = request.get_json(force=True)
-    except Exception:
-        return jsonify({"error": "Invalid request body"}), 400
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
     text = data.get("text", "").strip()
     if not text:
         return jsonify({"error": "text is required"}), 400
@@ -209,10 +214,15 @@ def export_labels():
     so that consumers know exactly where each labeled element came from.
     The format is a superset of the legacy export format — old consumers
     that only read ``md5`` and ``label`` keys continue to work unchanged.
+
+    Query params:
+        goods_only: If ``"1"`` or ``"true"``, only export good labels.
     """
     from vtsearch.datasets.labelset import LabelSet
 
-    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
+    goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
+    bads = {} if goods_only else bad_votes
+    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bads)
     result: dict = labelset.to_dict()
     return jsonify(result)
 
@@ -220,9 +230,9 @@ def export_labels():
 @sorting_bp.route("/api/labels/import", methods=["POST"])
 def import_labels():
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     labels = data.get("labels")
     if not isinstance(labels, list):
@@ -327,43 +337,14 @@ def fill_labels_from_sort():
         apply_label_with_click_time(entry["id"], "bad")
 
     # Build a results dict compatible with exporters
-    good_hits = []
-    for entry in good_candidates:
-        cid = entry["id"]
-        media = medias.get(cid, {})
-        hit = {
-            "id": cid,
-            "filename": media.get("filename", f"media_{cid}"),
-            "category": media.get("category", "unknown"),
-            "score": round(entry["score"], 4),
-            "label": "good",
-        }
-        if media.get("origin") is not None:
-            hit["origin"] = media["origin"]
-        if media.get("origin_name"):
-            hit["origin_name"] = media["origin_name"]
-        if media.get("md5"):
-            hit["md5"] = media["md5"]
-        good_hits.append(hit)
-
-    bad_hits = []
-    for entry in bad_candidates:
-        cid = entry["id"]
-        media = medias.get(cid, {})
-        hit = {
-            "id": cid,
-            "filename": media.get("filename", f"media_{cid}"),
-            "category": media.get("category", "unknown"),
-            "score": round(entry["score"], 4),
-            "label": "bad",
-        }
-        if media.get("origin") is not None:
-            hit["origin"] = media["origin"]
-        if media.get("origin_name"):
-            hit["origin_name"] = media["origin_name"]
-        if media.get("md5"):
-            hit["md5"] = media["md5"]
-        bad_hits.append(hit)
+    good_hits = [
+        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="good")
+        for e in good_candidates
+    ]
+    bad_hits = [
+        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="bad")
+        for e in bad_candidates
+    ]
 
     media_type = "unknown"
     for media in medias.values():
@@ -400,9 +381,9 @@ def get_inclusion_route():
 @sorting_bp.route("/api/inclusion", methods=["POST"])
 def set_inclusion_route():
     """Set the Inclusion setting."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     new_inclusion = data.get("inclusion")
 
@@ -425,9 +406,9 @@ def get_safe_thresholds_route():
 @sorting_bp.route("/api/safe-thresholds", methods=["POST"])
 def set_safe_thresholds_route():
     """Set the Safe Thresholds setting."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     value = data.get("safe_thresholds")
     if not isinstance(value, bool):
@@ -456,23 +437,7 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
 
-    # Vectorized cosine similarity with all medias
-    all_ids = list(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-    example_norm = np.linalg.norm(example_embedding)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * example_norm
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, example_embedding) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
-
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    scores = similarities.tolist()
-
-    # Calculate GMM-based threshold
-    threshold = calculate_gmm_threshold(scores)
-    results.sort(key=lambda x: x["similarity"], reverse=True)
-    return results, round(threshold, 4)
+    return _cosine_sort(example_embedding)
 
 
 @sorting_bp.route("/api/example-sort", methods=["POST"])
@@ -497,10 +462,11 @@ def example_sort():
         DATA_DIR.mkdir(exist_ok=True)
         file.save(temp_path)
 
-        results, thresh = _example_sort_from_path(temp_path)
-
-        # Clean up temp file
-        temp_path.unlink(missing_ok=True)
+        try:
+            results, thresh = _example_sort_from_path(temp_path)
+        finally:
+            # Clean up temp file even if sorting raises
+            temp_path.unlink(missing_ok=True)
 
         return jsonify({"results": results, "threshold": thresh})
 
@@ -533,23 +499,24 @@ def list_server_media_files():
 @sorting_bp.route("/api/example-sort-server", methods=["POST"])
 def example_sort_server():
     """Sort medias by similarity to a server-side media file."""
-    data = request.get_json(force=True)
-    if data is None:
-        return jsonify({"error": "Invalid request body"}), 400
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
 
     filename = data.get("filename", "").strip()
     if not filename:
         return jsonify({"error": "filename is required"}), 400
 
     file_path = SERVER_MEDIA_DIR / filename
-    if not file_path.is_file():
-        return jsonify({"error": f"File not found: {filename}"}), 404
 
     # Ensure path doesn't escape the server media directory
     try:
         file_path.resolve().relative_to(SERVER_MEDIA_DIR.resolve())
     except ValueError:
         return jsonify({"error": "Invalid filename"}), 400
+
+    if not file_path.is_file():
+        return jsonify({"error": f"File not found: {filename}"}), 404
 
     try:
         results, thresh = _example_sort_from_path(file_path)
@@ -716,9 +683,17 @@ def labeling_status_indicator():
         return jsonify({"error": str(e)}), 500
 
 
-@sorting_bp.route("/api/diversity-tree/next")
+@sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
 def diversity_tree_next():
     """Return the next diverse sample from the Diversity Tree.
+
+    Accepts an optional POST body with ``{"scores": {id: score, ...},
+    "threshold": <float>}`` so the sort mode influences which element is
+    picked from the next unseen node.  When a threshold is provided, the
+    node's median score determines direction: above-threshold nodes yield
+    the lowest-scored element (surprise in a "good" region), while
+    below-threshold nodes yield the highest-scored element (surprise in a
+    "bad" region).  Without scores the first element in the node is returned.
 
     Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
     exhausted or not yet built.  Also includes ``diversity_level`` so the
@@ -726,8 +701,25 @@ def diversity_tree_next():
     and ``exhausted`` (bool) which is true when the tree exists but every
     node has already been seen.
     """
+    scores = None
+    threshold = None
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        raw_scores = data.get("scores")
+        if isinstance(raw_scores, dict):
+            try:
+                scores = {int(k): float(v) for k, v in raw_scores.items()}
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid score keys or values"}), 400
+        raw_threshold = data.get("threshold")
+        if raw_threshold is not None:
+            try:
+                threshold = float(raw_threshold)
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid threshold value"}), 400
+
     tree = get_diversity_tree()
-    next_id = diversity_tree_next_sample()
+    next_id = diversity_tree_next_sample(scores=scores, threshold=threshold)
     level = tree.diversity_level() if tree is not None else -1
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})

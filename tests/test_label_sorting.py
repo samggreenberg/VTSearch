@@ -3,6 +3,7 @@ and the enriched /api/votes response."""
 
 import app as app_module
 import vtsearch.utils.state as _state
+import vtsearch.utils.state_core as _core
 from vtsearch.utils import vote_click_times, last_learned_scores
 
 
@@ -112,7 +113,7 @@ class TestClearVotesResetsState:
         assert len(vote_click_times) == 1
         _state.clear_votes()
         assert len(vote_click_times) == 0
-        assert _state._click_counter == 0
+        assert _core._click_counter == 0
 
     def test_clear_votes_clears_learned_scores(self, client):
         _state.last_learned_scores[1] = 0.9

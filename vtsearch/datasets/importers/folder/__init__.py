@@ -29,7 +29,7 @@ def _load_pdf_images(
     ``origin`` is set to ``{"importer": "pdf", "params": {"path": ...}}``
     so the provenance points back to the source document.
     """
-    pdf_files = sorted(folder.glob("*.pdf"))
+    pdf_files = sorted(folder.rglob("*.pdf"))
     if not pdf_files:
         return
 
@@ -45,6 +45,9 @@ def _load_pdf_images(
     for pdf_path in pdf_files:
         origin = {"importer": "pdf", "params": {"path": str(pdf_path)}}
         pages = render_pdf_pages(pdf_path)
+        # Relative path prefix so that PDFs in different subdirectories
+        # produce distinct page names.
+        pdf_rel = pdf_path.relative_to(folder).as_posix()
 
         for page_name, pil_image in pages:
             embedding = mt.embed_pil_image(pil_image)
@@ -55,16 +58,25 @@ def _load_pdf_images(
             pil_image.save(buf, format="PNG")
             image_bytes = buf.getvalue()
 
+            # page_name is e.g. "doc.pdf-1"; prefix with relative dir
+            # so that identically-named PDFs in different folders stay
+            # distinct (e.g. "subdir/doc.pdf-1").
+            rel_dir = str(Path(pdf_rel).parent)
+            if rel_dir and rel_dir != ".":
+                full_page_name = f"{rel_dir}/{page_name}"
+            else:
+                full_page_name = page_name
+
             media_data: dict[str, Any] = {
                 "id": media_id,
                 "type": mt.type_id,
                 "file_size": len(image_bytes),
                 "md5": hashlib.md5(image_bytes).hexdigest(),
                 "embedding": embedding,
-                "filename": page_name,
+                "filename": full_page_name,
                 "category": "custom",
                 "origin": origin,
-                "origin_name": page_name,
+                "origin_name": full_page_name,
                 "media_bytes": None if thin else image_bytes,
                 "media_string": None,
                 "media_path": str(pdf_path.resolve()),
@@ -121,7 +133,7 @@ class FolderDatasetImporter(DatasetImporter):
         if media_type == "images":
             _load_pdf_images(folder, medias, thin=thin)
             if not has_regular and not medias:
-                raise ValueError("No images files found in folder")
+                raise ValueError("No image files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])

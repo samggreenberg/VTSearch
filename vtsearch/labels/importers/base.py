@@ -56,57 +56,17 @@ to ``requirements-label-importers.txt``.
 
 from __future__ import annotations
 
-import argparse
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
-FieldType = Literal["file", "text", "password", "select"]
+from vtsearch.utils.registry import PluginBase, PluginField
 
-__all__ = ["FieldType", "LabelImporter", "LabelImporterField"]
+# Backward-compatible alias — existing plugins import ``LabelImporterField``.
+LabelImporterField = PluginField
 
-
-@dataclass
-class LabelImporterField:
-    """Describes a single configurable input for a label importer.
-
-    The ``field_type`` value drives how the frontend renders it:
-
-    - ``"file"``     – OS file-picker; value arrives as a Werkzeug
-      :class:`~werkzeug.datastructures.FileStorage` object.
-    - ``"text"``     – Generic single-line text input.
-    - ``"password"`` – Text input whose characters are masked.
-    - ``"select"``   – Drop-down; ``options`` must be populated.
-    """
-
-    key: str
-    label: str
-    field_type: FieldType
-    description: str = ""
-    #: For ``"file"`` fields: comma-separated extensions, e.g. ``".csv"``.
-    accept: str = ""
-    #: For ``"select"`` fields: the list of allowed values.
-    options: list[str] = field(default_factory=list)
-    #: Pre-filled default value shown in the UI.
-    default: str = ""
-    required: bool = True
-    #: Hint shown as placeholder text inside the input widget.
-    placeholder: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "key": self.key,
-            "label": self.label,
-            "field_type": self.field_type,
-            "description": self.description,
-            "accept": self.accept,
-            "options": self.options,
-            "default": self.default,
-            "required": self.required,
-            "placeholder": self.placeholder,
-        }
+__all__ = ["LabelImporter", "LabelImporterField"]
 
 
-class LabelImporter:
+class LabelImporter(PluginBase):
     """Abstract base class for label importers.
 
     Subclass this, set the class-level attributes, implement :meth:`run`,
@@ -133,16 +93,10 @@ class LabelImporter:
     Werkzeug ``FileStorage`` rather than a plain file path).
     """
 
-    #: Internal snake_case identifier used in API routes, e.g. ``"csv"``.
-    name: str
-    #: Human-readable label shown in the UI, e.g. ``"CSV File"``.
-    display_name: str
-    #: One-sentence description shown as a subtitle in the UI.
-    description: str
     #: Emoji or icon string shown next to the display name in the UI.
     icon: str = "🏷️"
     #: Ordered list of fields the user must fill before importing.
-    fields: list[LabelImporterField]
+    fields: list[PluginField]
 
     def run(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Perform the import and return a list of label dicts.
@@ -169,27 +123,6 @@ class LabelImporter:
     # CLI support
     # ------------------------------------------------------------------
 
-    def add_cli_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """Register this importer's fields as ``argparse`` arguments.
-
-        The default implementation converts each :class:`LabelImporterField`
-        into a CLI flag (e.g. a field with ``key="filepath"`` becomes
-        ``--filepath``).  ``"select"`` fields gain a ``choices`` constraint.
-
-        Override this method if you need custom argument handling.
-        """
-        for f in self.fields:
-            arg_name = f"--{f.key.replace('_', '-')}"
-            kwargs: dict[str, Any] = {
-                "dest": f.key,
-                "help": f.description or f.label,
-            }
-            if f.default:
-                kwargs["default"] = f.default
-            if f.field_type == "select" and f.options:
-                kwargs["choices"] = f.options
-            parser.add_argument(arg_name, **kwargs)
-
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Import labels from CLI-provided *field_values*.
 
@@ -199,20 +132,3 @@ class LabelImporter:
         override this method to handle file-path strings appropriately.
         """
         return self.run(field_values)
-
-    def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
-        """Raise ``ValueError`` if any required field is missing or empty."""
-        for f in self.fields:
-            if f.required and not field_values.get(f.key):
-                cli_flag = f"--{f.key.replace('_', '-')}"
-                raise ValueError(f"Missing required argument: {cli_flag}")
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialise importer metadata for the ``/api/label-importers`` endpoint."""
-        return {
-            "name": self.name,
-            "display_name": self.display_name,
-            "description": self.description,
-            "icon": self.icon,
-            "fields": [f.to_dict() for f in self.fields],
-        }

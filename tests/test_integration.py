@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -44,18 +45,19 @@ def _export_detector(client):
     return data
 
 
-def _save_favorite_detector(client, name, detector):
-    """Save a detector as a favorite."""
+def _save_autorun_detector(client, name, detector, *, autodetect=True):
+    """Save an autorun detector with autodetect enabled by default."""
     resp = client.post(
-        "/api/favorite-detectors",
+        "/api/autorun-detectors",
         json={
             "name": name,
             "media_type": "audio",
             "weights": detector["weights"],
             "threshold": detector["threshold"],
+            "autodetect": autodetect,
         },
     )
-    assert resp.status_code == 200, f"Save favorite failed: {resp.get_json()}"
+    assert resp.status_code == 200, f"Save autorun detector failed: {resp.get_json()}"
     return resp.get_json()
 
 
@@ -189,11 +191,11 @@ class TestDetectorLifecycleWorkflow:
         det_scores = [e["score"] for e in sort_data["results"]]
         assert det_scores == sorted(det_scores, reverse=True)
 
-        # Step 4: Save as favorite
-        _save_favorite_detector(client, "my-detector", detector)
+        # Step 4: Save as autorun
+        _save_autorun_detector(client, "my-detector", detector)
 
-        # Step 5: Verify it appears in favorites list
-        resp = client.get("/api/favorite-detectors")
+        # Step 5: Verify it appears in autorun list list
+        resp = client.get("/api/autorun-detectors")
         assert resp.status_code == 200
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "my-detector" in names
@@ -202,7 +204,7 @@ class TestDetectorLifecycleWorkflow:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Step 7: Run auto-detect using saved favorite
+        # Step 7: Run auto-detect using saved autorun detector
         resp = client.post("/api/auto-detect")
         assert resp.status_code == 200
         auto_data = resp.get_json()
@@ -311,10 +313,7 @@ class TestInclusionAffectsLearning:
         # in ordering, but the scores should be different
         neutral_scores = {e["id"]: e["score"] for e in neutral_results}
         inclusive_scores = {e["id"]: e["score"] for e in inclusive_results}
-        scores_differ = any(
-            abs(neutral_scores[i] - inclusive_scores[i]) > 1e-6
-            for i in neutral_scores
-        )
+        scores_differ = any(abs(neutral_scores[i] - inclusive_scores[i]) > 1e-6 for i in neutral_scores)
         assert scores_differ or neutral_order != inclusive_order, (
             "Changing inclusion from 0 to 10 should affect learned sort"
         )
@@ -337,17 +336,17 @@ class TestAutoDetectExportPipeline:
         # Step 1: Train and save first detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         det1 = _export_detector(client)
-        _save_favorite_detector(client, "low-freq-detector", det1)
+        _save_autorun_detector(client, "low-freq-detector", det1)
 
         # Step 2: Change votes and train second detector
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
         _vote_clips(client, [5, 6, 7], [1, 2, 3])
         det2 = _export_detector(client)
-        _save_favorite_detector(client, "mid-freq-detector", det2)
+        _save_autorun_detector(client, "mid-freq-detector", det2)
 
         # Step 3: Verify both detectors saved
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         names = {d["name"] for d in resp.get_json()["detectors"]}
         assert names == {"low-freq-detector", "mid-freq-detector"}
 
@@ -421,9 +420,7 @@ class TestIterativeVotingWorkflow:
         second_scores = {e["id"]: e["score"] for e in resp.get_json()["results"]}
 
         # Step 6: Clip 3's score should decrease (was good, now bad)
-        assert second_scores[3] < first_scores[3], (
-            "Clip 3 score should decrease after switching from good to bad"
-        )
+        assert second_scores[3] < first_scores[3], "Clip 3 score should decrease after switching from good to bad"
 
 
 # ---------------------------------------------------------------------------
@@ -481,7 +478,7 @@ class TestDetectorFileImportWorkflow:
         # Step 2: Import the detector from a "file"
         json_bytes = json.dumps(detector).encode("utf-8")
         resp = client.post(
-            "/api/favorite-detectors/import-pkl",
+            "/api/autorun-detectors/import-pkl",
             data={
                 "file": (io.BytesIO(json_bytes), "imported_detector.json"),
                 "name": "file-imported",
@@ -491,8 +488,8 @@ class TestDetectorFileImportWorkflow:
         assert resp.status_code == 200
         assert resp.get_json()["name"] == "file-imported"
 
-        # Step 3: Verify it appears in favorites
-        resp = client.get("/api/favorite-detectors")
+        # Step 3: Verify it appears in autorun list
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "file-imported" in names
 
@@ -505,24 +502,24 @@ class TestDetectorFileImportWorkflow:
 
         # Step 5: Rename the detector
         resp = client.put(
-            "/api/favorite-detectors/file-imported/rename",
+            "/api/autorun-detectors/file-imported/rename",
             json={"new_name": "renamed-detector"},
         )
         assert resp.status_code == 200
         assert resp.get_json()["new_name"] == "renamed-detector"
 
         # Step 6: Verify old name gone, new name present
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "renamed-detector" in names
         assert "file-imported" not in names
 
         # Step 7: Delete the detector
-        resp = client.delete("/api/favorite-detectors/renamed-detector")
+        resp = client.delete("/api/autorun-detectors/renamed-detector")
         assert resp.status_code == 200
 
         # Step 8: Verify it's gone
-        resp = client.get("/api/favorite-detectors")
+        resp = client.get("/api/autorun-detectors")
         assert resp.get_json()["detectors"] == []
 
 
@@ -621,34 +618,38 @@ class TestErrorRecoveryWorkflow:
 
 
 # ---------------------------------------------------------------------------
-# 12. Detector Train → Save to Favorite Processor → Verify Settings
+# 12. Detector Train → Save to Autorun Processor → Verify Settings
 # ---------------------------------------------------------------------------
 
 
-class TestFavoriteProcessorWorkflow:
-    """Simulates: user exports a detector to a file, adds it as a favorite
+class TestAutorunProcessorWorkflow:
+    """Simulates: user exports a detector to a file, adds it as an autorun
     processor in settings, and verifies the settings pipeline."""
 
-    def test_detector_to_favorite_processor(self, client, tmp_path):
+    def test_detector_to_autorun_processor(self, client, tmp_path):
         # Step 1: Vote and export detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         detector = _export_detector(client)
 
         # Step 2: Write detector to a JSON file (simulates user saving it)
         det_path = tmp_path / "my_detector.json"
-        det_path.write_text(json.dumps({
-            "media_type": "audio",
-            "weights": detector["weights"],
-            "threshold": detector["threshold"],
-        }))
+        det_path.write_text(
+            json.dumps(
+                {
+                    "media_type": "audio",
+                    "weights": detector["weights"],
+                    "threshold": detector["threshold"],
+                }
+            )
+        )
 
-        # Step 3: Add as a favorite processor in settings
+        # Step 3: Add as a autorun processor in settings
         resp = client.post(
-            "/api/settings/favorite-processors",
+            "/api/settings/autorun-processors",
             json={
                 "processor_name": "my-saved-detector",
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(det_path)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(det_path)},
             },
         )
         assert resp.status_code == 200
@@ -657,21 +658,21 @@ class TestFavoriteProcessorWorkflow:
         # Step 4: Verify it appears in settings
         resp = client.get("/api/settings")
         data = resp.get_json()
-        proc_names = [p["processor_name"] for p in data["favorite_processors"]]
+        proc_names = [p["processor_name"] for p in data["autorun_processors"]]
         assert "my-saved-detector" in proc_names
 
         # Step 5: Verify it also appears in the processors list
-        resp = client.get("/api/settings/favorite-processors")
+        resp = client.get("/api/settings/autorun-processors")
         assert resp.status_code == 200
-        proc_names = [p["processor_name"] for p in resp.get_json()["favorite_processors"]]
+        proc_names = [p["processor_name"] for p in resp.get_json()["autorun_processors"]]
         assert "my-saved-detector" in proc_names
 
         # Step 6: Delete it and verify it's gone
-        resp = client.delete("/api/settings/favorite-processors/my-saved-detector")
+        resp = client.delete("/api/settings/autorun-processors/my-saved-detector")
         assert resp.status_code == 200
 
-        resp = client.get("/api/settings/favorite-processors")
-        proc_names = [p["processor_name"] for p in resp.get_json()["favorite_processors"]]
+        resp = client.get("/api/settings/autorun-processors")
+        proc_names = [p["processor_name"] for p in resp.get_json()["autorun_processors"]]
         assert "my-saved-detector" not in proc_names
 
 
@@ -687,7 +688,7 @@ class TestGuiExporterWorkflow:
         # Step 1: Train and save a detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
         detector = _export_detector(client)
-        _save_favorite_detector(client, "gui-test-det", detector)
+        _save_autorun_detector(client, "gui-test-det", detector)
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
@@ -882,3 +883,339 @@ class TestSafeThresholdsWorkflow:
         # Both should be valid floats
         assert isinstance(threshold_off, (int, float))
         assert isinstance(threshold_on, (int, float))
+
+
+# ---------------------------------------------------------------------------
+# 18. Dashboard → Create Model → Label → Autopilot Workflow
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardToAutopilotWorkflow:
+    """Simulates the full dashboard workflow: create a trainable model via
+    the autorun-detectors endpoint (as the "New Model" form does), verify it
+    appears in the model registry with examples and text_query, then enter
+    labeling with the model, vote, and verify autopilot-related state."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_trainable_models(self):
+        """Remove trainable model files created during tests."""
+        from vtsearch.routes.trainable_models import TRAINABLE_MODELS_DIR
+
+        if TRAINABLE_MODELS_DIR.is_dir():
+            shutil.rmtree(TRAINABLE_MODELS_DIR)
+        yield
+        if TRAINABLE_MODELS_DIR.is_dir():
+            shutil.rmtree(TRAINABLE_MODELS_DIR)
+
+    def test_create_model_registers_with_examples_and_text_query(self, client):
+        """Creating a model via POST /api/autorun-detectors should register
+        the model in the model registry with text_query and create a
+        trainable model file with examples."""
+        # Step 1: Create a model via the same endpoint the GUI "New Model" form uses
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Bird Songs",
+                "media_type": "audio",
+                "examples": [
+                    {"type": "text", "value": "bird singing in the morning"},
+                    {"type": "text", "value": "chirping sounds"},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+
+        # Step 2: Verify model appears in the model registry
+        resp = client.get("/api/models/registry")
+        assert resp.status_code == 200
+        models = resp.get_json()["models"]
+        bird_model = [m for m in models if m["name"] == "Bird Songs"]
+        assert len(bird_model) == 1
+        entry = bird_model[0]
+        assert entry["trainable"] is True
+        assert entry["media_type"] == "audio"
+        # text_query should be populated from the first text example
+        assert entry.get("text_query") == "bird singing in the morning"
+        # trainable_model_name should be set so the Label button can find it
+        assert entry.get("trainable_model_name") == "Bird Songs"
+
+        # Step 3: Verify trainable model file was created with examples
+        resp = client.get("/api/trainable-models/Bird Songs")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        assert tm_data["name"] == "Bird Songs"
+        assert tm_data["text_query"] == "bird singing in the morning"
+        assert len(tm_data["examples"]) == 2
+        assert tm_data["examples"][0]["type"] == "text"
+        assert tm_data["examples"][0]["value"] == "bird singing in the morning"
+        assert tm_data["examples"][1]["value"] == "chirping sounds"
+
+    def test_create_model_then_fetch_examples_for_autopilot(self, client):
+        """After creating a model, the examples should be fetchable from both
+        the autorun detector and the trainable model endpoints — this is the
+        path the Label button + Autopilot tab use."""
+        # Create model
+        client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Ocean Waves",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "ocean waves crashing"}],
+            },
+        )
+
+        # Fetch examples from the autorun detector
+        resp = client.get("/api/autorun-detectors/Ocean Waves/examples")
+        assert resp.status_code == 200
+        det_examples = resp.get_json()["examples"]
+        assert len(det_examples) == 1
+        assert det_examples[0]["value"] == "ocean waves crashing"
+
+        # Fetch examples from the trainable model
+        resp = client.get("/api/trainable-models/Ocean Waves")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        assert len(tm_data["examples"]) == 1
+        assert tm_data["examples"][0]["value"] == "ocean waves crashing"
+
+    def test_label_workflow_with_trainable_model(self, client):
+        """Simulates: create model → enter labeling → vote → save labels →
+        verify labels persist on the trainable model."""
+        # Step 1: Create model
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Thunder",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "thunder rumbling"}],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Step 2: List medias (as the GUI does when entering labeling)
+        resp = client.get("/api/medias")
+        assert resp.status_code == 200
+        all_medias = resp.get_json()
+        assert len(all_medias) >= 4
+
+        # Step 3: Text sort with model's text query
+        resp = client.post("/api/sort", json={"text": "thunder rumbling"})
+        assert resp.status_code == 200
+        sort_data = resp.get_json()
+        assert "results" in sort_data
+        assert len(sort_data["results"]) > 0
+
+        # Step 4: Vote on some medias
+        top_ids = [r["id"] for r in sort_data["results"][:3]]
+        bottom_ids = [r["id"] for r in sort_data["results"][-4:]]
+        _vote_clips(client, top_ids, bottom_ids)
+
+        # Step 5: Save labels to the trainable model
+        resp = client.post("/api/trainable-models/Thunder/labels")
+        assert resp.status_code == 200
+        label_data = resp.get_json()
+        assert label_data["success"] is True
+        assert label_data["num_labels"] == 7  # 3 good + 4 bad
+
+        # Step 6: Verify model registry shows updated training count
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        thunder = [m for m in models if m["name"] == "Thunder"]
+        assert len(thunder) == 1
+        assert thunder[0]["num_training"] == 7
+
+        # Step 7: Verify trainable model has the labels persisted
+        resp = client.get("/api/trainable-models/Thunder")
+        assert resp.status_code == 200
+        tm_data = resp.get_json()
+        labels = tm_data["labelset"]["labels"]
+        assert len(labels) == 7
+        good_labels = [lb for lb in labels if lb["label"] == "good"]
+        bad_labels = [lb for lb in labels if lb["label"] == "bad"]
+        assert len(good_labels) == 3
+        assert len(bad_labels) == 4
+
+    def test_autopilot_indicators_after_voting(self, client):
+        """After enough votes, the labeling-status endpoint should return
+        indicator statuses that autopilot uses for phase transitions."""
+        # Get medias
+        resp = client.get("/api/medias")
+        all_medias = resp.get_json()
+        ids = [m["id"] for m in all_medias]
+
+        # Vote: 5 good, 5 bad
+        _vote_clips(client, ids[:5], ids[5:10])
+
+        # Check labeling status — should now return indicator data
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert "smart" in status
+        assert "stable" in status
+        assert "span" in status
+        assert status["smart"]["status"] in ("red", "yellow", "green")
+        assert status["stable"]["status"] in ("red", "yellow", "green")
+        assert status["span"]["status"] in ("red", "yellow", "green")
+
+    def test_full_autopilot_cycle(self, client):
+        """Simulates the complete autopilot flow: create model on dashboard →
+        enter labeling → autopilot good phase → bad phase → hard phase
+        (learned sort + indicators) → new phase (diversity tree) → done.
+
+        This is the main VTSearch workflow where a user goes through all
+        autopilot steps until all indicators are green."""
+        from vtsearch.utils import build_diversity_tree
+
+        # --- Dashboard: Create model with name + examples ---
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Beeping Sounds",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "electronic beeping"}],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Verify model is in registry
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        beep = [m for m in models if m["name"] == "Beeping Sounds"]
+        assert len(beep) == 1
+        assert beep[0]["trainable"] is True
+
+        # Verify trainable model has examples
+        resp = client.get("/api/trainable-models/Beeping Sounds")
+        assert resp.status_code == 200
+        tm = resp.get_json()
+        assert len(tm["examples"]) == 1
+        assert tm["examples"][0]["type"] == "text"
+        assert tm["text_query"] == "electronic beeping"
+
+        # --- Dashboard: Enter labeling (dataset already loaded) ---
+        resp = client.get("/api/medias")
+        assert resp.status_code == 200
+        all_medias = resp.get_json()
+        assert len(all_medias) == app_module.NUM_MEDIAS
+        ids = [m["id"] for m in all_medias]
+
+        # Text sort with model's query (as the Label button does)
+        resp = client.post("/api/sort", json={"text": "electronic beeping"})
+        assert resp.status_code == 200
+        sort_data = resp.get_json()
+        sorted_ids = [r["id"] for r in sort_data["results"]]
+
+        # --- Autopilot Good phase: vote top 3 as good ---
+        good_ids = sorted_ids[:3]
+        _vote_clips(client, good_ids, [])
+
+        # Verify votes
+        resp = client.get("/api/votes")
+        votes = resp.get_json()
+        assert len(votes["good"]) == 3
+        assert len(votes["bad"]) == 0
+
+        # Save labels to trainable model (as frontend does after each vote)
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+        assert resp.get_json()["num_labels"] == 3
+
+        # --- Autopilot Bad phase: vote bottom 4 as bad ---
+        bad_ids = sorted_ids[-4:]
+        _vote_clips(client, [], bad_ids)
+
+        resp = client.get("/api/votes")
+        votes = resp.get_json()
+        assert len(votes["good"]) == 3
+        assert len(votes["bad"]) == 4
+
+        # Save labels again
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+        assert resp.get_json()["num_labels"] == 7
+
+        # --- Autopilot Hard phase: learned sort + vote hard examples ---
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+        learned = resp.get_json()
+        assert len(learned["results"]) == app_module.NUM_MEDIAS
+        assert "threshold" in learned
+
+        # Vote more examples (simulating hard-phase labeling)
+        # Pick unlabeled medias to vote on
+        voted_ids = set(good_ids + bad_ids)
+        unlabeled = [i for i in ids if i not in voted_ids]
+        extra_good = unlabeled[:3]
+        extra_bad = unlabeled[3:6]
+        _vote_clips(client, extra_good, extra_bad)
+
+        # Re-run learned sort (as frontend does after each vote)
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+
+        # Check labeling status (autopilot polls this)
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert status["good_count"] == 6
+        assert status["bad_count"] == 7
+        assert "smart" in status
+        assert "stable" in status
+        assert "span" in status
+        # Indicators should each have a valid status
+        for key in ("smart", "stable", "span"):
+            assert status[key]["status"] in ("red", "yellow", "green")
+
+        # --- Autopilot New phase: build diversity tree + get samples ---
+        build_diversity_tree()
+
+        # Get next diversity sample
+        resp = client.post(
+            "/api/diversity-tree/next",
+            json={"scores": {str(r["id"]): r["score"] for r in learned["results"]},
+                  "threshold": learned["threshold"]},
+        )
+        assert resp.status_code == 200
+        div_data = resp.get_json()
+        assert "id" in div_data
+        assert "diversity_level" in div_data
+        assert "exhausted" in div_data
+
+        # If tree returned a sample, vote on it
+        if div_data["id"] is not None:
+            resp = client.post(
+                f"/api/medias/{div_data['id']}/vote",
+                json={"vote": "good"},
+            )
+            assert resp.status_code == 200
+
+        # Check status again with diversity tree
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert "span" in status
+        assert "fractional_level" in status["span"]
+        assert isinstance(status["span"]["fractional_level"], (int, float))
+
+        # --- Verify model labels persisted through entire workflow ---
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+
+        resp = client.get("/api/trainable-models/Beeping Sounds")
+        assert resp.status_code == 200
+        final_tm = resp.get_json()
+        labels = final_tm["labelset"]["labels"]
+        # Should have all the votes we cast
+        good_labels = [lb for lb in labels if lb["label"] == "good"]
+        bad_labels = [lb for lb in labels if lb["label"] == "bad"]
+        assert len(good_labels) >= 6
+        assert len(bad_labels) >= 7
+
+        # Verify model registry reflects the training count
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        beep = [m for m in models if m["name"] == "Beeping Sounds"]
+        assert len(beep) == 1
+        assert beep[0]["num_training"] >= 13

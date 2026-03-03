@@ -179,14 +179,14 @@ class TestImageClassExtractor:
 
 
 # ---------------------------------------------------------------------------
-# Favorite Extractors API tests
+# Autorun Extractors API tests
 # ---------------------------------------------------------------------------
 
 
-class TestFavoriteExtractors:
+class TestAutorunExtractors:
     def _post_extractor(self, client, name="test-ext"):
         return client.post(
-            "/api/favorite-extractors",
+            "/api/autorun-extractors",
             json={
                 "name": name,
                 "extractor_type": "image_class",
@@ -198,13 +198,13 @@ class TestFavoriteExtractors:
     # -- GET list --
 
     def test_get_empty_list(self, client):
-        resp = client.get("/api/favorite-extractors")
+        resp = client.get("/api/autorun-extractors")
         assert resp.status_code == 200
         assert resp.get_json()["extractors"] == []
 
     def test_get_list_after_add(self, client):
         self._post_extractor(client, "my-extractor")
-        resp = client.get("/api/favorite-extractors")
+        resp = client.get("/api/autorun-extractors")
         data = resp.get_json()
         assert len(data["extractors"]) == 1
         ext = data["extractors"][0]
@@ -221,7 +221,7 @@ class TestFavoriteExtractors:
 
     def test_add_missing_name_returns_400(self, client):
         resp = client.post(
-            "/api/favorite-extractors",
+            "/api/autorun-extractors",
             json={
                 "extractor_type": "image_class",
                 "media_type": "image",
@@ -232,7 +232,7 @@ class TestFavoriteExtractors:
 
     def test_add_missing_extractor_type_returns_400(self, client):
         resp = client.post(
-            "/api/favorite-extractors",
+            "/api/autorun-extractors",
             json={
                 "name": "test",
                 "media_type": "image",
@@ -243,7 +243,7 @@ class TestFavoriteExtractors:
 
     def test_add_missing_media_type_returns_400(self, client):
         resp = client.post(
-            "/api/favorite-extractors",
+            "/api/autorun-extractors",
             json={
                 "name": "test",
                 "extractor_type": "image_class",
@@ -254,7 +254,7 @@ class TestFavoriteExtractors:
 
     def test_add_missing_config_returns_400(self, client):
         resp = client.post(
-            "/api/favorite-extractors",
+            "/api/autorun-extractors",
             json={
                 "name": "test",
                 "extractor_type": "image_class",
@@ -266,28 +266,28 @@ class TestFavoriteExtractors:
     def test_add_multiple(self, client):
         self._post_extractor(client, "ext-a")
         self._post_extractor(client, "ext-b")
-        resp = client.get("/api/favorite-extractors")
+        resp = client.get("/api/autorun-extractors")
         names = {e["name"] for e in resp.get_json()["extractors"]}
         assert names == {"ext-a", "ext-b"}
 
     def test_add_overwrites_existing(self, client):
         self._post_extractor(client, "dup")
         self._post_extractor(client, "dup")
-        resp = client.get("/api/favorite-extractors")
+        resp = client.get("/api/autorun-extractors")
         assert len(resp.get_json()["extractors"]) == 1
 
     # -- DELETE --
 
     def test_delete_extractor(self, client):
         self._post_extractor(client, "to-delete")
-        resp = client.delete("/api/favorite-extractors/to-delete")
+        resp = client.delete("/api/autorun-extractors/to-delete")
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
-        resp = client.get("/api/favorite-extractors")
+        resp = client.get("/api/autorun-extractors")
         assert resp.get_json()["extractors"] == []
 
     def test_delete_nonexistent_returns_404(self, client):
-        resp = client.delete("/api/favorite-extractors/does-not-exist")
+        resp = client.delete("/api/autorun-extractors/does-not-exist")
         assert resp.status_code == 404
 
     # -- RENAME --
@@ -295,18 +295,18 @@ class TestFavoriteExtractors:
     def test_rename_extractor(self, client):
         self._post_extractor(client, "old-name")
         resp = client.put(
-            "/api/favorite-extractors/old-name/rename",
+            "/api/autorun-extractors/old-name/rename",
             json={"new_name": "new-name"},
         )
         assert resp.status_code == 200
         assert resp.get_json()["new_name"] == "new-name"
-        names = [e["name"] for e in client.get("/api/favorite-extractors").get_json()["extractors"]]
+        names = [e["name"] for e in client.get("/api/autorun-extractors").get_json()["extractors"]]
         assert "new-name" in names
         assert "old-name" not in names
 
     def test_rename_nonexistent_returns_400(self, client):
         resp = client.put(
-            "/api/favorite-extractors/ghost/rename",
+            "/api/autorun-extractors/ghost/rename",
             json={"new_name": "anything"},
         )
         assert resp.status_code == 400
@@ -315,7 +315,7 @@ class TestFavoriteExtractors:
         self._post_extractor(client, "ext-a")
         self._post_extractor(client, "ext-b")
         resp = client.put(
-            "/api/favorite-extractors/ext-a/rename",
+            "/api/autorun-extractors/ext-a/rename",
             json={"new_name": "ext-b"},
         )
         assert resp.status_code == 400
@@ -323,7 +323,7 @@ class TestFavoriteExtractors:
     def test_rename_missing_new_name_returns_400(self, client):
         self._post_extractor(client, "some-ext")
         resp = client.put(
-            "/api/favorite-extractors/some-ext/rename",
+            "/api/autorun-extractors/some-ext/rename",
             json={},
         )
         assert resp.status_code == 400
@@ -332,10 +332,10 @@ class TestFavoriteExtractors:
 
     def test_stored_extractor_has_correct_fields(self, client):
         self._post_extractor(client, "field-check")
-        from vtsearch.utils.state import favorite_extractors
+        from vtsearch.utils.state import autorun_extractors
 
-        assert "field-check" in favorite_extractors
-        stored = favorite_extractors["field-check"]
+        assert "field-check" in autorun_extractors
+        stored = autorun_extractors["field-check"]
         assert stored["name"] == "field-check"
         assert stored["extractor_type"] == "image_class"
         assert stored["media_type"] == "image"
@@ -402,13 +402,13 @@ class TestAutoExtract:
     def test_no_extractors_returns_400(self, client):
         resp = client.post("/api/auto-extract")
         assert resp.status_code == 400
-        assert "No favorite extractors" in resp.get_json()["error"]
+        assert "No autorun extractors" in resp.get_json()["error"]
 
     def test_no_matching_media_type_returns_400(self, client):
         # Clips are audio; add an image extractor
-        from vtsearch.utils.state import favorite_extractors
+        from vtsearch.utils.state import autorun_extractors
 
-        favorite_extractors["img-ext"] = {
+        autorun_extractors["img-ext"] = {
             "name": "img-ext",
             "extractor_type": "image_class",
             "media_type": "image",

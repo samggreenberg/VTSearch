@@ -15,52 +15,21 @@ Usage::
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
-import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING
+
+from vtsearch.utils.registry import PluginRegistry
 
 if TYPE_CHECKING:
     from vtsearch.labels.importers.base import LabelImporter
 
-_registry: dict[str, LabelImporter] = {}
+_registry: PluginRegistry[LabelImporter] = PluginRegistry(
+    package="vtsearch.labels.importers",
+    sentinel="LABEL_IMPORTER",
+    label="label importer",
+)
 
-
-def _discover() -> None:
-    """Scan sub-packages for ``LABEL_IMPORTER`` objects and register them."""
-    package_dir = Path(__file__).parent
-    for _, module_name, is_pkg in pkgutil.iter_modules([str(package_dir)]):
-        if not is_pkg:
-            continue
-        try:
-            mod = importlib.import_module(f"vtsearch.labels.importers.{module_name}")
-            importer = getattr(mod, "LABEL_IMPORTER", None)
-            if importer is not None:
-                _registry[importer.name] = importer
-        except Exception as exc:  # pragma: no cover
-            warnings.warn(
-                f"Failed to load label importer '{module_name}': {exc}",
-                stacklevel=2,
-            )
-
-
-def _ensure_discovered() -> None:
-    if not _registry:
-        _discover()
-
-
-def get_label_importer(name: str) -> LabelImporter | None:
-    """Return the registered label importer with *name*, or ``None`` if not found."""
-    _ensure_discovered()
-    return _registry.get(name)
-
-
-def list_label_importers() -> list[LabelImporter]:
-    """Return all registered label importers in discovery order."""
-    _ensure_discovered()
-    return list(_registry.values())
-
+get_label_importer = _registry.get
+list_label_importers = _registry.list
 
 __all__ = [
     "get_label_importer",

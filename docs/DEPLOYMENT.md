@@ -37,7 +37,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 VTSearch downloads four embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for the
-first time (or at startup if `favorite_media_types` is configured in
+first time (or at startup if `autoload_media_types` is configured in
 settings).
 
 | Model | Media type | HuggingFace ID | Approx. size |
@@ -81,10 +81,8 @@ These features require network access only when explicitly used:
 
 | Feature | Network target | Fallback |
 |---------|---------------|----------|
-| YouTube playlist importer | YouTube (via yt-dlp) | Use folder/pickle importer |
-| RSS feed importer | RSS/Atom feed server | Use folder/pickle importer |
 | HTTP archive importer | User-provided URL | Use folder/pickle importer |
-| Webhook exporter | User-provided endpoint | Use file/CSV exporter |
+| Webhook exporter | User-provided endpoint | Use server file exporter |
 
 ### pip install during build
 
@@ -162,10 +160,10 @@ docker run -p 5000:5000 \
 |-----------|--------|---------|
 | Models not cached | **Cannot load any dataset** | Error during model initialization |
 | Demo datasets | Cannot use demo datasets | Download error in web UI |
-| YouTube/RSS/HTTP importers | Those importers fail | Network error in importer |
+| HTTP archive importer | That importer fails | Network error in importer |
 | Webhook exporter | That exporter fails | Connection error on export |
 
-Everything else (folder/pickle import, file/CSV export, ML training,
+Everything else (folder/pickle import, server file export, ML training,
 evaluation, sorting, voting) works fully offline.
 
 ---
@@ -181,13 +179,15 @@ data/
 │   ├── models--laion--clap-htsat-unfused/
 │   ├── models--openai--clip-vit-base-patch32/
 │   ├── models--microsoft--xclip-base-patch32/
-│   └── models--sentence-transformers--e5-base-v2/
+│   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── settings.json                     # User preferences, favorites, thresholds
+├── trainable_models/                 # Persistent trainable model definitions (.json)
+├── settings.json                     # User preferences, autorun config, thresholds
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
 ├── images/                           # Image media files
-└── paragraphs/                       # Text media files
+├── paragraphs/                       # Text media files
+└── documents/                        # Document media files (PDF, DOC, PPT)
 ```
 
 ### What to preserve vs. what's safe to delete
@@ -196,8 +196,9 @@ data/
 |------|-----------|-----|
 | `data/models/` | **Yes** | Re-downloading is slow (~3.1 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
-| `data/settings.json` | **Yes** | User preferences, trained detectors, favorite processors |
-| `data/audio/`, `video/`, `images/`, `paragraphs/` | Depends | Media files from imported datasets; re-import if lost |
+| `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
+| `data/trainable_models/` | **Yes** | Persistent trainable model definitions with labelsets |
+| `data/audio/`, `video/`, `images/`, `paragraphs/`, `documents/` | Depends | Media files from imported datasets; re-import if lost |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
 
@@ -218,16 +219,18 @@ and auto-saved on every change. Schema:
   "swipe_animation": true,
   "show_thumbnails_left": false,
   "show_thumbnails_right": true,
-  "favorite_media_types": [],
-  "favorite_processors": []
+  "autopilot_top_greens": 3,
+  "autopilot_hard_reds": 4,
+  "autoload_media_types": [],
+  "autorun_processors": []
 }
 ```
 
 Notable fields:
 
-- `favorite_media_types` — media types to preload at startup (triggers
+- `autoload_media_types` — media types to preload at startup (triggers
   model downloads if models aren't cached)
-- `favorite_processors` — saved detector/extractor configurations with
+- `autorun_processors` — saved detector/extractor configurations with
   importer name, processor name, and field values
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
 
@@ -320,9 +323,11 @@ requirements.txt              ← Generic (includes all)
 Each plugin has its own `requirements.txt` in its subdirectory:
 
 ```
-vtsearch/media/{audio,image,text,video}/requirements.txt
-vtsearch/datasets/importers/{folder,pickle,http_zip,rss_feed,youtube_playlist,combine_datasets}/requirements.txt
-vtsearch/exporters/{file,csv_file,gui,email_smtp,webhook}/requirements.txt
+vtsearch/media/{audio,image,text,video,document}/requirements.txt
+vtsearch/datasets/importers/{folder,pickle,http_zip,combine_datasets}/requirements.txt
+vtsearch/exporters/{server_json_file,server_csv_file,gui,email_smtp,webhook}/requirements.txt
+vtsearch/labels/importers/{server_json_file,server_csv_file}/requirements.txt
+vtsearch/processors/importers/server_detector_file/requirements.txt
 ```
 
 ### Key dependencies
@@ -338,8 +343,7 @@ vtsearch/exporters/{file,csv_file,gui,email_smtp,webhook}/requirements.txt
 | `ultralytics` | latest | YOLO-based image processing |
 | `laion_clap` | latest | Audio embedding preprocessing |
 | `librosa` | latest | Audio file loading and processing |
-| `feedparser` | latest | RSS feed importer |
-| `yt-dlp` | latest | YouTube playlist importer |
+| `PyMuPDF` | latest | Document (PDF/DOC/PPT) rendering and text extraction |
 
 ---
 
@@ -359,7 +363,7 @@ pre-download models with `./download_models.sh` and set
 **Symptom**: Process killed or `torch.cuda.OutOfMemoryError`.
 
 **Fix**: Load fewer media types simultaneously. Set
-`favorite_media_types` in settings to only the types you need, so unused
+`autoload_media_types` in settings to only the types you need, so unused
 models aren't preloaded. For GPU, ensure adequate VRAM (4+ GB
 recommended).
 
@@ -395,5 +399,5 @@ pip install -r requirements-cpu.txt    # or requirements-gpu.txt
 pip install -r requirements-exporters.txt
 ```
 
-For specific importers (RSS, YouTube), install their individual
+For specific importers or media types, install their individual
 `requirements.txt` as well.

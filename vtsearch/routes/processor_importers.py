@@ -11,7 +11,7 @@ POST /api/processor-importers/import/<importer_name>
 
     The importer returns processor data (weights, threshold, media_type).
     A ``name`` field is required (from form data or JSON body) to save the
-    result as a favorite detector.
+    result as a autorun detector.
 
     Returns::
 
@@ -23,7 +23,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
-from vtsearch.utils import add_favorite_detector
+from vtsearch.utils import add_autorun_detector
 
 processor_importers_bp = Blueprint("processor_importers", __name__)
 
@@ -46,7 +46,7 @@ def get_processor_importers():
 
 @processor_importers_bp.route("/api/processor-importers/import/<importer_name>", methods=["POST"])
 def run_processor_import(importer_name: str):
-    """Run the named processor importer and save the result as a favorite detector.
+    """Run the named processor importer and save the result as a autorun detector.
 
     Accepts ``multipart/form-data`` when the importer has a ``"file"`` field,
     or ``application/json`` for text-only importers.  In both cases the route
@@ -118,7 +118,18 @@ def run_processor_import(importer_name: str):
 
     # Use suggested name from the importer if the user didn't provide one
     # (already checked above that name is non-empty, but importer may suggest)
-    add_favorite_detector(name, media_type, weights, threshold)
+    add_autorun_detector(name, media_type, weights, threshold)
+
+    # Register in the persistent model registry for the dashboard grid.
+    from vtsearch.models.registry import find_by_detector_name, register_model
+
+    if not find_by_detector_name(name):
+        register_model(
+            name=name,
+            media_type=media_type,
+            trainable=False,
+            detector_name=name,
+        )
 
     response: dict = {
         "success": True,

@@ -1,7 +1,5 @@
 import io
-import struct
 import tarfile
-import wave
 import zipfile
 
 import pytest
@@ -338,89 +336,6 @@ class TestLoadEmbedderForClips:
         assert vec.shape[0] > 0
 
 
-class TestExtractArchive:
-    """Unit tests for the zip/tar extraction helper."""
-
-    from vtsearch.datasets.importers.http_zip import _extract_archive
-
-    def _make_wav_bytes(self) -> bytes:
-        """Create a minimal valid WAV file in memory."""
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(44100)
-            samples = struct.pack("<" + "h" * 100, *([0] * 100))
-            wf.writeframes(samples)
-        return buf.getvalue()
-
-    def test_extract_zip(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        zip_path = tmp_path / "test.zip"
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("sounds/tone.wav", wav_data)
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(zip_path, extract_dir)
-        assert (extract_dir / "sounds" / "tone.wav").exists()
-
-    def test_extract_tar_gz(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        tar_path = tmp_path / "test.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as tf:
-            info = tarfile.TarInfo(name="sounds/tone.wav")
-            info.size = len(wav_data)
-            tf.addfile(info, io.BytesIO(wav_data))
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
-        assert (extract_dir / "sounds" / "tone.wav").exists()
-
-    def test_extract_tar_uncompressed(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        wav_data = self._make_wav_bytes()
-        tar_path = tmp_path / "test.tar"
-        with tarfile.open(tar_path, "w") as tf:
-            info = tarfile.TarInfo(name="tone.wav")
-            info.size = len(wav_data)
-            tf.addfile(info, io.BytesIO(wav_data))
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
-        assert (extract_dir / "tone.wav").exists()
-
-    def test_unsupported_format_raises(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        bad_archive = tmp_path / "test.7z"
-        bad_archive.write_bytes(b"not a real archive")
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-        with pytest.raises((ValueError, Exception)):
-            _extract_archive(bad_archive, extract_dir)
-
-    def test_rar_without_rarfile_raises_runtime_error(self, tmp_path):
-        """Attempting RAR extraction without rarfile installed raises RuntimeError."""
-        import sys
-        import unittest.mock as mock
-
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-
-        rar_path = tmp_path / "test.rar"
-        rar_path.write_bytes(b"Rar!\x1a\x07\x00")  # RAR magic bytes (v4)
-        extract_dir = tmp_path / "out"
-        extract_dir.mkdir()
-
-        with mock.patch.dict(sys.modules, {"rarfile": None}):
-            with pytest.raises((RuntimeError, ImportError, Exception)):
-                _extract_archive(rar_path, extract_dir)
-
-
 class TestCaltech101Download:
     """Verify download_caltech101 handles the nested zip→tar.gz structure."""
 
@@ -673,3 +588,72 @@ class TestUCF101SubsetDownload:
                         f"Video demo '{name}' uses category '{cat}' "
                         f"not in UCF-101 subset"
                     )
+
+
+class TestLoadProgressRaceCondition:
+    """Dataset load endpoints must set progress to 'loading' before the thread starts.
+
+    Without this, the frontend's progress poll can see a stale 'idle' from
+    a previous load and prematurely stop polling, causing it to proceed
+    with the old dataset's data and votes (the label-leak bug).
+    """
+
+    def test_load_registered_dataset_sets_progress_before_thread(self, client):
+        """After POST to load a registered dataset, progress must not be 'idle'."""
+        import time
+
+        from vtsearch.utils.progress import get_progress
+
+        # Register the current medias as a dataset entry so we can load it
+        saved = dict(app_module.medias)
+        try:
+            # First, export current medias to a pkl for registration
+            from vtsearch.datasets.loader import export_dataset_to_file
+            from vtsearch.datasets.registry import SAVED_DATASETS_DIR
+
+            SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+            pkl_path = str(SAVED_DATASETS_DIR / "test_race.pkl")
+            from pathlib import Path
+
+            Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
+
+            # Register in the dataset registry
+            from vtsearch.datasets.registry import register_dataset
+
+            entry = register_dataset(
+                name="test_race",
+                media_type="audio",
+                num_items=len(app_module.medias),
+                pkl_path=pkl_path,
+            )
+            dataset_id = entry["id"]
+
+            # Set progress to idle (simulating a previous completed load)
+            from vtsearch.utils.progress import update_progress
+
+            update_progress("idle", "Ready")
+
+            # POST to load the dataset
+            resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
+            assert resp.status_code == 200
+
+            # Immediately check progress — it must NOT be 'idle'
+            progress = get_progress()
+            assert progress["status"] != "idle", (
+                "Progress must be set to 'loading' before the thread starts "
+                "to prevent the frontend from seeing a stale 'idle' state"
+            )
+
+            # Wait for the background thread to finish
+            for _ in range(60):
+                time.sleep(0.1)
+                if get_progress()["status"] == "idle":
+                    break
+        finally:
+            app_module.medias.clear()
+            app_module.medias.update(saved)
+            # Clean up
+            Path(pkl_path).unlink(missing_ok=True)
+            from vtsearch.datasets.registry import unregister_dataset
+
+            unregister_dataset(dataset_id)

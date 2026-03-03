@@ -10,9 +10,12 @@ import numpy as np
 from vtsearch.config import (
     CALTECH101_DOWNLOAD_SIZE_MB,
     CALTECH256_DOWNLOAD_SIZE_MB,
-    CIFAR10_DOWNLOAD_SIZE_MB,
     CLIP_MODEL_ID,
+    EUROSAT_DOWNLOAD_SIZE_MB,
+    FOOD101_DOWNLOAD_SIZE_MB,
     MODELS_CACHE_DIR,
+    OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
     UCSF_IDL_DOWNLOAD_SIZE_MB,
 )
 
@@ -111,6 +114,10 @@ class ImageMediaType(MediaType):
     @property
     def legacy_bytes_keys(self) -> list[str]:
         return ["image_bytes"]
+
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["width", "height"]
 
     # ------------------------------------------------------------------
     # Viewer
@@ -587,7 +594,7 @@ class ImageMediaType(MediaType):
                 source="oxford_flowers_102",
                 slice_start=0,
                 slice_end=80,
-                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a",
@@ -597,7 +604,7 @@ class ImageMediaType(MediaType):
                 source="food101",
                 slice_start=0,
                 slice_end=1000,
-                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+                download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a",
@@ -607,7 +614,7 @@ class ImageMediaType(MediaType):
                 source="eurosat",
                 slice_start=0,
                 slice_end=2700,
-                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+                download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a",
@@ -617,7 +624,7 @@ class ImageMediaType(MediaType):
                 source="stanford_dogs",
                 slice_start=0,
                 slice_end=171,
-                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucsf_documents_a",
@@ -679,7 +686,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -699,12 +706,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -735,7 +742,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -755,12 +762,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -794,7 +801,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -814,12 +821,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -860,7 +867,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}: {img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
                 embedding = self.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -880,12 +887,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": img_path.name,
+                    "filename": f"{category}/{img_path.name}",
                     "category": category,
                     "width": width,
                     "height": height,
                     "origin": demo_origin,
-                    "origin_name": img_path.name,
+                    "origin_name": f"{category}/{img_path.name}",
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -931,6 +938,7 @@ class ImageMediaType(MediaType):
                 img_buffer = _io.BytesIO()
                 pil_image.save(img_buffer, format="PNG")
                 image_bytes = img_buffer.getvalue()
+                rel_name = f"{category}/{page_name}"
                 clips[clip_id] = {
                     "id": clip_id,
                     "type": self.type_id,
@@ -940,12 +948,12 @@ class ImageMediaType(MediaType):
                     "embedding": embedding,
                     "media_bytes": image_bytes,
                     "media_string": None,
-                    "filename": f"{page_name}.png",
+                    "filename": f"{rel_name}.png",
                     "category": category,
                     "width": pil_image.width,
                     "height": pil_image.height,
                     "origin": demo_origin,
-                    "origin_name": page_name,
+                    "origin_name": rel_name,
                 }
                 clip_id += 1
             return None  # bytes are inline
@@ -988,7 +996,7 @@ class ImageMediaType(MediaType):
                 embedding = embed_image_file_from_pil(img)
                 if embedding is None:
                     continue
-                fname = f"{category}_{clip_id}.png"
+                fname = f"{category}/{category}_{clip_id}.png"
                 clips[clip_id] = {
                     "id": clip_id,
                     "type": self.type_id,
@@ -1048,6 +1056,10 @@ class ImageMediaType(MediaType):
             self._model = CLIPModel.from_pretrained(
                 CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
+        # Materialize any tensors left on the ``meta`` device.
+        # ``low_cpu_mem_usage=True`` creates params on ``meta`` first; ignored
+        # checkpoint keys (e.g. position_ids) stay there, causing runtime errors.
+        self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = CLIPProcessor.from_pretrained(
@@ -1079,6 +1091,8 @@ class ImageMediaType(MediaType):
 
             image = image.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.get_image_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
@@ -1096,6 +1110,8 @@ class ImageMediaType(MediaType):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec

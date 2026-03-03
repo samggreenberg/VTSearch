@@ -2,7 +2,9 @@
 
 Validates that the ``_state_lock`` in ``vtsearch.utils.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
-favorite detectors.
+autorun detectors.  Also validates the ``_settings_lock`` in
+``vtsearch.settings`` and the ``_progress_lock`` in
+``vtsearch.models.progress``.
 """
 
 import threading
@@ -18,6 +20,9 @@ from vtsearch.utils import (
     vote_click_times,
 )
 import vtsearch.utils.state as _state
+import vtsearch.utils.state_core as _core
+import vtsearch.settings as _settings_mod
+import vtsearch.models.progress as _progress_mod
 
 
 class TestStateLock:
@@ -87,7 +92,7 @@ class TestToggleVote:
     def test_toggle_off_removes_click_time(self):
         good_votes[1] = None
         vote_click_times[1] = 1
-        _state._click_counter = 1
+        _core._click_counter = 1
         toggle_vote(1, "good")
         assert 1 not in vote_click_times
 
@@ -247,3 +252,114 @@ class TestConcurrentApplyLabel:
                 assert i in good_votes
             else:
                 assert i in bad_votes
+
+
+class TestSettingsLock:
+    """Verify that _settings_lock exists and is an RLock."""
+
+    def test_lock_is_rlock(self):
+        assert isinstance(_settings_mod._settings_lock, type(threading.RLock()))
+
+    def test_lock_is_reentrant(self):
+        """RLock should allow the same thread to acquire it multiple times."""
+        with _settings_mod._settings_lock:
+            with _settings_mod._settings_lock:
+                pass  # should not deadlock
+
+
+class TestConcurrentSettingsAccess:
+    """Verify that concurrent settings reads and writes don't corrupt state."""
+
+    def test_concurrent_get_set_volume(self):
+        """Concurrent get/set on the same setting should not raise."""
+        num_threads = 20
+        errors = []
+
+        def reader():
+            try:
+                for _ in range(50):
+                    _settings_mod.get_volume()
+            except Exception as e:
+                errors.append(e)
+
+        def writer(val):
+            try:
+                for _ in range(50):
+                    _settings_mod.set_volume(val)
+            except Exception as e:
+                errors.append(e)
+
+        threads = []
+        for i in range(num_threads):
+            if i % 2 == 0:
+                threads.append(threading.Thread(target=reader))
+            else:
+                threads.append(threading.Thread(target=writer, args=(i / num_threads,)))
+
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
+        assert not errors
+        # Volume should be a valid float in [0, 1]
+        vol = _settings_mod.get_volume()
+        assert 0.0 <= vol <= 1.0
+
+    def test_concurrent_get_all(self):
+        """Concurrent get_all calls should not raise."""
+        num_threads = 20
+        errors = []
+
+        def worker():
+            try:
+                for _ in range(50):
+                    result = _settings_mod.get_all()
+                    assert isinstance(result, dict)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
+        assert not errors
+
+
+class TestProgressLock:
+    """Verify that _progress_lock exists and is an RLock."""
+
+    def test_lock_is_rlock(self):
+        assert isinstance(_progress_mod._progress_lock, type(threading.RLock()))
+
+    def test_lock_is_reentrant(self):
+        """RLock should allow the same thread to acquire it multiple times."""
+        with _progress_mod._progress_lock:
+            with _progress_mod._progress_lock:
+                pass  # should not deadlock
+
+
+class TestConcurrentProgressCache:
+    """Verify that concurrent progress cache operations don't corrupt state."""
+
+    def test_concurrent_clear_progress_cache(self):
+        """Concurrent clears should not raise."""
+        num_threads = 20
+        errors = []
+
+        def worker():
+            try:
+                for _ in range(50):
+                    _progress_mod.clear_progress_cache()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
+        assert not errors
