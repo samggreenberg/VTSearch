@@ -1,0 +1,1 @@
+# Server JSON file exporter — no additional dependencies beyond core.

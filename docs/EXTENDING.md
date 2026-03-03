@@ -1,14 +1,15 @@
 # Extending VTSearch
 
 This guide explains how to add a new **Data Importer**, **Results Exporter**,
-**Label Importer**, **Processor Importer**, or **Media Type** to VTSearch.
-Each section describes the interface contract, where files go, and how to wire
-up dependencies.
+**Label Importer**, **Processor Importer**, **Media Type**, or **Media
+Converter** to VTSearch. Each section describes the interface contract, where
+files go, and how to wire up dependencies.
 
 All four plugin systems (data importers, results exporters, label importers,
 processor importers) share the same architecture: an abstract base class, a
 field dataclass for UI forms, auto-discovery via `pkgutil`, and CLI support
-auto-derived from field definitions.
+auto-derived from field definitions. Media types and converters use explicit
+registration instead.
 
 ---
 
@@ -19,7 +20,8 @@ auto-derived from field definitions.
 3. [Adding a Label Importer](#adding-a-label-importer)
 4. [Adding a Processor Importer](#adding-a-processor-importer)
 5. [Adding a Media Type](#adding-a-media-type)
-6. [Dependency Management (requirements.txt)](#dependency-management)
+6. [Adding a Media Converter](#adding-a-media-converter)
+7. [Dependency Management (requirements.txt)](#dependency-management)
 
 ---
 
@@ -824,6 +826,88 @@ and render accordingly.
 
 ---
 
+## Adding a Media Converter
+
+Media converters transform content from one media type to another (e.g.
+document pages to images, video to audio). Unlike the four plugin systems
+above, converters use **explicit registration** in
+`vtsearch/converters/__init__.py` — they are not auto-discovered.
+
+### Built-in converters
+
+| Converter | Source → Target | Description |
+|-----------|----------------|-------------|
+| `Document2ImageMediaConverter` | document → image | Render document pages as images |
+| `Document2TextMediaConverter` | document → text | Extract embedded text from documents |
+| `Video2AudioMediaConverter` | video → audio | Extract the audio track from a video |
+| `Video2ImageMediaConverter` | video → image | Sample frames from a video as images |
+
+### File structure
+
+Create a new module in `vtsearch/converters/`:
+
+```
+vtsearch/converters/<source>2<target>.py   # Your converter class
+```
+
+### What to implement
+
+Subclass `MediaConverter` from `vtsearch.converters.base`:
+
+```python
+# vtsearch/converters/audio2text.py
+
+from vtsearch.converters.base import MediaConverter
+
+
+class Audio2TextMediaConverter(MediaConverter):
+    @property
+    def source_type(self) -> str:
+        return "audio"
+
+    @property
+    def target_type(self) -> str:
+        return "text"
+
+    def convert(self, media: dict) -> list[dict]:
+        """Transcribe audio to text.
+
+        Args:
+            media: A media dict with at least "media_bytes" or "media_path".
+
+        Returns:
+            A list of media dicts, each with "filename" and "media_string"
+            keys. Returns an empty list if conversion fails.
+        """
+        # ... transcription logic ...
+        return [{"filename": "transcript.txt", "media_string": transcript}]
+```
+
+### Register the converter
+
+Add an import and export in `vtsearch/converters/__init__.py`:
+
+```python
+from vtsearch.converters.audio2text import Audio2TextMediaConverter
+```
+
+And add it to `__all__`.
+
+### Abstract interface reference
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `source_type` | `str` (property) | The `type_id` of the input media type |
+| `target_type` | `str` (property) | The `type_id` of the output media type |
+| `convert(media)` | `(dict) -> list[dict]` | Convert one media dict into one or more target-type media dicts |
+
+Each returned dict must include a `"filename"` key and the data fields expected
+by the target media type (e.g. `"media_bytes"` for images, `"media_string"` for
+text). The returned dicts do **not** include `"id"`, `"embedding"`, or `"md5"`
+— the caller handles those.
+
+---
+
 ## Dependency Management
 
 VTSearch uses a layered requirements file structure to keep dependencies
@@ -962,3 +1046,10 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Update `export_dataset_to_file()` in `vtsearch/datasets/loader.py` if you use custom clip keys
 - [ ] Add rendering logic in `static/index.html` if the generic viewer isn't sufficient
 - [ ] Test: start the app, import a folder of your media type, verify clips appear and are sortable
+
+### New Media Converter Checklist
+
+- [ ] Create `vtsearch/converters/<source>2<target>.py`
+- [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
+- [ ] Add import and `__all__` entry in `vtsearch/converters/__init__.py`
+- [ ] Test: import a dataset of the source type, convert it, verify the output media dicts are valid
