@@ -633,10 +633,6 @@ video { max-width: 100%; }
 }
 .dashboard-section-title { font-size: 0.8rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
 .dashboard-section-actions { display: flex; gap: 6px; }
-.dashboard-status-bar {
-  padding: 8px 14px; font-size: 0.82rem; color: var(--text-primary);
-  border-bottom: 1px solid var(--border); background: var(--bg-subtle); flex-shrink: 0;
-}
 .dashboard-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; }
 .dashboard-grid { min-height: 0; }
 
