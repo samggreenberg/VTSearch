@@ -1763,6 +1763,9 @@
           }
 
           showMainUI();
+          if (tabAutopilot) {
+            tabAutopilot.click();
+          }
           // Select first media
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
@@ -6423,6 +6426,9 @@
           }
 
           showMainUI();
+          if (_dashboardTrainMode && tabAutopilot) {
+            tabAutopilot.click();
+          }
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
           }
@@ -6441,6 +6447,9 @@
       if (dashSelectedDataset) {
         dashLoadSelectedDataset(() => {
           showMainUI();
+          if (_dashboardTrainMode && tabAutopilot) {
+            tabAutopilot.click();
+          }
           if (medias.length > 0 && !selected) {
             selectMedia(medias[0].id);
           }
