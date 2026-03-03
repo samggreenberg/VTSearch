@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+from unittest.mock import patch, MagicMock
 
 import app as app_module
 from vtsearch.utils import good_votes, bad_votes, medias
@@ -665,11 +666,12 @@ class TestPathTraversalPrevention:
     def test_label_file_sort_rejects_absolute_escape(self, client):
         """Absolute paths outside DATA_DIR must be skipped."""
         buf = self._make_label_file(["/etc/passwd", "/etc/shadow"])
-        resp = client.post(
-            "/api/label-file-sort",
-            data={"file": (buf, "labels.json")},
-            content_type="multipart/form-data",
-        )
+        with patch("vtsearch.routes.sorting.get_clap_model", return_value=(MagicMock(), MagicMock())):
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
         # All paths rejected → too few valid files → 400
         assert resp.status_code == 400
         assert "2 valid" in resp.get_json()["error"] or "loaded 0" in resp.get_json()["error"]
@@ -677,11 +679,12 @@ class TestPathTraversalPrevention:
     def test_label_file_sort_rejects_relative_traversal(self, client):
         """Relative paths that traverse out of DATA_DIR must be skipped."""
         buf = self._make_label_file(["../../etc/passwd", "../../../etc/shadow"])
-        resp = client.post(
-            "/api/label-file-sort",
-            data={"file": (buf, "labels.json")},
-            content_type="multipart/form-data",
-        )
+        with patch("vtsearch.routes.sorting.get_clap_model", return_value=(MagicMock(), MagicMock())):
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
         assert resp.status_code == 400
 
     # -- /api/autorun-detectors/import-labels --------------------------------
