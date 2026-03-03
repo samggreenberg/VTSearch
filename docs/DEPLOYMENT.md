@@ -326,6 +326,8 @@ Each plugin has its own `requirements.txt` in its subdirectory:
 vtsearch/media/{audio,image,text,video,document}/requirements.txt
 vtsearch/datasets/importers/{folder,pickle,http_zip,combine_datasets}/requirements.txt
 vtsearch/exporters/{server_json_file,server_csv_file,gui,email_smtp,webhook}/requirements.txt
+vtsearch/labels/importers/{server_json_file,server_csv_file}/requirements.txt
+vtsearch/processors/importers/server_detector_file/requirements.txt
 ```
 
 ### Key dependencies

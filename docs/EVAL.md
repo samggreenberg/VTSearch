@@ -43,6 +43,10 @@ python -m vtsearch.eval [OPTIONS]
 | `--output FILE` | Write JSON results to FILE | none |
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
 | `--no-plot` | Disable plot generation | off |
+| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
+| `--safe-thresholds` | Blend cross-calibration threshold with GMM for robustness | off |
+| `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
+| `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
 | `--list` | List available eval datasets and exit | — |
 
 ### Examples

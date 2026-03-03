@@ -927,8 +927,13 @@ requirements.txt              # Core deps + includes per-media + per-importer + 
 │   └── vtsearch/datasets/importers/combine_datasets/requirements.txt
 ├── requirements-exporters.txt          # Aggregates all exporter deps
 │   ├── vtsearch/exporters/gui/requirements.txt
+│   ├── vtsearch/exporters/server_json_file/requirements.txt
+│   ├── vtsearch/exporters/server_csv_file/requirements.txt
 │   ├── vtsearch/exporters/email_smtp/requirements.txt
 │   └── vtsearch/exporters/webhook/requirements.txt
+├── vtsearch/labels/importers/server_json_file/requirements.txt
+├── vtsearch/labels/importers/server_csv_file/requirements.txt
+├── vtsearch/processors/importers/server_detector_file/requirements.txt
 requirements-cpu.txt          # CPU-specific pins (lists packages INLINE)
 requirements-gpu.txt          # GPU-specific (minimal, includes importers)
 requirements-dev.txt          # Dev tools (pytest)

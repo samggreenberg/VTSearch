@@ -258,6 +258,17 @@ GET /api/votes
 }
 ```
 
+### Clear votes
+
+```
+POST /api/votes/clear
+```
+
+Clears all good/bad votes without clearing the loaded dataset. Used by the
+Label flow to reset votes before importing a model's labelset.
+
+→ `{"ok": true}`
+
 ### Text-sort suggestions
 
 ```
