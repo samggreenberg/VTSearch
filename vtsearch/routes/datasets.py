@@ -20,6 +20,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
+from vtsearch.datasets.loader import load_dataset_from_pickle
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
@@ -503,16 +504,13 @@ def load_registered_dataset(dataset_id: str):
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
-    importer = get_importer("pickle")
-    if importer is None:
-        return jsonify({"error": "pickle importer not available"}), 500
-
     def load_task():
         try:
             clear_dataset()
             _reg_set_loaded(None)
             gc.collect()
-            importer.run({"pkl_path": pkl_path}, medias)
+            update_progress("loading", "Loading dataset from file...", 0, 0)
+            load_dataset_from_pickle(Path(pkl_path), medias)
             collapse_duplicates(medias)
             build_diversity_tree()
             _reg_set_loaded(dataset_id)
@@ -629,10 +627,31 @@ def _load_from_origin(source: dict):
         pkl_path = params.get("path", "")
         if not pkl_path or not Path(pkl_path).is_file():
             return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
-        importer = get_importer("pickle")
-        if importer is None:
-            return jsonify({"error": "pickle importer not available"}), 500
-        _run_importer_in_background(importer, {"pkl_path": pkl_path})
+
+        def load_pkl_task():
+            try:
+                clear_dataset()
+                gc.collect()
+                update_progress("loading", "Loading dataset from file...", 0, 0)
+                load_dataset_from_pickle(Path(pkl_path), medias)
+                origin = {"importer": "pickle", "params": params}
+                _set_clip_origins(medias, origin)
+                collapse_duplicates(medias)
+                build_diversity_tree()
+                origin_str = _origin_to_str(origin)
+                _auto_register_dataset(origin_str=origin_str, source=origin)
+                _load_embedder_for_clips()
+            except MemoryError:
+                medias.clear()
+                gc.collect()
+                update_progress(
+                    "idle", "", 0, 0,
+                    "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                )
+            except Exception as e:
+                update_progress("idle", "", 0, 0, str(e))
+
+        threading.Thread(target=load_pkl_task, daemon=True).start()
         return jsonify({"ok": True, "message": "Loading started"})
 
     if importer_name == "folder":
