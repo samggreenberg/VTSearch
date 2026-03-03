@@ -17,6 +17,7 @@ from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder
+from vtsearch.utils.url_validation import validate_url
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -131,6 +132,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
+        validate_url(url)
         media_type = field_values.get("media_type", "sounds")
 
         DATA_DIR.mkdir(exist_ok=True)
@@ -166,6 +168,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     def _download_and_extract(self, field_values: dict[str, Any]) -> Path:
         """Download and extract the archive, returning the extraction dir."""
         url = field_values["url"]
+        validate_url(url)
 
         DATA_DIR.mkdir(exist_ok=True)
         progress = _default_progress()
