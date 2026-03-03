@@ -1676,14 +1676,15 @@
       // Build the status text: message + optional ETA
       let statusText = progress.message || "Loading...";
 
-      if (progress.pct != null && dashProgressFill) {
+      if (progress.total > 0 && dashProgressFill) {
+        const pct = Math.round((progress.current / progress.total) * 100);
         dashProgressFill.classList.remove("indeterminate");
-        dashProgressFill.style.width = `${progress.pct}%`;
-        if (dashProgressText) dashProgressText.textContent = `${progress.pct}%`;
+        dashProgressFill.style.width = `${pct}%`;
+        if (dashProgressText) dashProgressText.textContent = `${pct}%`;
 
         // ETA calculation during embedding phase
         const now = Date.now();
-        if (progress.status === "embedding" && progress.total > 0) {
+        if (progress.status === "embedding") {
           if (!dashEtaState || dashEtaState.total !== progress.total) {
             dashEtaState = { startTime: now, startCurrent: progress.current, total: progress.total };
           }
@@ -1697,6 +1698,11 @@
         } else {
           dashEtaState = null;
         }
+      } else if (dashProgressFill) {
+        dashProgressFill.classList.add("indeterminate");
+        dashProgressFill.style.width = "0%";
+        if (dashProgressText) dashProgressText.textContent = "";
+        dashEtaState = null;
       }
 
       if (dashProgressMessage) {
