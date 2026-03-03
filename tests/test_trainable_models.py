@@ -319,3 +319,71 @@ class TestSaveLabels:
             assert len(labels) == 1
         finally:
             medias[first_id] = original
+
+
+class TestLabelVoteIsolation:
+    """Clearing votes before importing a model's labels prevents cross-contamination."""
+
+    def test_clear_votes_before_import_prevents_leakage(self, client):
+        """Votes from Model A must not persist into a Model B label session.
+
+        Simulates the Label-button flow: clear votes, then import a model's
+        labels.  Without the clear, votes from a prior session leak in.
+        """
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create two trainable models
+        client.post("/api/trainable-models", json={"name": "Model A", "text_query": "a"})
+        client.post("/api/trainable-models", json={"name": "Model B", "text_query": "b"})
+
+        # Simulate labeling with Model A: vote on ids[0] and ids[1]
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post("/api/trainable-models/Model%20A/labels")  # save 2 labels
+
+        # Now clear votes (as the Label button should do) and import Model B's labels
+        client.post("/api/votes/clear")
+        assert len(good_votes) == 0
+        assert len(bad_votes) == 0
+
+        # Model B has no labels, so import is a no-op — votes should remain empty
+        model_b = client.get("/api/trainable-models/Model%20B").get_json()
+        assert len(model_b["labelset"]["labels"]) == 0
+
+        client.post("/api/labels/import", json={"labels": model_b["labelset"]["labels"]})
+        assert len(good_votes) == 0, "Model A's votes should not leak into Model B's session"
+        assert len(bad_votes) == 0
+
+    def test_import_after_clear_only_has_model_labels(self, client):
+        """After clearing + importing, only the target model's labels are active."""
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create model and label 2 items
+        client.post("/api/trainable-models", json={"name": "Target", "text_query": "t"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post("/api/trainable-models/Target/labels")
+
+        # Add extra votes that DON'T belong to the model (simulating stale state)
+        client.post(f"/api/medias/{ids[2]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[3]}/vote", json={"vote": "bad"})
+        assert len(good_votes) == 2  # ids[0] + ids[2]
+        assert len(bad_votes) == 2  # ids[1] + ids[3]
+
+        # Clear votes, then import only Target's labels
+        client.post("/api/votes/clear")
+        target_data = client.get("/api/trainable-models/Target").get_json()
+        client.post("/api/labels/import", json={"labels": target_data["labelset"]["labels"]})
+
+        # Should only have the 2 labels from Target, not the 4 from before
+        assert len(good_votes) + len(bad_votes) == 2
+        assert ids[2] not in good_votes, "Stale vote should be gone after clear+import"
+        assert ids[3] not in bad_votes, "Stale vote should be gone after clear+import"
