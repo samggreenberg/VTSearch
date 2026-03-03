@@ -182,11 +182,8 @@ header h1 { font-size: 1.3rem; color: var(--accent); }
 .burger-btn:hover { background: var(--bg-hover); border-color: var(--accent); }
 .burger-btn span { display: block; width: 18px; height: 2px; background: var(--text-secondary); transition: all 0.2s; }
 .burger-btn:hover span { background: var(--accent); }
-.burger-dropdown { position: absolute; top: 40px; left: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow-dropdown); min-width: 220px; z-index: 1000; display: none; }
+.burger-dropdown { position: absolute; top: 40px; left: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow-dropdown); min-width: 220px; z-index: 1000; display: none; padding: 8px 0; }
 .burger-dropdown.show { display: block; }
-.burger-section { padding: 8px 0; border-bottom: 1px solid var(--border); }
-.burger-section:last-child { border-bottom: none; }
-.burger-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 16px 4px; }
 .burger-item { padding: 10px 16px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; gap: 8px; }
 .burger-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .burger-status { font-size: 0.7rem; color: var(--text-dim); padding: 4px 16px 8px; }
