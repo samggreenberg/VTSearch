@@ -142,3 +142,60 @@ class TestInterceptTqdmProgress:
             bar.close()
 
         assert all(s == "loading" for s in calls)
+
+
+class TestProgressTrackerUpdate:
+    """Tests for ProgressTracker.update() merge semantics."""
+
+    def test_update_preserves_unspecified_extra_fields(self):
+        """Calling update() without an extra field should not reset it."""
+        from vtsearch.utils.progress import ProgressTracker
+
+        tracker = ProgressTracker(extra_fields={"error": None, "staging_result": None})
+        tracker.update("loading", error="something broke")
+        # A subsequent update that doesn't mention 'error' should preserve it
+        tracker.update("loading", message="still going")
+        snap = tracker.get()
+        assert snap["error"] == "something broke"
+
+    def test_update_can_explicitly_overwrite_extra_field(self):
+        """Passing an extra field explicitly should overwrite the previous value."""
+        from vtsearch.utils.progress import ProgressTracker
+
+        tracker = ProgressTracker(extra_fields={"error": None})
+        tracker.update("loading", error="first error")
+        tracker.update("loading", error="second error")
+        assert tracker.get()["error"] == "second error"
+
+    def test_update_can_explicitly_clear_extra_field(self):
+        """Passing None for an extra field should clear it."""
+        from vtsearch.utils.progress import ProgressTracker
+
+        tracker = ProgressTracker(extra_fields={"error": None})
+        tracker.update("loading", error="oops")
+        tracker.update("idle", error=None)
+        assert tracker.get()["error"] is None
+
+    def test_update_preserves_multiple_extra_fields_independently(self):
+        """Each extra field is preserved independently when not specified."""
+        from vtsearch.utils.progress import ProgressTracker
+
+        tracker = ProgressTracker(extra_fields={"error": None, "staging_result": None})
+        tracker.update("idle", staging_result={"path": "/tmp/x"})
+        tracker.update("loading")
+        snap = tracker.get()
+        assert snap["staging_result"] == {"path": "/tmp/x"}
+        assert snap["error"] is None  # was never set, stays at default
+
+    def test_free_function_preserves_extra_fields(self):
+        """The update_progress() wrapper should also preserve unspecified extras."""
+        from vtsearch.utils.progress import dataset_progress, get_progress, update_progress
+
+        # Set error via the free function
+        update_progress("loading", error="whoops")
+        # Update without mentioning error
+        update_progress("loading", message="progress")
+        snap = get_progress()
+        assert snap["error"] == "whoops"
+        # Clean up for other tests
+        dataset_progress.update("idle", error=None, staging_result=None)
