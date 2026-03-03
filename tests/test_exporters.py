@@ -634,3 +634,28 @@ class TestExportEndpoint:
         )
         # exporter_name will be empty → 400
         assert res.status_code == 400
+
+    def test_path_traversal_absolute_rejected(self, client):
+        """Absolute paths outside the allowed directory must be rejected."""
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": "/etc/passwd"},
+                "results": SAMPLE_RESULTS,
+            },
+        )
+        assert res.status_code == 400
+        assert "outside" in res.get_json()["error"].lower() or "must be within" in res.get_json()["error"].lower()
+
+    def test_path_traversal_relative_rejected(self, client):
+        """Relative paths that escape the base directory must be rejected."""
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": "../../../etc/shadow"},
+                "results": SAMPLE_RESULTS,
+            },
+        )
+        assert res.status_code == 400

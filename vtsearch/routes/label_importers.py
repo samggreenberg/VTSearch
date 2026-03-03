@@ -35,6 +35,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
+from vtsearch.utils.paths import validate_server_filepath
 from vtsearch.utils import (
     apply_label,
     build_media_lookup,
@@ -139,6 +140,13 @@ def run_label_import(importer_name: str):
             jsonify({"error": f"Missing required field(s): {missing_fields}", "missing_fields": missing_fields}),
             400,
         )
+
+    # Validate server file paths to prevent path traversal
+    if "filepath" in field_values and str(field_values["filepath"]).strip():
+        try:
+            validate_server_filepath(str(field_values["filepath"]))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     try:
         label_entries = importer.run(field_values)
