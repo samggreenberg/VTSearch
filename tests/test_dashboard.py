@@ -109,16 +109,16 @@ class TestDashboardHtmlPresent:
         resp = client.get("/")
         assert resp.status_code == 200
         assert b"dashboard-view" in resp.data
-        assert b"My Datasets" in resp.data
-        assert b"My Models" in resp.data
+        assert b"Datasets" in resp.data
+        assert b"Models" in resp.data
 
     def test_dashboard_menu_item(self, client):
         """The burger menu should have a Dashboard entry."""
         resp = client.get("/")
         assert b"menu-dashboard" in resp.data
 
-    def test_train_and_run_buttons(self, client):
-        """Train and Run buttons should be present and disabled by default."""
+    def test_label_and_detect_buttons(self, client):
+        """Label and Detect buttons should be present and disabled by default."""
         resp = client.get("/")
-        assert b"dashboard-train-btn" in resp.data
-        assert b"dashboard-run-btn" in resp.data
+        assert b"dash-label-btn" in resp.data
+        assert b"dash-detect-btn" in resp.data

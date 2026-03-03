@@ -4,9 +4,9 @@ VTSearch provides a CLI workflow for running detectors on datasets and exporting
 
 ## Auto-detect (run detectors on a dataset)
 
-Score every item in a dataset with your favorite processors (detectors) and output the items predicted as "Good."
+Score every item in a dataset with your autorun processors (detectors) and output the items predicted as "Good."
 
-Detectors are specified via a **settings file** (`--settings`) that lists favorite processors. Each processor is a recipe referencing a processor importer (e.g. `detector_file` for a pre-trained detector JSON, or `label_file` to train a detector from labeled media). See below for how to create one.
+Detectors are specified via a **settings file** (`--settings`) that lists autorun processors. Each processor is a recipe referencing a processor importer (e.g. `server_detector_file` for a pre-trained detector JSON on disk). See below for how to create one.
 
 **From a pickle file:**
 
@@ -14,59 +14,50 @@ Detectors are specified via a **settings file** (`--settings`) that lists favori
 python app.py --autodetect --dataset path/to/dataset.pkl --settings settings.json
 ```
 
-**From any supported data source** (folder, HTTP archive, RSS feed, YouTube playlist):
+**From any supported data source** (folder, HTTP archive):
 
 ```bash
 python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings settings.json
-python app.py --autodetect --importer http_zip --url https://example.com/data.zip --settings settings.json
-python app.py --autodetect --importer rss_feed --url https://example.com/feed.xml --settings settings.json
-python app.py --autodetect --importer youtube_playlist --url https://youtube.com/playlist?list=... --settings settings.json
+python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_zip`, `rss_feed`, `youtube_playlist`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them (e.g. `--max-episodes` for RSS, `--max-videos` for YouTube).
+Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them.
+
+**Chunked loading** — for large datasets, use `--chunk-size N` to process in batches to limit memory:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-size 1000
+python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings settings.json --chunk-size 500
+```
 
 **Exporting results** — by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
-python app.py --autodetect --dataset data.pkl --settings settings.json --exporter local_json_file --filepath results.json
-python app.py --autodetect --dataset data.pkl --settings settings.json --exporter local_csv_file --filepath results.csv
+python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_json_file --filepath results.json
+python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_csv_file --filepath results.csv
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter webhook --url https://example.com/hook
 ```
 
-Available exporters: `local_json_file` (JSON to local file), `server_json_file` (JSON to server), `local_csv_file` (CSV to local file), `server_csv_file` (CSV to server), `webhook` (HTTP POST), `email_smtp`, `gui` (default — print to console).
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST), `email_smtp`, `gui` (default — print to console).
 
 **How to get the files:**
 
 - **Dataset file** — Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file** — A JSON file listing favorite processors. Each processor references a processor importer and its field values. Example:
+- **Settings file** — A JSON file listing autorun processors. Each processor references a processor importer and its field values. Example:
 
 ```json
 {
-  "favorite_processors": [
+  "autorun_processors": [
     {
       "processor_name": "my detector",
-      "processor_importer": "detector_file",
-      "field_values": { "file": "path/to/detector.json" }
+      "processor_importer": "server_detector_file",
+      "field_values": { "filepath": "/path/to/detector.json" }
     }
   ]
 }
 ```
 
-To use a labelset (labeled media) as a detector, use the `label_file` processor importer — VTSearch will load the referenced media clips, compute their embeddings, train a model, and use that as a detector:
-
-```json
-{
-  "favorite_processors": [
-    {
-      "processor_name": "trained from labels",
-      "processor_importer": "label_file",
-      "field_values": { "file": "path/to/labels.json" }
-    }
-  ]
-}
-```
-
-- **Detector file** — In the web UI, vote on some items, then export a detector from the sorting panel. Save the returned JSON to a file. You can also use a favorite detector exported via the API (`POST /api/detector/export`).
+- **Detector file** — In the web UI, vote on some items, then export a detector from the sorting panel. Save the returned JSON to a file. You can also use an autorun detector exported via the API (`POST /api/detector/export`).
 
 **Example output:**
 

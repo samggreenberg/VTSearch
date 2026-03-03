@@ -211,6 +211,14 @@ def rename_trainable_model(name: str):
     if new_path != old_path:
         old_path.unlink(missing_ok=True)
 
+    # Update the model registry entry that references this trainable model
+    from vtsearch.models.registry import find_by_trainable_model_name, rename_model, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        update_model(reg_entry["id"], trainable_model_name=new_name)
+        rename_model(reg_entry["id"], new_name)
+
     return jsonify({"success": True, "old_name": name, "new_name": new_name})
 
 
@@ -271,8 +279,147 @@ def save_trainable_model_labels(name: str):
     data["labelset"] = labelset.to_dict()
     _write_model(path, data)
 
+    # Also update the model registry entry if one exists
+    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        update_model(reg_entry["id"], num_training=len(labelset))
+
     return jsonify({
         "success": True,
         "name": name,
         "num_labels": len(labelset),
     })
+
+
+# ---------------------------------------------------------------------------
+# Model registry endpoints
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route("/api/models/registry")
+def list_registered_models():
+    """Return all registered models with their loaded state."""
+    from vtsearch.models.registry import get_loaded_id, list_models
+
+    entries = list_models()
+    loaded_id = get_loaded_id()
+    for entry in entries:
+        entry["loaded"] = entry["id"] == loaded_id
+    return jsonify({"models": entries})
+
+
+@trainable_models_bp.route("/api/models/registry", methods=["POST"])
+def register_model_route():
+    """Register a new model in the model registry.
+
+    Expects JSON::
+
+        {
+            "name": "Dog Barks",
+            "media_type": "audio",
+            "trainable": true,
+            "text_query": "dog barking sounds"
+        }
+    """
+    from vtsearch.models.registry import register_model
+
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get("name", "").strip()
+    media_type = data.get("media_type", "").strip()
+    trainable = data.get("trainable", True)
+    text_query = data.get("text_query", "")
+    detector_name = data.get("detector_name", "")
+    trainable_model_name = data.get("trainable_model_name", "")
+
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
+    # If trainable, also create the trainable model file if needed
+    if trainable and not trainable_model_name:
+        trainable_model_name = name
+        tm_path = _model_path(name)
+        if not tm_path.exists():
+            examples = []
+            if text_query:
+                examples = [{"type": "text", "value": text_query}]
+            model_data = {
+                "name": name,
+                "text_query": text_query,
+                "media_type": media_type or "any",
+                "examples": examples,
+                "created_at": time.time(),
+                "labelset": {"labels": []},
+            }
+            _write_model(tm_path, model_data)
+
+    entry = register_model(
+        name=name,
+        media_type=media_type or "any",
+        trainable=trainable,
+        text_query=text_query,
+        detector_name=detector_name,
+        trainable_model_name=trainable_model_name,
+    )
+    return jsonify({"ok": True, "model": entry}), 201
+
+
+@trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])
+def delete_registered_model(model_id: str):
+    """Remove a model from the registry."""
+    from vtsearch.models.registry import get_model, unregister_model
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+
+    # Also clean up the underlying trainable model file
+    tm_name = entry.get("trainable_model_name", "")
+    if tm_name:
+        tm_path = _model_path(tm_name)
+        if tm_path.exists():
+            tm_path.unlink(missing_ok=True)
+
+    # Clean up the autorun detector if any
+    det_name = entry.get("detector_name", "")
+    if det_name:
+        from vtsearch.utils import remove_autorun_detector
+
+        remove_autorun_detector(det_name)
+
+    unregister_model(model_id)
+    return jsonify({"ok": True})
+
+
+@trainable_models_bp.route("/api/models/registry/<model_id>/rename", methods=["PUT"])
+def rename_registered_model(model_id: str):
+    """Rename a registered model."""
+    from vtsearch.models.registry import get_model, rename_model
+
+    data = request.get_json(force=True, silent=True) or {}
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return jsonify({"error": "name is required"}), 400
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+
+    # Rename the underlying trainable model file if applicable
+    tm_name = entry.get("trainable_model_name", "")
+    if tm_name:
+        old_path = _model_path(tm_name)
+        tm_data = _read_model(old_path)
+        if tm_data:
+            new_path = _model_path(new_name)
+            tm_data["name"] = new_name
+            _write_model(new_path, tm_data)
+            if new_path != old_path:
+                old_path.unlink(missing_ok=True)
+        from vtsearch.models.registry import update_model
+
+        update_model(model_id, trainable_model_name=new_name)
+
+    rename_model(model_id, new_name)
+    return jsonify({"ok": True, "name": new_name})

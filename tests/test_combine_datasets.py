@@ -383,7 +383,7 @@ class TestCombineEndpoint:
             "/api/dataset/combine",
             json={"datasets": ["/nonexistent_a.pkl", "/nonexistent_b.pkl"]},
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     def test_accepts_valid_request(self, client, tmp_path):
         """A valid request returns 200 with ok=True."""

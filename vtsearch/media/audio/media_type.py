@@ -452,6 +452,8 @@ class AudioMediaType(MediaType):
             self._model = ClapModel.from_pretrained(
                 CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
+        # Materialize any tensors left on the ``meta`` device.
+        self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLAP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
@@ -481,6 +483,8 @@ class AudioMediaType(MediaType):
             truncation=True,
         )
         self._on_progress("loading", "Warming up audio pipeline: running model…", 3, 3)
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self._model.audio_model(**inputs)
             self._model.audio_projection(outputs.pooler_output)
@@ -503,6 +507,8 @@ class AudioMediaType(MediaType):
                 max_length=480000,
                 truncation=True,
             )
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.audio_model(**inputs)
                 embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
@@ -520,6 +526,8 @@ class AudioMediaType(MediaType):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model.text_model(**inputs)
                 text_vec = self._model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]

@@ -16,25 +16,19 @@
       <span aria-hidden="true"></span>
     </button>
     <div class="burger-dropdown" id="burger-dropdown" role="menu" aria-label="Main menu">
-      <div class="burger-section" role="group" aria-label="Dataset">
-        <div class="burger-section-title" id="menu-section-dataset">Dataset</div>
-        <div class="burger-item" id="menu-dataset-change" role="menuitem" tabindex="-1">Change Dataset</div>
-      </div>
       <div class="burger-section" role="group" aria-label="Labels">
         <div class="burger-section-title" id="menu-section-labels">Labels</div>
         <div class="burger-item disabled" id="menu-labels-import" role="menuitem" tabindex="-1">Import Labels</div>
-        <div class="burger-item disabled" id="menu-labels-export" role="menuitem" tabindex="-1">Export Labels</div>
         <div class="burger-status" id="menu-labels-status" aria-live="polite"></div>
       </div>
       <div class="burger-section" role="group" aria-label="Detector">
         <div class="burger-section-title" id="menu-section-detector">Detector</div>
         <div class="burger-item disabled" id="menu-detector-import" role="menuitem" tabindex="-1">Load Sort</div>
-        <div class="burger-item disabled" id="menu-detector-export" role="menuitem" tabindex="-1">Export Detector</div>
         <div class="burger-status" id="menu-detector-status" aria-live="polite"></div>
       </div>
       <div class="burger-section">
         <div class="burger-item" id="menu-dashboard" role="menuitem" tabindex="-1">Dashboard</div>
-        <div class="burger-item" id="menu-settings">Settings</div>
+        <div class="burger-item" id="menu-settings" role="menuitem" tabindex="-1">Settings</div>
       </div>
     </div>
   </nav>
@@ -128,24 +122,31 @@
         <!-- Dataset grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Dataset</span>
+            <span class="dashboard-section-title">Datasets</span>
             <div class="dashboard-section-actions">
-              <button class="btn-sm" id="dash-load-file-btn">Load File</button>
-              <button class="btn-sm" id="dash-change-dataset-btn" style="display:none">Change</button>
+              <button class="btn-sm" id="dash-add-dataset-btn">+</button>
             </div>
           </div>
           <div id="dash-dataset-status" class="dashboard-status-bar" style="display:none"></div>
           <div class="dashboard-grid-wrap">
-            <div id="dash-dataset-tabs" class="demo-tab-bar"></div>
-            <div id="dash-dataset-grid" class="dashboard-grid demo-content-area"></div>
+            <div id="dash-dataset-grid" class="dashboard-grid"></div>
+            <!-- In-grid progress bar for dataset loading -->
+            <div class="dataset-progress dash-grid-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
+              <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+                <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
+              </div>
+              <div class="progress-message" id="dash-progress-message">Loading...</div>
+              <div class="progress-eta" id="dash-progress-eta"></div>
+            </div>
           </div>
         </div>
         <!-- Model grid -->
         <div class="dashboard-section">
           <div class="dashboard-section-header">
-            <span class="dashboard-section-title">Model</span>
+            <span class="dashboard-section-title">Models</span>
             <div class="dashboard-section-actions">
-              <button class="btn-sm" id="dash-add-model-btn">Add</button>
+              <button class="btn-sm" id="dash-add-model-btn">+</button>
             </div>
           </div>
           <div class="dashboard-grid-wrap">
@@ -155,16 +156,7 @@
       </div>
       <div class="dashboard-actions">
         <button class="dashboard-action-btn" id="dash-label-btn" disabled>Label</button>
-        <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Detect</button>
-      </div>
-      <!-- Reuse the progress bar for dataset loading within the dashboard -->
-      <div class="dataset-progress" id="dash-progress" style="display:none" role="status" aria-live="polite">
-        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
-          <div class="progress-text" id="dash-progress-text" aria-hidden="true">0%</div>
-        </div>
-        <div class="progress-message" id="dash-progress-message">Loading...</div>
-        <div class="progress-eta" id="dash-progress-eta"></div>
+        <button class="dashboard-action-btn secondary" id="dash-detect-btn" disabled>Find</button>
       </div>
       <input type="file" id="dash-file-input" accept=".pkl" style="display:none">
     </div>
@@ -385,6 +377,21 @@
   </div>
 </div>
 
+<!-- Dataset Importer Picker Modal -->
+<div id="dataset-importer-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dataset-importer-modal-title">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 id="dataset-importer-modal-title">Add Dataset</h2>
+      <button class="modal-close" id="dataset-importer-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="dataset-importer-list"></div>
+      <div id="dataset-importer-form" style="display:none"></div>
+      <button id="dataset-importer-back" aria-label="Back to importer list" class="btn-sm" style="display:none; margin-top:12px; padding:6px 14px;">&#8592; Back</button>
+    </div>
+  </div>
+</div>
+
 <!-- Label Importer Picker Modal -->
 <div id="label-importer-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="label-importer-modal-title">
   <div class="modal-content" style="max-width: 600px;">
@@ -523,11 +530,11 @@
 </div>
 
 <!-- Settings Modal -->
-<div id="settings-modal" class="modal">
+<div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header">
-      <h2>Settings</h2>
-      <button class="modal-close" id="settings-modal-close">&times;</button>
+      <h2 id="settings-modal-title">Settings</h2>
+      <button class="modal-close" id="settings-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <div class="settings-columns">
@@ -566,7 +573,7 @@
             </div>
           </div>
         </div>
-        <!-- Right column: Calibration + Favorite Media Types -->
+        <!-- Right column: Calibration + Autoload Media Types -->
         <div>
           <!-- Calibration -->
           <div class="settings-section">
@@ -596,9 +603,9 @@
               <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
             </div>
           </div>
-          <!-- Favorite Media Types -->
+          <!-- Autoload Media Types -->
           <div class="settings-section">
-            <div class="settings-section-title">Favorite Media Types</div>
+            <div class="settings-section-title">Autoload Media Types</div>
             <div class="settings-row">
               <label for="fav-mt-audio" class="settings-label">Audio</label>
               <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
@@ -629,6 +636,9 @@
   </div>
 </div>
 
+<script src="/static/dialogs.js"></script>
+<script src="/static/charts.js"></script>
+<script src="/static/results.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

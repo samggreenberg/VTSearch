@@ -21,8 +21,8 @@ which pieces you need and how to pull them out.
 ## What VTSearch does
 
 VTSearch is a media-explorer web app for browsing, voting on, and
-semantically sorting collections of audio, images, text, or video.  It
-combines:
+semantically sorting collections of audio, images, text, video, or
+documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), CLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search.
@@ -44,7 +44,7 @@ VTSearch/
 │   ├── config.py                   Constants (paths, model IDs, rates)
 │   ├── medias.py                   Test media generation & embedding cache
 │   ├── cli.py                      CLI autodetect workflow
-│   ├── settings.py                 Persistent settings & favorite processors
+│   ├── settings.py                 Persistent settings & autorun processors
 │   │
 │   ├── media/                      Media type registry + plugins
 │   │   ├── base.py                 MediaType ABC, MediaResponse, Processor, Detector, Localizer, Extractor, MediaClipper
@@ -52,7 +52,15 @@ VTSearch/
 │   │   ├── audio/media_type.py     CLAP embeddings
 │   │   ├── image/media_type.py     CLIP embeddings
 │   │   ├── text/media_type.py      E5 embeddings
-│   │   └── video/media_type.py     X-CLIP embeddings
+│   │   ├── video/media_type.py     X-CLIP embeddings
+│   │   └── document/media_type.py  Document handling (no embedder; convert first)
+│   │
+│   ├── converters/                 Media type converters
+│   │   ├── base.py                 MediaConverter ABC
+│   │   ├── document2image.py       Render document pages as images
+│   │   ├── document2text.py        Extract text from documents
+│   │   ├── video2audio.py          Extract audio track from video
+│   │   └── video2image.py          Sample frames from video as images
 │   │
 │   ├── models/                     ML model wrappers
 │   │   ├── training.py             MLP training, GMM thresholds (pure PyTorch)
@@ -73,16 +81,12 @@ VTSearch/
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
 │   │       ├── pickle/             .pkl file importer
-│   │       ├── http_zip/           HTTP archive importer
-│   │       ├── rss_feed/           RSS/Podcast feed importer
-│   │       ├── youtube_playlist/   YouTube yt-dlp importer
+│   │       ├── http_zip/           HTTP archive importer (API name: http_archive)
 │   │       └── combine_datasets/   Merge multiple pickle datasets
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
-│   │   ├── local_json_file/        JSON file download (local)
 │   │   ├── server_json_file/       JSON file on server
-│   │   ├── local_csv_file/         CSV file download (local)
 │   │   ├── server_csv_file/        CSV file on server
 │   │   ├── email_smtp/             SMTP email sender
 │   │   ├── webhook/                HTTP POST webhook
@@ -90,17 +94,12 @@ VTSearch/
 │   │
 │   ├── labels/importers/           Plugin system for label sources
 │   │   ├── base.py                 LabelImporter ABC + LabelImporterField
-│   │   ├── local_json_file/        Upload JSON label file (local)
 │   │   ├── server_json_file/       JSON label file on server
-│   │   ├── local_csv_file/         Upload CSV label file (local)
 │   │   └── server_csv_file/        CSV label file on server
 │   │
 │   ├── processors/importers/       Plugin system for processor sources
 │   │   ├── base.py                 ProcessorImporter ABC + ProcessorImporterField
-│   │   ├── detector_file/          Import detector from uploaded JSON file
-│   │   ├── server_detector_file/   Import detector from server JSON file
-│   │   ├── label_file/             Train detector from a labeled media file
-│   │   └── csv_label_file/         Train detector from a CSV label file
+│   │   └── server_detector_file/   Import detector from server JSON file
 │   │
 │   ├── eval/                       Evaluation framework
 │   │   ├── __main__.py             CLI entry point (python -m vtsearch.eval)
@@ -111,18 +110,19 @@ VTSearch/
 │   │   └── voting_iterations.py    Voting-iteration simulation
 │   │
 │   ├── routes/                     Flask blueprints (HTTP layer)
+│   │   ├── main.py                 Root route, favicon, logo
 │   │   ├── medias.py               Media listing, serving, voting
-│   │   ├── sorting.py              Text/learned/example sort
-│   │   ├── detectors.py            Detector export/import/run
-│   │   ├── datasets.py             Dataset loading & management
+│   │   ├── sorting.py              Text/learned/example sort, labels, diversity
+│   │   ├── detectors.py            Detector/extractor/localizer management, autodetect
+│   │   ├── datasets.py             Dataset loading, demos, dashboard
 │   │   ├── exporters.py            Exporter registry & execution
 │   │   ├── label_importers.py      Label importer registry & execution
 │   │   ├── processor_importers.py  Processor importer registry & execution
 │   │   ├── settings.py             Settings persistence (volume, theme, etc.)
-│   │   └── main.py                 Root route
+│   │   └── trainable_models.py     Persistent trainable model definitions (CRUD)
 │   │
 │   ├── utils/
-│   │   ├── state.py                Global state (medias, votes, favorites, history)
+│   │   ├── state.py                Global state (medias, votes, autorun config, history)
 │   │   └── progress.py             Thread-safe progress tracking
 │   │
 │   └── audio/                      WAV/tone generation utilities
@@ -156,10 +156,11 @@ modules on the right.
 ┌──────────────┐ ┌────────────┐ ┌───────────────────┐
 │ media/*      │ │ models/    │ │ datasets/          │
 │              │ │            │ │                     │
-│ audio  ─┐   │ │ training   │ │ loader ──► media/*  │
-│ image  ─┤   │ │ progress   │ │ downloader          │
-│ text   ─┤   │ │ embeddings │ │ importers/*         │
-│ video  ─┘   │ │ loader     │ │                     │
+│ audio    ─┐ │ │ training   │ │ loader ──► media/*  │
+│ image    ─┤ │ │ progress   │ │ downloader          │
+│ text     ─┤ │ │ embeddings │ │ importers/*         │
+│ video    ─┤ │ │ loader     │ │                     │
+│ document ─┘ │ │            │ │                     │
 │   │         │ │   │        │ │                     │
 │   ▼         │ │   ▼        │ └───────────────────┘
 │ config.py   │ │ media/*    │
@@ -171,12 +172,11 @@ modules on the right.
 │ exporters/*              │  │ labels/importers/*      │  │ processors/importers/*   │
 │                          │  │                          │  │                          │
 │ base.py (ABC)            │  │ base.py (ABC)           │  │ base.py (ABC)            │
-│ local_json, server_json  │  │ local_json, server_json │  │ detector_file, label_file│
-│ local_csv, server_csv    │  │ local_csv, server_csv   │  │ server_detector_file     │
-│ email_smtp, webhook, gui │  │                          │  │ csv_label_file           │
-│                          │  │ (NO Flask, NO state,     │  │                          │
-│ (NO Flask, NO state,     │  │  pure data processing)   │  │ (NO Flask, NO state,     │
-│  pure data in/out)       │  │                          │  │  pure data processing)   │
+│ server_json, server_csv  │  │ server_json, server_csv │  │ server_detector_file     │
+│ email_smtp, webhook, gui │  │                          │  │                          │
+│                          │  │ (NO Flask, NO state,     │  │ (NO Flask, NO state,     │
+│ (NO Flask, NO state,     │  │  pure data processing)   │  │  pure data processing)   │
+│  pure data in/out)       │  │                          │  │                          │
 └──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
 ```
 
@@ -211,7 +211,8 @@ modules on the right.
 | `eval/*` | No | No | **Yes** — needs media + datasets |
 | `settings.py` | No | No | **Yes** — JSON file I/O |
 | `media/base.py` | No | No | **Yes** — abstract only |
-| `media/audio,image,text,video` | No | No | **Yes** — torch + HF models |
+| `media/audio,image,text,video,document` | No | No | **Yes** — torch + HF models |
+| `converters/*` | No | No | **Yes** — pure media conversion |
 | `utils/progress.py` | No | No | **Yes** — threading only |
 | `utils/state.py` | No | N/A (IS the state) | **Yes** — plain Python dicts |
 | `config.py` | No | No | **Yes** — just constants |
@@ -279,7 +280,7 @@ audio.load_models()
 To use an exporter standalone:
 
 ```python
-from vtsearch.exporters.file import EXPORTER
+from vtsearch.exporters.server_json_file import EXPORTER
 
 result = EXPORTER.export(
     results={"media_type": "audio", "results": {...}},
@@ -338,7 +339,7 @@ class, and expose the sentinel.  See `EXTENDING.md` (in this directory) for full
 ## State management
 
 Application state lives in `vtsearch/utils/state.py` as module-level
-dicts:
+dicts, all protected by `_state_lock` (a `threading.RLock`):
 
 | Variable | Type | Purpose |
 |----------|------|---------|
@@ -350,17 +351,24 @@ dicts:
 | `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
-| `favorite_detectors` | `dict` | Saved detector configurations |
-| `favorite_extractors` | `dict` | Saved extractor configurations |
-| `favorite_localizers` | `dict` | Saved localizer configurations |
+| `autorun_detectors` | `dict` | Saved detector configurations (with `autodetect` flag, `examples`, `num_labels`) |
+| `autorun_extractors` | `dict` | Saved extractor configurations |
+| `autorun_localizers` | `dict` | Saved localizer configurations |
+| `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
+| `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
 `swipe_animation`, `show_thumbnails_left`, `show_thumbnails_right`,
-favorite processor recipes) live
+`autopilot_top_greens`, `autopilot_hard_reds`,
+autorun processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
+
+Trainable models are persisted as JSON files in `data/trainable_models/`
+via the `trainable_models_bp` route blueprint.  Each stores a name,
+text query, media type, examples list, and labelset.
 
 **Only Flask routes mutate this state.**  All ML and dataset functions
 accept state as parameters — they never import it directly.  This means

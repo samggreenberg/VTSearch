@@ -12,7 +12,6 @@ import pytest
 import app as app_module
 from vtsearch.cli import (
     _build_multi_results_dict,
-    _build_results_dict,
     _detect_media_type,
     _run_exporter,
     _score_medias_with_detectors,
@@ -25,6 +24,25 @@ from vtsearch.datasets.loader import export_dataset_to_file
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_results_dict(hits, detector_path, media_type="unknown"):
+    """Build a single-detector results dict for testing (same shape as exporter input)."""
+    detector_data = json.loads(Path(detector_path).read_text())
+    detector_name = detector_data.get("name", Path(detector_path).stem)
+    threshold = detector_data.get("threshold", 0.5)
+    return {
+        "media_type": media_type,
+        "detectors_run": 1,
+        "results": {
+            detector_name: {
+                "detector_name": detector_name,
+                "threshold": threshold,
+                "total_hits": len(hits),
+                "hits": hits,
+            }
+        },
+    }
 
 
 def _make_dataset_file(tmp_path, clips_dict):
@@ -51,10 +69,10 @@ def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json
 
 
 def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
-    """Create a settings JSON file with favorite_processors pointing to detector files.
+    """Create a settings JSON file with autorun_processors pointing to detector files.
 
-    Each detector file becomes a favorite processor recipe using the
-    ``detector_file`` processor importer.
+    Each detector file becomes an autorun processor recipe using the
+    ``server_detector_file`` processor importer.
     """
     processors = []
     for i, det_path in enumerate(detector_paths):
@@ -63,11 +81,11 @@ def _make_settings_file(tmp_path, detector_paths, name="settings.json"):
         processors.append(
             {
                 "processor_name": proc_name,
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(det_path)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(det_path)},
             }
         )
-    settings = {"favorite_processors": processors}
+    settings = {"autorun_processors": processors}
     settings_path = tmp_path / name
     settings_path.write_text(json.dumps(settings))
     return settings_path
@@ -354,7 +372,7 @@ class TestScoreClipsWithDetectors:
             _score_medias_with_detectors({}, detectors)
 
     def test_empty_detectors_raises_error(self):
-        with pytest.raises(ValueError, match="No favorite processors"):
+        with pytest.raises(ValueError, match="No autorun processors"):
             _score_medias_with_detectors(app_module.medias, {})
 
     def test_threshold_zero_returns_all_clips(self, client, tmp_path):
@@ -543,7 +561,7 @@ class TestAutodetectCLI:
         """Autodetect with an empty settings file should fail (no processors)."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
-        empty_settings.write_text(json.dumps({"favorite_processors": []}))
+        empty_settings.write_text(json.dumps({"autorun_processors": []}))
 
         result = subprocess.run(
             [
@@ -561,7 +579,7 @@ class TestAutodetectCLI:
             timeout=120,
         )
         assert result.returncode == 1
-        assert "No favorite processors" in result.stderr
+        assert "No autorun processors" in result.stderr
 
     def test_autodetect_nonexistent_dataset(self, client, tmp_path):
         detector_path, _ = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
@@ -737,7 +755,7 @@ class TestAutodetectImporterCLI:
         """Autodetect with importer but no processors should fail."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         empty_settings = tmp_path / "empty_settings.json"
-        empty_settings.write_text(json.dumps({"favorite_processors": []}))
+        empty_settings.write_text(json.dumps({"autorun_processors": []}))
 
         result = subprocess.run(
             [

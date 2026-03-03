@@ -7,6 +7,105 @@ import pytest
 
 import vtsearch.config as config
 
+# ---------------------------------------------------------------------------
+# Auto-assign test group markers based on filename so tests can be run by
+# area: pytest -m core, pytest -m sorting, pytest -m datasets, etc.
+# ---------------------------------------------------------------------------
+
+_TEST_GROUPS = {
+    "core": [
+        "test_audio",
+        "test_medias",
+        "test_votes",
+        "test_inclusion",
+        "test_settings",
+        "test_frontend",
+    ],
+    "api": [
+        "test_api_contracts",
+        "test_error_recovery",
+        "test_dashboard",
+    ],
+    "sorting": [
+        "test_sorting",
+        "test_label_sorting",
+        "test_safe_thresholds",
+        "test_enrich_descriptions",
+        "test_diversity_tree",
+        "test_diversity_tree_integration",
+    ],
+    "datasets": [
+        "test_datasets",
+        "test_dataset_split",
+        "test_combine_datasets",
+        "test_creation_info",
+        "test_duplicates",
+        "test_origin_labelset",
+        "test_thin_loading",
+        "test_chunked_loading",
+        "test_memory_errors",
+    ],
+    "io": [
+        "test_exporters",
+        "test_csv_webhook_exporters",
+        "test_export_options",
+        "test_importers",
+        "test_label_importers",
+        "test_labels",
+        "test_processor_importers",
+        "test_pdf_import",
+    ],
+    "models": [
+        "test_detectors",
+        "test_extractors",
+        "test_processors",
+        "test_trainable_models",
+        "test_clippers",
+        "test_eval",
+        "test_eval_visualize",
+        "test_eval_voting_iterations",
+    ],
+    "downloads": [
+        "test_ag_news_download",
+        "test_bbc_news_download",
+        "test_gtzan_download",
+        "test_image_sources_download",
+        "test_imdb_download",
+        "test_ucsf_documents_download",
+        "test_download_and_extract",
+    ],
+    "integration": [
+        "test_integration",
+        "test_slow_integration",
+        "test_thread_safety",
+    ],
+    "cli": [
+        "test_cli_autodetect",
+        "test_load_sort_window",
+        "test_preload_progress",
+        "test_tqdm_progress",
+    ],
+    "converters": [
+        "test_document_and_converters",
+    ],
+}
+
+# Build reverse map: filename -> group name
+_FILE_TO_GROUP = {}
+for group, files in _TEST_GROUPS.items():
+    for fname in files:
+        _FILE_TO_GROUP[fname] = group
+
+
+def pytest_collection_modifyitems(items, config):
+    """Auto-assign group markers to tests based on their filename."""
+    for item in items:
+        # Extract test_xxx from the file path
+        fname = item.fspath.purebasename  # e.g. "test_sorting"
+        group = _FILE_TO_GROUP.get(fname)
+        if group:
+            item.add_marker(getattr(pytest.mark, group))
+
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
 # for the tiny MLP to converge on the small test dataset).
 config.TRAIN_EPOCHS = 30
@@ -33,7 +132,8 @@ def _fake_embed_audio(path):
     import hashlib
 
     try:
-        data = open(path, "rb").read(1000)
+        with open(path, "rb") as f:
+            data = f.read(1000)
         seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
     except Exception:
         seed = hash(str(path)) % 2**31
@@ -117,10 +217,10 @@ def reset_state():
     """Reset all mutable global state before each test.
 
     This fixture prevents cross-test contamination by clearing votes,
-    favorites, and all other mutable state that lives in
+    autorun entries, and all other mutable state that lives in
     ``vtsearch.utils.state``.  It runs automatically before every test.
     """
-    import vtsearch.utils.state as _state
+    import vtsearch.utils.state_core as _core
 
     good_votes.clear()
     bad_votes.clear()
@@ -128,13 +228,21 @@ def reset_state():
     textsort_suggestions.clear()
     vote_click_times.clear()
     last_learned_scores.clear()
-    _state._click_counter = 0
-    _state.inclusion = None  # reset to "not loaded" so it re-reads from settings
-    _state._diversity_tree = None
-    _state.favorite_detectors.clear()
-    _state.favorite_extractors.clear()
-    _state.favorite_localizers.clear()
+    _core._click_counter = 0
+    _core.inclusion = None  # reset to "not loaded" so it re-reads from settings
+    _core._dataset_display_name = None
+    _core._diversity_tree = None
+    _core.autorun_detectors.clear()
+    _core.autorun_extractors.clear()
+    _core.autorun_localizers.clear()
     clear_progress_cache()
+
+    # Reset the dataset and model registries
+    from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
+    from vtsearch.models.registry import reset_for_tests as _reset_model_reg
+
+    _reset_ds_reg()
+    _reset_model_reg()
 
 
 @pytest.fixture(autouse=True)
@@ -150,8 +258,21 @@ def isolated_settings(tmp_path, monkeypatch):
     test_settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
     settings_mod.reset()
+
+    # Also redirect dataset and model registries to temp paths
+    from vtsearch.datasets import registry as ds_reg_mod
+    from vtsearch.models import registry as model_reg_mod
+
+    monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
+    monkeypatch.setattr(ds_reg_mod, "SAVED_DATASETS_DIR", tmp_path / "saved_datasets")
+    monkeypatch.setattr(model_reg_mod, "REGISTRY_PATH", tmp_path / "model_registry.json")
+    ds_reg_mod.reset_for_tests()
+    model_reg_mod.reset_for_tests()
+
     yield test_settings_path
     settings_mod.reset()
+    ds_reg_mod.reset_for_tests()
+    model_reg_mod.reset_for_tests()
 
 
 @pytest.fixture
@@ -161,6 +282,7 @@ def client():
         yield c
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Force-exit to avoid SIGABRT (exit code 134) from native library cleanup.
 
@@ -171,5 +293,36 @@ def pytest_sessionfinish(session, exitstatus):
 
     ``os._exit()`` skips the normal interpreter teardown (atexit handlers,
     C++ static destructors) so the problematic cleanup never runs.
+
+    Prints a clear PASS/FAIL summary right before exiting, since os._exit()
+    prevents the normal pytest summary from being flushed.
     """
+    import sys
+
+    # Grab stats from the terminal reporter (if available)
+    reporter = session.config.pluginmanager.getplugin("terminalreporter")
+    if reporter:
+        passed = len(reporter.stats.get("passed", []))
+        failed = len(reporter.stats.get("failed", []))
+        errors = len(reporter.stats.get("error", []))
+        skipped = len(reporter.stats.get("skipped", []))
+        total = passed + failed + errors + skipped
+
+        print("", flush=True)
+        print("=" * 60, flush=True)
+        if failed or errors:
+            print(
+                f"TESTS FAILED: {failed} failed, {errors} errors, "
+                f"{passed} passed, {skipped} skipped (total: {total})",
+                flush=True,
+            )
+        else:
+            print(
+                f"ALL {passed} TESTS PASSED ({skipped} skipped, total: {total})",
+                flush=True,
+            )
+        print("=" * 60, flush=True)
+
+    sys.stdout.flush()
+    sys.stderr.flush()
     os._exit(exitstatus)

@@ -178,10 +178,12 @@ class TestServerDetectorFileGet:
     @pytest.fixture(autouse=True)
     def _setup_det_dir(self, tmp_path, monkeypatch):
         from vtsearch.routes import detectors as det_module
+        from vtsearch.routes import detectors_crud as crud_module
 
         self._det_dir = tmp_path / "detectors"
         self._det_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(det_module, "SERVER_DETECTOR_DIR", self._det_dir)
+        monkeypatch.setattr(crud_module, "SERVER_DETECTOR_DIR", self._det_dir)
 
     def _create_detector(self, name="test_detector"):
         data = {"weights": {"0.weight": [[1.0]], "0.bias": [0.0]}, "threshold": 0.5, "media_type": "audio"}

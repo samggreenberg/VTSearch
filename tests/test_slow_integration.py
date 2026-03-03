@@ -117,17 +117,17 @@ def _write_settings_file(
     name: str = "settings.json",
     extra: dict | None = None,
 ) -> Path:
-    """Write a settings.json that references detectors as favorite_processors."""
+    """Write a settings.json that references detectors as autorun_processors."""
     processors = []
     for dp in detector_paths:
         processors.append(
             {
                 "processor_name": dp.stem,
-                "processor_importer": "detector_file",
-                "field_values": {"file": str(dp)},
+                "processor_importer": "server_detector_file",
+                "field_values": {"filepath": str(dp)},
             }
         )
-    settings: dict[str, Any] = {"favorite_processors": processors}
+    settings: dict[str, Any] = {"autorun_processors": processors}
     if extra:
         settings.update(extra)
     settings_path = tmp_path / name
@@ -179,7 +179,7 @@ class TestChunkedPickleAutodetectExport:
 
         # Export to JSON file
         output_path = tmp_path / "results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists(), "Exporter did not write output file"
         written = json.loads(output_path.read_text())
@@ -266,7 +266,7 @@ class TestChunkedFolderImporterAutodetect:
 
         # Export to CSV
         csv_path = tmp_path / "results.csv"
-        _run_exporter("local_csv_file", {"filepath": str(csv_path)}, results)
+        _run_exporter("server_csv_file", {"filepath": str(csv_path)}, results)
 
         assert csv_path.exists(), "CSV exporter did not write output file"
         csv_text = csv_path.read_text()
@@ -329,7 +329,7 @@ class TestCombinedDatasetChunkedAutodetect:
 
         # Export and read back
         output_path = tmp_path / "combined_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
         written = json.loads(output_path.read_text())
@@ -508,12 +508,12 @@ class TestFillFromSortExportPipeline:
 
 
 # ======================================================================
-# 6. Processor Importer → Favorite → Autodetect Chain
+# 6. Processor Importer → Autorun → Autodetect Chain
 # ======================================================================
 
 
 class TestProcessorImporterToAutodetect:
-    """Import a detector via processor importer, save as favorite processor
+    """Import a detector via processor importer, save as autorun processor
     in settings, run autodetect using that settings file."""
 
     def test_detector_file_import_then_chunked_autodetect(self, client, tmp_path):
@@ -524,8 +524,8 @@ class TestProcessorImporterToAutodetect:
         # Step 2: Load detector via processor importer (simulates settings import)
         from vtsearch.processors.importers import get_processor_importer
 
-        proc_imp = get_processor_importer("detector_file")
-        imported = proc_imp.run_cli({"file": str(det_path)})
+        proc_imp = get_processor_importer("server_detector_file")
+        imported = proc_imp.run_cli({"filepath": str(det_path)})
         detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
 
         # Step 3: Create a target dataset and score in chunks
@@ -539,7 +539,7 @@ class TestProcessorImporterToAutodetect:
 
         # Step 4: Export and verify
         output_path = tmp_path / "processor_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
 
         assert output_path.exists()
         written = json.loads(output_path.read_text())
@@ -660,8 +660,8 @@ class TestSettingsPersistenceCLI:
         # Load detector via processor importer (as settings import would)
         from vtsearch.processors.importers import get_processor_importer
 
-        proc_imp = get_processor_importer("detector_file")
-        imported = proc_imp.run_cli({"file": str(det_path)})
+        proc_imp = get_processor_importer("server_detector_file")
+        imported = proc_imp.run_cli({"filepath": str(det_path)})
         detectors = {det_path.stem: {"weights": imported["weights"], "threshold": imported["threshold"]}}
 
         pkl_path = _make_pickle_dataset(tmp_path, 20)
@@ -675,7 +675,7 @@ class TestSettingsPersistenceCLI:
 
         # Export and verify
         output_path = tmp_path / "settings_results.json"
-        _run_exporter("local_json_file", {"filepath": str(output_path)}, results)
+        _run_exporter("server_json_file", {"filepath": str(output_path)}, results)
         assert output_path.exists()
         written = json.loads(output_path.read_text())
         assert written["detectors_run"] == 1
@@ -693,10 +693,10 @@ class TestSettingsPersistenceCLI:
         det3_path = _write_detector_file(tmp_path, det3, "d3.json")
 
         # Import all 3 via processor importer
-        proc_imp = get_processor_importer("detector_file")
+        proc_imp = get_processor_importer("server_detector_file")
         detectors = {}
         for dp in [det1_path, det2_path, det3_path]:
-            imported = proc_imp.run_cli({"file": str(dp)})
+            imported = proc_imp.run_cli({"filepath": str(dp)})
             detectors[dp.stem] = {"weights": imported["weights"], "threshold": imported["threshold"]}
 
         pkl_path = _make_pickle_dataset(tmp_path, 20)
@@ -759,15 +759,15 @@ class TestLargeDatasetChunking:
 
 
 # ======================================================================
-# 11. Detector Train → Save Favorite → Clear State → Auto-Detect
+# 11. Detector Train → Save Autorun → Clear State → Auto-Detect
 # ======================================================================
 
 
-class TestDetectorFavoriteRoundTrip:
-    """Full lifecycle: vote → export detector → save as favorite →
-    clear all state → run auto-detect using favorite → verify results."""
+class TestDetectorAutorunRoundTrip:
+    """Full lifecycle: vote → export detector → save as autorun →
+    clear all state → run auto-detect using autorun detector → verify results."""
 
-    def test_favorite_detector_survives_state_clear(self, client):
+    def test_autorun_detector_survives_state_clear(self, client):
         # Step 1: Vote and export detector
         app_module.good_votes.update({1: None, 2: None, 3: None})
         app_module.bad_votes.update({18: None, 19: None, 20: None})
@@ -775,14 +775,15 @@ class TestDetectorFavoriteRoundTrip:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 2: Save as favorite
+        # Step 2: Save as autorun detector with autodetect
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "production-detector",
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -791,8 +792,8 @@ class TestDetectorFavoriteRoundTrip:
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
-        # Step 4: Verify favorite is still there
-        resp = client.get("/api/favorite-detectors")
+        # Step 4: Verify autorun detector is still there
+        resp = client.get("/api/autorun-detectors")
         names = [d["name"] for d in resp.get_json()["detectors"]]
         assert "production-detector" in names
 
@@ -1062,12 +1063,13 @@ class TestAutoDetectExporterLabelRoundTrip:
         detector = resp.get_json()
 
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "roundtrip-det",
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200
@@ -1269,7 +1271,7 @@ class TestExporterIntegration:
 
 class TestLabelImporterDetectorChain:
     """Import labels via the API, train detector from imported labels,
-    save as favorite, run autodetect.  Tests the full pipeline from
+    save as autorun, run autodetect.  Tests the full pipeline from
     external label file to production scoring."""
 
     def test_json_label_import_to_autodetect(self, client, tmp_path):
@@ -1287,9 +1289,8 @@ class TestLabelImporterDetectorChain:
 
         # Step 2: Import labels via label importer API
         resp = client.post(
-            "/api/label-importers/import/local_json_file",
-            data={"file": (label_path.open("rb"), "labels.json")},
-            content_type="multipart/form-data",
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(label_path)},
         )
         assert resp.status_code == 200
         import_data = resp.get_json()
@@ -1306,14 +1307,15 @@ class TestLabelImporterDetectorChain:
         assert resp.status_code == 200
         detector = resp.get_json()
 
-        # Step 5: Save as favorite
+        # Step 5: Save as autorun detector with autodetect
         resp = client.post(
-            "/api/favorite-detectors",
+            "/api/autorun-detectors",
             json={
                 "name": "from-labels",
                 "media_type": "audio",
                 "weights": detector["weights"],
                 "threshold": detector["threshold"],
+                "autodetect": True,
             },
         )
         assert resp.status_code == 200

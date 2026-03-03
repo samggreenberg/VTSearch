@@ -2,7 +2,7 @@
 
 Validates that the ``_state_lock`` in ``vtsearch.utils.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
-favorite detectors.
+autorun detectors.
 """
 
 import threading
@@ -18,6 +18,7 @@ from vtsearch.utils import (
     vote_click_times,
 )
 import vtsearch.utils.state as _state
+import vtsearch.utils.state_core as _core
 
 
 class TestStateLock:
@@ -87,7 +88,7 @@ class TestToggleVote:
     def test_toggle_off_removes_click_time(self):
         good_votes[1] = None
         vote_click_times[1] = 1
-        _state._click_counter = 1
+        _core._click_counter = 1
         toggle_vote(1, "good")
         assert 1 not in vote_click_times
 

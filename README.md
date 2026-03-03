@@ -1,6 +1,6 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, or videos — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
+A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
 
 ## Setup
 
@@ -36,23 +36,7 @@ You can also load your own data from pickle files or folders via the same menu.
 
 ## Running the tests
 
-Install dev dependencies (includes pytest):
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Then run:
-
-```bash
-python -m pytest tests/ -v
-```
-
-This runs fast CPU tests only. Additional test modes:
-
-- **Full CPU tests** (includes slow CLI subprocess tests): `python -m pytest tests/ -v -m 'not gpu'`
-- **GPU tests** (requires CUDA): `python -m pytest tests/test_gpu.py -v -m gpu`
-- **All tests**: `python -m pytest tests/ -v -m ''`
+See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including the default fast CPU mode and additional modes for full CPU, GPU, and all tests.
 
 ## Project structure
 
@@ -62,10 +46,11 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── config.py                   # Constants (SAMPLE_RATE, paths, model IDs)
 │   ├── medias.py                   # Test media generation & embedding cache
 │   ├── cli.py                      # CLI utilities: autodetect workflow
-│   ├── settings.py                 # Persistent settings & favorite processors
+│   ├── settings.py                 # Persistent settings & autorun processors
 │   ├── routes/                     # Flask blueprints
 │   ├── models/                     # ML models (embeddings, training, progress)
-│   ├── media/                      # Media type plugins (audio, image, text, video)
+│   ├── media/                      # Media type plugins (audio, image, text, video, document)
+│   ├── converters/                 # Media converters (document→image, video→audio, etc.)
 │   ├── datasets/                   # Dataset loading, downloading, importers
 │   ├── eval/                       # Evaluation framework (metrics, runner, visualisation)
 │   ├── exporters/                  # Results exporter plugins
@@ -79,15 +64,21 @@ This runs fast CPU tests only. Additional test modes:
 │   ├── HANDOFF.md                  # Project handoff & orientation guide
 │   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
 │   ├── ARCHITECTURE.md             # Architecture deep-dive
+│   ├── API.md                      # HTTP API reference (all REST endpoints)
 │   ├── EXTENDING.md                # Plugin authoring guide
 │   ├── EVAL.md                     # Evaluation framework guide
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
 │   ├── FEATURE_IDEAS.md            # Brainstorm of potential features
-│   └── demos.md                    # Demo dataset listing
+│   ├── demos.md                    # Demo dataset listing
+│   └── old_io.md                   # Retired IO module reference implementations
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
 ```
+
+## HTTP API
+
+VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector/exporter/importer operations, settings, and trainable models.
 
 ## Deployment
 

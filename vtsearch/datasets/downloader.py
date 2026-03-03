@@ -103,6 +103,62 @@ def download_file_with_progress(
             on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
 
 
+def _download_and_extract(
+    *,
+    url: str,
+    archive_name: str,
+    extract_to: Path,
+    check_path: Path,
+    download_size_mb: int,
+    dataset_name: str,
+    on_progress: ProgressCallback,
+) -> None:
+    """Download an archive and extract it if *check_path* does not already exist.
+
+    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
+    and ``.zip`` archives.  The archive file is deleted after successful
+    extraction to reclaim disk space.
+
+    Args:
+        url: Download URL for the archive.
+        archive_name: Filename to save the downloaded archive as inside
+            ``DATA_DIR`` (e.g. ``"genres.tar.gz"``).
+        extract_to: Directory into which the archive contents are extracted.
+        check_path: Path whose existence signals that extraction is already
+            complete (often the same as *extract_to* or a subdirectory of it).
+        download_size_mb: Expected download size in megabytes (for progress).
+        dataset_name: Human-readable dataset name used in progress messages.
+        on_progress: Progress callback.
+    """
+    if check_path.exists():
+        return
+
+    archive_path = DATA_DIR / archive_name
+    DATA_DIR.mkdir(exist_ok=True)
+
+    if not archive_path.exists():
+        on_progress("downloading", f"Starting {dataset_name} download...", 0, 0)
+        download_file_with_progress(url, archive_path, download_size_mb * 1024 * 1024, on_progress)
+
+    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+    extract_to.mkdir(parents=True, exist_ok=True)
+
+    suffix = archive_name.lower()
+    if suffix.endswith((".tar.gz", ".tgz")):
+        with tarfile.open(archive_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_to, filter="data")
+    elif suffix.endswith(".tar"):
+        with tarfile.open(archive_path, "r:") as tar_ref:
+            tar_ref.extractall(extract_to, filter="data")
+    elif suffix.endswith(".zip"):
+        with zipfile.ZipFile(archive_path, "r") as zip_ref:
+            zip_ref.extractall(extract_to)
+    else:
+        raise ValueError(f"Unsupported archive format: {archive_name}")
+
+    archive_path.unlink(missing_ok=True)
+
+
 def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the ESC-50 environmental sounds dataset.
 
@@ -168,24 +224,16 @@ def download_gtzan(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "genres.tar.gz"
-    extract_dir = DATA_DIR / "gtzan"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    genres_dir = extract_dir / "genres"
-    if not genres_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting GTZAN download...", 0, 0)
-            download_file_with_progress(
-                GTZAN_URL, tar_path, GTZAN_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
-
-        on_progress("downloading", "Extracting GTZAN...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(extract_dir, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    genres_dir = DATA_DIR / "gtzan" / "genres"
+    _download_and_extract(
+        url=GTZAN_URL,
+        archive_name="genres.tar.gz",
+        extract_to=DATA_DIR / "gtzan",
+        check_path=genres_dir,
+        download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
+        dataset_name="GTZAN",
+        on_progress=on_progress,
+    )
     return genres_dir
 
 
@@ -211,27 +259,16 @@ def download_speech_commands_v2(on_progress: Optional[ProgressCallback] = None) 
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "speech_commands_v0.02.tar.gz"
     extract_dir = DATA_DIR / "speech_commands_v2"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting Speech Commands v2 download...", 0, 0)
-            download_file_with_progress(
-                SPEECH_COMMANDS_V2_URL,
-                tar_path,
-                SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting Speech Commands v2...", 0, 0)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(extract_dir, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    _download_and_extract(
+        url=SPEECH_COMMANDS_V2_URL,
+        archive_name="speech_commands_v0.02.tar.gz",
+        extract_to=extract_dir,
+        check_path=extract_dir,
+        download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+        dataset_name="Speech Commands v2",
+        on_progress=on_progress,
+    )
     return extract_dir
 
 
@@ -256,26 +293,16 @@ def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Pat
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "UrbanSound8K.tar.gz"
     extract_dir = DATA_DIR / "UrbanSound8K"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting UrbanSound8K download...", 0, 0)
-            download_file_with_progress(
-                URBANSOUND8K_URL,
-                tar_path,
-                URBANSOUND8K_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting UrbanSound8K...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(DATA_DIR, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    _download_and_extract(
+        url=URBANSOUND8K_URL,
+        archive_name="UrbanSound8K.tar.gz",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+        dataset_name="UrbanSound8K",
+        on_progress=on_progress,
+    )
     return extract_dir
 
 
@@ -298,21 +325,16 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "cifar-10-python.tar.gz"
     extract_dir = DATA_DIR / "cifar-10-batches-py"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting CIFAR-10 download...", 0, 0)
-            download_file_with_progress(CIFAR10_URL, tar_path, CIFAR10_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress)
-
-        on_progress("downloading", "Extracting CIFAR-10...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(DATA_DIR, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    _download_and_extract(
+        url=CIFAR10_URL,
+        archive_name="cifar-10-python.tar.gz",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+        dataset_name="CIFAR-10",
+        on_progress=on_progress,
+    )
     return extract_dir
 
 
@@ -399,25 +421,18 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "256_ObjectCategories.tar"
-    extract_dir = DATA_DIR / "caltech-256"
-    DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    categories_dir = extract_dir / "256_ObjectCategories"
-    if not categories_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting Caltech-256 download...", 0, 0)
-            download_file_with_progress(
-                CALTECH256_URL, tar_path, CALTECH256_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
-
-        on_progress("downloading", "Extracting Caltech-256...", 0, 0)
-        with tarfile.open(tar_path, "r:") as tar_ref:
-            tar_ref.extractall(extract_dir, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    categories_dir = DATA_DIR / "caltech-256" / "256_ObjectCategories"
+    _download_and_extract(
+        url=CALTECH256_URL,
+        archive_name="256_ObjectCategories.tar",
+        extract_to=DATA_DIR / "caltech-256",
+        check_path=categories_dir,
+        download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+        dataset_name="Caltech-256",
+        on_progress=on_progress,
+    )
     return categories_dir
 
 
@@ -443,32 +458,23 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
     if on_progress is None:
         on_progress = _default_progress()
 
-    tgz_path = DATA_DIR / "102flowers.tgz"
-    extract_dir = DATA_DIR / "oxford_flowers"
-    DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    jpg_dir = extract_dir / "jpg"
-    if not jpg_dir.exists():
-        if not tgz_path.exists():
-            on_progress("downloading", "Starting Oxford Flowers download...", 0, 0)
-            download_file_with_progress(
-                OXFORD_FLOWERS_URL,
-                tgz_path,
-                OXFORD_FLOWERS_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting Oxford Flowers...", 0, 0)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(tgz_path, "r:gz") as tar_ref:
-            tar_ref.extractall(extract_dir, filter="data")
-
-        tgz_path.unlink(missing_ok=True)
+    extract_dir = DATA_DIR / "oxford_flowers"
+    _download_and_extract(
+        url=OXFORD_FLOWERS_URL,
+        archive_name="102flowers.tgz",
+        extract_to=extract_dir,
+        check_path=extract_dir / "jpg",
+        download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+        dataset_name="Oxford Flowers",
+        on_progress=on_progress,
+    )
 
     # Download labels file if not present.
     labels_path = extract_dir / "imagelabels.mat"
     if not labels_path.exists():
+        DATA_DIR.mkdir(exist_ok=True)
         on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
         download_file_with_progress(
             OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress
@@ -498,25 +504,18 @@ def download_food101(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "food-101.tar.gz"
-    extract_dir = DATA_DIR / "food-101"
-    DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    images_dir = extract_dir / "images"
-    if not images_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting Food-101 download...", 0, 0)
-            download_file_with_progress(
-                FOOD101_URL, tar_path, FOOD101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
-
-        on_progress("downloading", "Extracting Food-101...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(DATA_DIR, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    images_dir = DATA_DIR / "food-101" / "images"
+    _download_and_extract(
+        url=FOOD101_URL,
+        archive_name="food-101.tar.gz",
+        extract_to=DATA_DIR,
+        check_path=images_dir,
+        download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+        dataset_name="Food-101",
+        on_progress=on_progress,
+    )
     return images_dir
 
 
@@ -541,24 +540,18 @@ def download_eurosat(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    zip_path = DATA_DIR / "EuroSAT_RGB.zip"
-    extract_dir = DATA_DIR / "EuroSAT_RGB"
-    DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    if not extract_dir.exists():
-        if not zip_path.exists():
-            on_progress("downloading", "Starting EuroSAT download...", 0, 0)
-            download_file_with_progress(
-                EUROSAT_URL, zip_path, EUROSAT_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
-
-        on_progress("downloading", "Extracting EuroSAT...", 0, 0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(DATA_DIR)
-
-        zip_path.unlink(missing_ok=True)
-
+    extract_dir = DATA_DIR / "EuroSAT_RGB"
+    _download_and_extract(
+        url=EUROSAT_URL,
+        archive_name="EuroSAT_RGB.zip",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+        dataset_name="EuroSAT",
+        on_progress=on_progress,
+    )
     return extract_dir
 
 
@@ -585,29 +578,18 @@ def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Pa
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "stanford_dogs_images.tar"
-    extract_dir = DATA_DIR / "stanford_dogs"
-    DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    images_dir = extract_dir / "Images"
-    if not images_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting Stanford Dogs download...", 0, 0)
-            download_file_with_progress(
-                STANFORD_DOGS_URL,
-                tar_path,
-                STANFORD_DOGS_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting Stanford Dogs...", 0, 0)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(tar_path, "r:") as tar_ref:
-            tar_ref.extractall(extract_dir, filter="data")
-
-        tar_path.unlink(missing_ok=True)
-
+    images_dir = DATA_DIR / "stanford_dogs" / "Images"
+    _download_and_extract(
+        url=STANFORD_DOGS_URL,
+        archive_name="stanford_dogs_images.tar",
+        extract_to=DATA_DIR / "stanford_dogs",
+        check_path=images_dir,
+        download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+        dataset_name="Stanford Dogs",
+        on_progress=on_progress,
+    )
     return images_dir
 
 
@@ -643,26 +625,16 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
     if video_dir.exists() and any(video_dir.glob("*/*.avi")):
         return video_dir
 
-    tar_path = DATA_DIR / "UCF101_subset.tar.gz"
     extract_dir = DATA_DIR / "UCF101_subset"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    # Download the tar.gz if we don't already have the extracted tree.
-    if not extract_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting UCF-101 subset download...", 0, 0)
-            download_file_with_progress(
-                UCF101_SUBSET_URL,
-                tar_path,
-                UCF101_SUBSET_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting UCF-101 subset...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(DATA_DIR, filter="data")
-
-        tar_path.unlink(missing_ok=True)
+    _download_and_extract(
+        url=UCF101_SUBSET_URL,
+        archive_name="UCF101_subset.tar.gz",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
+        dataset_name="UCF-101 subset",
+        on_progress=on_progress,
+    )
 
     # Flatten the train/val/test splits into VIDEO_DIR/ucf101/<Category>/.
     import shutil
@@ -945,25 +917,16 @@ def download_imdb(
     if on_progress is None:
         on_progress = _default_progress()
 
-    tar_path = DATA_DIR / "aclImdb_v1.tar.gz"
     extract_dir = DATA_DIR / "aclImdb"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not tar_path.exists():
-            on_progress("downloading", "Starting IMDB download...", 0, 0)
-            download_file_with_progress(
-                IMDB_URL,
-                tar_path,
-                IMDB_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-        on_progress("downloading", "Extracting IMDB dataset...", 0, 0)
-        with tarfile.open(tar_path, "r:gz") as tar_ref:
-            tar_ref.extractall(DATA_DIR, filter="data")
-
-        tar_path.unlink(missing_ok=True)
+    _download_and_extract(
+        url=IMDB_URL,
+        archive_name="aclImdb_v1.tar.gz",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=IMDB_DOWNLOAD_SIZE_MB,
+        dataset_name="IMDB",
+        on_progress=on_progress,
+    )
 
     # Read reviews grouped by sentiment category, merging train + test splits.
     categories_reviews: dict[str, list[str]] = {}

@@ -173,6 +173,41 @@ class TestRenameTrainableModel:
         )
         assert res.status_code == 400
 
+    def test_rename_updates_model_registry(self, client):
+        """Renaming a trainable model should update registry references."""
+        from vtsearch.models.registry import find_by_trainable_model_name, get_model
+
+        # Create a trainable model and register it in the model registry
+        client.post(
+            "/api/trainable-models",
+            json={"name": "Original", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "Original", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        assert res.status_code == 201
+        model_id = res.get_json()["model"]["id"]
+
+        # Rename the trainable model directly (not through the registry endpoint)
+        res = client.put(
+            "/api/trainable-models/Original/rename",
+            json={"new_name": "Renamed"},
+        )
+        assert res.status_code == 200
+
+        # Registry entry should now reference the new name
+        entry = get_model(model_id)
+        assert entry is not None
+        assert entry["name"] == "Renamed"
+        assert entry["trainable_model_name"] == "Renamed"
+
+        # Look up by old name should fail
+        assert find_by_trainable_model_name("Original") is None
+
+        # Look up by new name should succeed
+        assert find_by_trainable_model_name("Renamed") is not None
+
     def test_rename_conflict(self, client):
         client.post(
             "/api/trainable-models",
