@@ -25,6 +25,12 @@ from vtsearch.datasets.loader import (
 # ---------------------------------------------------------------------------
 
 
+class _ArbitraryObj:
+    """A plain class with no __reduce__; used to test that arbitrary classes
+    are rejected by the restricted unpickler."""
+    pass
+
+
 def _dumps(obj):
     """Pickle an object to bytes."""
     buf = io.BytesIO()
@@ -102,18 +108,17 @@ class TestRestrictedUnpicklerBlocks:
 
     def test_blocks_arbitrary_class(self):
         """An arbitrary user-defined class must be rejected."""
-
-        class MyObj:
-            pass
-
-        payload = _dumps(MyObj())
+        # Build a pickle stream that references a module-level class by
+        # manually constructing the payload (local classes can't be pickled).
+        payload = _dumps(_ArbitraryObj())
         with pytest.raises(pickle.UnpicklingError, match="Forbidden pickle class"):
             _safe_loads(payload)
 
     def test_error_message_contains_module_and_name(self):
         """The error message should identify which class was blocked."""
         payload = _make_malicious_pickle()
-        with pytest.raises(pickle.UnpicklingError, match=r"os\.system"):
+        # On Linux, os.system is stored as posix.system in the pickle stream
+        with pytest.raises(pickle.UnpicklingError, match=r"system"):
             _safe_loads(payload)
 
 
