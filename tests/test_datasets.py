@@ -588,3 +588,72 @@ class TestUCF101SubsetDownload:
                         f"Video demo '{name}' uses category '{cat}' "
                         f"not in UCF-101 subset"
                     )
+
+
+class TestLoadProgressRaceCondition:
+    """Dataset load endpoints must set progress to 'loading' before the thread starts.
+
+    Without this, the frontend's progress poll can see a stale 'idle' from
+    a previous load and prematurely stop polling, causing it to proceed
+    with the old dataset's data and votes (the label-leak bug).
+    """
+
+    def test_load_registered_dataset_sets_progress_before_thread(self, client):
+        """After POST to load a registered dataset, progress must not be 'idle'."""
+        import time
+
+        from vtsearch.utils.progress import get_progress
+
+        # Register the current medias as a dataset entry so we can load it
+        saved = dict(app_module.medias)
+        try:
+            # First, export current medias to a pkl for registration
+            from vtsearch.datasets.loader import export_dataset_to_file
+            from vtsearch.datasets.registry import SAVED_DATASETS_DIR
+
+            SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+            pkl_path = str(SAVED_DATASETS_DIR / "test_race.pkl")
+            from pathlib import Path
+
+            Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
+
+            # Register in the dataset registry
+            from vtsearch.datasets.registry import register_dataset
+
+            entry = register_dataset(
+                name="test_race",
+                media_type="audio",
+                num_items=len(app_module.medias),
+                pkl_path=pkl_path,
+            )
+            dataset_id = entry["id"]
+
+            # Set progress to idle (simulating a previous completed load)
+            from vtsearch.utils.progress import update_progress
+
+            update_progress("idle", "Ready")
+
+            # POST to load the dataset
+            resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
+            assert resp.status_code == 200
+
+            # Immediately check progress — it must NOT be 'idle'
+            progress = get_progress()
+            assert progress["status"] != "idle", (
+                "Progress must be set to 'loading' before the thread starts "
+                "to prevent the frontend from seeing a stale 'idle' state"
+            )
+
+            # Wait for the background thread to finish
+            for _ in range(60):
+                time.sleep(0.1)
+                if get_progress()["status"] == "idle":
+                    break
+        finally:
+            app_module.medias.clear()
+            app_module.medias.update(saved)
+            # Clean up
+            Path(pkl_path).unlink(missing_ok=True)
+            from vtsearch.datasets.registry import unregister_dataset
+
+            unregister_dataset(dataset_id)

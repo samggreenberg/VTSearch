@@ -185,6 +185,10 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
+    # Signal "loading" before the thread starts so frontend polling never
+    # sees a stale "idle" from a previous load and prematurely stops.
+    update_progress("loading", "Preparing to load dataset…", 0, 0)
+
     threading.Thread(target=task, daemon=True).start()
 
 
