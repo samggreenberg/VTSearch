@@ -1058,3 +1058,164 @@ class TestDashboardToAutopilotWorkflow:
         assert status["smart"]["status"] in ("red", "yellow", "green")
         assert status["stable"]["status"] in ("red", "yellow", "green")
         assert status["span"]["status"] in ("red", "yellow", "green")
+
+    def test_full_autopilot_cycle(self, client):
+        """Simulates the complete autopilot flow: create model on dashboard →
+        enter labeling → autopilot good phase → bad phase → hard phase
+        (learned sort + indicators) → new phase (diversity tree) → done.
+
+        This is the main VTSearch workflow where a user goes through all
+        autopilot steps until all indicators are green."""
+        from vtsearch.utils import build_diversity_tree
+
+        # --- Dashboard: Create model with name + examples ---
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "Beeping Sounds",
+                "media_type": "audio",
+                "examples": [{"type": "text", "value": "electronic beeping"}],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Verify model is in registry
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        beep = [m for m in models if m["name"] == "Beeping Sounds"]
+        assert len(beep) == 1
+        assert beep[0]["trainable"] is True
+
+        # Verify trainable model has examples
+        resp = client.get("/api/trainable-models/Beeping Sounds")
+        assert resp.status_code == 200
+        tm = resp.get_json()
+        assert len(tm["examples"]) == 1
+        assert tm["examples"][0]["type"] == "text"
+        assert tm["text_query"] == "electronic beeping"
+
+        # --- Dashboard: Enter labeling (dataset already loaded) ---
+        resp = client.get("/api/medias")
+        assert resp.status_code == 200
+        all_medias = resp.get_json()
+        assert len(all_medias) == app_module.NUM_MEDIAS
+        ids = [m["id"] for m in all_medias]
+
+        # Text sort with model's query (as the Label button does)
+        resp = client.post("/api/sort", json={"text": "electronic beeping"})
+        assert resp.status_code == 200
+        sort_data = resp.get_json()
+        sorted_ids = [r["id"] for r in sort_data["results"]]
+
+        # --- Autopilot Good phase: vote top 3 as good ---
+        good_ids = sorted_ids[:3]
+        _vote_clips(client, good_ids, [])
+
+        # Verify votes
+        resp = client.get("/api/votes")
+        votes = resp.get_json()
+        assert len(votes["good"]) == 3
+        assert len(votes["bad"]) == 0
+
+        # Save labels to trainable model (as frontend does after each vote)
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+        assert resp.get_json()["num_labels"] == 3
+
+        # --- Autopilot Bad phase: vote bottom 4 as bad ---
+        bad_ids = sorted_ids[-4:]
+        _vote_clips(client, [], bad_ids)
+
+        resp = client.get("/api/votes")
+        votes = resp.get_json()
+        assert len(votes["good"]) == 3
+        assert len(votes["bad"]) == 4
+
+        # Save labels again
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+        assert resp.get_json()["num_labels"] == 7
+
+        # --- Autopilot Hard phase: learned sort + vote hard examples ---
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+        learned = resp.get_json()
+        assert len(learned["results"]) == app_module.NUM_MEDIAS
+        assert "threshold" in learned
+
+        # Vote more examples (simulating hard-phase labeling)
+        # Pick unlabeled medias to vote on
+        voted_ids = set(good_ids + bad_ids)
+        unlabeled = [i for i in ids if i not in voted_ids]
+        extra_good = unlabeled[:3]
+        extra_bad = unlabeled[3:6]
+        _vote_clips(client, extra_good, extra_bad)
+
+        # Re-run learned sort (as frontend does after each vote)
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+
+        # Check labeling status (autopilot polls this)
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert status["good_count"] == 6
+        assert status["bad_count"] == 7
+        assert "smart" in status
+        assert "stable" in status
+        assert "span" in status
+        # Indicators should each have a valid status
+        for key in ("smart", "stable", "span"):
+            assert status[key]["status"] in ("red", "yellow", "green")
+
+        # --- Autopilot New phase: build diversity tree + get samples ---
+        build_diversity_tree()
+
+        # Get next diversity sample
+        resp = client.post(
+            "/api/diversity-tree/next",
+            json={"scores": {str(r["id"]): r["score"] for r in learned["results"]},
+                  "threshold": learned["threshold"]},
+        )
+        assert resp.status_code == 200
+        div_data = resp.get_json()
+        assert "id" in div_data
+        assert "diversity_level" in div_data
+        assert "exhausted" in div_data
+
+        # If tree returned a sample, vote on it
+        if div_data["id"] is not None:
+            resp = client.post(
+                f"/api/medias/{div_data['id']}/vote",
+                json={"vote": "good"},
+            )
+            assert resp.status_code == 200
+
+        # Check status again with diversity tree
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert "span" in status
+        assert "fractional_level" in status["span"]
+        assert isinstance(status["span"]["fractional_level"], (int, float))
+
+        # --- Verify model labels persisted through entire workflow ---
+        resp = client.post("/api/trainable-models/Beeping Sounds/labels")
+        assert resp.status_code == 200
+
+        resp = client.get("/api/trainable-models/Beeping Sounds")
+        assert resp.status_code == 200
+        final_tm = resp.get_json()
+        labels = final_tm["labelset"]["labels"]
+        # Should have all the votes we cast
+        good_labels = [lb for lb in labels if lb["label"] == "good"]
+        bad_labels = [lb for lb in labels if lb["label"] == "bad"]
+        assert len(good_labels) >= 6
+        assert len(bad_labels) >= 7
+
+        # Verify model registry reflects the training count
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        beep = [m for m in models if m["name"] == "Beeping Sounds"]
+        assert len(beep) == 1
+        assert beep[0]["num_training"] >= 13

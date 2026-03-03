@@ -872,7 +872,7 @@
 
     _autopilotState = {
       phase: "good", goodToStart, badToStart,
-      hardLabels: 0, smartStatus: "", stableStatus: "",
+      hardLabels: 0, smartStatus: "", stableStatus: "", spanStatus: "",
       fracDiversity: 0,
     };
 
