@@ -6104,9 +6104,25 @@
       if (lblRes.ok) lblImporters = await lblRes.json();
     } catch (_) { /* ignore */ }
 
+    // Guess the media type: prefer single dataset type, then single autoload type
+    let guessedMediaType = "";
+    const datasetTypes = [...new Set(dashRegisteredDatasets.map(d => d.media_type).filter(Boolean))];
+    if (datasetTypes.length === 1) {
+      guessedMediaType = datasetTypes[0];
+    } else {
+      try {
+        const sRes = await fetch("/api/settings");
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          const autoloads = sData.autoload_media_types || [];
+          if (autoloads.length === 1) guessedMediaType = autoloads[0];
+        }
+      } catch (_) { /* ignore */ }
+    }
+
     // Build media type options from the registry
     const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
-      `<option value="${escapeHtml(id)}">${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
+      `<option value="${escapeHtml(id)}"${id === guessedMediaType ? " selected" : ""}>${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
     ).join("");
 
     // Build example type options: built-in + importers
