@@ -209,10 +209,15 @@ def export_labels():
     so that consumers know exactly where each labeled element came from.
     The format is a superset of the legacy export format — old consumers
     that only read ``md5`` and ``label`` keys continue to work unchanged.
+
+    Query params:
+        goods_only: If ``"1"`` or ``"true"``, only export good labels.
     """
     from vtsearch.datasets.labelset import LabelSet
 
-    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
+    goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
+    bads = {} if goods_only else bad_votes
+    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bads)
     result: dict = labelset.to_dict()
     return jsonify(result)
 

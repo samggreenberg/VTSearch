@@ -181,8 +181,16 @@
   <!-- Right panel -->
   <aside class="panel-right" aria-label="Labels">
     <div class="train-context-bar" id="train-detector-bar" style="display:none">
-      <span class="train-context-label">Detector</span>
-      <span class="train-context-name" id="train-detector-name"></span>
+      <div class="train-context-header">
+        <div>
+          <span class="train-context-label">Detector</span>
+          <span class="train-context-name" id="train-detector-name"></span>
+        </div>
+        <div class="train-context-actions">
+          <button class="train-context-btn" id="train-export-detector" title="Export detector weights and labels">Export Detector</button>
+          <button class="train-context-btn" id="train-export-labels" title="Export labels (goods)">Export Labels</button>
+        </div>
+      </div>
     </div>
     <!-- import-file removed: label import now uses the label importer modal -->
     <div class="progress-check-bar">
