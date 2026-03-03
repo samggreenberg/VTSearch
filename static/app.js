@@ -298,11 +298,11 @@
   const datasetImporterFormDiv = document.getElementById("dataset-importer-form");
   const datasetImporterBack = document.getElementById("dataset-importer-back");
   const dashFileInput = document.getElementById("dash-file-input");
-  // Dashboard progress elements — created dynamically as a table row
-  let dashProgressFill = null;
-  let dashProgressText = null;
-  let dashProgressMessage = null;
-  let dashProgressEta = null;
+  // Dashboard progress elements — in the section header
+  const dashHeaderProgress = document.getElementById("dash-header-progress");
+  const dashProgressFill = document.getElementById("dash-progress-fill");
+  const dashProgressText = document.getElementById("dash-progress-text");
+  const dashProgressMessage = document.getElementById("dash-progress-message");
   const headerDashboardBtn = document.getElementById("header-dashboard-btn");
   const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
@@ -1151,7 +1151,7 @@
     center.appendChild(dashboardView);
     center.className = "panel-center";
     dashboardView.style.display = "flex";
-    // Only hide the in-grid progress if no load is actively running
+    // Only hide the header progress if no load is actively running
     if (!dashProgressTimer) hideDashGridProgress();
 
     // Populate grids
@@ -1552,45 +1552,22 @@
 
   // Show a progress row inside the dataset table (keeps existing rows visible)
   function showDashGridProgress(message) {
-    // Remove any existing progress row first
-    hideDashGridProgress();
-    // Ensure the table exists; if the grid is empty, create a minimal table
-    let tbody = dashDatasetGrid.querySelector("tbody");
-    if (!tbody) {
-      dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
-        <thead><tr>
-          <th>Name</th><th>Type</th><th>Items</th><th>Loaded</th><th class="col-actions-header"></th>
-        </tr></thead><tbody></tbody></table>`;
-      tbody = dashDatasetGrid.querySelector("tbody");
+    if (!dashHeaderProgress) return;
+    // Reset bar to indeterminate
+    if (dashProgressFill) {
+      dashProgressFill.style.width = "0%";
+      dashProgressFill.classList.add("indeterminate");
     }
-    const tr = document.createElement("tr");
-    tr.id = "dash-progress-row";
-    tr.className = "dash-progress-row";
-    tr.innerHTML = `<td colspan="5" class="dash-progress-cell" role="status" aria-live="polite">
-      <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-        <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
-        <div class="progress-text" id="dash-progress-text" aria-hidden="true"></div>
-      </div>
-      <div class="progress-message" id="dash-progress-message">${escapeHtml(message || "Loading...")}</div>
-      <div class="progress-eta" id="dash-progress-eta"></div>
-    </td>`;
-    tbody.appendChild(tr);
-    // Update element references
-    dashProgressFill = tr.querySelector("#dash-progress-fill");
-    dashProgressText = tr.querySelector("#dash-progress-text");
-    dashProgressMessage = tr.querySelector("#dash-progress-message");
-    dashProgressEta = tr.querySelector("#dash-progress-eta");
-    dashProgressMessage.style.color = "var(--text-secondary)";
+    if (dashProgressText) dashProgressText.textContent = "";
+    if (dashProgressMessage) {
+      dashProgressMessage.textContent = message || "Loading...";
+      dashProgressMessage.style.color = "var(--text-secondary)";
+    }
+    dashHeaderProgress.style.display = "flex";
   }
 
-  // Remove the progress row from the dataset table
   function hideDashGridProgress() {
-    const row = document.getElementById("dash-progress-row");
-    if (row) row.remove();
-    dashProgressFill = null;
-    dashProgressText = null;
-    dashProgressMessage = null;
-    dashProgressEta = null;
+    if (dashHeaderProgress) dashHeaderProgress.style.display = "none";
   }
 
   // Dashboard: load a dataset from the selected demo, then run a callback
@@ -1631,6 +1608,8 @@
     if (dashProgressTimer) { clearInterval(dashProgressTimer); dashProgressTimer = null; }
   }
 
+  let dashEtaState = null;
+
   async function pollDashProgress() {
     try {
       const res = await fetch("/api/dataset/progress");
@@ -1638,24 +1617,47 @@
 
       if (progress.error) {
         stopDashProgressPolling();
+        dashEtaState = null;
         if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${progress.error}`; dashProgressMessage.style.color = "var(--color-bad)"; }
         if (dashProgressFill) dashProgressFill.classList.remove("indeterminate");
         return;
       }
 
+      // Build the status text: message + optional ETA
+      let statusText = progress.message || "Loading...";
+
       if (progress.pct != null && dashProgressFill) {
         dashProgressFill.classList.remove("indeterminate");
         dashProgressFill.style.width = `${progress.pct}%`;
         if (dashProgressText) dashProgressText.textContent = `${progress.pct}%`;
+
+        // ETA calculation during embedding phase
+        const now = Date.now();
+        if (progress.status === "embedding" && progress.total > 0) {
+          if (!dashEtaState || dashEtaState.total !== progress.total) {
+            dashEtaState = { startTime: now, startCurrent: progress.current, total: progress.total };
+          }
+          const elapsed = (now - dashEtaState.startTime) / 1000;
+          const done = progress.current - dashEtaState.startCurrent;
+          if (done > 0 && elapsed > 1 && progress.current < progress.total) {
+            const rate = done / elapsed;
+            const remaining = (progress.total - progress.current) / rate;
+            statusText += ` — ${formatETA(remaining)}`;
+          }
+        } else {
+          dashEtaState = null;
+        }
       }
-      if (progress.message && dashProgressMessage) {
-        dashProgressMessage.textContent = progress.message;
+
+      if (dashProgressMessage) {
+        dashProgressMessage.textContent = statusText;
         dashProgressMessage.style.color = "var(--text-secondary)";
       }
 
       if (progress.status === "idle") {
         stopDashProgressPolling();
         hideDashGridProgress();
+        dashEtaState = null;
 
         // Refresh dataset state
         await checkDatasetStatus();
