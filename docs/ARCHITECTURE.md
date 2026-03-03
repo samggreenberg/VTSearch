@@ -81,7 +81,7 @@ VTSearch/
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
 │   │       ├── pickle/             .pkl file importer
-│   │       ├── http_zip/           HTTP archive importer
+│   │       ├── http_zip/           HTTP archive importer (API name: http_archive)
 │   │       └── combine_datasets/   Merge multiple pickle datasets
 │   │
 │   ├── exporters/                  Plugin system for output destinations
