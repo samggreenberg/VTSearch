@@ -692,7 +692,7 @@ video { max-width: 100%; }
 .demo-row.dash-selected .col-name, .dash-dataset-row.dash-selected .col-name, .dash-model-row.dash-selected .col-name { color: var(--accent); }
 
 /* Dashboard action buttons */
-.dashboard-actions { display: flex; gap: 12px; flex-shrink: 0; padding-top: 4px; }
+.dashboard-actions { display: flex; gap: 12px; flex-shrink: 0; padding-top: 4px; width: 100%; }
 .dashboard-action-btn {
   flex: 1; padding: 12px 24px; font-size: 1rem; font-weight: 600;
   border: 2px solid var(--accent); border-radius: 8px;
