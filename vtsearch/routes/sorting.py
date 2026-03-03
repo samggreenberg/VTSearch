@@ -54,6 +54,53 @@ def sort_progress():
     return jsonify(get_sort_progress())
 
 
+def _cosine_sort(query_vec):
+    """Sort all loaded medias by cosine similarity to *query_vec*.
+
+    Returns ``(results, threshold)`` where *results* is a list of
+    ``{"id": …, "similarity": …}`` dicts sorted descending, and
+    *threshold* is the GMM-based boundary (rounded to 4 decimals).
+    """
+    all_ids = list(medias.keys())
+    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    query_norm = np.linalg.norm(query_vec)
+    emb_norms = np.linalg.norm(all_embs, axis=1)
+    norm_products = emb_norms * query_norm
+    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
+    similarities = np.dot(all_embs, query_vec) / safe_norms
+    similarities = np.where(norm_products == 0, 0.0, similarities)
+
+    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
+    threshold = calculate_gmm_threshold(similarities.tolist())
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return results, round(threshold, 4)
+
+
+def _load_embedder_with_progress(media_type, total_steps):
+    """Load the embedding model for *media_type*, forwarding progress to the sort progress bar.
+
+    If the model is already loaded this is a no-op.
+    """
+    from vtsearch.media import get as media_get
+
+    try:
+        mt = media_get(media_type)
+        needs_loading = getattr(mt, "_model", None) is None
+    except KeyError:
+        return
+
+    if not needs_loading:
+        return
+
+    update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+    original_cb = mt._on_progress
+    mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+    try:
+        mt.load_models()
+    finally:
+        mt._on_progress = original_cb
+
+
 @sorting_bp.route("/api/sort", methods=["POST"])
 def sort_clips():
     """Return medias sorted by cosine similarity to a text query."""
@@ -68,82 +115,32 @@ def sort_clips():
         return jsonify({"error": "Invalid request body"}), 400
 
     text = data.get("text", "").strip()
-
     if not text:
         update_sort_progress("idle")
         return jsonify({"error": "text is required"}), 400
 
-    # Determine media type from current medias
     if not medias:
         update_sort_progress("idle")
         return jsonify({"error": "No medias loaded"}), 400
 
     media_type = next(iter(medias.values())).get("type", "audio")
-
-    # Total steps: 1 (embed) + len(medias) (similarities) + 1 (threshold)
     total_steps = 1 + len(medias) + 1
 
-    # Check if the embedder needs loading (first use of this media type)
-    from vtsearch.media import get as media_get
+    _load_embedder_with_progress(media_type, total_steps)
+    update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
 
-    try:
-        mt = media_get(media_type)
-        needs_loading = getattr(mt, "_model", None) is None
-    except KeyError:
-        needs_loading = False
-
-    if needs_loading:
-        # Temporarily redirect the media type's progress callback to the
-        # sort progress system so the GUI's sort progress bar shows real
-        # download / weight-loading percentages instead of an indeterminate
-        # animation.
-        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
-        original_cb = mt._on_progress
-        mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
-        try:
-            mt.load_models()
-        finally:
-            mt._on_progress = original_cb
-        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
-    else:
-        update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
-
-    # Embed text query using refactored module
     from vtsearch import settings
 
     enrich = settings.get_enrich_descriptions()
     text_vec = embed_text_query(text, media_type, enrich=enrich)
     if text_vec is None:
         update_sort_progress("idle")
-        return (
-            jsonify({"error": f"Could not embed text for media type {media_type}"}),
-            500,
-        )
+        return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
 
     update_sort_progress("sorting", "Computing similarities…", 1, total_steps)
-
-    # Vectorized cosine similarity: batch all embeddings into a matrix
-    all_ids = list(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-    text_norm = np.linalg.norm(text_vec)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * text_norm
-    # Avoid division by zero
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, text_vec) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
-
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    scores = similarities.tolist()
-    update_sort_progress("sorting", "Computing similarities…", 1 + len(medias), total_steps)
-
-    # Calculate GMM-based threshold
-    update_sort_progress("sorting", "Calculating threshold…", total_steps - 1, total_steps)
-    threshold = calculate_gmm_threshold(scores)
-
-    results.sort(key=lambda x: x["similarity"], reverse=True)
+    results, threshold = _cosine_sort(text_vec)
     update_sort_progress("idle")
-    return jsonify({"results": results, "threshold": round(threshold, 4)})
+    return jsonify({"results": results, "threshold": threshold})
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
@@ -474,23 +471,7 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
 
-    # Vectorized cosine similarity with all medias
-    all_ids = list(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-    example_norm = np.linalg.norm(example_embedding)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * example_norm
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, example_embedding) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
-
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    scores = similarities.tolist()
-
-    # Calculate GMM-based threshold
-    threshold = calculate_gmm_threshold(scores)
-    results.sort(key=lambda x: x["similarity"], reverse=True)
-    return results, round(threshold, 4)
+    return _cosine_sort(example_embedding)
 
 
 @sorting_bp.route("/api/example-sort", methods=["POST"])
