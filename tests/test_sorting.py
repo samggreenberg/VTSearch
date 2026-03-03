@@ -425,6 +425,7 @@ class TestLoadEmbedderConcurrentCallback:
 
     def test_callback_restored_after_load_error(self):
         """_on_progress must be restored even when load_models raises."""
+        import pytest
         from unittest.mock import MagicMock
 
         from vtsearch.routes.sorting import _load_embedder_with_progress
@@ -436,6 +437,7 @@ class TestLoadEmbedderConcurrentCallback:
         mock_mt.load_models.side_effect = RuntimeError("boom")
 
         with unittest.mock.patch("vtsearch.media.get", return_value=mock_mt):
-            _load_embedder_with_progress("audio", 5)
+            with pytest.raises(RuntimeError):
+                _load_embedder_with_progress("audio", 5)
 
         assert mock_mt._on_progress is original_cb
