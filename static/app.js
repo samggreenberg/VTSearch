@@ -47,6 +47,11 @@
   // Local copy of favorite detectors list
   let favoriteDetectors = [];
   let autorunDetectors = [];
+
+  // Favorites modal elements (may not exist in all HTML builds)
+  const favoritesModal = document.getElementById("favorites-modal");
+  const favoritesModalClose = document.getElementById("favorites-modal-close");
+  const favAddName = document.getElementById("fav-add-name");
   const mediaList = document.getElementById("media-list");
   const center = document.getElementById("center");
   const goodList = document.getElementById("good-list");
@@ -638,6 +643,75 @@
         body: JSON.stringify({ examples: model.examples || [] }),
       });
     } catch (_) { /* ignore */ }
+  }
+
+  /**
+   * Persist current labels to a trainable model's labelset (fire-and-forget).
+   * Called after each vote in dashboard train mode.
+   */
+  function _persistTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => {}); // fire-and-forget
+  }
+
+  /**
+   * Save trainable model labels (awaited version for explicit save points).
+   */
+  async function saveTrainableModelLabels() {
+    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
+    const model = _dashboardTrainMode.model;
+    if (!model.trainable) return;
+    try {
+      await fetch(`/api/trainable-models/${encodeURIComponent(model.name)}/labels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  // Stub functions for features that require the favorites modal HTML
+  // (not yet present in index.html).  These prevent ReferenceErrors when
+  // dashboard buttons or autopilot code call into the favorites UI.
+  async function loadFavoriteDetectors() {
+    try {
+      const res = await fetch("/api/favorite-detectors");
+      const data = await res.json();
+      favoriteDetectors = data.detectors || [];
+    } catch (_) {}
+  }
+
+  function loadFavImporterButtons() { /* no-op until favorites modal HTML is added */ }
+
+  function renderExamplesGrid(container, examples, onUpdate) {
+    if (!container) return;
+    container.innerHTML = "";
+    examples.forEach((ex, i) => {
+      const div = document.createElement("div");
+      div.className = "example-chip";
+      div.textContent = ex.value || ex.type || "example";
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "\u00d7";
+      removeBtn.className = "example-remove";
+      removeBtn.onclick = () => {
+        const updated = examples.filter((_, j) => j !== i);
+        if (onUpdate) onUpdate(updated);
+      };
+      div.appendChild(removeBtn);
+      container.appendChild(div);
+    });
+  }
+
+  async function promptForExample(type) {
+    if (type === "text") {
+      const value = prompt("Enter a text example:");
+      return value ? { type: "text", value } : null;
+    }
+    return null;
   }
 
   if (autopilotExampleAdd) {

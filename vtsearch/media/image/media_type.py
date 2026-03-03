@@ -10,9 +10,12 @@ import numpy as np
 from vtsearch.config import (
     CALTECH101_DOWNLOAD_SIZE_MB,
     CALTECH256_DOWNLOAD_SIZE_MB,
-    CIFAR10_DOWNLOAD_SIZE_MB,
     CLIP_MODEL_ID,
+    EUROSAT_DOWNLOAD_SIZE_MB,
+    FOOD101_DOWNLOAD_SIZE_MB,
     MODELS_CACHE_DIR,
+    OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
     UCSF_IDL_DOWNLOAD_SIZE_MB,
 )
 
@@ -591,7 +594,7 @@ class ImageMediaType(MediaType):
                 source="oxford_flowers_102",
                 slice_start=0,
                 slice_end=80,
-                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a",
@@ -601,7 +604,7 @@ class ImageMediaType(MediaType):
                 source="food101",
                 slice_start=0,
                 slice_end=1000,
-                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+                download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a",
@@ -611,7 +614,7 @@ class ImageMediaType(MediaType):
                 source="eurosat",
                 slice_start=0,
                 slice_end=2700,
-                download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+                download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a",
@@ -621,7 +624,7 @@ class ImageMediaType(MediaType):
                 source="stanford_dogs",
                 slice_start=0,
                 slice_end=171,
-                download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucsf_documents_a",

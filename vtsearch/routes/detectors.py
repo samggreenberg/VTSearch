@@ -1,12 +1,6 @@
 """Blueprint for detector, extractor, and localizer routes.
 
-This module is a re-export facade.  The actual routes are split across:
-
-* ``detectors_crud`` — CRUD for autorun detectors/extractors/localizers, pregen processors
-* ``detectors_training`` — Vote-based training, label-based training, multi-find
-* ``detectors_scoring`` — Detector scoring, extractor/localizer execution
-
-All three sub-blueprints are registered under ``detectors_bp`` so
+This module was split into sub-blueprints.  It re-exports them so that
 existing code that imports ``detectors_bp`` continues to work.
 """
 

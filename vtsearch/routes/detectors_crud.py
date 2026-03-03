@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.config import DATA_DIR
 from vtsearch.utils import (
     add_autorun_detector,
     add_autorun_extractor,
@@ -27,7 +28,7 @@ from vtsearch.utils import (
 detectors_crud_bp = Blueprint("detectors_crud", __name__)
 
 #: Default directory for server-side detector files.
-SERVER_DETECTOR_DIR = Path("data/detectors")
+SERVER_DETECTOR_DIR = DATA_DIR / "detectors"
 
 
 # ---------------------------------------------------------------------------

@@ -247,7 +247,7 @@ def set_trainable_model_examples(name: str):
 
     data["examples"] = examples
     # Update text_query from first text example for backward compat
-    text_examples = [e for e in examples if e.get("type") == "text"]
+    text_examples = [e for e in examples if e.get("type") == "text" and e.get("value")]
     if text_examples:
         data["text_query"] = text_examples[0]["value"]
     _write_model(path, data)
