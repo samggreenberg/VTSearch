@@ -2,7 +2,8 @@
 
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
-from vtsearch.utils import medias
+from vtsearch.models.registry import register_model
+from vtsearch.utils import add_autorun_detector, get_autorun_detectors, medias
 
 
 class TestDashboardDatasetInfo:
@@ -197,3 +198,157 @@ class TestGuessMediaType:
         resp = client.get("/api/settings")
         data = resp.get_json()
         assert data["autoload_media_types"] == ["paragraph"]
+
+
+class TestDashboardDatasetRegistryColumns:
+    """Tests that the dataset registry API returns fields needed for new columns."""
+
+    def test_dataset_registry_includes_created_at(self, client):
+        """Registered datasets include a created_at timestamp."""
+        register_dataset(name="ts-ds", media_type="audio", num_items=5, pkl_path="/tmp/ts.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "created_at" in ds
+        assert isinstance(ds["created_at"], (int, float))
+        assert ds["created_at"] > 0
+
+    def test_dataset_registry_includes_origin(self, client):
+        """Registered datasets include an origin string."""
+        register_dataset(
+            name="orig-ds",
+            media_type="image",
+            num_items=10,
+            pkl_path="/tmp/orig.pkl",
+            origin="demo:flowers",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["origin"] == "demo:flowers"
+
+    def test_dataset_registry_includes_source(self, client):
+        """Registered datasets include a source dict for the Details column."""
+        src = {"importer": "folder", "params": {"path": "/data/images"}}
+        register_dataset(
+            name="src-ds",
+            media_type="image",
+            num_items=8,
+            pkl_path="/tmp/src.pkl",
+            origin="folder:/data/images",
+            source=src,
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["source"] == src
+
+    def test_dataset_registry_default_origin_is_unknown(self, client):
+        """Datasets registered without origin default to 'unknown'."""
+        register_dataset(name="no-origin", media_type="audio", num_items=3, pkl_path="/tmp/no.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["origin"] == "unknown"
+
+    def test_dataset_registry_includes_loaded_field(self, client):
+        """Registered datasets include the loaded boolean (renamed to Loaded? in UI)."""
+        register_dataset(name="ld-ds", media_type="audio", num_items=5, pkl_path="/tmp/ld.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "loaded" in ds
+        assert isinstance(ds["loaded"], bool)
+
+
+class TestDashboardModelRegistryColumns:
+    """Tests that the model registry API returns fields needed for new columns."""
+
+    def test_model_registry_includes_created_at(self, client):
+        """Registered models include a created_at timestamp."""
+        register_model(name="ts-model", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert "created_at" in m
+        assert isinstance(m["created_at"], (int, float))
+        assert m["created_at"] > 0
+
+    def test_model_registry_includes_autodetect_false_by_default(self, client):
+        """Models without an autorun detector show autodetect=False."""
+        register_model(name="no-det", media_type="image", trainable=True)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert "autodetect" in m
+        assert m["autodetect"] is False
+
+    def test_model_registry_reflects_autodetect_flag(self, client):
+        """Models with an autorun detector reflect its autodetect flag."""
+        add_autorun_detector("det-a", "audio", None, 0.5, autodetect=True)
+        register_model(
+            name="det-a",
+            media_type="audio",
+            trainable=False,
+            detector_name="det-a",
+        )
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert m["autodetect"] is True
+
+    def test_autodetect_toggle_via_api(self, client):
+        """Toggling autodetect via PUT updates the model registry response."""
+        add_autorun_detector("toggle-det", "audio", None, 0.5, autodetect=False)
+        register_model(
+            name="toggle-det",
+            media_type="audio",
+            trainable=False,
+            detector_name="toggle-det",
+        )
+
+        # Initially false
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["autodetect"] is False
+
+        # Toggle on
+        resp = client.put(
+            "/api/autorun-detectors/toggle-det/autodetect",
+            json={"autodetect": True},
+        )
+        assert resp.status_code == 200
+
+        # Verify reflected
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["autodetect"] is True
+
+    def test_model_registry_includes_loaded_field(self, client):
+        """Registered models include the loaded boolean (renamed to Loaded? in UI)."""
+        register_model(name="ld-model", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        data = resp.get_json()
+        m = data["models"][0]
+        assert "loaded" in m
+        assert isinstance(m["loaded"], bool)
+
+
+class TestDashboardColumnHeaders:
+    """Verify the frontend JS contains the updated column headers."""
+
+    def test_dataset_grid_has_new_column_headers(self, client):
+        """app.js should include the new dataset column headers."""
+        resp = client.get("/static/app.js")
+        text = resp.data.decode("utf-8")
+        assert ">Created<" in text
+        assert ">Origin<" in text
+        assert ">Details<" in text
+        assert ">Loaded?<" in text
+
+    def test_model_grid_has_new_column_headers(self, client):
+        """app.js should include the new model column headers."""
+        resp = client.get("/static/app.js")
+        text = resp.data.decode("utf-8")
+        assert ">Autorun?<" in text
+        assert "dash-autorun-cb" in text

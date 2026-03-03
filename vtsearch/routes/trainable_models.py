@@ -300,13 +300,18 @@ def save_trainable_model_labels(name: str):
 
 @trainable_models_bp.route("/api/models/registry")
 def list_registered_models():
-    """Return all registered models with their loaded state."""
+    """Return all registered models with their loaded state and autodetect flag."""
     from vtsearch.models.registry import get_loaded_id, list_models
+    from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
     loaded_id = get_loaded_id()
+    detectors = get_autorun_detectors()
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
+        det_name = entry.get("detector_name", "")
+        det = detectors.get(det_name) if det_name else None
+        entry["autodetect"] = bool(det.get("autodetect")) if det else False
     return jsonify({"models": entries})
 
 
