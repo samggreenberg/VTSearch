@@ -16,7 +16,6 @@ from vtsearch.utils import (
     get_autorun_detectors,
     get_autorun_extractors,
     get_autorun_localizers,
-    medias,
     remove_autorun_detector,
     remove_autorun_extractor,
     remove_autorun_localizer,
@@ -24,6 +23,7 @@ from vtsearch.utils import (
     rename_autorun_extractor,
     rename_autorun_localizer,
     set_autorun_detector_autodetect,
+    snapshot_medias,
 )
 
 detectors_crud_bp = Blueprint("detectors_crud", __name__)
@@ -304,8 +304,9 @@ def import_detector_pkl():
         # Prefer media_type stored in the file; fall back to current medias, then "audio"
         media_type = detector_data.get("media_type", "")
         if not media_type:
-            if medias:
-                media_type = next(iter(medias.values())).get("type", "audio")
+            snap = snapshot_medias()
+            if snap:
+                media_type = next(iter(snap.values())).get("type", "audio")
             else:
                 media_type = "audio"
 

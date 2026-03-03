@@ -21,6 +21,7 @@ from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
     medias,
+    snapshot_medias,
     update_progress,
 )
 
@@ -45,9 +46,10 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return
-    media_type = next(iter(medias.values())).get("type", "audio")
+    media_type = next(iter(snap.values())).get("type", "audio")
     from vtsearch.media import get as media_get
 
     try:
@@ -102,12 +104,13 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
     empty or if a registry entry with the same pkl path already exists (to
     avoid duplicating on reload).
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return
 
-    first = next(iter(medias.values()))
+    first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
-    num_items = len(medias)
+    num_items = len(snap)
 
     # Derive name from display-name override, origin, or fallback
     if not name:
@@ -120,7 +123,7 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     try:
-        data_bytes = export_dataset_to_file(medias)
+        data_bytes = export_dataset_to_file(snap)
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:

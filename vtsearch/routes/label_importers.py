@@ -41,6 +41,7 @@ from vtsearch.utils import (
     medias,
     find_missing_entries,
     resolve_media_ids,
+    snapshot_medias,
 )
 
 label_importers_bp = Blueprint("label_importers", __name__)
@@ -151,7 +152,7 @@ def run_label_import(importer_name: str):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
     applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup)
 
     # Detect entries that could not be matched at all
@@ -207,7 +208,7 @@ def ingest_missing():
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
     applied, _ = _apply_labels(entries, origin_lookup, md5_lookup)
 
     return jsonify(

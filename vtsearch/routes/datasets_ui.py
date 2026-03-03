@@ -10,8 +10,8 @@ from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
-    medias,
     set_dataset_display_name,
+    snapshot_medias,
 )
 
 datasets_ui_bp = Blueprint("datasets_ui", __name__)
@@ -116,16 +116,17 @@ def dashboard_dataset_info():
     Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
     ``origin`` extracted from the first media that has origin info.
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No dataset loaded"}), 404
 
-    first = next(iter(medias.values()))
+    first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
-    num_medias = len(medias)
+    num_medias = len(snap)
 
     # Determine origin from the first media that has one
     origin = None
-    for m in medias.values():
+    for m in snap.values():
         o = m.get("origin")
         if o:
             importer = o.get("importer", "")
@@ -152,7 +153,7 @@ def dashboard_dataset_info():
 
     # Build a source dict that can be used to reload the dataset later
     source = None
-    for m in medias.values():
+    for m in snap.values():
         o = m.get("origin")
         if isinstance(o, dict):
             source = o

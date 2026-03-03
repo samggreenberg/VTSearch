@@ -40,6 +40,7 @@ from vtsearch.utils import (
     get_progress,
     good_votes,
     set_dataset_display_name,
+    snapshot_medias,
     update_progress,
 )
 
@@ -89,13 +90,14 @@ def media_types_list():
 @datasets_bp.route("/api/dataset/status")
 def dataset_status():
     """Return the current dataset status."""
+    snap = snapshot_medias()
     media_type = None
-    if medias:
-        media_type = next(iter(medias.values())).get("type", "audio")
+    if snap:
+        media_type = next(iter(snap.values())).get("type", "audio")
     return jsonify(
         {
-            "loaded": len(medias) > 0,
-            "num_medias": len(medias),
+            "loaded": len(snap) > 0,
+            "num_medias": len(snap),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
             "num_dupes": get_dupe_count(),
@@ -432,11 +434,12 @@ def load_dataset_folder():
 @datasets_bp.route("/api/dataset/export")
 def export_dataset():
     """Export the current dataset to a pickle file."""
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No dataset loaded"}), 400
 
     try:
-        dataset_bytes = export_dataset_to_file(medias)
+        dataset_bytes = export_dataset_to_file(snap)
         return send_file(
             io.BytesIO(dataset_bytes),
             mimetype="application/octet-stream",
