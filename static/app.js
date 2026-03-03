@@ -6412,7 +6412,7 @@
           try {
             await fetch(`/api/datasets/registry/${encodeURIComponent(selDs[0].id)}/load`, { method: "POST" });
           } catch (_) {}
-          pollProgress();
+          startProgressPolling();
         }
         return;
       }
