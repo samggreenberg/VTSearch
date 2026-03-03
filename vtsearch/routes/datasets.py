@@ -49,6 +49,7 @@ from vtsearch.routes.datasets_loading import (  # noqa: F401
     _load_embedder_for_clips,
     _origin_to_str,
     _run_importer_in_background,
+    _run_origin_load_in_background,
     _set_clip_origins,
     _stage_importer_in_background,
     clear_dataset,
@@ -597,61 +598,25 @@ def _load_from_origin(source: dict):
         demo_name = params.get("name", "")
         if demo_name not in DEMO_DATASETS:
             return jsonify({"error": f"Unknown demo dataset: {demo_name}"}), 400
-
-        def load_task():
-            try:
-                clear_dataset()
-                gc.collect()
-                load_demo_dataset(demo_name, medias)
-                demo_origin = {"importer": "demo", "params": {"name": demo_name}}
-                _set_clip_origins(medias, demo_origin)
-                collapse_duplicates(medias)
-                build_diversity_tree()
-                _auto_register_dataset(
-                    name=demo_name,
-                    origin_str=f"demo:{demo_name}",
-                    source=demo_origin,
-                )
-                _load_embedder_for_clips()
-            except MemoryError:
-                medias.clear()
-                gc.collect()
-                update_progress("idle", "", 0, 0, "Out of memory — dataset too large.")
-            except Exception as e:
-                update_progress("idle", "", 0, 0, str(e))
-
-        threading.Thread(target=load_task, daemon=True).start()
+        origin = {"importer": "demo", "params": {"name": demo_name}}
+        _run_origin_load_in_background(
+            lambda: load_demo_dataset(demo_name, medias),
+            origin,
+            name=demo_name,
+        )
         return jsonify({"ok": True, "message": "Loading started"})
 
     if importer_name == "pickle":
         pkl_path = params.get("path", "")
         if not pkl_path or not Path(pkl_path).is_file():
             return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
+        origin = {"importer": "pickle", "params": params}
 
-        def load_pkl_task():
-            try:
-                clear_dataset()
-                gc.collect()
-                update_progress("loading", "Loading dataset from file...", 0, 0)
-                load_dataset_from_pickle(Path(pkl_path), medias)
-                origin = {"importer": "pickle", "params": params}
-                _set_clip_origins(medias, origin)
-                collapse_duplicates(medias)
-                build_diversity_tree()
-                origin_str = _origin_to_str(origin)
-                _auto_register_dataset(origin_str=origin_str, source=origin)
-                _load_embedder_for_clips()
-            except MemoryError:
-                medias.clear()
-                gc.collect()
-                update_progress(
-                    "idle", "", 0, 0,
-                    "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
-                )
-            except Exception as e:
-                update_progress("idle", "", 0, 0, str(e))
+        def load_pkl():
+            update_progress("loading", "Loading dataset from file...", 0, 0)
+            load_dataset_from_pickle(Path(pkl_path), medias)
 
-        threading.Thread(target=load_pkl_task, daemon=True).start()
+        _run_origin_load_in_background(load_pkl, origin)
         return jsonify({"ok": True, "message": "Loading started"})
 
     if importer_name == "folder":

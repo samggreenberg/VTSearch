@@ -135,23 +135,35 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
     _reg_set_loaded(entry["id"])
 
 
-def _run_importer_in_background(importer, field_values: dict) -> None:
-    """Start *importer*.run() in a daemon thread after clearing the dataset."""
+def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> None:
+    """Run a dataset load in a background thread with standard error handling.
 
-    def load_task():
+    *load_fn* is called after ``clear_dataset()`` / ``gc.collect()`` and should
+    populate ``medias``.  Everything after (origin tagging, dedup, diversity
+    tree, registry, embedder warm-up) is handled automatically.
+
+    Parameters
+    ----------
+    load_fn:
+        Callable that loads data into *medias*.
+    origin:
+        Origin dict (``{"importer": ..., "params": ...}``).
+    name:
+        Display name for the dataset registry.  Falls back to
+        ``_origin_to_str(origin)`` when empty.
+    """
+
+    def task():
         try:
             clear_dataset()
             gc.collect()
-            importer.run(field_values, medias)
-            origin = importer.build_origin(field_values)
+            load_fn()
             _set_clip_origins(medias, origin)
             collapse_duplicates(medias)
             build_diversity_tree()
-            # Auto-register in the dataset registry before signalling idle
-            # so the frontend sees the new entry when it refreshes the grid.
             origin_str = _origin_to_str(origin)
             _auto_register_dataset(
-                name=importer.display_name,
+                name=name,
                 origin_str=origin_str,
                 source=origin,
             )
@@ -169,8 +181,17 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         except Exception as e:
             update_progress("idle", "", 0, 0, str(e))
 
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
+    threading.Thread(target=task, daemon=True).start()
+
+
+def _run_importer_in_background(importer, field_values: dict) -> None:
+    """Start *importer*.run() in a daemon thread after clearing the dataset."""
+    origin = importer.build_origin(field_values)
+    _run_origin_load_in_background(
+        lambda: importer.run(field_values, medias),
+        origin,
+        name=importer.display_name,
+    )
 
 
 # ---------------------------------------------------------------------------
