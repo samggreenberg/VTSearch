@@ -1596,6 +1596,8 @@
 
       if (progress.error) {
         stopDashProgressPolling();
+        _dashboardAddDatasetMode = false;
+        dashPendingAction = null;
         if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${progress.error}`; dashProgressMessage.style.color = "var(--color-bad)"; }
         if (dashProgressFill) dashProgressFill.classList.remove("indeterminate");
         return;
@@ -1621,6 +1623,14 @@
           await renderDashboardDatasets();
           await fetchMedias();
           await fetchVotes();
+
+          // When adding a dataset via "+", stay on the dashboard — never
+          // navigate to the labeling screen.  Only "Label" sets a callback.
+          if (_dashboardAddDatasetMode) {
+            _dashboardAddDatasetMode = false;
+            dashPendingAction = null;
+            return;
+          }
 
           const cb = dashPendingAction;
           dashPendingAction = null;
@@ -5763,6 +5773,7 @@
 
       dashSelectedDataset = null;
       dashPendingAction = null;
+      _dashboardAddDatasetMode = true;
       startDashProgressPolling();
     });
   }
@@ -5851,6 +5862,7 @@
           dashSelectedDataset = ds;
           // Load the selected demo dataset immediately from dashboard
           dashPendingAction = null;
+          _dashboardAddDatasetMode = true;
           dashLoadSelectedDataset();
         });
         tr.addEventListener("keydown", (e) => {
@@ -5972,6 +5984,7 @@
       dashSelectedDataset = null;
       // Poll progress
       dashPendingAction = null;
+      _dashboardAddDatasetMode = true;
       startDashProgressPolling();
     });
   }
@@ -6433,6 +6446,7 @@
           }
         } else {
           // Load from registry, then go to labeling
+          _dashboardAddDatasetMode = false;
           showDashGridProgress("Loading dataset...");
           try {
             await fetch(`/api/datasets/registry/${encodeURIComponent(selDs[0].id)}/load`, { method: "POST" });
