@@ -1653,7 +1653,7 @@
 
           const cb = dashPendingAction;
           dashPendingAction = null;
-          if (typeof cb === "function") cb();
+          if (typeof cb === "function") await cb();
         }
       }
     } catch (_) {}
@@ -6450,7 +6450,51 @@
           try {
             await fetch(`/api/datasets/registry/${encodeURIComponent(selDs[0].id)}/load`, { method: "POST" });
           } catch (_) {}
-          startProgressPolling();
+          const savedTrainMode = _dashboardTrainMode;
+          dashPendingAction = async () => {
+            _dashboardTrainMode = savedTrainMode;
+
+            if (_dashboardTrainMode && _dashboardTrainMode.model) {
+              // Import labels from the trainable model's labelset
+              try {
+                const modelRes = await fetch(`/api/trainable-models/${encodeURIComponent(_dashboardTrainMode.model.name)}`);
+                if (modelRes.ok) {
+                  const modelData = await modelRes.json();
+                  const labels = modelData.labelset && modelData.labelset.labels;
+                  if (labels && labels.length > 0) {
+                    await fetch("/api/labels/import", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ labels }),
+                    });
+                  }
+                }
+              } catch (_) { /* ignore label import errors */ }
+
+              await fetchVotes();
+
+              // Set text sort mode and trigger sort with the model's first example or text_query
+              const exQuery = _dashboardTrainMode.model.text_query
+                || (_dashboardTrainMode.model.examples && _dashboardTrainMode.model.examples.length > 0 && _dashboardTrainMode.model.examples[0].type === "text" ? _dashboardTrainMode.model.examples[0].value : "");
+              sortMode = "text";
+              textSortWrap.style.display = "";
+              learnedSortWrap.style.display = "none";
+              loadSortWrap.style.display = "none";
+              document.querySelectorAll('input[name="sort-mode"]').forEach(r => {
+                r.checked = r.value === "text";
+              });
+              textSortInput.value = exQuery;
+              if (exQuery) {
+                fetchTextSort(exQuery);
+              }
+            }
+
+            showMainUI();
+            if (medias.length > 0 && !selected) {
+              selectMedia(medias[0].id);
+            }
+          };
+          startDashProgressPolling();
         }
         return;
       }
