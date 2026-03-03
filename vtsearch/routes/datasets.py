@@ -366,46 +366,12 @@ def load_demo_dataset_route():
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
-    # Set progress to "loading" synchronously so the frontend never sees a
-    # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Loading demo dataset...")
-
-    def load_task():
-        try:
-            clear_dataset()
-            gc.collect()
-            load_demo_dataset(dataset_name, medias)
-            demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
-            _set_clip_origins(medias, demo_origin)
-            collapse_duplicates(medias)
-            build_diversity_tree()
-            # Auto-register in the dataset registry before signalling idle
-            # so the frontend sees the new entry when it refreshes the grid.
-            _auto_register_dataset(
-                name=dataset_name,
-                origin_str=f"demo:{dataset_name}",
-                source=demo_origin,
-            )
-            _load_embedder_for_clips()
-        except MemoryError:
-            medias.clear()
-            gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
-
-    # Signal "loading" before the thread starts so frontend polling never
-    # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0)
-
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
+    demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
+    _run_origin_load_in_background(
+        lambda: load_demo_dataset(dataset_name, medias),
+        demo_origin,
+        name=dataset_name,
+    )
 
     return jsonify({"ok": True, "message": "Loading started"})
 

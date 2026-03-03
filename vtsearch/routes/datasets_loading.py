@@ -164,6 +164,12 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
             clear_dataset()
             gc.collect()
             load_fn()
+            # Suppress any premature "idle" that load_fn may have emitted
+            # (e.g. load_demo_dataset signals idle before returning).
+            # The frontend must not see "idle" until registration and
+            # embedder warm-up are complete, otherwise the dashboard grid
+            # renders before the new entry exists in the registry.
+            update_progress("loading", "Finalizing…")
             _set_clip_origins(medias, origin)
             collapse_duplicates(medias)
             build_diversity_tree()
