@@ -295,11 +295,11 @@
   const datasetImporterFormDiv = document.getElementById("dataset-importer-form");
   const datasetImporterBack = document.getElementById("dataset-importer-back");
   const dashFileInput = document.getElementById("dash-file-input");
-  const dashProgress = document.getElementById("dash-progress");
-  const dashProgressFill = document.getElementById("dash-progress-fill");
-  const dashProgressText = document.getElementById("dash-progress-text");
-  const dashProgressMessage = document.getElementById("dash-progress-message");
-  const dashProgressEta = document.getElementById("dash-progress-eta");
+  // Dashboard progress elements — created dynamically as a table row
+  let dashProgressFill = null;
+  let dashProgressText = null;
+  let dashProgressMessage = null;
+  let dashProgressEta = null;
   const headerDashboardBtn = document.getElementById("header-dashboard-btn");
   const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
@@ -1586,22 +1586,47 @@
     renderModelRows();
   }
 
-  // Show the in-grid progress bar inside the dataset section, hiding the grid content
+  // Show a progress row inside the dataset table (keeps existing rows visible)
   function showDashGridProgress(message) {
-    dashDatasetGrid.style.display = "none";
-    dashProgress.style.display = "block";
-    dashProgressFill.style.width = "0%";
-    dashProgressFill.classList.add("indeterminate");
-    dashProgressText.textContent = "";
-    dashProgressMessage.textContent = message || "Loading...";
+    // Remove any existing progress row first
+    hideDashGridProgress();
+    // Ensure the table exists; if the grid is empty, create a minimal table
+    let tbody = dashDatasetGrid.querySelector("tbody");
+    if (!tbody) {
+      dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
+        <thead><tr>
+          <th>Name</th><th>Type</th><th>Items</th><th>Loaded</th><th class="col-actions-header"></th>
+        </tr></thead><tbody></tbody></table>`;
+      tbody = dashDatasetGrid.querySelector("tbody");
+    }
+    const tr = document.createElement("tr");
+    tr.id = "dash-progress-row";
+    tr.className = "dash-progress-row";
+    tr.innerHTML = `<td colspan="5" class="dash-progress-cell" role="status" aria-live="polite">
+      <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill indeterminate" id="dash-progress-fill" style="width:0%"></div>
+        <div class="progress-text" id="dash-progress-text" aria-hidden="true"></div>
+      </div>
+      <div class="progress-message" id="dash-progress-message">${escapeHtml(message || "Loading...")}</div>
+      <div class="progress-eta" id="dash-progress-eta"></div>
+    </td>`;
+    tbody.appendChild(tr);
+    // Update element references
+    dashProgressFill = tr.querySelector("#dash-progress-fill");
+    dashProgressText = tr.querySelector("#dash-progress-text");
+    dashProgressMessage = tr.querySelector("#dash-progress-message");
+    dashProgressEta = tr.querySelector("#dash-progress-eta");
     dashProgressMessage.style.color = "var(--text-secondary)";
-    dashProgressEta.textContent = "";
   }
 
-  // Hide the in-grid progress bar and restore the dataset grid
+  // Remove the progress row from the dataset table
   function hideDashGridProgress() {
-    dashProgress.style.display = "none";
-    dashDatasetGrid.style.display = "";
+    const row = document.getElementById("dash-progress-row");
+    if (row) row.remove();
+    dashProgressFill = null;
+    dashProgressText = null;
+    dashProgressMessage = null;
+    dashProgressEta = null;
   }
 
   // Dashboard: load a dataset from the selected demo, then run a callback
@@ -1618,13 +1643,11 @@
       });
       if (!res.ok) {
         const error = await res.json();
-        dashProgressMessage.textContent = `Error: ${error.error}`;
-        dashProgressMessage.style.color = "var(--color-bad)";
+        if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${error.error}`; dashProgressMessage.style.color = "var(--color-bad)"; }
         return;
       }
     } catch (e) {
-      dashProgressMessage.textContent = `Error: ${e.message}`;
-      dashProgressMessage.style.color = "var(--color-bad)";
+      if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${e.message}`; dashProgressMessage.style.color = "var(--color-bad)"; }
       return;
     }
 
@@ -1651,18 +1674,17 @@
 
       if (progress.error) {
         stopDashProgressPolling();
-        dashProgressMessage.textContent = `Error: ${progress.error}`;
-        dashProgressMessage.style.color = "var(--color-bad)";
-        dashProgressFill.classList.remove("indeterminate");
+        if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${progress.error}`; dashProgressMessage.style.color = "var(--color-bad)"; }
+        if (dashProgressFill) dashProgressFill.classList.remove("indeterminate");
         return;
       }
 
-      if (progress.pct != null) {
+      if (progress.pct != null && dashProgressFill) {
         dashProgressFill.classList.remove("indeterminate");
         dashProgressFill.style.width = `${progress.pct}%`;
-        dashProgressText.textContent = `${progress.pct}%`;
+        if (dashProgressText) dashProgressText.textContent = `${progress.pct}%`;
       }
-      if (progress.message) {
+      if (progress.message && dashProgressMessage) {
         dashProgressMessage.textContent = progress.message;
         dashProgressMessage.style.color = "var(--text-secondary)";
       }
@@ -5781,13 +5803,11 @@
         const res = await fetch(`/api/dataset/import/${importer.name}`, { method: "POST", headers, body });
         if (!res.ok) {
           const err = await res.json();
-          dashProgressMessage.textContent = `Error: ${err.error}`;
-          dashProgressMessage.style.color = "var(--color-bad)";
+          if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${err.error}`; dashProgressMessage.style.color = "var(--color-bad)"; }
           return;
         }
       } catch (err) {
-        dashProgressMessage.textContent = `Error: ${err.message}`;
-        dashProgressMessage.style.color = "var(--color-bad)";
+        if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${err.message}`; dashProgressMessage.style.color = "var(--color-bad)"; }
         return;
       }
 
@@ -5988,14 +6008,12 @@
         const res = await fetch("/api/dataset/load-file", { method: "POST", body: formData });
         if (!res.ok) {
           const data = await res.json();
-          dashProgressMessage.textContent = `Error: ${data.error || "Upload failed"}`;
-          dashProgressMessage.style.color = "var(--color-bad)";
+          if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${data.error || "Upload failed"}`; dashProgressMessage.style.color = "var(--color-bad)"; }
           dashFileInput.value = "";
           return;
         }
       } catch (e) {
-        dashProgressMessage.textContent = `Error: ${e.message}`;
-        dashProgressMessage.style.color = "var(--color-bad)";
+        if (dashProgressMessage) { dashProgressMessage.textContent = `Error: ${e.message}`; dashProgressMessage.style.color = "var(--color-bad)"; }
         dashFileInput.value = "";
         return;
       }
