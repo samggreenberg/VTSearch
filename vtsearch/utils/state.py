@@ -152,16 +152,15 @@ def set_inclusion(value: int) -> None:
     Also clears the progress model cache since cached models were trained
     with the old inclusion value.
     """
+    from vtsearch import settings
+
     with _state_lock:
         if value != _core.inclusion:
             from vtsearch.models.progress import clear_progress_cache
 
             clear_progress_cache()
         _core.inclusion = value
-
-    from vtsearch import settings
-
-    settings.set_inclusion(value)
+        settings.set_inclusion(value)
 
 
 def get_dataset_display_name() -> str | None:
