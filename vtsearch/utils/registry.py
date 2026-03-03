@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import pkgutil
+import threading
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -184,6 +185,7 @@ class PluginRegistry(Generic[T]):
         self._label = label
         self._items: dict[str, T] = {}
         self._discovered = False
+        self._lock = threading.Lock()
 
     # -- Discovery ----------------------------------------------------------
 
@@ -206,9 +208,12 @@ class PluginRegistry(Generic[T]):
                 )
 
     def _ensure_discovered(self) -> None:
-        if not self._discovered:
-            self._discover()
-            self._discovered = True
+        if self._discovered:
+            return
+        with self._lock:
+            if not self._discovered:
+                self._discover()
+                self._discovered = True
 
     # -- Public API ---------------------------------------------------------
 

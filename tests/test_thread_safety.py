@@ -363,3 +363,47 @@ class TestConcurrentProgressCache:
             th.join()
 
         assert not errors
+
+
+class TestPluginRegistryLock:
+    """Verify that PluginRegistry._ensure_discovered is thread-safe."""
+
+    def test_registry_has_lock(self):
+        from vtsearch.utils.registry import PluginRegistry
+
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        assert isinstance(reg._lock, type(threading.Lock()))
+
+    def test_concurrent_first_access_discovers_once(self):
+        """Concurrent .list() calls should trigger _discover exactly once."""
+        from unittest.mock import patch
+        from vtsearch.utils.registry import PluginRegistry
+
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        call_count = 0
+        original_discover = reg._discover
+
+        def counting_discover():
+            nonlocal call_count
+            call_count += 1
+            original_discover()
+
+        barrier = threading.Barrier(10)
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait()
+                reg.list()
+            except Exception as e:
+                errors.append(e)
+
+        with patch.object(reg, "_discover", side_effect=counting_discover):
+            threads = [threading.Thread(target=worker) for _ in range(10)]
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join()
+
+        assert not errors
+        assert call_count == 1, f"_discover called {call_count} times, expected 1"
