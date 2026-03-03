@@ -2794,6 +2794,10 @@
         a.click();
         URL.revokeObjectURL(url);
       }
+      // Handle GUI display if the exporter returns display_results
+      if (result.display_results) {
+        displayAutodetectResults(result.display_results);
+      }
       menuLabelsStatus.textContent = result.message || "Labels exported";
       setTimeout(() => { menuLabelsStatus.textContent = ""; }, 4000);
     } catch (e) {
