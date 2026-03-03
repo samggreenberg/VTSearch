@@ -1,6 +1,7 @@
 """Tests for the VTSearch dashboard API endpoint."""
 
 import app as app_module  # noqa: F401 — triggers conftest side effects
+from vtsearch.datasets.registry import register_dataset
 from vtsearch.utils import medias
 
 
@@ -122,3 +123,77 @@ class TestDashboardHtmlPresent:
         resp = client.get("/")
         assert b"dash-label-btn" in resp.data
         assert b"dash-detect-btn" in resp.data
+
+
+class TestGuessMediaType:
+    """Frontend auto-populates the media-type dropdown when creating a new model.
+
+    The guessing logic lives in app.js (showNewModelForm):
+    1. If all datasets in the registry share a single media_type, use that.
+    2. Otherwise, if settings.autoload_media_types has exactly one entry, use it.
+
+    These tests verify the underlying data contracts that the JS logic relies on.
+    """
+
+    def test_js_contains_guessing_logic(self, client):
+        """app.js should include the media-type guessing code."""
+        resp = client.get("/static/app.js")
+        text = resp.data.decode("utf-8")
+        assert "guessedMediaType" in text
+        assert "datasetTypes" in text
+
+    def test_single_dataset_type_in_registry(self, client):
+        """When the registry has one dataset, its media_type is available."""
+        register_dataset(
+            name="test-audio",
+            media_type="audio",
+            num_items=10,
+            pkl_path="/tmp/fake.pkl",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        assert len(data["datasets"]) == 1
+        assert data["datasets"][0]["media_type"] == "audio"
+
+    def test_multiple_same_type_datasets_in_registry(self, client):
+        """Multiple datasets of the same type yield a single unique type."""
+        register_dataset(name="ds1", media_type="image", num_items=5, pkl_path="/tmp/a.pkl")
+        register_dataset(name="ds2", media_type="image", num_items=3, pkl_path="/tmp/b.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        types = {d["media_type"] for d in data["datasets"]}
+        assert types == {"image"}
+
+    def test_mixed_type_datasets_no_single_guess(self, client):
+        """Multiple datasets with different types produce more than one unique type."""
+        register_dataset(name="ds1", media_type="audio", num_items=5, pkl_path="/tmp/a.pkl")
+        register_dataset(name="ds2", media_type="image", num_items=3, pkl_path="/tmp/b.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        types = {d["media_type"] for d in data["datasets"]}
+        assert len(types) > 1
+
+    def test_autoload_single_type_from_settings(self, client):
+        """When autoload_media_types has exactly one entry, settings returns it."""
+        client.put("/api/settings", json={"autoload_media_types": ["video"]})
+        resp = client.get("/api/settings")
+        data = resp.get_json()
+        assert data["autoload_media_types"] == ["video"]
+
+    def test_autoload_multiple_types_no_single_guess(self, client):
+        """When autoload_media_types has multiple entries, no single guess."""
+        client.put("/api/settings", json={"autoload_media_types": ["audio", "image"]})
+        resp = client.get("/api/settings")
+        data = resp.get_json()
+        assert len(data["autoload_media_types"]) > 1
+
+    def test_empty_registry_falls_back_to_settings(self, client):
+        """With no datasets, the frontend should fall back to autoload settings."""
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        assert len(data["datasets"]) == 0
+        # Set a single autoload type
+        client.put("/api/settings", json={"autoload_media_types": ["paragraph"]})
+        resp = client.get("/api/settings")
+        data = resp.get_json()
+        assert data["autoload_media_types"] == ["paragraph"]
