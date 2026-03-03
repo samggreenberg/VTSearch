@@ -183,7 +183,7 @@ class TestAutorunDetectors:
         )
         assert resp.status_code == 200
 
-        detectors = client.get("/api/favorite-detectors").get_json()["detectors"]
+        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
         det = [d for d in detectors if d["name"] == "test"][0]
         assert det["weights"] is None
         assert det["autodetect"] is False

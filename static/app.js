@@ -663,7 +663,7 @@
   // dashboard buttons or autopilot code call into the favorites UI.
   async function loadFavoriteDetectors() {
     try {
-      const res = await fetch("/api/favorite-detectors");
+      const res = await fetch("/api/autorun-detectors");
       const data = await res.json();
       favoriteDetectors = data.detectors || [];
     } catch (_) {}
