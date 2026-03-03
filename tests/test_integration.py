@@ -1032,8 +1032,8 @@ class TestDashboardToAutopilotWorkflow:
         tm_data = resp.get_json()
         labels = tm_data["labelset"]["labels"]
         assert len(labels) == 7
-        good_labels = [l for l in labels if l["label"] == "good"]
-        bad_labels = [l for l in labels if l["label"] == "bad"]
+        good_labels = [lb for lb in labels if lb["label"] == "good"]
+        bad_labels = [lb for lb in labels if lb["label"] == "bad"]
         assert len(good_labels) == 3
         assert len(bad_labels) == 4
 
