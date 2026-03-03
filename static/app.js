@@ -31,6 +31,9 @@
   // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart, hardLabels, ...}
   // phase: "good" | "bad" | "hard" | "new" | "done"
   let _autopilotState = null;
+  // Pending autopilot transition: deferred until the current vote finishes so
+  // the user isn't jerked to a new media mid-vote.  Stored as a function.
+  let _pendingAutopilotTransition = null;
   // Media type metadata fetched from /api/media-types at startup.
   // Keyed by type_id → { type_id, name, icon, tab_title, loops, ... }
   let mediaTypesMap = {};
@@ -897,7 +900,9 @@
 
     if (st.phase === "good") {
       if (votes.good.length >= st.goodToStart) {
-        // Transition to Bad phase — switch select mode to Hard
+        // Transition to Bad phase — switch select mode to Hard.
+        // Good→Bad only changes select mode (no sort change, no media jerk),
+        // so apply immediately even mid-vote.
         st.phase = "bad";
         _apSetSelectMode("hard");
         checkAutopilotPhase(); // re-check in case bad threshold also met
@@ -905,7 +910,22 @@
       }
     } else if (st.phase === "bad") {
       if (votes.bad.length >= st.badToStart) {
-        // Transition to Hard phase — switch to learned sort + hard select
+        // Transition to Hard phase — switch to learned sort + hard select.
+        // This changes sort mode and fetches new rankings, which would jerk the
+        // user to a different media.  When mid-vote (isVoting), defer the
+        // side-effects so the current selection finishes first.
+        if (isVoting) {
+          _pendingAutopilotTransition = () => {
+            st.phase = "hard";
+            st.hardLabels = 0;
+            _apActivateLearnedSort();
+            _apSetSelectMode("hard");
+            fetchLearnedSort(true);
+            checkAutopilotPhase();
+          };
+          renderAutopilotSteps();
+          return;
+        }
         st.phase = "hard";
         st.hardLabels = 0;
         _apActivateLearnedSort();
@@ -917,7 +937,18 @@
     } else if (st.phase === "hard") {
       // Check if Smart AND Stable indicators are both green
       if (st.smartStatus === "green" && st.stableStatus === "green") {
-        // Transition to New phase
+        // Transition to New phase — changes select mode to diversity tree,
+        // which would jerk the user to a different media.  Defer when mid-vote.
+        if (isVoting) {
+          _pendingAutopilotTransition = () => {
+            st.phase = "new";
+            _apSetSelectMode("new");
+            _fetchAndApplyDiversitySample();
+            checkAutopilotPhase();
+          };
+          renderAutopilotSteps();
+          return;
+        }
         st.phase = "new";
         _apSetSelectMode("new");
         // Keep learned sort active; select mode = new uses diversity tree
@@ -976,6 +1007,7 @@
 
   function stopAutopilot() {
     _autopilotState = null;
+    _pendingAutopilotTransition = null;
     renderAutopilotSteps();
   }
 
@@ -4099,6 +4131,15 @@
       // re-renders — but the user can keep voting in the meantime.
       if (sortMode === "learned") {
         scheduleLearnedSort();
+      }
+
+      // Apply any autopilot transition that was deferred during this vote.
+      // The user has now finished voting on their current media and auto-advanced,
+      // so it's safe to switch sort/select modes without jerking them.
+      if (_pendingAutopilotTransition) {
+        const transition = _pendingAutopilotTransition;
+        _pendingAutopilotTransition = null;
+        transition();
       }
     } finally {
       isVoting = false;
