@@ -143,7 +143,10 @@ def _fake_embed_audio(path):
 
 def _fake_embed_text(text):
     """Deterministic fake text embedding derived from the query string."""
-    rng = np.random.RandomState(hash(text) % 2**31)
+    import hashlib as _hl
+
+    seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
+    rng = np.random.RandomState(seed)
     return rng.randn(_EMBEDDING_DIM).astype(np.float32)
 
 

@@ -49,6 +49,9 @@ def _extract_archive(
                     i,
                     total,
                 )
+                target = (extract_dir / member).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
                 zf.extract(member, extract_dir)
 
     elif tarfile.is_tarfile(archive_path):
@@ -81,6 +84,9 @@ def _extract_archive(
                     i,
                     total,
                 )
+                target = (extract_dir / member).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
                 rf.extract(member, extract_dir)
 
     else:

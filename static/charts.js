@@ -131,12 +131,6 @@
     }
 
     const dataToPlot = stabilityData;
-    if (dataToPlot.length === 0) {
-      ctx.fillStyle = themeColor("--text-muted");
-      ctx.font = "14px sans-serif";
-      ctx.fillText("Need more labels for stability analysis", 20, canvas.height / 2);
-      return;
-    }
 
     const numLabels = dataToPlot.map(d => d.num_labels);
     const numFlips = dataToPlot.map(d => d.num_flips);

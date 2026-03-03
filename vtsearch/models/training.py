@@ -539,7 +539,7 @@ def train_and_score(
         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
     if safe_thresholds:
-        n_labels = len(good_votes) + len(bad_votes)
+        n_labels = len(X_list)
         threshold = calculate_safe_threshold(threshold, scores, n_labels)
 
     # Sort by raw scores (full precision) so that tiny differences still
