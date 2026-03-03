@@ -6692,8 +6692,9 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    // Never intercept keys when a dialog is open
-    if (vtDialogModal.classList.contains("show")) return;
+    // Never intercept keys when any modal is open (dialogs, autodetect
+    // results, settings, load-sort, etc.).  All modals use .modal.show.
+    if (document.querySelector(".modal.show")) return;
 
     // Never intercept keys when typing in text fields
     if (isTyping()) return;
