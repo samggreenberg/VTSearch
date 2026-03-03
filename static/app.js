@@ -6114,7 +6114,7 @@
       exTypeOptions += `<option value="label_imp:${escapeHtml(imp.name)}">${escapeHtml(imp.icon || '\uD83C\uDFF7\uFE0F')} ${escapeHtml(imp.display_name)}</option>`;
     }
 
-    let html = `<h3 class="form-heading">New Model</h3>`;
+    let html = ``;
     html += `<form id="new-model-form">`;
     html += `<div class="form-group">`;
     html += `<label class="form-label">Model Name *</label>`;
