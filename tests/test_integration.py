@@ -899,13 +899,15 @@ class TestDashboardToAutopilotWorkflow:
     @pytest.fixture(autouse=True)
     def _clean_trainable_models(self):
         """Remove trainable model files created during tests."""
-        from vtsearch.routes.trainable_models import TRAINABLE_MODELS_DIR
+        from vtsearch.settings import get_trainable_models_dir
 
-        if TRAINABLE_MODELS_DIR.is_dir():
-            shutil.rmtree(TRAINABLE_MODELS_DIR)
+        tm_dir = get_trainable_models_dir()
+        if tm_dir.is_dir():
+            shutil.rmtree(tm_dir)
         yield
-        if TRAINABLE_MODELS_DIR.is_dir():
-            shutil.rmtree(TRAINABLE_MODELS_DIR)
+        tm_dir = get_trainable_models_dir()
+        if tm_dir.is_dir():
+            shutil.rmtree(tm_dir)
 
     def test_create_model_registers_with_examples_and_text_query(self, client):
         """Creating a model via POST /api/autorun-detectors should register

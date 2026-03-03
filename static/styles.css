@@ -485,6 +485,8 @@ video { max-width: 100%; }
 .settings-label { font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; }
 .settings-number-input { width: 72px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-primary); font-size: 0.85rem; text-align: center; outline: none; }
 .settings-number-input:focus { border-color: var(--accent); }
+.settings-path-input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-primary); font-size: 0.85rem; font-family: monospace; outline: none; }
+.settings-path-input:focus { border-color: var(--accent); }
 .settings-actions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
 .settings-btn { padding: 7px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border); }
 .settings-btn.secondary { background: var(--bg-surface); color: var(--text-secondary); }

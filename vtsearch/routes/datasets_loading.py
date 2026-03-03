@@ -10,7 +10,7 @@ from uuid import uuid4
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
 from vtsearch.datasets.registry import (
-    SAVED_DATASETS_DIR,
+    get_saved_datasets_dir,
     register_dataset as _reg_register,
     set_loaded_id as _reg_set_loaded,
 )
@@ -116,8 +116,9 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
             name = name.split(":", 1)[1] or name
 
     # Save to a pkl file in saved_datasets/
-    SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    pkl_path = str(SAVED_DATASETS_DIR / f"ds_{uuid4().hex}.pkl")
+    ds_dir = get_saved_datasets_dir()
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     try:
         data_bytes = export_dataset_to_file(medias)
         Path(pkl_path).write_bytes(data_bytes)

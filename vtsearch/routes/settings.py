@@ -132,6 +132,18 @@ def update_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
+    # Directory path settings
+    for dir_key, setter in (
+        ("saved_datasets_dir", settings.set_saved_datasets_dir),
+        ("detectors_dir", settings.set_detectors_dir),
+        ("trainable_models_dir", settings.set_trainable_models_dir),
+    ):
+        if dir_key in body:
+            val = body[dir_key]
+            if not isinstance(val, str) or not val.strip():
+                return jsonify({"error": f"{dir_key} must be a non-empty string"}), 400
+            setter(val.strip())
+
     return jsonify(settings.get_all())
 
 

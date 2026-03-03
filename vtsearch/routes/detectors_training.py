@@ -25,7 +25,7 @@ from vtsearch.utils import (
     medias,
 )
 
-from vtsearch.routes.detectors_crud import SERVER_DETECTOR_DIR
+from vtsearch.routes.detectors_crud import get_detectors_dir
 
 detectors_training_bp = Blueprint("detectors_training", __name__)
 
@@ -130,8 +130,9 @@ def export_detector_server():
     if not safe_name:
         return jsonify({"error": "name contains no valid characters"}), 400
 
-    SERVER_DETECTOR_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    det_dir = get_detectors_dir()
+    det_dir.mkdir(parents=True, exist_ok=True)
+    filepath = det_dir / f"{safe_name}.json"
 
     # Check for existing file before doing expensive training
     if filepath.exists() and not overwrite:

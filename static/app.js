@@ -310,6 +310,9 @@
   const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
   const autopilotTopGreensInput = document.getElementById("autopilot-top-greens-input");
   const autopilotHardRedsInput = document.getElementById("autopilot-hard-reds-input");
+  const savedDatasetsDirInput = document.getElementById("saved-datasets-dir-input");
+  const detectorsDirInput = document.getElementById("detectors-dir-input");
+  const trainableModelsDirInput = document.getElementById("trainable-models-dir-input");
 
   // Left-panel tab switching
   const tabManual = document.getElementById("tab-manual");
@@ -3150,6 +3153,9 @@
     favMtCheckboxes.forEach(cb => {
       cb.checked = favList.includes(cb.dataset.mediaType);
     });
+    if (savedDatasetsDirInput) savedDatasetsDirInput.value = data.saved_datasets_dir || "";
+    if (detectorsDirInput) detectorsDirInput.value = data.detectors_dir || "";
+    if (trainableModelsDirInput) trainableModelsDirInput.value = data.trainable_models_dir || "";
   }
 
   if (menuSettings && settingsModal && burgerDropdown) {
@@ -3285,7 +3291,7 @@
         const imported = JSON.parse(text);
         // Send all importable fields to the server
         const payload = {};
-        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right", "autopilot_top_greens", "autopilot_hard_reds"];
+        const importableKeys = ["volume", "theme", "inclusion", "enrich_descriptions", "safe_thresholds", "calibrate_count", "calibration_fraction", "swipe_animation", "show_thumbnails_left", "show_thumbnails_right", "autopilot_top_greens", "autopilot_hard_reds", "saved_datasets_dir", "detectors_dir", "trainable_models_dir"];
         for (const k of importableKeys) {
           if (k in imported) payload[k] = imported[k];
         }
@@ -3494,6 +3500,26 @@
       }).catch(() => {});
     });
   }
+
+  // ---- Storage location settings ----
+
+  [
+    { el: savedDatasetsDirInput, key: "saved_datasets_dir" },
+    { el: detectorsDirInput, key: "detectors_dir" },
+    { el: trainableModelsDirInput, key: "trainable_models_dir" },
+  ].forEach(({ el, key }) => {
+    if (el) {
+      el.addEventListener("change", () => {
+        const val = el.value.trim();
+        if (!val) return;
+        fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [key]: val }),
+        }).catch(() => {});
+      });
+    }
+  });
 
   // ---- Text sort ----
 

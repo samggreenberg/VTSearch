@@ -38,6 +38,15 @@ from vtsearch.config import DATA_DIR
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
 
+
+def get_trainable_models_dir() -> Path:
+    """Return the configured trainable-models directory from settings."""
+    from vtsearch.settings import get_trainable_models_dir as _get
+
+    return _get()
+
+
+#: Backward-compat alias — prefer :func:`get_trainable_models_dir` for live value.
 TRAINABLE_MODELS_DIR = DATA_DIR / "trainable_models"
 
 
@@ -47,7 +56,7 @@ def _slug(name: str) -> str:
 
 
 def _model_path(name: str) -> Path:
-    return TRAINABLE_MODELS_DIR / f"{_slug(name)}.json"
+    return get_trainable_models_dir() / f"{_slug(name)}.json"
 
 
 def _read_model(path: Path) -> dict | None:
@@ -58,16 +67,17 @@ def _read_model(path: Path) -> dict | None:
 
 
 def _write_model(path: Path, data: dict) -> None:
-    TRAINABLE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    get_trainable_models_dir().mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
-    if not TRAINABLE_MODELS_DIR.is_dir():
+    tm_dir = get_trainable_models_dir()
+    if not tm_dir.is_dir():
         return []
     models = []
-    for p in sorted(TRAINABLE_MODELS_DIR.iterdir()):
+    for p in sorted(tm_dir.iterdir()):
         if p.suffix != ".json":
             continue
         data = _read_model(p)
