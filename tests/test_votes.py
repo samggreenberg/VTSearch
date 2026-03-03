@@ -108,6 +108,39 @@ class TestGetVotes:
         assert 5 in data["bad"]
 
 
+class TestClearVotes:
+    def test_clear_votes_empties_good_and_bad(self, client):
+        """POST /api/votes/clear should remove all votes."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        assert 1 in app_module.good_votes
+        assert 2 in app_module.bad_votes
+
+        resp = client.post("/api/votes/clear")
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+        assert len(app_module.good_votes) == 0
+        assert len(app_module.bad_votes) == 0
+
+    def test_clear_votes_preserves_medias(self, client):
+        """Clearing votes should not affect loaded medias."""
+        num_before = len(medias)
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/votes/clear")
+        assert resp.status_code == 200
+        assert len(medias) == num_before
+
+    def test_get_votes_empty_after_clear(self, client):
+        """GET /api/votes should return empty lists after clear."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/votes/clear")
+        resp = client.get("/api/votes")
+        data = resp.get_json()
+        assert data["good"] == []
+        assert data["bad"] == []
+
+
 class TestLabelHistory:
     def test_vote_adds_history_entry(self, client):
         client.post("/api/medias/1/vote", json={"vote": "good"})
