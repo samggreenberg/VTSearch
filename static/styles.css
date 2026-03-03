@@ -206,7 +206,9 @@ header h1 { margin-left: 0; }
 /* Autopilot panel */
 .autopilot-panel { padding: 8px 10px; }
 .ap-examples-header { display: flex; align-items: center; justify-content: space-between; }
-.ap-examples-edit-btn { font-size: 0.65rem; padding: 2px 8px; }
+.ap-examples-header .sort-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 0; }
+.ap-examples-edit-btn { font-size: 0.7rem; padding: 2px 4px; background: none; border: none; color: var(--text-muted); cursor: pointer; line-height: 1; }
+.ap-examples-edit-btn:hover { color: var(--text-secondary); }
 .ap-examples-summary { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
 .ap-example-chip {
   display: inline-flex; align-items: center; gap: 2px;
