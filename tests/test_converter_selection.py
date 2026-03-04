@@ -330,8 +330,15 @@ class TestRunConvertersOnFolder:
         # Create a folder with only text files — no videos.
         (tmp_path / "file.txt").write_text("hello")
 
+        mock_mt = MagicMock()
+        mock_mt.type_id = "image"
+        mock_mt._model = True  # skip model loading
+
         medias: dict = {}
-        with patch("vtsearch.converters.runner._embed_converted_output", return_value=np.zeros(768)):
+        with (
+            patch("vtsearch.converters.runner._embed_converted_output", return_value=np.zeros(768)),
+            patch("vtsearch.media.get_by_folder_name", return_value=mock_mt),
+        ):
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
