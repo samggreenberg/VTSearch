@@ -556,6 +556,6 @@ class TestProgressStagingResult:
         progress = get_progress()
         assert progress["staging_result"] == staging
 
-        # Clean up
-        update_progress("idle", "", 0, 0)
+        # Clean up — explicitly clear staging_result (update has merge semantics)
+        update_progress("idle", "", 0, 0, staging_result=None)
         assert get_progress()["staging_result"] is None
