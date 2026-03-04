@@ -540,10 +540,10 @@ def multi_find():
     detection.  Returns a merged results table.
     """
     import gc
-    import pickle
 
     import torch
 
+    from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
@@ -623,7 +623,7 @@ def multi_find():
         try:
             pkl_path = ds["pkl_path"]
             with open(pkl_path, "rb") as f:
-                pkl_data = pickle.load(f)
+                pkl_data = safe_pickle_load(f)
             if isinstance(pkl_data, dict) and "medias" in pkl_data:
                 raw_medias = pkl_data["medias"]
             else:

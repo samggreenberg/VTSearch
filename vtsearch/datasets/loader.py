@@ -27,6 +27,62 @@ from vtsearch.datasets.config import DEMO_DATASETS
 ProgressCallback = Callable[[str, str, int, int], None]
 
 
+# ---------------------------------------------------------------------------
+# Restricted unpickler – prevents arbitrary code execution from .pkl files
+# ---------------------------------------------------------------------------
+
+# Allowlist of (module, name) pairs that may be instantiated during unpickling.
+# VTSearch pickles only contain plain Python containers and numpy arrays.
+_PICKLE_SAFE_CLASSES: set[tuple[str, str]] = {
+    # builtins (needed for dict/list/set/bytes subclasses & booleans)
+    ("builtins", "set"),
+    ("builtins", "frozenset"),
+    ("builtins", "bytes"),
+    ("builtins", "bytearray"),
+    ("builtins", "complex"),
+    # collections
+    ("collections", "OrderedDict"),
+    # numpy – reconstruction helpers used by numpy's __reduce__
+    ("numpy", "ndarray"),
+    ("numpy", "dtype"),
+    ("numpy.core.multiarray", "_reconstruct"),
+    ("numpy.core.multiarray", "scalar"),
+    ("numpy", "_core.multiarray._reconstruct"),
+    ("numpy._core.multiarray", "_reconstruct"),
+    ("numpy._core.multiarray", "scalar"),
+    ("numpy.core.numeric", "_frombuffer"),
+    ("numpy._core.numeric", "_frombuffer"),
+}
+
+
+class RestrictedUnpickler(pickle.Unpickler):
+    """An ``Unpickler`` that refuses to instantiate classes outside an allowlist.
+
+    Plain Python primitives (int, float, str, None, bool, dict, list, tuple)
+    are handled by the pickle protocol directly and never trigger
+    ``find_class``.  This restricts only explicit class/callable references
+    in the pickle stream.
+    """
+
+    def find_class(self, module: str, name: str) -> Any:
+        if (module, name) in _PICKLE_SAFE_CLASSES:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Forbidden pickle class: {module}.{name}. "
+            "Only plain Python types and numpy arrays are allowed."
+        )
+
+
+def safe_pickle_load(f: io.BufferedIOBase, **kwargs: Any) -> Any:
+    """Deserialise a pickle stream using the restricted unpickler.
+
+    Drop-in replacement for ``pickle.load(f)`` that blocks arbitrary code
+    execution.  Any extra keyword arguments (e.g. ``encoding``) are
+    forwarded to the underlying ``Unpickler``.
+    """
+    return RestrictedUnpickler(f, **kwargs).load()
+
+
 def _default_progress() -> ProgressCallback:
     """Lazily resolve the application-wide progress callback."""
     from vtsearch.utils import update_progress
@@ -210,7 +266,7 @@ def load_cifar10_batch(file_path: Path) -> tuple[np.ndarray, list[int], list[str
           ``label_names[i]`` corresponds to label value ``i``.
     """
     with open(file_path, "rb") as f:
-        batch = pickle.load(f, encoding="bytes")
+        batch = safe_pickle_load(f, encoding="bytes")
 
     # CIFAR-10 label names
     label_names = [
@@ -739,7 +795,7 @@ def load_dataset_from_pickle(
     """
     try:
         with open(file_path, "rb") as f:
-            data = pickle.load(f)
+            data = safe_pickle_load(f)
     except MemoryError:
         gc.collect()
         raise MemoryError(
@@ -940,7 +996,7 @@ def load_dataset_from_pickle_chunked(
         A dict mapping int media IDs (starting at 1) to media data dicts.
     """
     with open(file_path, "rb") as f:
-        data = pickle.load(f)
+        data = safe_pickle_load(f)
 
     if isinstance(data, dict) and ("medias" in data or "clips" in data):
         medias_data = data["medias"] if "medias" in data else data["clips"]
