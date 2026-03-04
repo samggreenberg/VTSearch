@@ -313,11 +313,13 @@ class TestRunConvertersOnFolder:
         from vtsearch.converters.runner import run_converters_on_folder
 
         medias: dict = {}
+        # get_converter returns None for unknown names, so this is a no-op.
         run_converters_on_folder(
             folder_path=tmp_path,
             converter_names=["nonexistent_converter"],
             target_media_type="images",
             medias=medias,
+            on_progress=lambda *a: None,
         )
         assert medias == {}
 

@@ -63,6 +63,15 @@ def run_converters_on_folder(
     if not converter_names:
         return
 
+    # Validate converter names up front — skip model loading if none are valid.
+    valid_converters = []
+    for cname in converter_names:
+        c = get_converter(cname)
+        if c is not None:
+            valid_converters.append(c)
+    if not valid_converters:
+        return
+
     if on_progress is None:
         on_progress = _default_progress()
 
@@ -70,17 +79,18 @@ def run_converters_on_folder(
 
     # Resolve target media type and load its embedding model.
     target_mt = get_by_folder_name(target_media_type)
+
+    # Filter to converters that actually target this media type.
+    valid_converters = [c for c in valid_converters if c.target_type == target_mt.type_id]
+    if not valid_converters:
+        return
+
     if getattr(target_mt, "_model", None) is None:
         target_mt.load_models()
 
     media_id = max(medias.keys(), default=0) + 1
 
-    for conv_name in converter_names:
-        converter = get_converter(conv_name)
-        if converter is None:
-            continue
-        if converter.target_type != target_mt.type_id:
-            continue
+    for converter in valid_converters:
 
         # Get the source media type to know which file extensions to scan.
         try:
@@ -128,7 +138,7 @@ def run_converters_on_folder(
             try:
                 outputs = converter.convert(source_media)
             except Exception as exc:
-                print(f"Converter {conv_name} failed on {source_rel}: {exc}")
+                print(f"Converter {converter.name} failed on {source_rel}: {exc}")
                 continue
 
             if not outputs:
@@ -138,7 +148,7 @@ def run_converters_on_folder(
             origin = {
                 "importer": "converter",
                 "params": {
-                    "converter": conv_name,
+                    "converter": converter.name,
                     "source_file": source_rel,
                 },
             }
