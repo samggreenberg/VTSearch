@@ -16,9 +16,7 @@ from vtsearch.models import (
     calculate_gmm_threshold,
     calculate_safe_threshold,
     compute_labeling_status,
-    embed_audio_file,
     embed_text_query,
-    get_clap_model,
     train_and_score,
     train_model,
 )
@@ -539,7 +537,7 @@ def example_sort_server():
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 def label_file_sort():
-    """Train MLP on external audio files from a label file, then sort all medias."""
+    """Train MLP on external media files from a label file, then sort all medias."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -547,9 +545,14 @@ def label_file_sort():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    clap_model, clap_processor = get_clap_model()
-    if clap_model is None or clap_processor is None:
-        return jsonify({"error": "CLAP model not loaded"}), 500
+    if not medias:
+        return jsonify({"error": "No medias loaded"}), 400
+
+    # Determine media type from loaded dataset and get the appropriate embedder
+    media_type = next(iter(medias.values())).get("type", "audio")
+    from vtsearch.media import get as media_get
+
+    mt = media_get(media_type)
 
     try:
         # Parse the label file
@@ -564,7 +567,7 @@ def label_file_sort():
         if not labels:
             return jsonify({"error": "No labels found in file"}), 400
 
-        # Load and embed each labeled audio file
+        # Load and embed each labeled media file
         X_list = []
         y_list = []
         loaded_count = 0
@@ -576,19 +579,19 @@ def label_file_sort():
                 skipped_count += 1
                 continue
 
-            # Try to get audio file path
-            audio_path = entry.get("path") or entry.get("file") or entry.get("filename")
-            if not audio_path:
+            # Try to get media file path
+            media_path = entry.get("path") or entry.get("file") or entry.get("filename")
+            if not media_path:
                 skipped_count += 1
                 continue
 
-            audio_path = Path(audio_path)
-            if not audio_path.exists():
+            media_path = Path(media_path)
+            if not media_path.exists():
                 skipped_count += 1
                 continue
 
-            # Embed the audio file
-            embedding = embed_audio_file(audio_path)
+            # Embed the media file using the appropriate model for the current media type
+            embedding = mt.embed_media(media_path)
             if embedding is None:
                 skipped_count += 1
                 continue
