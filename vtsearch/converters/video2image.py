@@ -22,6 +22,9 @@ class Video2ImageMediaConverter(MediaConverter):
         extracted from the temporal centre of each clip.  Defaults to 10.
     """
 
+    display_name = "Video \u2192 Images"
+    converter_description = "Extract frames from video files"
+
     def __init__(self, n_clips: int = 10) -> None:
         self.n_clips = n_clips
 

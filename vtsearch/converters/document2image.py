@@ -13,6 +13,12 @@ from vtsearch.converters.base import MediaConverter
 class Document2ImageMediaConverter(MediaConverter):
     """Render each page of a PDF/DOC/PPT document as a PNG image.
 
+    .. attribute:: display_name
+       :value: "Document \u2192 Images"
+
+    .. attribute:: converter_description
+       :value: "Render document pages as images"
+
     Supported formats:
 
     * **.pdf** — rendered via PyMuPDF (``fitz``).
@@ -23,6 +29,9 @@ class Document2ImageMediaConverter(MediaConverter):
 
     Each page becomes one item in the returned list.
     """
+
+    display_name = "Document \u2192 Images"
+    converter_description = "Render document pages as images"
 
     @property
     def source_type(self) -> str:

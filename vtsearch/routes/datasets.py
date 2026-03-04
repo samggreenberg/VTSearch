@@ -83,6 +83,38 @@ def media_types_list():
 
 
 # ---------------------------------------------------------------------------
+# Converter chooser
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/converters")
+def converters_list():
+    """Return all converters, optionally filtered by target media type.
+
+    Query parameters:
+        target: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only converters whose
+            ``target_type`` matches are returned.
+    """
+    from vtsearch.converters import list_converters, list_converters_for_target
+    from vtsearch.media import get_by_folder_name
+
+    target = request.args.get("target", "").strip()
+    if target:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(target)
+            target = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        converters = list_converters_for_target(target)
+    else:
+        converters = list_converters()
+
+    return jsonify({"converters": [c.to_dict() for c in converters]})
+
+
+# ---------------------------------------------------------------------------
 # Status / progress
 # ---------------------------------------------------------------------------
 
@@ -248,6 +280,14 @@ def stage_import(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
+    # Pass through the optional "converters" key.
+    if file_keys:
+        conv = request.form.get("converters", "")
+    else:
+        conv = (request.get_json(force=True) or {}).get("converters", "")
+    if conv:
+        field_values["converters"] = conv
+
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
 
@@ -351,6 +391,15 @@ def import_dataset(importer_name: str):
             if f.key not in body and f.required:
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
+
+    # Pass through the optional "converters" key for importers that support
+    # converter selection (e.g. folder, http_archive).
+    if file_keys:
+        converters_val = request.form.get("converters", "")
+    else:
+        converters_val = (request.get_json(force=True) or {}).get("converters", "")
+    if converters_val:
+        field_values["converters"] = converters_val
 
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
