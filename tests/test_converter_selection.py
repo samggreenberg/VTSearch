@@ -295,7 +295,34 @@ class TestHttpArchiveImporterConverterFields:
 
 
 class TestRunConvertersOnFolder:
-    """Tests for the converter runner utility."""
+    """Tests for the converter runner utility.
+
+    All tests mock ``get_by_folder_name`` to avoid loading real embedding
+    models (which are expensive and can interfere with other tests when
+    run in a full suite).
+    """
+
+    @staticmethod
+    def _mock_target_mt():
+        """Return a mock target MediaType that avoids model loading."""
+        mt = MagicMock()
+        mt.type_id = "image"
+        mt._model = True
+        return mt
+
+    @staticmethod
+    def _mock_video2image_converter(**overrides):
+        c = MagicMock()
+        c.name = "video2image"
+        c.source_type = "video"
+        c.target_type = "image"
+        c.display_name = "Video \u2192 Images"
+        c.convert.return_value = overrides.pop("convert_return", [
+            {"filename": "clip_clip_1.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
+        ])
+        for k, v in overrides.items():
+            setattr(c, k, v)
+        return c
 
     def test_no_converters_is_noop(self, tmp_path):
         from vtsearch.converters.runner import run_converters_on_folder
@@ -330,14 +357,10 @@ class TestRunConvertersOnFolder:
         # Create a folder with only text files — no videos.
         (tmp_path / "file.txt").write_text("hello")
 
-        mock_mt = MagicMock()
-        mock_mt.type_id = "image"
-        mock_mt._model = True  # skip model loading
-
         medias: dict = {}
         with (
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.zeros(768)),
-            patch("vtsearch.media.get_by_folder_name", return_value=mock_mt),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -356,25 +379,13 @@ class TestRunConvertersOnFolder:
         (tmp_path / "clip.mp4").write_bytes(b"fake-video-data")
 
         fake_embedding = np.ones(768, dtype=np.float32)
-        fake_output = [{
-            "filename": "clip_clip_1.png",
-            "media_bytes": _make_png_bytes(),
-            "duration": 0,
-            "width": 4,
-            "height": 4,
-        }]
-
-        mock_converter = MagicMock()
-        mock_converter.name = "video2image"
-        mock_converter.source_type = "video"
-        mock_converter.target_type = "image"
-        mock_converter.display_name = "Video \u2192 Images"
-        mock_converter.convert.return_value = fake_output
+        mock_converter = self._mock_video2image_converter()
 
         medias: dict = {}
         with (
             patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -416,17 +427,13 @@ class TestRunConvertersOnFolder:
             {"filename": "long_video_clip_3.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
         ]
 
-        mock_converter = MagicMock()
-        mock_converter.name = "video2image"
-        mock_converter.source_type = "video"
-        mock_converter.target_type = "image"
-        mock_converter.display_name = "Video \u2192 Images"
-        mock_converter.convert.return_value = fake_outputs
+        mock_converter = self._mock_video2image_converter(convert_return=fake_outputs)
 
         medias: dict = {}
         with (
             patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -455,17 +462,14 @@ class TestRunConvertersOnFolder:
                 raise RuntimeError("corrupt video")
             return [{"filename": "frame.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4}]
 
-        mock_converter = MagicMock()
-        mock_converter.name = "video2image"
-        mock_converter.source_type = "video"
-        mock_converter.target_type = "image"
-        mock_converter.display_name = "Video \u2192 Images"
+        mock_converter = self._mock_video2image_converter()
         mock_converter.convert.side_effect = _side_effect
 
         medias: dict = {}
         with (
             patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -484,20 +488,14 @@ class TestRunConvertersOnFolder:
 
         (tmp_path / "clip.mp4").write_bytes(b"video")
 
-        mock_converter = MagicMock()
-        mock_converter.name = "video2image"
-        mock_converter.source_type = "video"
-        mock_converter.target_type = "image"
-        mock_converter.display_name = "Video \u2192 Images"
-        mock_converter.convert.return_value = [
-            {"filename": "f.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
-        ]
+        mock_converter = self._mock_video2image_converter()
 
         # Pre-populate with some existing medias
         medias: dict = {1: {"id": 1}, 5: {"id": 5}, 10: {"id": 10}}
         with (
             patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -516,19 +514,13 @@ class TestRunConvertersOnFolder:
 
         (tmp_path / "clip.mp4").write_bytes(b"video")
 
-        mock_converter = MagicMock()
-        mock_converter.name = "video2image"
-        mock_converter.source_type = "video"
-        mock_converter.target_type = "image"
-        mock_converter.display_name = "Video \u2192 Images"
-        mock_converter.convert.return_value = [
-            {"filename": "f.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
-        ]
+        mock_converter = self._mock_video2image_converter()
 
         medias: dict = {}
         with (
             patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=None),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
