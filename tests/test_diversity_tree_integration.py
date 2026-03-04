@@ -1,5 +1,7 @@
 """Integration tests for diversity tree wiring: build, label, unlabel, API."""
 
+import pytest
+
 from vtsearch.utils import (
     add_label_to_history,
     bad_votes,
@@ -308,8 +310,7 @@ class TestSpanLevelProgression:
         tree = _build_tree()
         depth = tree.depth()
         if depth < 1:
-            # Tree too shallow to test progression beyond 0
-            return
+            pytest.skip("Tree too shallow to test progression beyond 0")
 
         # Use next_sample to find medias from each depth-1 subtree and vote on them
         for _ in range(len(medias)):
