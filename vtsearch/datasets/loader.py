@@ -10,7 +10,6 @@ to use these functions outside the Flask app.
 
 from __future__ import annotations
 
-import collections
 import csv
 import gc
 import hashlib

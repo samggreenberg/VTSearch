@@ -11,7 +11,6 @@ remain here.
 
 import gc
 import io
-import pickle
 import threading
 from pathlib import Path
 from uuid import uuid4
