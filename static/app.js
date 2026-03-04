@@ -1319,134 +1319,173 @@
 
     dashDatasetGrid.innerHTML = `<table class="dash-dataset-table">
       <thead><tr>
-        <th>Name</th>
-        <th>Type</th>
-        <th>Items</th>
-        <th>#Dupes</th>
-        <th>Created</th>
-        <th>Origin</th>
+        <th data-sort="name">Name<span class="sort-arrow"></span></th>
+        <th data-sort="media_type">Type<span class="sort-arrow"></span></th>
+        <th data-sort="num_items" style="text-align:right">Items<span class="sort-arrow"></span></th>
+        <th data-sort="num_dupes" style="text-align:right">#Dupes<span class="sort-arrow"></span></th>
+        <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
+        <th data-sort="origin">Origin<span class="sort-arrow"></span></th>
         <th>Details</th>
         <th>Loaded?</th>
         <th class="col-actions-header"></th>
       </tr></thead>
       <tbody></tbody></table>`;
 
-    const tbody = dashDatasetGrid.querySelector("tbody");
+    const table = dashDatasetGrid.querySelector(".dash-dataset-table");
+    let datasetSort = { key: "name", asc: true };
 
-    dashRegisteredDatasets.forEach(ds => {
-      const icon = mediaIcons[ds.media_type] || "";
-      const typeName = mediaTypesMap[ds.media_type] ? mediaTypesMap[ds.media_type].name : ds.media_type || "media";
-      const isSelected = dashSelectedDatasetIds.includes(ds.id);
-      const isLoaded = !!ds.loaded;
-      const tr = document.createElement("tr");
-      tr.className = "dash-dataset-row" + (isSelected ? " dash-selected" : "");
-      tr.setAttribute("role", "button");
-      tr.setAttribute("tabindex", "0");
-
-      const nameTd = document.createElement("td");
-      nameTd.className = "col-name";
-      nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
-      tr.appendChild(nameTd);
-      const dsCreated = ds.created_at ? new Date(ds.created_at * 1000).toLocaleDateString() : "-";
-      const dsOrigin = ds.origin || "unknown";
-      const dsSource = ds.source;
-      let dsDetails = "-";
-      if (dsSource && typeof dsSource === "object") {
-        const params = dsSource.params || {};
-        const parts = Object.values(params).filter(Boolean);
-        dsDetails = parts.length ? parts.join(", ") : dsSource.importer || "-";
-      }
-      const dsDupes = ds.num_dupes || 0;
-      tr.insertAdjacentHTML("beforeend", `
-        <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
-        <td class="col-count">${ds.num_items || 0}</td>
-        <td class="col-dupes">${dsDupes}</td>
-        <td class="col-date">${escapeHtml(dsCreated)}</td>
-        <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
-        <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
-        <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
-        <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
-      `);
-
-      // Inline rename
-      const renameBtn = tr.querySelector(".dash-rename-btn");
-      renameBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const nameSpan = nameTd.querySelector(".dash-name-text");
-        const current = nameSpan.textContent;
-        nameSpan.style.display = "none";
-        renameBtn.style.display = "none";
-        const input = document.createElement("input");
-        input.type = "text";
-        input.className = "dash-rename-input";
-        input.value = current;
-        nameTd.insertBefore(input, nameSpan);
-        input.focus();
-        input.select();
-        const commit = async () => {
-          const newName = input.value.trim();
-          if (newName && newName !== current) {
-            try {
-              await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}/rename`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: newName }),
-              });
-              ds.name = newName;
-              nameSpan.textContent = newName;
-            } catch (_) {}
-          }
-          input.remove();
-          nameSpan.style.display = "";
-          renameBtn.style.display = "";
-        };
-        input.addEventListener("blur", commit);
-        input.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-          if (ev.key === "Escape") { input.value = current; input.blur(); }
-        });
-      });
-
-      // Delete dataset
-      const deleteBtn = tr.querySelector(".dash-delete-btn");
-      deleteBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (!(await vtConfirm("Remove this dataset? Its saved file will be deleted."))) return;
-        try {
-          await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}`, { method: "DELETE" });
-          dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
-          if (ds.loaded) datasetLoaded = false;
-          await renderDashboardDatasets();
-          updateDashboardButtons();
-        } catch (_) {}
-      });
-
-      // Multi-select click (toggle)
-      tr.addEventListener("click", async (e) => {
-        if (e.ctrlKey || e.metaKey) {
-          // Toggle individual selection
-          if (dashSelectedDatasetIds.includes(ds.id)) {
-            dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
-          } else {
-            dashSelectedDatasetIds.push(ds.id);
-          }
-        } else {
-          // Single-click replaces selection
-          if (dashSelectedDatasetIds.length === 1 && dashSelectedDatasetIds[0] === ds.id) {
-            dashSelectedDatasetIds = [];
-          } else {
-            dashSelectedDatasetIds = [ds.id];
-          }
+    function renderDatasetRows() {
+      const sorted = [...dashRegisteredDatasets].sort((a, b) => {
+        let va = a[datasetSort.key], vb = b[datasetSort.key];
+        if (datasetSort.key === "num_items" || datasetSort.key === "num_dupes" || datasetSort.key === "created_at") {
+          return datasetSort.asc ? ((va || 0) - (vb || 0)) : ((vb || 0) - (va || 0));
         }
-        await renderDashboardDatasets();
-        updateDashboardButtons();
-      });
-      tr.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+        va = String(va || "").toLowerCase(); vb = String(vb || "").toLowerCase();
+        return datasetSort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
       });
 
-      tbody.appendChild(tr);
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+
+      sorted.forEach(ds => {
+        const icon = mediaIcons[ds.media_type] || "";
+        const typeName = mediaTypesMap[ds.media_type] ? mediaTypesMap[ds.media_type].name : ds.media_type || "media";
+        const isSelected = dashSelectedDatasetIds.includes(ds.id);
+        const isLoaded = !!ds.loaded;
+        const tr = document.createElement("tr");
+        tr.className = "dash-dataset-row" + (isSelected ? " dash-selected" : "");
+        tr.setAttribute("role", "button");
+        tr.setAttribute("tabindex", "0");
+
+        const nameTd = document.createElement("td");
+        nameTd.className = "col-name";
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        tr.appendChild(nameTd);
+        const dsCreated = ds.created_at ? new Date(ds.created_at * 1000).toLocaleDateString() : "-";
+        const dsOrigin = ds.origin || "unknown";
+        const dsSource = ds.source;
+        let dsDetails = "-";
+        if (dsSource && typeof dsSource === "object") {
+          const params = dsSource.params || {};
+          const parts = Object.values(params).filter(Boolean);
+          dsDetails = parts.length ? parts.join(", ") : dsSource.importer || "-";
+        }
+        const dsDupes = ds.num_dupes || 0;
+        tr.insertAdjacentHTML("beforeend", `
+          <td class="col-type">${escapeHtml(icon)} ${escapeHtml(typeName)}</td>
+          <td class="col-count">${ds.num_items || 0}</td>
+          <td class="col-dupes" style="text-align:right">${dsDupes}</td>
+          <td class="col-date">${escapeHtml(dsCreated)}</td>
+          <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
+          <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
+          <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
+          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+        `);
+
+        // Inline rename
+        const renameBtn = tr.querySelector(".dash-rename-btn");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const nameSpan = nameTd.querySelector(".dash-name-text");
+          const current = nameSpan.textContent;
+          nameSpan.style.display = "none";
+          renameBtn.style.display = "none";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "dash-rename-input";
+          input.value = current;
+          nameTd.insertBefore(input, nameSpan);
+          input.focus();
+          input.select();
+          const commit = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== current) {
+              try {
+                await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}/rename`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: newName }),
+                });
+                ds.name = newName;
+                nameSpan.textContent = newName;
+              } catch (_) {}
+            }
+            input.remove();
+            nameSpan.style.display = "";
+            renameBtn.style.display = "";
+          };
+          input.addEventListener("blur", commit);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+            if (ev.key === "Escape") { input.value = current; input.blur(); }
+          });
+        });
+
+        // Delete dataset
+        const deleteBtn = tr.querySelector(".dash-delete-btn");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!(await vtConfirm("Remove this dataset? Its saved file will be deleted."))) return;
+          try {
+            await fetch(`/api/datasets/registry/${encodeURIComponent(ds.id)}`, { method: "DELETE" });
+            dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
+            if (ds.loaded) datasetLoaded = false;
+            await renderDashboardDatasets();
+            updateDashboardButtons();
+          } catch (_) {}
+        });
+
+        // Multi-select click (toggle)
+        tr.addEventListener("click", async (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            // Toggle individual selection
+            if (dashSelectedDatasetIds.includes(ds.id)) {
+              dashSelectedDatasetIds = dashSelectedDatasetIds.filter(id => id !== ds.id);
+            } else {
+              dashSelectedDatasetIds.push(ds.id);
+            }
+          } else {
+            // Single-click replaces selection
+            if (dashSelectedDatasetIds.length === 1 && dashSelectedDatasetIds[0] === ds.id) {
+              dashSelectedDatasetIds = [];
+            } else {
+              dashSelectedDatasetIds = [ds.id];
+            }
+          }
+          renderDatasetRows();
+          updateDashboardButtons();
+        });
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.click(); }
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      // Sort arrows
+      table.querySelectorAll("th[data-sort]").forEach(th => {
+        const arrow = th.querySelector(".sort-arrow");
+        if (th.dataset.sort === datasetSort.key) {
+          arrow.textContent = datasetSort.asc ? " \u25B2" : " \u25BC";
+        } else {
+          arrow.textContent = "";
+        }
+      });
+    }
+
+    table.querySelectorAll("th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sort;
+        if (datasetSort.key === key) {
+          datasetSort.asc = !datasetSort.asc;
+        } else {
+          datasetSort = { key, asc: true };
+        }
+        renderDatasetRows();
+      });
     });
+
+    renderDatasetRows();
   }
 
   async function renderDashboardModels() {
@@ -2926,8 +2965,8 @@
     `;
 
     if (labelsetExporters.length > 0) {
-      html += `<h3 style="margin:1.2em 0 0.3em;font-size:1em;color:var(--text-muted);">Export Labels</h3>
-        <p style="margin:0 0 0.6em;font-size:0.85em;color:var(--text-muted);">Export votes as a label set (sufficient to retrain the detector later).</p>`;
+      html += `<h3 style="margin:1.2rem 0 0.3rem;font-size:1rem;color:var(--text-muted);">Export Labels</h3>
+        <p style="margin:0 0 0.6rem;font-size:0.85rem;color:var(--text-muted);">Export votes as a label set (sufficient to retrain the detector later).</p>`;
       html += labelsetExporters.map(exp => `
         <div class="detector-labelset-export-option option-card" data-name="${escapeHtml(exp.name)}" role="button" tabindex="0">
           <span class="option-card-icon">${escapeHtml(exp.icon || '\uD83D\uDCE4')}</span>
@@ -4361,7 +4400,7 @@
       console.error("Error drawing waveform:", error);
       // Draw error message
       ctx.fillStyle = themeColor("--color-bad");
-      ctx.font = "12px monospace";
+      ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("Unable to load waveform", width / 2, height / 2);
     }

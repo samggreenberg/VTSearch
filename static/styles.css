@@ -653,8 +653,10 @@ video { max-width: 100%; }
 .dashboard-grid .dash-dataset-table thead th {
   text-align: center; padding: 5px 8px; color: var(--text-secondary);
   font-size: 0.7rem; font-weight: 600; border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+  cursor: pointer; user-select: none; white-space: nowrap;
 }
+.dashboard-grid .dash-dataset-table thead th:hover { color: var(--accent); }
+.dashboard-grid .dash-dataset-table thead th .sort-arrow { font-size: 0.6rem; display: inline-block; width: 1em; text-align: left; }
 .dashboard-grid .dash-dataset-table thead th:nth-child(1) { width: 20%; }
 .dashboard-grid .dash-dataset-table thead th:nth-child(2) { width: 10%; }
 .dashboard-grid .dash-dataset-table thead th:nth-child(3) { width: 9%; }
@@ -667,6 +669,7 @@ video { max-width: 100%; }
 .dash-dataset-row .col-name { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-dataset-row .col-type { white-space: nowrap; }
 .dash-dataset-row .col-count { font-family: monospace; font-size: 0.72rem; color: var(--text-muted); }
+.dash-dataset-row .col-dupes { font-family: monospace; font-size: 0.72rem; color: var(--text-muted); }
 .dash-dataset-row .col-origin { font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-dataset-row .col-details { font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-dataset-row .col-date { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
@@ -735,7 +738,7 @@ video { max-width: 100%; }
 .dash-rename-btn { vertical-align: middle; margin-left: 4px; font-size: 0.72rem; }
 .dash-rename-input {
   width: calc(100% - 4px); padding: 2px 4px; font-size: 0.75rem; font-weight: 600;
-  border: 1px solid var(--accent); border-radius: 3px; outline: none;
+  border: 1px solid var(--accent); border-radius: 4px; outline: none;
   background: var(--bg-panel); color: var(--text-primary);
 }
 .dash-delete-btn { font-size: 0.78rem; }
@@ -775,7 +778,7 @@ video { max-width: 100%; }
 }
 .example-picker-panel {
   background: var(--bg-surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 16px; min-width: 280px; max-width: 420px;
+  border-radius: 8px; padding: 16px; min-width: 280px; max-width: 420px;
   max-height: 80vh; display: flex; flex-direction: column; gap: 8px;
 }
 .example-picker-header { font-size: 0.95rem; margin-bottom: 4px; }
