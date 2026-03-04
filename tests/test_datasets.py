@@ -30,13 +30,14 @@ class TestDatasetEndpoints:
         assert "demos" in data or isinstance(data, dict)
 
     def test_clear_dataset(self, client):
-        resp = client.post("/api/dataset/clear")
-        assert resp.status_code == 200
-        # After clearing, medias should be empty
-        assert len(app_module.medias) == 0
-
-        # Re-initialize for other tests
-        app_module.init_medias()
+        saved = dict(app_module.medias)
+        try:
+            resp = client.post("/api/dataset/clear")
+            assert resp.status_code == 200
+            # After clearing, medias should be empty
+            assert len(app_module.medias) == 0
+        finally:
+            app_module.medias.update(saved)
 
 
 class TestStartupState:
