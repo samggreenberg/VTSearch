@@ -22,7 +22,7 @@ from vtsearch.utils import (
     get_calibration_fraction,
     get_inclusion,
     get_safe_thresholds,
-    medias,
+    snapshot_medias,
 )
 import vtsearch.utils.paths as _paths
 
@@ -46,16 +46,18 @@ def export_detector():
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
 
+    snap = snapshot_medias()
+
     # Train the model
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(0.0)
 
     if not X_list:
@@ -86,8 +88,8 @@ def export_detector():
 
     # Apply safe thresholds blending if enabled
     if get_safe_thresholds():
-        all_ids = sorted(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(snap.keys())
+        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -142,16 +144,18 @@ def export_detector_server():
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
 
+    snap = snapshot_medias()
+
     # Train the model (same logic as export_detector)
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(0.0)
 
     if not X_list:
@@ -177,8 +181,8 @@ def export_detector_server():
     model = train_model(X, y, input_dim, get_inclusion())
 
     if get_safe_thresholds():
-        all_ids = sorted(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(snap.keys())
+        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -191,8 +195,8 @@ def export_detector_server():
 
     # Determine media type from current medias
     media_type = "audio"
-    if medias:
-        media_type = next(iter(medias.values())).get("type", "audio")
+    if snap:
+        media_type = next(iter(snap.values())).get("type", "audio")
 
     detector_data = {
         "weights": weights,
@@ -344,9 +348,10 @@ def import_detector_labels():
         model = train_model(X, y, input_dim, get_inclusion())
 
         # Apply safe thresholds blending if enabled
-        if get_safe_thresholds() and medias:
-            all_ids = sorted(medias.keys())
-            all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        snap = snapshot_medias()
+        if get_safe_thresholds() and snap:
+            all_ids = sorted(snap.keys())
+            all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
             X_all = torch.tensor(all_embs, dtype=torch.float32)
             with torch.no_grad():
                 all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -391,7 +396,8 @@ def train_from_label_import(importer_name: str):
             404,
         )
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded. Load a dataset first."}), 400
 
     # Build field_values from multipart form data
@@ -434,7 +440,7 @@ def train_from_label_import(importer_name: str):
     # Match md5s to loaded medias and collect embeddings
     from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snap)
 
     X_list: list = []
     y_list: list = []
@@ -454,7 +460,7 @@ def train_from_label_import(importer_name: str):
 
         # Use the first matching media's embedding
         cid = cids[0]
-        embedding = medias[cid].get("embedding")
+        embedding = snap[cid].get("embedding")
         if embedding is None:
             skipped_count += 1
             continue
@@ -488,7 +494,7 @@ def train_from_label_import(importer_name: str):
     for key, value in state_dict.items():
         weights[key] = value.tolist()
 
-    media_type = next(iter(medias.values())).get("type", "audio")
+    media_type = next(iter(snap.values())).get("type", "audio")
     add_autorun_detector(name, media_type, weights, threshold)
 
     # Register in the persistent model registry for the dashboard grid.
