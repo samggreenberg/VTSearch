@@ -24,7 +24,7 @@ from vtsearch.utils import (
     get_safe_thresholds,
     medias,
 )
-from vtsearch.utils.paths import validate_server_filepath
+import vtsearch.utils.paths as _paths
 
 from vtsearch.routes.detectors_crud import get_detectors_dir
 
@@ -417,7 +417,7 @@ def train_from_label_import(importer_name: str):
     # Validate server file paths to prevent path traversal
     if "filepath" in field_values and str(field_values["filepath"]).strip():
         try:
-            validate_server_filepath(str(field_values["filepath"]))
+            _paths.validate_server_filepath(str(field_values["filepath"]))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 

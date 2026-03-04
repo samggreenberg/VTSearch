@@ -24,7 +24,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
 from vtsearch.utils import add_autorun_detector
-from vtsearch.utils.paths import validate_server_filepath
+import vtsearch.utils.paths as _paths
 
 processor_importers_bp = Blueprint("processor_importers", __name__)
 
@@ -103,7 +103,7 @@ def run_processor_import(importer_name: str):
     # Validate server file paths to prevent path traversal
     if "filepath" in field_values and str(field_values["filepath"]).strip():
         try:
-            validate_server_filepath(str(field_values["filepath"]))
+            _paths.validate_server_filepath(str(field_values["filepath"]))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 

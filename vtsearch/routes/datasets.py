@@ -42,7 +42,7 @@ from vtsearch.utils import (
     set_dataset_display_name,
     update_progress,
 )
-from vtsearch.utils.paths import validate_server_filepath
+import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.routes.datasets_loading import (  # noqa: F401
@@ -161,7 +161,7 @@ def combine_datasets_route():
 
     for p in dataset_paths:
         try:
-            validate_server_filepath(str(p))
+            _paths.validate_server_filepath(str(p))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         if not Path(p).exists():
@@ -421,7 +421,7 @@ def load_dataset_folder():
         return jsonify({"error": "No folder path provided"}), 400
 
     try:
-        validate_server_filepath(str(folder_path))
+        _paths.validate_server_filepath(str(folder_path))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -606,7 +606,7 @@ def _load_from_origin(source: dict):
     if importer_name == "pickle":
         pkl_path = params.get("path", "")
         try:
-            validate_server_filepath(str(pkl_path)) if pkl_path else None
+            _paths.validate_server_filepath(str(pkl_path)) if pkl_path else None
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         if not pkl_path or not Path(pkl_path).is_file():
@@ -623,7 +623,7 @@ def _load_from_origin(source: dict):
     if importer_name == "folder":
         folder_path = params.get("path", "")
         try:
-            validate_server_filepath(str(folder_path)) if folder_path else None
+            _paths.validate_server_filepath(str(folder_path)) if folder_path else None
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         if not folder_path or not Path(folder_path).is_dir():
