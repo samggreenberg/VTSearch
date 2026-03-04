@@ -41,6 +41,7 @@ from vtsearch.utils import (
     get_vote_click_times,
     good_votes,
     label_history,
+    medias,
     resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
