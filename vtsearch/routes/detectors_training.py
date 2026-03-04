@@ -289,6 +289,12 @@ def import_detector_labels():
                 continue
 
             file_path = Path(file_path_str)
+            # Ensure the path doesn't escape the data directory
+            try:
+                _paths.validate_server_filepath(file_path_str)
+            except ValueError:
+                skipped_count += 1
+                continue
             if not file_path.exists():
                 skipped_count += 1
                 continue

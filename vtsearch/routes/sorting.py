@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 from vtsearch.routes.helpers import get_json_or_400
 
 from vtsearch.config import DATA_DIR
+import vtsearch.utils.paths as _paths
 from vtsearch.models import (
     analyze_labeling_progress,
     calculate_cross_calibration_threshold,
@@ -40,6 +41,7 @@ from vtsearch.utils import (
     get_vote_click_times,
     good_votes,
     label_history,
+    medias,
     resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
@@ -586,6 +588,12 @@ def label_file_sort():
                 continue
 
             media_path = Path(media_path)
+            # Ensure the path doesn't escape the data directory
+            try:
+                _paths.validate_server_filepath(str(media_path))
+            except ValueError:
+                skipped_count += 1
+                continue
             if not media_path.exists():
                 skipped_count += 1
                 continue
