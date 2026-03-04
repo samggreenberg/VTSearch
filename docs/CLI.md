@@ -89,5 +89,5 @@ start, but the first dataset load is slower:
 python app.py --local
 ```
 
-Both modes bind to `0.0.0.0:5000` (accessible from other devices on the
-network).
+Production mode binds to `127.0.0.1:5000` (localhost only).  `--local` mode
+binds to `0.0.0.0:5000` (accessible from other devices on the network).

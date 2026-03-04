@@ -206,4 +206,4 @@ if __name__ == "__main__":
         print("\u2705 VTSearch is ready!", flush=True)
         print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
 
-        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+        app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
