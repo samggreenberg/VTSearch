@@ -870,3 +870,160 @@ class TestLoadDatasetRelativePaths:
         media = chunks[0][1]
         assert media["filename"] == "sub/chunk.wav"
         assert media["origin_name"] == "sub/chunk.wav"
+
+
+# ---------------------------------------------------------------------------
+# HTTP Archive importer – unique extract directories
+# ---------------------------------------------------------------------------
+
+
+class TestHttpArchiveExtractDirIsolation:
+    """Concurrent HTTP archive imports must use separate extract directories."""
+
+    def test_run_uses_unique_extract_dir(self, tmp_path):
+        """Each run() call should create a uniquely-named extract directory."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+        dirs_used = []
+
+        real_load = None
+
+        def capture_load(extract_dir, *args, **kwargs):
+            dirs_used.append(str(extract_dir))
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                side_effect=capture_load,
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        assert len(dirs_used) == 2
+        # The two extract dirs must be different
+        assert dirs_used[0] != dirs_used[1]
+
+    def test_old_shared_dir_name_not_used(self, tmp_path):
+        """The old fixed name 'http_archive_extract' must no longer appear."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        # The old shared directory should not exist
+        assert not (tmp_path / "http_archive_extract").exists()
+
+    def test_extract_dir_cleaned_up_after_run(self, tmp_path):
+        """The unique extract directory should be removed after run() completes."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        # No http_archive_extract_* dirs should remain
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+    def test_extract_dir_cleaned_up_on_error(self, tmp_path):
+        """The extract directory should still be cleaned up if loading fails."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                side_effect=RuntimeError("boom"),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="boom"):
+                imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+    def test_chunked_extract_dir_cleaned_up(self, tmp_path):
+        """run_chunked() should clean up its extract directory after iteration."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip._extract_archive",
+            ),
+            mock.patch(
+                "vtsearch.datasets.loader.load_dataset_from_folder_chunked",
+                return_value=iter([{1: {"test": True}}]),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            chunks = list(imp.run_chunked({"url": "http://example.com/a.zip", "media_type": "sounds"}, 10))
+
+        assert len(chunks) == 1
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+
+def _write_zip_to(archive_path, tmp_path):
+    """Helper: write a minimal .zip so _extract_archive succeeds."""
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("dummy.wav", _make_wav_bytes())

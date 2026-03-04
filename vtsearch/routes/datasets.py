@@ -11,7 +11,6 @@ remain here.
 
 import gc
 import io
-import pickle
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -21,7 +20,7 @@ from flask import Blueprint, jsonify, request, send_file
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
-from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
@@ -40,8 +39,10 @@ from vtsearch.utils import (
     get_progress,
     good_votes,
     set_dataset_display_name,
+    snapshot_medias,
     update_progress,
 )
+import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.routes.datasets_loading import (  # noqa: F401
@@ -89,13 +90,14 @@ def media_types_list():
 @datasets_bp.route("/api/dataset/status")
 def dataset_status():
     """Return the current dataset status."""
+    snap = snapshot_medias()
     media_type = None
-    if medias:
-        media_type = next(iter(medias.values())).get("type", "audio")
+    if snap:
+        media_type = next(iter(snap.values())).get("type", "audio")
     return jsonify(
         {
-            "loaded": len(medias) > 0,
-            "num_medias": len(medias),
+            "loaded": len(snap) > 0,
+            "num_medias": len(snap),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
             "num_dupes": get_dupe_count(),
@@ -159,6 +161,10 @@ def combine_datasets_route():
         return jsonify({"error": "Provide at least two dataset file paths."}), 400
 
     for p in dataset_paths:
+        try:
+            _paths.validate_server_filepath(str(p))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if not Path(p).exists():
             return jsonify({"error": f"File not found: {p}"}), 400
 
@@ -192,7 +198,7 @@ def stage_file():
     # Peek inside the pkl to get count and media type.
     try:
         with open(staging_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+            data = safe_pickle_load(f)
         if isinstance(data, dict) and "medias" in data:
             media_dict = data["medias"]
         elif isinstance(data, dict):
@@ -415,6 +421,11 @@ def load_dataset_folder():
     if not folder_path:
         return jsonify({"error": "No folder path provided"}), 400
 
+    try:
+        _paths.validate_server_filepath(str(folder_path))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     folder = Path(folder_path)
     if not folder.exists() or not folder.is_dir():
         return jsonify({"error": "Invalid folder path"}), 400
@@ -432,11 +443,12 @@ def load_dataset_folder():
 @datasets_bp.route("/api/dataset/export")
 def export_dataset():
     """Export the current dataset to a pickle file."""
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No dataset loaded"}), 400
 
     try:
-        dataset_bytes = export_dataset_to_file(medias)
+        dataset_bytes = export_dataset_to_file(snap)
         return send_file(
             io.BytesIO(dataset_bytes),
             mimetype="application/octet-stream",
@@ -595,6 +607,10 @@ def _load_from_origin(source: dict):
 
     if importer_name == "pickle":
         pkl_path = params.get("path", "")
+        try:
+            _paths.validate_server_filepath(str(pkl_path)) if pkl_path else None
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if not pkl_path or not Path(pkl_path).is_file():
             return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
         origin = {"importer": "pickle", "params": params}
@@ -608,6 +624,10 @@ def _load_from_origin(source: dict):
 
     if importer_name == "folder":
         folder_path = params.get("path", "")
+        try:
+            _paths.validate_server_filepath(str(folder_path)) if folder_path else None
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if not folder_path or not Path(folder_path).is_dir():
             return jsonify({"error": f"Folder not found: {folder_path}"}), 400
         importer = get_importer("folder")

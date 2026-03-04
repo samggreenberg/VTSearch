@@ -13,7 +13,7 @@ from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
-    medias,
+    snapshot_medias,
 )
 from vtsearch.routes.detectors_crud import _build_extractor, _build_localizer
 
@@ -47,12 +47,13 @@ def detector_sort():
     # Reconstruct the model from weights
     model = build_model_from_weights(weights)
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "no medias loaded"}), 400
 
     # Score every media
-    all_ids = sorted(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    all_ids = sorted(snap.keys())
+    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
     with torch.no_grad():
         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -69,7 +70,8 @@ def auto_detect():
     Accepts an optional JSON body with ``detector_name`` to run a single
     detector instead of all autorun detectors.
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded"}), 400
 
     # Import any autorun processors from settings that aren't already loaded
@@ -78,7 +80,7 @@ def auto_detect():
     newly_imported = ensure_autorun_processors_imported()
 
     # Determine media type from current medias
-    media_type = next(iter(medias.values())).get("type", "audio")
+    media_type = next(iter(snap.values())).get("type", "audio")
 
     # Get autorun detectors for this media type (only those with autodetect enabled)
     detectors = get_autodetect_detectors_by_media(media_type)
@@ -97,8 +99,8 @@ def auto_detect():
     # Prepare shared data for all detectors
     import torch  # noqa: PLC0415
 
-    all_ids = sorted(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    all_ids = sorted(snap.keys())
+    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     def _run_single_detector(detector_name, detector_data):
@@ -115,7 +117,7 @@ def auto_detect():
             positive_hits = []
             negative_hits = []
             for cid, score in zip(all_ids, scores):
-                clip_info = medias[cid].copy()
+                clip_info = snap[cid].copy()
                 clip_info.pop("embedding", None)
                 clip_info.pop("media_bytes", None)
                 clip_info.pop("media_string", None)
@@ -180,7 +182,8 @@ def run_extract():
     if not config or not isinstance(config, dict):
         return jsonify({"error": "config is required"}), 400
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded"}), 400
 
     try:
@@ -188,7 +191,7 @@ def run_extract():
     except Exception as e:
         return jsonify({"error": f"Invalid extractor config: {e}"}), 400
 
-    media_type = next(iter(medias.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("type", "")
     if extractor.media_type != media_type:
         return (
             jsonify({"error": f"Extractor media type '{extractor.media_type}' does not match medias '{media_type}'"}),
@@ -196,8 +199,8 @@ def run_extract():
         )
 
     results = []
-    for media_id in sorted(medias.keys()):
-        media = medias[media_id]
+    for media_id in sorted(snap.keys()):
+        media = snap[media_id]
         extractions = extractor.extract(media)
         if extractions:
             clip_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
@@ -217,16 +220,17 @@ def run_extract():
 @detectors_scoring_bp.route("/api/auto-extract", methods=["POST"])
 def auto_extract():
     """Run all autorun extractors for the current media type and return extraction results."""
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(medias.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("type", "")
     extractors = get_autorun_extractors_by_media(media_type)
 
     if not extractors:
         return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
 
-    sorted_media_ids = sorted(medias.keys())
+    sorted_media_ids = sorted(snap.keys())
 
     def _run_single_extractor(ext_name, ext_data):
         """Run a single extractor on all medias and return (name, result_dict) or None."""
@@ -237,7 +241,7 @@ def auto_extract():
 
         ext_results = []
         for media_id in sorted_media_ids:
-            media = medias[media_id]
+            media = snap[media_id]
             extractions = extractor.extract(media)
             if extractions:
                 clip_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
@@ -290,7 +294,8 @@ def run_localize():
     if not config or not isinstance(config, dict):
         return jsonify({"error": "config is required"}), 400
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded"}), 400
 
     try:
@@ -298,7 +303,7 @@ def run_localize():
     except Exception as e:
         return jsonify({"error": f"Invalid localizer config: {e}"}), 400
 
-    media_type = next(iter(medias.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("type", "")
     if localizer.media_type != media_type:
         return (
             jsonify({"error": f"Localizer media type '{localizer.media_type}' does not match medias '{media_type}'"}),
@@ -306,8 +311,8 @@ def run_localize():
         )
 
     results = []
-    for media_id in sorted(medias.keys()):
-        media = medias[media_id]
+    for media_id in sorted(snap.keys()):
+        media = snap[media_id]
         localizations = localizer.localize(media)
         if localizations:
             media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
@@ -327,16 +332,17 @@ def run_localize():
 @detectors_scoring_bp.route("/api/auto-localize", methods=["POST"])
 def auto_localize():
     """Run all autorun localizers for the current media type."""
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(medias.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("type", "")
     localizers = get_autorun_localizers_by_media(media_type)
 
     if not localizers:
         return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
 
-    sorted_media_ids = sorted(medias.keys())
+    sorted_media_ids = sorted(snap.keys())
 
     def _run_single_localizer(loc_name, loc_data):
         try:
@@ -346,7 +352,7 @@ def auto_localize():
 
         loc_results = []
         for media_id in sorted_media_ids:
-            media = medias[media_id]
+            media = snap[media_id]
             localizations = localizer.localize(media)
             if localizations:
                 media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}

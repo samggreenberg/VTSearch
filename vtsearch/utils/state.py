@@ -13,6 +13,7 @@ as before, so no call-sites need to change.
 from __future__ import annotations
 
 import gc
+from typing import Any
 
 # Re-export all state variables from state_core --------------------------
 from vtsearch.utils.state_core import (  # noqa: F401
@@ -103,6 +104,28 @@ from vtsearch.utils.state_media_lookup import (  # noqa: F401
 # ---------------------------------------------------------------------------
 
 
+def snapshot_medias() -> dict[int, dict[str, Any]]:
+    """Return a shallow copy of the medias dict, safe for iteration.
+
+    Use this instead of accessing ``medias`` directly when you need to
+    iterate over medias or access multiple entries.  The snapshot is
+    taken under ``_state_lock`` so a concurrent ``clear_medias()`` cannot
+    cause a TOCTOU race (e.g. ``KeyError`` between ``list(medias.keys())``
+    and ``medias[cid]``).
+    """
+    with _state_lock:
+        return dict(medias)
+
+
+def get_media(media_id: int) -> dict[str, Any] | None:
+    """Return a single media entry by ID, or ``None`` if not loaded.
+
+    Thread-safe: holds ``_state_lock`` for the duration of the lookup.
+    """
+    with _state_lock:
+        return medias.get(media_id)
+
+
 def clear_medias() -> None:
     """Clear all loaded medias from memory.
 
@@ -152,16 +175,15 @@ def set_inclusion(value: int) -> None:
     Also clears the progress model cache since cached models were trained
     with the old inclusion value.
     """
+    from vtsearch import settings
+
     with _state_lock:
         if value != _core.inclusion:
             from vtsearch.models.progress import clear_progress_cache
 
             clear_progress_cache()
         _core.inclusion = value
-
-    from vtsearch import settings
-
-    settings.set_inclusion(value)
+        settings.set_inclusion(value)
 
 
 def get_dataset_display_name() -> str | None:

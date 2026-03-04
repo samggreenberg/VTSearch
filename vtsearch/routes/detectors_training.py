@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
-from vtsearch.config import DATA_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.models import (
     build_model_from_weights,
@@ -23,8 +22,9 @@ from vtsearch.utils import (
     get_calibration_fraction,
     get_inclusion,
     get_safe_thresholds,
-    medias,
+    snapshot_medias,
 )
+import vtsearch.utils.paths as _paths
 
 from vtsearch.routes.detectors_crud import get_detectors_dir
 
@@ -46,16 +46,18 @@ def export_detector():
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
 
+    snap = snapshot_medias()
+
     # Train the model
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(0.0)
 
     if not X_list:
@@ -86,8 +88,8 @@ def export_detector():
 
     # Apply safe thresholds blending if enabled
     if get_safe_thresholds():
-        all_ids = sorted(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(snap.keys())
+        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -142,16 +144,18 @@ def export_detector_server():
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
 
+    snap = snapshot_medias()
+
     # Train the model (same logic as export_detector)
     X_list = []
     y_list = []
     for cid in good_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(1.0)
     for cid in bad_votes:
-        if cid in medias:
-            X_list.append(medias[cid]["embedding"])
+        if cid in snap:
+            X_list.append(snap[cid]["embedding"])
             y_list.append(0.0)
 
     if not X_list:
@@ -177,8 +181,8 @@ def export_detector_server():
     model = train_model(X, y, input_dim, get_inclusion())
 
     if get_safe_thresholds():
-        all_ids = sorted(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        all_ids = sorted(snap.keys())
+        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -191,8 +195,8 @@ def export_detector_server():
 
     # Determine media type from current medias
     media_type = "audio"
-    if medias:
-        media_type = next(iter(medias.values())).get("type", "audio")
+    if snap:
+        media_type = next(iter(snap.values())).get("type", "audio")
 
     detector_data = {
         "weights": weights,
@@ -287,7 +291,7 @@ def import_detector_labels():
             file_path = Path(file_path_str)
             # Ensure the path doesn't escape the data directory
             try:
-                file_path.resolve().relative_to(DATA_DIR.resolve())
+                _paths.validate_server_filepath(file_path_str)
             except ValueError:
                 skipped_count += 1
                 continue
@@ -350,9 +354,10 @@ def import_detector_labels():
         model = train_model(X, y, input_dim, get_inclusion())
 
         # Apply safe thresholds blending if enabled
-        if get_safe_thresholds() and medias:
-            all_ids = sorted(medias.keys())
-            all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        snap = snapshot_medias()
+        if get_safe_thresholds() and snap:
+            all_ids = sorted(snap.keys())
+            all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
             X_all = torch.tensor(all_embs, dtype=torch.float32)
             with torch.no_grad():
                 all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -397,7 +402,8 @@ def train_from_label_import(importer_name: str):
             404,
         )
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No medias loaded. Load a dataset first."}), 400
 
     # Build field_values from multipart form data
@@ -420,6 +426,13 @@ def train_from_label_import(importer_name: str):
     if not name:
         return jsonify({"error": "name is required"}), 400
 
+    # Validate server file paths to prevent path traversal
+    if "filepath" in field_values and str(field_values["filepath"]).strip():
+        try:
+            _paths.validate_server_filepath(str(field_values["filepath"]))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
     try:
         label_entries = importer.run(field_values)
     except ValueError as exc:
@@ -433,7 +446,7 @@ def train_from_label_import(importer_name: str):
     # Match md5s to loaded medias and collect embeddings
     from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snap)
 
     X_list: list = []
     y_list: list = []
@@ -453,7 +466,7 @@ def train_from_label_import(importer_name: str):
 
         # Use the first matching media's embedding
         cid = cids[0]
-        embedding = medias[cid].get("embedding")
+        embedding = snap[cid].get("embedding")
         if embedding is None:
             skipped_count += 1
             continue
@@ -487,7 +500,7 @@ def train_from_label_import(importer_name: str):
     for key, value in state_dict.items():
         weights[key] = value.tolist()
 
-    media_type = next(iter(medias.values())).get("type", "audio")
+    media_type = next(iter(snap.values())).get("type", "audio")
     add_autorun_detector(name, media_type, weights, threshold)
 
     # Register in the persistent model registry for the dashboard grid.
@@ -533,10 +546,10 @@ def multi_find():
     detection.  Returns a merged results table.
     """
     import gc
-    import pickle
 
     import torch
 
+    from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
@@ -616,7 +629,7 @@ def multi_find():
         try:
             pkl_path = ds["pkl_path"]
             with open(pkl_path, "rb") as f:
-                pkl_data = pickle.load(f)
+                pkl_data = safe_pickle_load(f)
             if isinstance(pkl_data, dict) and "medias" in pkl_data:
                 raw_medias = pkl_data["medias"]
             else:

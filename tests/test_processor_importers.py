@@ -471,6 +471,30 @@ class TestProcessorImportEndpoint:
         )
         assert res.status_code == 400
 
+    def test_path_traversal_absolute_rejected(self, client):
+        """Absolute paths outside the allowed directory must be rejected."""
+        res = client.post(
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": "/etc/passwd", "name": "evil_det"},
+        )
+        assert res.status_code == 400
+
+    def test_path_traversal_relative_rejected(self, client):
+        """Relative paths that escape the base directory must be rejected."""
+        res = client.post(
+            "/api/processor-importers/import/server_detector_file",
+            json={"filepath": "../../../etc/shadow", "name": "evil_det"},
+        )
+        assert res.status_code == 400
+
+    def test_path_traversal_from_label_import_rejected(self, client):
+        """Path traversal via the from-label-import endpoint must be rejected."""
+        res = client.post(
+            "/api/autorun-detectors/from-label-import/server_json_file",
+            json={"filepath": "/etc/passwd", "name": "evil"},
+        )
+        assert res.status_code == 400
+
 
 # ---------------------------------------------------------------------------
 # API – POST /api/autorun-detectors/from-label-import/<name>

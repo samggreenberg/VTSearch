@@ -3,6 +3,8 @@
 import threading
 from typing import Any, Optional
 
+_UNSET = object()  # sentinel for "caller did not provide this argument"
+
 
 class ProgressTracker:
     """Thread-safe progress tracker for long-running operations.
@@ -51,8 +53,9 @@ class ProgressTracker:
             self._data["message"] = message
             self._data["current"] = current
             self._data["total"] = total
-            for key, default in self._extra_defaults.items():
-                self._data[key] = kwargs.get(key, default)
+            for key in self._extra_defaults:
+                if key in kwargs:
+                    self._data[key] = kwargs[key]
 
     def get(self) -> dict[str, Any]:
         """Return a snapshot of the current progress data.
@@ -85,16 +88,24 @@ def update_progress(
     message: str = "",
     current: int = 0,
     total: int = 0,
-    error: Optional[str] = None,
-    staging_result: Optional[dict] = None,
+    error: Any = _UNSET,
+    staging_result: Any = _UNSET,
 ) -> None:
     """Update the global dataset progress tracker.
 
     All write access is serialised internally so that background threads
     can safely report progress while the Flask request thread polls
     :func:`get_progress`.
+
+    Only extra fields explicitly supplied by the caller are forwarded;
+    omitted fields are left unchanged (true update/merge semantics).
     """
-    dataset_progress.update(status, message, current, total, error=error, staging_result=staging_result)
+    kwargs: dict[str, Any] = {}
+    if error is not _UNSET:
+        kwargs["error"] = error
+    if staging_result is not _UNSET:
+        kwargs["staging_result"] = staging_result
+    dataset_progress.update(status, message, current, total, **kwargs)
 
 
 def get_progress() -> dict[str, Any]:

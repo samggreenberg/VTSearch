@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import io
 import json
-from unittest.mock import patch, MagicMock
-
 import app as app_module
 from vtsearch.utils import good_votes, bad_votes, medias
 
@@ -68,9 +66,8 @@ class TestInvalidRequestBodies:
 
     def test_settings_put_with_empty_body(self):
         resp = self.client.put("/api/settings", json={})
-        # Empty but valid dict — should succeed (no fields to update)
-        # OR may return 400 for empty body depending on impl
-        assert resp.status_code in (200, 400)
+        # Empty dict is falsy → route rejects with 400
+        assert resp.status_code == 400
 
     def test_settings_put_with_null_body(self):
         resp = self.client.put(
@@ -192,9 +189,10 @@ class TestTypeMismatches:
 
     def test_inclusion_boolean_value(self):
         resp = self.client.post("/api/inclusion", json={"inclusion": True})
-        # True is not a number in the strict check (isinstance True of int is True in Python,
-        # but the route may or may not accept it). Let's check it doesn't crash.
-        assert resp.status_code in (200, 400)
+        # bool is a subclass of int in Python, so isinstance(True, (int, float))
+        # passes validation.  True → int(1) → clamped to 1.
+        assert resp.status_code == 200
+        assert resp.get_json()["inclusion"] == 1
 
     def test_safe_thresholds_string_value(self):
         resp = self.client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
@@ -666,12 +664,11 @@ class TestPathTraversalPrevention:
     def test_label_file_sort_rejects_absolute_escape(self, client):
         """Absolute paths outside DATA_DIR must be skipped."""
         buf = self._make_label_file(["/etc/passwd", "/etc/shadow"])
-        with patch("vtsearch.routes.sorting.get_clap_model", return_value=(MagicMock(), MagicMock())):
-            resp = client.post(
-                "/api/label-file-sort",
-                data={"file": (buf, "labels.json")},
-                content_type="multipart/form-data",
-            )
+        resp = client.post(
+            "/api/label-file-sort",
+            data={"file": (buf, "labels.json")},
+            content_type="multipart/form-data",
+        )
         # All paths rejected → too few valid files → 400
         assert resp.status_code == 400
         assert "2 valid" in resp.get_json()["error"] or "loaded 0" in resp.get_json()["error"]
@@ -679,12 +676,11 @@ class TestPathTraversalPrevention:
     def test_label_file_sort_rejects_relative_traversal(self, client):
         """Relative paths that traverse out of DATA_DIR must be skipped."""
         buf = self._make_label_file(["../../etc/passwd", "../../../etc/shadow"])
-        with patch("vtsearch.routes.sorting.get_clap_model", return_value=(MagicMock(), MagicMock())):
-            resp = client.post(
-                "/api/label-file-sort",
-                data={"file": (buf, "labels.json")},
-                content_type="multipart/form-data",
-            )
+        resp = client.post(
+            "/api/label-file-sort",
+            data={"file": (buf, "labels.json")},
+            content_type="multipart/form-data",
+        )
         assert resp.status_code == 400
 
     # -- /api/autorun-detectors/import-labels --------------------------------

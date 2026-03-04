@@ -39,7 +39,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.pickle.load", side_effect=MemoryError):
+        with mock.patch("vtsearch.datasets.loader.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 

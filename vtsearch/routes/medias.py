@@ -11,7 +11,8 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
-    medias,
+    get_media,
+    snapshot_medias,
     toggle_vote,
 )
 
@@ -67,7 +68,7 @@ def list_medias() -> Response:
         optionally ``frequency``, ``width``, ``height``, ``word_count``.
     """
     result: list[dict[str, Any]] = []
-    for c in medias.values():
+    for c in snapshot_medias().values():
         media_data: dict[str, Any] = {
             "id": c["id"],
             "type": c.get("type", "audio"),
@@ -96,7 +97,7 @@ def media_audio(media_id: int) -> tuple[Response, int] | Response:
         A ``audio/wav`` file response on success (HTTP 200), or a JSON error
         response with HTTP 404 if the media does not exist.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     media_bytes = _resolve_bytes(c)
@@ -124,7 +125,7 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
         (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
         error if the media exists but is not of type ``"video"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "video":
@@ -168,7 +169,7 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
         (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
         error if the media exists but is not of type ``"image"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "image":
@@ -211,7 +212,7 @@ def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
         error if the media does not exist, or a JSON 400 error if the media
         exists but is not of type ``"paragraph"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "paragraph":
@@ -247,7 +248,7 @@ def media_generic(media_id: int) -> tuple[Response, int] | Response:
         or a JSON error response for HTTP 404 (media not found) or HTTP 400
         (unrecognised media type).
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
 
@@ -287,7 +288,7 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
         - HTTP 400 – request body is missing, malformed, or ``vote`` is not
           ``"good"`` or ``"bad"``.
     """
-    if media_id not in medias:
+    if get_media(media_id) is None:
         return jsonify({"error": "not found"}), 404
 
     data = get_json_or_400()

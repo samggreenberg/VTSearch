@@ -35,12 +35,14 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
+import vtsearch.utils.paths as _paths
 from vtsearch.utils import (
     apply_label,
     build_media_lookup,
     medias,
     find_missing_entries,
     resolve_media_ids,
+    snapshot_medias,
 )
 
 label_importers_bp = Blueprint("label_importers", __name__)
@@ -140,6 +142,13 @@ def run_label_import(importer_name: str):
             400,
         )
 
+    # Validate server file paths to prevent path traversal
+    if "filepath" in field_values and str(field_values["filepath"]).strip():
+        try:
+            _paths.validate_server_filepath(str(field_values["filepath"]))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
     try:
         label_entries = importer.run(field_values)
     except ValueError as exc:
@@ -151,7 +160,7 @@ def run_label_import(importer_name: str):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
     applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup)
 
     # Detect entries that could not be matched at all
@@ -207,7 +216,7 @@ def ingest_missing():
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
     applied, _ = _apply_labels(entries, origin_lookup, md5_lookup)
 
     return jsonify(

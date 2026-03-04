@@ -283,9 +283,9 @@ def save_trainable_model_labels(name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, medias
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
-    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes, expand_dupes=False)
+    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
     data["labelset"] = labelset.to_dict()
     _write_model(path, data)
 
