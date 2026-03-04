@@ -1,6 +1,7 @@
 """Blueprint for sorting and voting routes."""
 
 import json
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -81,29 +82,35 @@ def _cosine_sort(query_vec):
     return results, round(threshold, 4)
 
 
+_embedder_load_lock = threading.Lock()
+
+
 def _load_embedder_with_progress(media_type, total_steps):
     """Load the embedding model for *media_type*, forwarding progress to the sort progress bar.
 
-    If the model is already loaded this is a no-op.
+    If the model is already loaded this is a no-op.  A lock serialises
+    concurrent callers so that only one request touches ``_on_progress``
+    at a time, preventing the save/restore from trampling another
+    request's callback.
     """
     from vtsearch.media import get as media_get
 
     try:
         mt = media_get(media_type)
-        needs_loading = getattr(mt, "_model", None) is None
     except KeyError:
         return
 
-    if not needs_loading:
-        return
+    with _embedder_load_lock:
+        if getattr(mt, "_model", None) is not None:
+            return
 
-    update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
-    original_cb = mt._on_progress
-    mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
-    try:
-        mt.load_models()
-    finally:
-        mt._on_progress = original_cb
+        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+        original_cb = mt._on_progress
+        mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+        try:
+            mt.load_models()
+        finally:
+            mt._on_progress = original_cb
 
 
 @sorting_bp.route("/api/sort", methods=["POST"])
