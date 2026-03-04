@@ -421,6 +421,8 @@ class TestWebhookExporterCLI:
 class TestWebhookExporterExport:
     """Tests for the Webhook export() method using mocked HTTP."""
 
+    _PATCH_VALIDATE = mock.patch("vtsearch.exporters.webhook.validate_url")
+
     def test_posts_json_to_url(self):
         from vtsearch.exporters.webhook import WebhookLabelsetExporter
 
@@ -431,7 +433,9 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ) as mock_post:
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         mock_post.assert_called_once()
@@ -450,7 +454,9 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ) as mock_post:
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
         call_kwargs = mock_post.call_args
@@ -466,7 +472,9 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post:
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ) as mock_post:
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
@@ -488,7 +496,9 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -502,7 +512,9 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -518,7 +530,9 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -539,7 +553,9 @@ class TestWebhookExporterIntegration:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtsearch.exporters.webhook.validate_url"), mock.patch(
+            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 
     def test_unknown_exporter_still_raises(self):
