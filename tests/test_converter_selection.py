@@ -617,10 +617,10 @@ class TestFolderImporterWithConverters:
             )
             mock_load.assert_called_once()
             mock_conv.assert_called_once()
-            # Check converters are passed through
+            # _run_selected_converters(folder, media_type, field_values, medias, thin=False)
             call_args = mock_conv.call_args
-            assert call_args[0][2] == "images"  # media_type
-            assert "video2image" in call_args[0][3].get("converters", "") or "video2image" in str(call_args)
+            assert call_args[0][1] == "images"  # media_type
+            assert "video2image" in call_args[0][2].get("converters", "")
 
     def test_run_without_converters_does_not_call_runner(self, tmp_path):
         """Without converters field, runner is not called."""
