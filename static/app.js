@@ -5896,10 +5896,45 @@
     datasetImporterModal.classList.add("show");
   }
 
+  // -----------------------------------------------------------------------
+  // Converter chooser: fetches and renders converter checkboxes for a
+  // given media type (folder_import_name like "images").
+  // -----------------------------------------------------------------------
+  async function _updateConverterChooser(mediaTypeValue) {
+    const container = document.getElementById("converter-chooser");
+    if (!container) return;
+    if (!mediaTypeValue) { container.innerHTML = ""; container.style.display = "none"; return; }
+    try {
+      const res = await fetch(`/api/converters?target=${encodeURIComponent(mediaTypeValue)}`);
+      if (!res.ok) { container.innerHTML = ""; container.style.display = "none"; return; }
+      const data = await res.json();
+      const converters = data.converters || [];
+      if (converters.length === 0) { container.innerHTML = ""; container.style.display = "none"; return; }
+      let html = '<label class="form-label">Also include via conversion</label>';
+      for (const c of converters) {
+        html += `<label class="converter-checkbox-label" style="display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer;">`;
+        html += `<input type="checkbox" name="converter_cb" value="${escapeHtml(c.name)}" data-converter-cb>`;
+        html += `<span>${escapeHtml(c.display_name)}</span>`;
+        if (c.description) html += `<span style="color:var(--text-muted); font-size:0.85em;">\u2014 ${escapeHtml(c.description)}</span>`;
+        html += `</label>`;
+      }
+      container.innerHTML = html;
+      container.style.display = "block";
+    } catch { container.innerHTML = ""; container.style.display = "none"; }
+  }
+
+  function _getSelectedConverters() {
+    const cbs = document.querySelectorAll("[data-converter-cb]:checked");
+    return Array.from(cbs).map(cb => cb.value).join(",");
+  }
+
   // Show an importer's form inline within the dataset importer picker modal
   function showDashImporterForm(importer) {
     datasetImporterList.style.display = "none";
     datasetImporterBack.style.display = "";
+
+    // Check if this importer has a media_type select field (converter chooser target).
+    const mediaTypeField = importer.fields.find(f => f.key === "media_type" && f.field_type === "select");
 
     let html = `<h3 style="margin-bottom:12px;">${escapeHtml(importer.icon || '\uD83D\uDD0C')} ${escapeHtml(importer.display_name)}</h3>`;
     html += `<form id="dash-imp-form">`;
@@ -5909,7 +5944,7 @@
       if (field.field_type === "file") {
         html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept || "")}" class="form-input" ${field.required ? "required" : ""}>`;
       } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
+        html += `<select name="${escapeHtml(field.key)}" class="form-input"${field.key === "media_type" ? ' id="imp-media-type-select"' : ""}>`;
         for (const opt of field.options) {
           html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
         }
@@ -5926,6 +5961,11 @@
         html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
       }
       html += `</div>`;
+
+      // Insert converter chooser placeholder right after the media_type field.
+      if (field.key === "media_type" && mediaTypeField) {
+        html += `<div id="converter-chooser" class="form-group" style="display:none;"></div>`;
+      }
     }
     html += `<div id="dash-imp-status" class="status-text" style="min-height:1.2em; margin:8px 0;"></div>`;
     html += `<button type="submit" class="btn-block-primary">Import</button>`;
@@ -5950,19 +5990,31 @@
       });
     }
 
+    // Wire up converter chooser: populate on load and on media_type change.
+    if (mediaTypeField) {
+      const mtSelect = document.getElementById("imp-media-type-select");
+      if (mtSelect) {
+        _updateConverterChooser(mtSelect.value);
+        mtSelect.addEventListener("change", () => _updateConverterChooser(mtSelect.value));
+      }
+    }
+
     document.getElementById("dash-imp-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const formEl = e.target;
       const statusEl = document.getElementById("dash-imp-status");
       const hasFiles = importer.fields.some(f => f.field_type === "file");
+      const selectedConverters = _getSelectedConverters();
       let body, headers = {};
       if (hasFiles) {
         body = new FormData(formEl);
+        if (selectedConverters) body.append("converters", selectedConverters);
       } else {
         const obj = {};
         for (const field of importer.fields) {
           obj[field.key] = formEl.elements[field.key].value;
         }
+        if (selectedConverters) obj.converters = selectedConverters;
         body = JSON.stringify(obj);
         headers["Content-Type"] = "application/json";
       }

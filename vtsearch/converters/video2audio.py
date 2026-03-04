@@ -22,6 +22,9 @@ class Video2AudioMediaConverter(MediaConverter):
     available.
     """
 
+    display_name = "Video \u2192 Audio"
+    converter_description = "Extract audio tracks from video files"
+
     @property
     def source_type(self) -> str:
         return "video"

@@ -4,6 +4,14 @@ When the media type is ``"images"``, PDF files (``*.pdf``) in the folder are
 also included: each page is rendered as a separate image and embedded with
 CLIP.  The origin for PDF-derived images is ``"pdf"`` (not ``"folder"``) so
 that provenance tracks back to the original document.
+
+Converter support
+-----------------
+When the ``converters`` field value is set (a comma-separated list of
+converter names, e.g. ``"video2image,document2image"``), the importer also
+scans for source files matching each converter's input type, converts them
+to the target media type, embeds the results, and appends them to the
+dataset with converter-specific origins.
 """
 
 from __future__ import annotations
@@ -88,6 +96,34 @@ def _load_pdf_images(
             media_id += 1
 
 
+def _run_selected_converters(
+    folder: Path,
+    media_type: str,
+    field_values: dict,
+    medias: dict,
+    thin: bool = False,
+) -> None:
+    """Run any user-selected converters from *field_values*."""
+    converters_str = field_values.get("converters", "")
+    if not converters_str:
+        return
+    converter_names = [c.strip() for c in converters_str.split(",") if c.strip()]
+    if not converter_names:
+        return
+
+    from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
+
+    base_origin = {"importer": "folder", "params": {"path": str(folder), "media_type": media_type}}
+    run_converters_on_folder(
+        folder_path=folder,
+        converter_names=converter_names,
+        target_media_type=media_type,
+        medias=medias,
+        thin=thin,
+        base_origin=base_origin,
+    )
+
+
 class FolderDatasetImporter(DatasetImporter):
     """Embed all media files found in a local directory into a dataset.
 
@@ -96,6 +132,10 @@ class FolderDatasetImporter(DatasetImporter):
 
     When the media type is ``"images"``, any ``*.pdf`` files in the folder
     are also processed: each page is rendered as a separate image.
+
+    When converters are selected (via the ``converters`` field value), files
+    matching each converter's source type are also scanned, converted, and
+    added to the dataset.
     """
 
     name = "folder"
@@ -126,14 +166,18 @@ class FolderDatasetImporter(DatasetImporter):
         try:
             load_dataset_from_folder(folder, media_type, medias, thin=thin)
         except ValueError:
-            # No regular image files found — PDFs may still be present.
-            if media_type != "images":
+            # No regular image files found — PDFs or converters may still produce output.
+            if media_type != "images" and not field_values.get("converters"):
                 raise
             has_regular = False
         if media_type == "images":
             _load_pdf_images(folder, medias, thin=thin)
-            if not has_regular and not medias:
-                raise ValueError("No image files found in folder")
+
+        # Run any user-selected converters.
+        _run_selected_converters(folder, media_type, field_values, medias, thin=thin)
+
+        if not has_regular and not medias:
+            raise ValueError(f"No {media_type} files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
@@ -155,13 +199,20 @@ class FolderDatasetImporter(DatasetImporter):
         try:
             yield from load_dataset_from_folder_chunked(folder, media_type, chunk_size, thin=thin)
         except ValueError:
-            if media_type != "images":
+            if media_type != "images" and not field_values.get("converters"):
                 raise
         if media_type == "images":
             chunk: dict[int, dict[str, Any]] = {}
             _load_pdf_images(folder, chunk, thin=thin)
             if chunk:
                 yield chunk
+        # Run converters and yield as a single chunk.
+        converters_str = field_values.get("converters", "")
+        if converters_str:
+            converter_chunk: dict[int, dict[str, Any]] = {}
+            _run_selected_converters(folder, media_type, field_values, converter_chunk, thin=thin)
+            if converter_chunk:
+                yield converter_chunk
 
     def run_chunked_cli(
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
@@ -172,6 +223,20 @@ class FolderDatasetImporter(DatasetImporter):
         if not folder.is_dir():
             raise NotADirectoryError(f"Not a directory: {folder}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
+
+    def build_cli_args(self, field_values: dict[str, Any]) -> str:
+        base = super().build_cli_args(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            base += f" --converters {converters}"
+        return base
+
+    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        origin = super().build_origin(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            origin["params"]["converters"] = converters
+        return origin
 
 
 IMPORTER = FolderDatasetImporter()

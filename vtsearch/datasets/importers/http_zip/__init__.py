@@ -4,6 +4,13 @@ Supports .zip, .tar, .tar.gz, .tar.bz2, .tar.xz archives.
 RAR support requires the optional ``rarfile`` package.
 
 Requires only ``requests``, which is already a core dependency.
+
+Converter support
+-----------------
+When the ``converters`` field value is set (a comma-separated list of
+converter names), the importer also scans the extracted archive for source
+files matching each converter's input type, converts them to the target
+media type, and appends them to the dataset.
 """
 
 from __future__ import annotations
@@ -99,6 +106,37 @@ def _extract_archive(
         )
 
 
+def _run_selected_converters(
+    folder: Path,
+    media_type: str,
+    field_values: dict,
+    medias: dict,
+    thin: bool = False,
+) -> None:
+    """Run any user-selected converters from *field_values*."""
+    converters_str = field_values.get("converters", "")
+    if not converters_str:
+        return
+    converter_names = [c.strip() for c in converters_str.split(",") if c.strip()]
+    if not converter_names:
+        return
+
+    from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
+
+    base_origin = {"importer": "http_archive", "params": {
+        "url": field_values.get("url", ""),
+        "media_type": media_type,
+    }}
+    run_converters_on_folder(
+        folder_path=folder,
+        converter_names=converter_names,
+        target_media_type=media_type,
+        medias=medias,
+        thin=thin,
+        base_origin=base_origin,
+    )
+
+
 class HttpArchiveDatasetImporter(DatasetImporter):
     """Download a publicly-accessible archive and load its media files.
 
@@ -110,6 +148,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     Supported archive formats: ``.zip``, ``.tar``, ``.tar.gz``,
     ``.tar.bz2``, ``.tar.xz``, ``.rar`` (requires ``rarfile`` package).
+
+    When converters are selected (via the ``converters`` field value), files
+    matching each converter's source type are also scanned, converted, and
+    added to the dataset.
     """
 
     name = "http_archive"
@@ -159,6 +201,8 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         try:
             load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
+            # Run any user-selected converters on the extracted folder.
+            _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
@@ -210,6 +254,13 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "sounds")
         try:
             yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+            # Run converters on the extracted folder and yield as a chunk.
+            converters_str = field_values.get("converters", "")
+            if converters_str:
+                converter_chunk: dict[int, dict[str, Any]] = {}
+                _run_selected_converters(extract_dir, media_type, field_values, converter_chunk, thin=thin)
+                if converter_chunk:
+                    yield converter_chunk
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
@@ -220,6 +271,20 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
+
+    def build_cli_args(self, field_values: dict[str, Any]) -> str:
+        base = super().build_cli_args(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            base += f" --converters {converters}"
+        return base
+
+    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        origin = super().build_origin(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            origin["params"]["converters"] = converters
+        return origin
 
 
 IMPORTER = HttpArchiveDatasetImporter()
