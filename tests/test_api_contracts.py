@@ -558,8 +558,13 @@ class TestLabelingStatusContract:
         resp = self.client.get("/api/labeling-status")
         assert resp.status_code == 200
         data = resp.get_json()
-        # Should have status indicators or at minimum no error
-        assert "error" not in data or "good_count" in data
+        assert "error" not in data
+        assert "good_count" in data
+        assert "bad_count" in data
+        assert "total_count" in data
+        for key in ("smart", "stable", "span"):
+            assert key in data
+            assert "status" in data[key]
 
 
 class TestFillFromSortContract:
