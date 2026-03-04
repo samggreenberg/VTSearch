@@ -254,6 +254,35 @@ class TestConcurrentApplyLabel:
                 assert i in bad_votes
 
 
+class TestConcurrentSetInclusion:
+    """Verify that concurrent set_inclusion keeps in-memory and on-disk state in sync."""
+
+    def test_concurrent_set_inclusion_memory_disk_sync(self, isolated_settings):
+        """After concurrent writes, in-memory inclusion must equal the persisted value."""
+        num_threads = 20
+        iterations = 30
+        errors = []
+
+        def worker(value):
+            try:
+                for _ in range(iterations):
+                    _state.set_inclusion(value)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker, args=(i % 5,)) for i in range(num_threads)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
+        assert not errors
+        # The critical invariant: in-memory value must match the on-disk value.
+        in_memory = _state.get_inclusion()
+        on_disk = _settings_mod.get_inclusion()
+        assert in_memory == on_disk
+
+
 class TestSettingsLock:
     """Verify that _settings_lock exists and is an RLock."""
 
