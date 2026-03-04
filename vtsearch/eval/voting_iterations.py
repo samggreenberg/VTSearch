@@ -146,7 +146,8 @@ def simulate_voting_iterations(
         ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
     """
     rng = np.random.RandomState(seed)
-    torch.manual_seed(seed)
+    # Note: no torch.manual_seed() here — train_model handles its own
+    # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
 
     sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
