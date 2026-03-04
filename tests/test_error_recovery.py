@@ -63,9 +63,8 @@ class TestInvalidRequestBodies:
 
     def test_settings_put_with_empty_body(self):
         resp = self.client.put("/api/settings", json={})
-        # Empty but valid dict — should succeed (no fields to update)
-        # OR may return 400 for empty body depending on impl
-        assert resp.status_code in (200, 400)
+        # Empty dict is falsy → route rejects with 400
+        assert resp.status_code == 400
 
     def test_settings_put_with_null_body(self):
         resp = self.client.put(
@@ -187,9 +186,10 @@ class TestTypeMismatches:
 
     def test_inclusion_boolean_value(self):
         resp = self.client.post("/api/inclusion", json={"inclusion": True})
-        # True is not a number in the strict check (isinstance True of int is True in Python,
-        # but the route may or may not accept it). Let's check it doesn't crash.
-        assert resp.status_code in (200, 400)
+        # bool is a subclass of int in Python, so isinstance(True, (int, float))
+        # passes validation.  True → int(1) → clamped to 1.
+        assert resp.status_code == 200
+        assert resp.get_json()["inclusion"] == 1
 
     def test_safe_thresholds_string_value(self):
         resp = self.client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
