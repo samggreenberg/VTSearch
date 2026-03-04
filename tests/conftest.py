@@ -25,6 +25,7 @@ _TEST_GROUPS = {
         "test_api_contracts",
         "test_error_recovery",
         "test_dashboard",
+        "test_path_validation",
     ],
     "sorting": [
         "test_sorting",
@@ -105,6 +106,7 @@ def pytest_collection_modifyitems(items, config):
         group = _FILE_TO_GROUP.get(fname)
         if group:
             item.add_marker(getattr(pytest.mark, group))
+
 
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
 # for the tiny MLP to converge on the small test dataset).
@@ -195,6 +197,31 @@ _patch_embed_audio.stop()
 from vtsearch.media import get as _media_get
 
 _audio_mt = _media_get("audio")
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_tmp_paths(monkeypatch):
+    """Allow tests to use system temp dirs with server file-path validation.
+
+    In production, ``validate_server_filepath`` restricts paths to
+    ``Path.cwd()``.  During tests, temp files live in the system temp
+    directory, so we widen the check to also accept that tree.
+    """
+    import tempfile
+    from pathlib import Path
+
+    import vtsearch.utils.paths as paths_mod
+
+    _original = paths_mod.validate_server_filepath
+
+    def _permissive(filepath_str, base_dir=None):
+        try:
+            return _original(filepath_str, base_dir)
+        except ValueError:
+            # Also allow the system temp directory (where pytest tmp_path lives).
+            return _original(filepath_str, Path(tempfile.gettempdir()))
+
+    monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
 
 
 @pytest.fixture(autouse=True)
@@ -320,8 +347,7 @@ def pytest_sessionfinish(session, exitstatus):
         print("=" * 60, flush=True)
         if failed or errors:
             print(
-                f"TESTS FAILED: {failed} failed, {errors} errors, "
-                f"{passed} passed, {skipped} skipped (total: {total})",
+                f"TESTS FAILED: {failed} failed, {errors} errors, {passed} passed, {skipped} skipped (total: {total})",
                 flush=True,
             )
         else:
