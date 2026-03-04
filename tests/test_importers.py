@@ -887,14 +887,12 @@ class TestHttpArchiveExtractDirIsolation:
         from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
-        dirs_created = []
+        dirs_used = []
 
-        original_mkdir = Path.mkdir
+        real_load = None
 
-        def spy_mkdir(self_path, *args, **kwargs):
-            if "http_archive_extract_" in str(self_path):
-                dirs_created.append(str(self_path))
-            return original_mkdir(self_path, *args, **kwargs)
+        def capture_load(extract_dir, *args, **kwargs):
+            dirs_used.append(str(extract_dir))
 
         with (
             mock.patch(
@@ -903,18 +901,18 @@ class TestHttpArchiveExtractDirIsolation:
             ),
             mock.patch(
                 "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                side_effect=capture_load,
             ),
             mock.patch(
                 "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
             ),
-            mock.patch.object(Path, "mkdir", spy_mkdir),
         ):
             imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
             imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
 
-        assert len(dirs_created) >= 2
+        assert len(dirs_used) == 2
         # The two extract dirs must be different
-        assert dirs_created[-1] != dirs_created[-2]
+        assert dirs_used[0] != dirs_used[1]
 
     def test_old_shared_dir_name_not_used(self, tmp_path):
         """The old fixed name 'http_archive_extract' must no longer appear."""
