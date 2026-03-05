@@ -38,8 +38,6 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Output() started = new EventEmitter<void>();
   @Output() stopped = new EventEmitter<void>();
 
-  readonly overallHelp = 'Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration.';
-
   constructor(public autopilotState: AutopilotStateService) {}
 
   get state(): AutopilotState {

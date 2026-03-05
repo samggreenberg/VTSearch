@@ -4,41 +4,6 @@
   gap: 12px;
 }
 
-.autopilot-header {
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px 8px 0;
-}
-
-.ap-help-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid var(--text-muted);
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  cursor: help;
-  flex-shrink: 0;
-  line-height: 1;
-
-  &.small {
-    width: 14px;
-    height: 14px;
-    font-size: 0.6rem;
-    margin-left: 4px;
-    vertical-align: middle;
-  }
-
-  &:hover {
-    color: var(--text-primary);
-    border-color: var(--text-primary);
-  }
-}
-
 .autopilot-active {
   display: flex;
   flex-direction: column;
@@ -109,6 +74,7 @@
   font-size: 0.82rem;
   color: var(--text-primary);
   font-weight: 500;
+  cursor: help;
 }
 
 .ap-step-detail {
