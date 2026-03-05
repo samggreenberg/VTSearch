@@ -1,4 +1,4 @@
-import { Component, EventEmitter, HostBinding, HostListener, Input, Output } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -21,6 +21,8 @@ export class ModelCardComponent {
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
 
+  @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
+
   editing = false;
   editName = '';
 
@@ -28,6 +30,7 @@ export class ModelCardComponent {
     event.stopPropagation();
     this.editing = true;
     this.editName = this.model.name;
+    setTimeout(() => this.renameInput?.nativeElement.focus());
   }
 
   confirmRename(): void {
@@ -58,5 +61,10 @@ export class ModelCardComponent {
   formatDate(timestamp: number | null): string {
     if (!timestamp) return '-';
     return new Date(timestamp * 1000).toLocaleDateString();
+  }
+
+  capitalizeType(type: string | undefined): string {
+    if (!type) return '-';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   }
 }

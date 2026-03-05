@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ModelCardComponent } from './model-card.component';
 
 describe('ModelCardComponent', () => {
@@ -36,9 +36,10 @@ describe('ModelCardComponent', () => {
     expect(el.textContent).toContain('Test Model');
   });
 
-  it('should display media type', () => {
+  it('should display capitalized media type with icon', () => {
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('audio');
+    expect(el.textContent).toContain('Audio');
+    expect(el.querySelector('.type-icon')).toBeTruthy();
   });
 
   it('should display training count', () => {
@@ -68,6 +69,16 @@ describe('ModelCardComponent', () => {
     expect(component.editing).toBeTrue();
     expect(el.querySelector('.inline-edit')).toBeTruthy();
   });
+
+  it('should focus the rename input after clicking rename', fakeAsync(() => {
+    const el = fixture.nativeElement as HTMLElement;
+    const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
+    renameBtn.click();
+    fixture.detectChanges();
+    tick();
+    const input = el.querySelector('.inline-edit') as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+  }));
 
   it('should emit rename on confirm', () => {
     spyOn(component.rename, 'emit');

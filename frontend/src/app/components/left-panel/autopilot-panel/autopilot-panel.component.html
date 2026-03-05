@@ -24,8 +24,18 @@
           </div>
           <div class="ap-step-content">
             <span class="ap-step-label">{{ step.label }}</span>
-            @if (step.detail) {
-              <span class="ap-step-detail">{{ step.detail }}</span>
+            @if (step.detail || step.statusIcons.length) {
+              <span class="ap-step-detail">
+                {{ step.detail }}
+                @for (icon of step.statusIcons; track icon.ariaLabel) {
+                  <span
+                    class="ap-status-icon"
+                    [attr.data-color]="icon.color"
+                    [attr.aria-label]="icon.ariaLabel"
+                    role="img"
+                  ></span>
+                }
+              </span>
             }
           </div>
         </div>
