@@ -20,6 +20,7 @@ interface StepDisplay {
   state: 'done' | 'active' | 'future';
   detail: string;
   statusIcons: StatusIcon[];
+  helpText: string;
 }
 
 @Component({
@@ -36,6 +37,8 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
 
   @Output() started = new EventEmitter<void>();
   @Output() stopped = new EventEmitter<void>();
+
+  readonly overallHelp = 'Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration.';
 
   constructor(public autopilotState: AutopilotStateService) {}
 
@@ -63,6 +66,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
         statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
+        helpText: this.phaseHelpText(phase),
       };
     });
   }
@@ -112,6 +116,17 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       { color: st.smartStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Smart: ${st.smartStatus === 'green' ? 'green' : 'pending'}` },
       { color: st.stableStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Stable: ${st.stableStatus === 'green' ? 'green' : 'pending'}` },
     ];
+  }
+
+  private phaseHelpText(phase: AutopilotPhase): string {
+    switch (phase) {
+      case 'good': return 'Label a few examples of what you are looking for so the system can learn what "good" looks like.';
+      case 'bad': return 'Label examples that are not what you want, helping the system learn the boundary between good and bad.';
+      case 'hard': return 'The system shows you items near the decision boundary. Labeling these improves accuracy where it matters most.';
+      case 'new': return 'Explore diverse items the system is less certain about, ensuring nothing important is missed.';
+      case 'done': return 'All quality indicators are green. You can continue labeling or export your results.';
+      default: return '';
+    }
   }
 
   private phaseDetail(phase: AutopilotPhase): string {
