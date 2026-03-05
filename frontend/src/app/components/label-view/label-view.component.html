@@ -37,6 +37,10 @@
       (mediaVoted)="onMediaVoted($event)"
     />
   </div>
+  <div
+    class="divider-right"
+    (mousedown)="onRightDividerMouseDown($event)"
+  ></div>
   <div class="panel-right">
     <vt-right-panel
       [medias]="medias"
