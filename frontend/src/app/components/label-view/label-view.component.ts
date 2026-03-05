@@ -27,16 +27,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   labelingStatus: LabelingStatusResponse | null = null;
   showThumbnails = true;
   leftWidth = 260;
+  rightWidth = 300;
 
   private readonly LEFT_MIN = 180;
   private readonly LEFT_MAX = 500;
+  private readonly RIGHT_MIN = 150;
+  private readonly RIGHT_MAX = 500;
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
   private autopilotTextSortPending = false;
   private dragging = false;
+  private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
   private boundMouseUp = this.onMouseUp.bind(this);
+  private boundRightMouseMove = this.onRightMouseMove.bind(this);
+  private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor(
     private sortingApi: SortingApiService,
@@ -50,6 +56,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+    this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.loadSettings();
@@ -75,6 +82,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.stopPolling();
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    document.removeEventListener('mousemove', this.boundRightMouseMove);
+    document.removeEventListener('mouseup', this.boundRightMouseUp);
   }
 
   // --- Divider drag ---
@@ -103,6 +112,34 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+  }
+
+  // --- Right divider drag ---
+
+  onRightDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.draggingRight = true;
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundRightMouseMove);
+      document.addEventListener('mouseup', this.boundRightMouseUp);
+    });
+  }
+
+  private onRightMouseMove(event: MouseEvent): void {
+    if (!this.draggingRight) return;
+    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
+    let newWidth = layoutRect.right - event.clientX;
+    newWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, newWidth));
+    this.ngZone.run(() => {
+      this.rightWidth = newWidth;
+      this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
+    });
+  }
+
+  private onRightMouseUp(): void {
+    this.draggingRight = false;
+    document.removeEventListener('mousemove', this.boundRightMouseMove);
+    document.removeEventListener('mouseup', this.boundRightMouseUp);
   }
 
   // --- Data loading ---

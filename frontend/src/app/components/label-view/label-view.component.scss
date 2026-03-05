@@ -1,6 +1,6 @@
 .layout {
   display: grid;
-  grid-template-columns: var(--left-width, 300px) 4px 1fr 300px;
+  grid-template-columns: var(--left-width, 300px) 4px 1fr 4px var(--right-width, 300px);
   height: 100%;
   overflow: hidden;
 }
@@ -25,16 +25,29 @@
 }
 
 .panel-center {
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg-panel);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.divider-right {
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+
+  &:hover,
+  &.dragging {
+    background: var(--accent);
+  }
+}
+
 .panel-right {
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
+  min-width: 150px;
 }
 

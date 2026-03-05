@@ -5,10 +5,7 @@
 }
 
 .panel-right {
-  width: 220px;
-  border-left: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
