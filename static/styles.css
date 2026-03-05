@@ -736,6 +736,7 @@ video { max-width: 100%; }
 .dashboard-action-btn .dash-btn-hint {
   display: block; font-size: 0.68rem; font-weight: 400; opacity: 0.85;
   line-height: 1.2; min-height: 1.2em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .dashboard-action-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .dashboard-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
