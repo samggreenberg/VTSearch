@@ -1360,7 +1360,7 @@
 
         const nameTd = document.createElement("td");
         nameTd.className = "col-name";
-        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span>`;
         tr.appendChild(nameTd);
         const dsCreated = ds.created_at ? new Date(ds.created_at * 1000).toLocaleDateString() : "-";
         const dsOrigin = ds.origin || "unknown";
@@ -1380,7 +1380,7 @@
           <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
           <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+          <td class="col-actions"><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
         `);
 
         // Inline rename
@@ -1560,7 +1560,7 @@
 
         const nameTd = document.createElement("td");
         nameTd.className = "col-name";
-        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button>`;
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span>`;
         tr.appendChild(nameTd);
         const mCreated = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : "-";
         const mLastTrained = m.last_trained_at ? new Date(m.last_trained_at * 1000).toLocaleDateString() : "-";
@@ -1573,7 +1573,7 @@
           <td class="col-date">${escapeHtml(mCreated)}</td>
           <td class="col-autorun"><input type="checkbox" class="dash-autorun-cb" ${isAutorun ? "checked" : ""} title="Include in CLI autorun" aria-label="Autorun"></td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
+          <td class="col-actions"><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
 
         // Inline rename
