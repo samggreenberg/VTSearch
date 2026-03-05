@@ -8,6 +8,7 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsApiService } from '../../services/settings-api.service';
 import { MediaItem, LabelingStatusResponse, AppSettings } from '../../models/api.models';
+import { LabelSessionService } from '../../services/label-session.service';
 
 @Component({
   selector: 'vt-label-view',
@@ -42,6 +43,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
+  private autopilotTextSortPending = false;
   private dragging = false;
   private boundMouseMove = this.onMouseMove.bind(this);
   private boundMouseUp = this.onMouseUp.bind(this);
@@ -51,6 +53,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private sortingApi: SortingApiService,
     private settingsApi: SettingsApiService,
     private ngZone: NgZone,
+    private labelSession: LabelSessionService,
   ) {}
 
   ngOnInit(): void {
@@ -106,6 +109,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediasApi.getMedias().pipe(takeUntil(this.destroy$)).subscribe({
       next: (medias) => {
         this.medias = medias;
+        if (this.autopilotTextSortPending) {
+          this.autopilotTextSortPending = false;
+          this.triggerAutopilotTextSort();
+        }
       },
     });
   }
@@ -267,6 +274,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onAutopilotStart(): void {
     this.selectMode = 'top';
+    const textQuery = this.labelSession.textQuery;
+    if (textQuery) {
+      if (this.medias.length > 0) {
+        this.triggerAutopilotTextSort();
+      } else {
+        this.autopilotTextSortPending = true;
+      }
+    }
+  }
+
+  private triggerAutopilotTextSort(): void {
+    const textQuery = this.labelSession.textQuery;
+    if (textQuery) {
+      this.onTextSort(textQuery);
+    }
   }
 
   onAutopilotStop(): void {

@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
+import { LabelSessionService } from '../../services/label-session.service';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -352,6 +353,18 @@ describe('DashboardComponent', () => {
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
       expect(component.loading).toBeFalse();
+    });
+
+    it('should store selected model text_query in session before navigating', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio', text_query: 'dog barking' }];
+      flushInitialRequests(datasets, models);
+
+      const session = TestBed.inject(LabelSessionService);
+      spyOn(component['router'], 'navigate');
+      component.onLabel();
+
+      expect(session.textQuery).toBe('dog barking');
     });
 
     it('should load dataset first when not loaded, then navigate', () => {
