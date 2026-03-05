@@ -531,7 +531,7 @@
 
 <!-- Settings Modal -->
 <div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-  <div class="modal-content" style="max-width: 800px;">
+  <div class="modal-content settings-modal-wide">
     <div class="modal-header">
       <h2 id="settings-modal-title">Settings</h2>
       <button class="modal-close" id="settings-modal-close" aria-label="Close">&times;</button>
@@ -564,30 +564,15 @@
             </div>
           </div>
           <div class="settings-section">
-            <div class="settings-section-title">Storage Locations</div>
-            <div class="settings-row">
-              <label for="saved-datasets-dir-input" class="settings-label">Saved Datasets</label>
-              <input type="text" id="saved-datasets-dir-input" class="settings-path-input" placeholder="data/saved_datasets">
-            </div>
-            <div class="settings-row">
-              <label for="detectors-dir-input" class="settings-label">Detectors</label>
-              <input type="text" id="detectors-dir-input" class="settings-path-input" placeholder="data/detectors">
-            </div>
-            <div class="settings-row">
-              <label for="trainable-models-dir-input" class="settings-label">Trainable Models</label>
-              <input type="text" id="trainable-models-dir-input" class="settings-path-input" placeholder="data/trainable_models">
-            </div>
-          </div>
-        </div>
-        <!-- Column 2: Sorting + Calibration -->
-        <div>
-          <div class="settings-section">
             <div class="settings-section-title">Sorting</div>
             <div class="settings-row">
               <label for="enrich-descriptions-checkbox" class="settings-label">Enrich Sort Descriptions</label>
               <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
+        </div>
+        <!-- Column 2: Calibration + Autopilot -->
+        <div>
           <div class="settings-section">
             <div class="settings-section-title">Calibration</div>
             <div class="settings-row">
@@ -603,9 +588,6 @@
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
-        </div>
-        <!-- Column 3: Autopilot + Autoload Media Types + Actions -->
-        <div>
           <div class="settings-section">
             <div class="settings-section-title">Autopilot</div>
             <div class="settings-row">
@@ -615,6 +597,24 @@
             <div class="settings-row">
               <label for="autopilot-hard-reds-input" class="settings-label">#BadToStart</label>
               <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
+            </div>
+          </div>
+        </div>
+        <!-- Column 3: Storage Locations + Autoload + Actions -->
+        <div>
+          <div class="settings-section">
+            <div class="settings-section-title">Storage Locations</div>
+            <div class="settings-row">
+              <label for="saved-datasets-dir-input" class="settings-label">Saved Datasets</label>
+              <input type="text" id="saved-datasets-dir-input" class="settings-path-input" placeholder="data/saved_datasets">
+            </div>
+            <div class="settings-row">
+              <label for="detectors-dir-input" class="settings-label">Detectors</label>
+              <input type="text" id="detectors-dir-input" class="settings-path-input" placeholder="data/detectors">
+            </div>
+            <div class="settings-row">
+              <label for="trainable-models-dir-input" class="settings-label">Trainable Models</label>
+              <input type="text" id="trainable-models-dir-input" class="settings-path-input" placeholder="data/trainable_models">
             </div>
           </div>
           <div class="settings-section">
