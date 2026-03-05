@@ -33,6 +33,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
+  @ViewChild(ImageViewerComponent) imageViewer?: ImageViewerComponent;
   @ViewChild(VideoPlayerComponent) videoPlayer?: VideoPlayerComponent;
 
   isVoting = false;

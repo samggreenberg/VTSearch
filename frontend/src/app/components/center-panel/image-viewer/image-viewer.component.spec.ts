@@ -43,12 +43,13 @@ describe('ImageViewerComponent', () => {
     expect(fixture.nativeElement.querySelector('img')).toBeTruthy();
   });
 
-  it('should render image controls', () => {
-    component.media = mockMedia;
-    component.imageSrc = '/api/medias/2/image';
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.image-view-controls')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('input[type="range"]')).toBeTruthy();
+  it('should expose control methods and properties', () => {
+    expect(component.rotateLeft).toBeDefined();
+    expect(component.rotateRight).toBeDefined();
+    expect(component.resetView).toBeDefined();
+    expect(component.onZoomInput).toBeDefined();
+    expect(component.minZoom).toBe(1);
+    expect(component.maxZoom).toBe(5);
   });
 
   it('should reset view', () => {

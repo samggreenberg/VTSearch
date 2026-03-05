@@ -14,22 +14,3 @@
     draggable="false"
   />
 </div>
-<div class="image-view-controls">
-  <button class="ivc-btn" (click)="rotateLeft()" title="Rotate left" aria-label="Rotate image left">&#x21BA;</button>
-  <button class="ivc-btn" (click)="rotateRight()" title="Rotate right" aria-label="Rotate image right">&#x21BB;</button>
-  <label for="ivc-zoom" class="sr-only">Zoom</label>
-  <input
-    type="range"
-    id="ivc-zoom"
-    class="ivc-zoom-slider"
-    [min]="minZoom"
-    [max]="maxZoom"
-    [step]="zoomStep"
-    [value]="zoom"
-    (input)="onZoomInput($event)"
-    title="Zoom"
-    aria-label="Zoom level"
-  />
-  <span class="ivc-zoom-label">{{ zoomLabel }}</span>
-  <button class="ivc-btn" (click)="resetView()" title="Reset view" aria-label="Reset image view">Reset</button>
-</div>
