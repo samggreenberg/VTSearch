@@ -8,15 +8,6 @@
   </nav>
   <h1>VTSearch</h1>
 </header>
-<div class="layout">
-  <div class="panel-left" role="region" aria-label="Media list">
-    <p class="placeholder">Left Panel — Sorting &amp; Media List</p>
-  </div>
-  <div class="panel-center" role="main" aria-label="Media viewer">
-    <router-outlet />
-    <p class="placeholder">Center Panel — Media Viewer &amp; Voting</p>
-  </div>
-  <div class="panel-right" role="region" aria-label="Labels">
-    <p class="placeholder">Right Panel — Labels &amp; Vote History</p>
-  </div>
+<div class="main-content" role="main">
+  <router-outlet />
 </div>

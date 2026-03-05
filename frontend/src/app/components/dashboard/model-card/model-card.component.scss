@@ -1,0 +1,57 @@
+:host {
+  display: table-row;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.selected {
+    background: var(--accent-highlight-bg);
+  }
+}
+
+.name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rename-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  :host:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.inline-edit {
+  width: 140px;
+  padding: 2px 6px;
+  font-size: 0.83rem;
+}
+
+.check {
+  color: var(--color-good);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+.btn--xs {
+  padding: 1px 6px;
+  font-size: 0.75rem;
+}

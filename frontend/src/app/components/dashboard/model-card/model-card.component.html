@@ -1,0 +1,38 @@
+<td>
+  @if (editing) {
+    <input
+      class="form-input inline-edit"
+      [(ngModel)]="editName"
+      (keydown)="onRenameKeydown($event)"
+      (blur)="confirmRename()"
+      (click)="$event.stopPropagation()"
+      autofocus
+    />
+  } @else {
+    <span class="name-cell">
+      {{ model.name }}
+      <button class="rename-btn" (click)="startRename($event)" title="Rename" aria-label="Rename model">&#9998;</button>
+    </span>
+  }
+</td>
+<td>{{ model.media_type || '-' }}</td>
+<td>{{ model.num_training ?? 0 }}</td>
+<td>
+  @if (model.trainable) {
+    <span class="check" aria-label="Trainable">&#10003;</span>
+  } @else {
+    <span class="dim">-</span>
+  }
+</td>
+<td>{{ formatDate(model.last_trained_at) }}</td>
+<td>{{ formatDate(model.created_at) }}</td>
+<td>
+  @if (model.loaded) {
+    <span class="check" aria-label="Loaded">&#10003;</span>
+  } @else {
+    <span class="dim">-</span>
+  }
+</td>
+<td>
+  <button class="btn btn--danger btn--xs" (click)="onDelete($event)" aria-label="Delete model">&#10005;</button>
+</td>
