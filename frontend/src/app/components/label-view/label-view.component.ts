@@ -189,6 +189,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onTextSort(text: string): void {
+    this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting...');
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
@@ -320,7 +321,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAutopilotStop(): void {
-    // Reset to manual defaults
+    const phase = this.autopilotStateService.state.phase;
+
+    // Map autopilot phase to a valid Manual select mode.
+    // 'bottom' has no radio button in Manual UI, so map to 'top'.
+    if (phase === 'good' || phase === 'bad') {
+      this.sortState.setSelectMode('top');
+    } else if (phase === 'hard') {
+      this.sortState.setSelectMode('hard');
+    } else if (phase === 'new' || phase === 'done') {
+      this.sortState.setSelectMode('new');
+    }
+
+    // Keep sort mode as 'text' (what autopilot uses) so the sort bar
+    // shows the current text query and results carry over.
+    this.sortState.setSortMode('text');
   }
 
   // --- Helpers ---
