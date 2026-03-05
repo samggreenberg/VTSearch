@@ -63,10 +63,10 @@
 
         @if (embedders.length > 0) {
           <h4>Autoload Embedders</h4>
-          @for (embedder of embedders; track embedder) {
+          @for (embedder of embedders; track embedder.name) {
             <label class="checkbox-row">
               <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
-              {{ embedder }}
+              {{ embedder.name }} ({{ embedder.media_type_id }})
             </label>
           }
         }
