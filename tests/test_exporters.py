@@ -270,6 +270,35 @@ class TestDisplayLabelsetExporter:
         assert "No items predicted as Good" in captured.out
         assert "message" in result
 
+    def test_export_converts_labelset_to_display_format(self):
+        """When results come from /api/labels/export (LabelSet format),
+        the GUI exporter should convert them to the display format."""
+        from vtsearch.exporters import get_exporter
+
+        labelset_data = {
+            "labels": [
+                {"md5": "aaa", "label": "good", "origin_name": "file1.wav", "filename": "file1.wav"},
+                {"md5": "bbb", "label": "bad", "origin_name": "file2.wav", "filename": "file2.wav"},
+                {"md5": "ccc", "label": "good", "origin_name": "file3.wav", "filename": "file3.wav"},
+            ]
+        }
+        exp = get_exporter("gui")
+        result = exp.export(labelset_data, {})
+        assert "display_results" in result
+        dr = result["display_results"]
+        # Should have the autodetect-results structure
+        assert "results" in dr
+        assert "media_type" in dr
+        assert "detectors_run" in dr
+        # All 3 labels should appear as hits
+        hits = dr["results"]["labels"]["hits"]
+        assert len(hits) == 3
+        # Good labels come first
+        assert hits[0]["label"] == "good"
+        assert hits[1]["label"] == "good"
+        assert hits[2]["label"] == "bad"
+        assert "3" in result["message"]
+
 
 # ---------------------------------------------------------------------------
 # Server JSON file exporter
