@@ -25,7 +25,7 @@
 }
 
 .panel-center {
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg-panel);
   display: flex;
   align-items: center;
