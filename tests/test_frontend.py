@@ -117,6 +117,43 @@ class TestStaticFiles:
         assert resp.status_code == 404
 
 
+class TestRootStaticFiles:
+    """Static assets should also be accessible at root paths (no /static/ prefix).
+
+    The Angular build uses <base href="/"> so the browser requests main.js,
+    polyfills.js, and styles.css at the root.
+    """
+
+    def setup_method(self):
+        app_module.app.config["TESTING"] = True
+        self.client = app_module.app.test_client()
+
+    def test_main_js_at_root(self):
+        resp = self.client.get("/main.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.content_type
+
+    def test_polyfills_js_at_root(self):
+        resp = self.client.get("/polyfills.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.content_type
+
+    def test_styles_css_at_root(self):
+        resp = self.client.get("/styles.css")
+        assert resp.status_code == 200
+        assert "css" in resp.content_type
+
+    def test_logo_png_at_root(self):
+        resp = self.client.get("/logo.png")
+        assert resp.status_code == 200
+
+    def test_unknown_path_returns_spa(self):
+        """Unknown paths should return the Angular SPA for client-side routing."""
+        resp = self.client.get("/some/unknown/route")
+        assert resp.status_code == 200
+        assert b"<app-root>" in resp.data
+
+
 class TestFavicon:
     """Favicon routes should serve valid .ico files."""
 
@@ -144,9 +181,12 @@ class TestFavicon:
         resp = self.client.get("/favicon-angry.ico")
         assert resp.status_code == 404
 
-    def test_favicon_empty_variant_returns_404(self):
+    def test_favicon_empty_variant_returns_spa_fallback(self):
         resp = self.client.get("/favicon-.ico")
-        assert resp.status_code == 404
+        # Empty variant doesn't match the favicon-<variant>.ico route,
+        # so the catch-all serves the SPA (standard SPA fallback behavior).
+        assert resp.status_code == 200
+        assert b"<app-root>" in resp.data
 
     def test_favicon_content_type(self):
         resp = self.client.get("/favicon.ico")
