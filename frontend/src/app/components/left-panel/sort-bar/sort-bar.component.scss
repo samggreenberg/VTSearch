@@ -37,6 +37,18 @@
   }
 }
 
+.sort-mode-content {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.text-sort-wrap,
+.learned-sort-wrap,
+.load-sort-wrap {
+  width: 100%;
+}
+
 .text-sort-input {
   font-size: 0.82rem;
   padding: 5px 8px;
