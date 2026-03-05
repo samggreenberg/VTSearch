@@ -6,6 +6,7 @@ import { takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
 import { VtDialogService } from '../../services/dialog.service';
+import { LabelSessionService } from '../../services/label-session.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
@@ -54,6 +55,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private datasetsApi: DatasetsApiService,
     private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
+    private labelSession: LabelSessionService,
   ) {}
 
   ngOnInit(): void {
@@ -363,11 +365,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return '';
   }
 
+  private storeSelectedModelTextQuery(): void {
+    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
+    this.labelSession.textQuery = model?.text_query || '';
+  }
+
   onLabel(): void {
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
     if (!dataset) return;
 
     if (dataset.loaded) {
+      this.storeSelectedModelTextQuery();
       this.router.navigate(['/label']);
       return;
     }
@@ -378,6 +386,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
+        this.storeSelectedModelTextQuery();
         this.startProgressPolling(() => {
           this.router.navigate(['/label']);
         });

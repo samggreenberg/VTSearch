@@ -22,50 +22,59 @@ describe('LeftPanelComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should default to manual tab', () => {
-    expect(component.activeTab).toBe('manual');
-  });
-
-  it('should switch to autopilot tab', () => {
-    component.setTab('autopilot');
+  it('should default to autopilot tab', () => {
     expect(component.activeTab).toBe('autopilot');
   });
 
-  it('should render manual tab content by default', () => {
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.tab-panel-manual')).toBeTruthy();
-    expect(el.querySelector('.tab-panel-autopilot')).toBeNull();
+  it('should emit autopilotStart on init', () => {
+    const fresh = TestBed.createComponent(LeftPanelComponent);
+    const comp = fresh.componentInstance;
+    spyOn(comp.autopilotStart, 'emit');
+    fresh.detectChanges();
+    expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
 
-  it('should render autopilot tab content when switched', () => {
-    component.setTab('autopilot');
-    fixture.detectChanges();
+  it('should switch to manual tab', () => {
+    component.setTab('manual');
+    expect(component.activeTab).toBe('manual');
+  });
+
+  it('should render autopilot tab content by default', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.tab-panel-autopilot')).toBeTruthy();
     expect(el.querySelector('.tab-panel-manual')).toBeNull();
   });
 
+  it('should render manual tab content when switched', () => {
+    component.setTab('manual');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.tab-panel-manual')).toBeTruthy();
+    expect(el.querySelector('.tab-panel-autopilot')).toBeNull();
+  });
+
   it('should show active class on selected tab', () => {
     const el = fixture.nativeElement as HTMLElement;
     const tabs = el.querySelectorAll('.left-tab');
-    expect(tabs[0].classList.contains('active')).toBeTrue();
-    expect(tabs[1].classList.contains('active')).toBeFalse();
+    // Default: autopilot is active (second tab)
+    expect(tabs[0].classList.contains('active')).toBeFalse();
+    expect(tabs[1].classList.contains('active')).toBeTrue();
 
-    component.setTab('autopilot');
+    component.setTab('manual');
     fixture.detectChanges();
     const tabsAfter = el.querySelectorAll('.left-tab');
-    expect(tabsAfter[0].classList.contains('active')).toBeFalse();
-    expect(tabsAfter[1].classList.contains('active')).toBeTrue();
+    expect(tabsAfter[0].classList.contains('active')).toBeTrue();
+    expect(tabsAfter[1].classList.contains('active')).toBeFalse();
   });
 
   it('should emit autopilotStart when switching to autopilot tab', () => {
+    component.setTab('manual');
     spyOn(component.autopilotStart, 'emit');
     component.setTab('autopilot');
     expect(component.autopilotStart.emit).toHaveBeenCalled();
   });
 
   it('should emit autopilotStop when switching from autopilot to manual tab', () => {
-    component.setTab('autopilot');
     spyOn(component.autopilotStop, 'emit');
     component.setTab('manual');
     expect(component.autopilotStop.emit).toHaveBeenCalled();
@@ -73,7 +82,7 @@ describe('LeftPanelComponent', () => {
 
   it('should not emit when setting the same tab', () => {
     spyOn(component.autopilotStart, 'emit');
-    component.setTab('manual');
+    component.setTab('autopilot');
     expect(component.autopilotStart.emit).not.toHaveBeenCalled();
   });
 

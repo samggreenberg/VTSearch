@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
@@ -33,7 +33,7 @@ export interface SortedItem {
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
 })
-export class LeftPanelComponent {
+export class LeftPanelComponent implements OnInit {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -60,7 +60,11 @@ export class LeftPanelComponent {
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
 
-  activeTab: 'manual' | 'autopilot' = 'manual';
+  activeTab: 'manual' | 'autopilot' = 'autopilot';
+
+  ngOnInit(): void {
+    this.autopilotStart.emit();
+  }
 
   setTab(tab: 'manual' | 'autopilot'): void {
     if (tab === this.activeTab) return;

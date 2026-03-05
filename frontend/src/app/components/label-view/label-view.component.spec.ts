@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { LabelViewComponent } from './label-view.component';
+import { LabelSessionService } from '../../services/label-session.service';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -190,5 +191,62 @@ describe('LabelViewComponent', () => {
 
     // Should auto-select id 1 (first unlabeled)
     expect(component.selectedId).toBe(1);
+  });
+
+  it('should trigger text sort on autopilot start when session has text query', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'dog barking';
+    flushInitialRequests();
+
+    // onAutopilotStart is called by left-panel ngOnInit; simulate it
+    component.onAutopilotStart();
+
+    const req = httpMock.expectOne('/api/sort');
+    expect(req.request.body).toEqual({ text: 'dog barking' });
+    req.flush({
+      results: [{ id: 1, similarity: 0.9 }, { id: 2, similarity: 0.3 }],
+      threshold: 0.5,
+    });
+
+    expect(component.sortOrder).toBeTruthy();
+    expect(component.selectedId).toBe(1);
+  });
+
+  it('should defer autopilot text sort until medias are loaded', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'cat meowing';
+
+    // Call onAutopilotStart before medias are loaded
+    component.onAutopilotStart();
+    // No sort request yet (no medias)
+    httpMock.expectNone('/api/sort');
+
+    // Now trigger init which loads medias
+    fixture.detectChanges();
+    httpMock.expectOne('/api/medias').flush([
+      { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
+    ]);
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+    httpMock.expectOne('/api/settings').flush({ volume: 80 });
+    httpMock.expectOne('/api/labeling-status').flush({});
+
+    // Now the deferred sort should fire
+    const req = httpMock.expectOne('/api/sort');
+    expect(req.request.body).toEqual({ text: 'cat meowing' });
+    req.flush({
+      results: [{ id: 1, similarity: 0.8 }],
+      threshold: 0.5,
+    });
+
+    expect(component.selectedId).toBe(1);
+  });
+
+  it('should not trigger text sort on autopilot start when no text query', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = '';
+    flushInitialRequests();
+
+    component.onAutopilotStart();
+    httpMock.expectNone('/api/sort');
   });
 });
