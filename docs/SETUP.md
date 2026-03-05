@@ -44,8 +44,53 @@ brew install git
 
 ## Getting the code
 
+We recommend cloning over SSH so you don't have to enter your password on every push/pull.
+
+### Setting up an SSH key
+
+1. **Generate a key** (skip this if you already have one at `~/.ssh/id_ed25519`):
+
+   ```bash
+   ssh-keygen -t ed25519 -C "your_email@example.com"
+   ```
+
+   Press Enter to accept the default file location, then choose a passphrase (or leave it empty).
+
+2. **Start the SSH agent and add your key**:
+
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+   ```
+
+3. **Copy the public key** to your clipboard:
+
+   Linux:
+
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+
+   macOS:
+
+   ```bash
+   pbcopy < ~/.ssh/id_ed25519.pub
+   ```
+
+4. **Add the key to GitHub**: Go to [github.com/settings/ssh/new](https://github.com/settings/ssh/new), paste the public key, give it a title, and click **Add SSH key**.
+
+5. **Verify the connection**:
+
+   ```bash
+   ssh -T git@github.com
+   ```
+
+   You should see a message like *"Hi username! You've successfully authenticated…"*.
+
+### Clone the repository
+
 ```bash
-git clone https://github.com/samggreenberg/vtsearch.git
+git clone git@github.com:samggreenberg/vtsearch.git
 cd vtsearch
 ```
 
