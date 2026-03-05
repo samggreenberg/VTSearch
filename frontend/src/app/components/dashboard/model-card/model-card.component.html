@@ -25,13 +25,6 @@
 </td>
 <td>{{ formatDate(model.last_trained_at) }}</td>
 <td>{{ formatDate(model.created_at) }}</td>
-<td>
-  @if (model.loaded) {
-    <span class="check" aria-label="Loaded">&#10003;</span>
-  } @else {
-    <span class="dim">-</span>
-  }
-</td>
 <td class="actions-cell">
   <button class="edit-btn" (click)="startRename($event)" aria-label="Rename model" title="Rename">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

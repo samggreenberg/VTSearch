@@ -51,12 +51,12 @@ describe('DatasetCardComponent', () => {
     expect(el.querySelector('.check')).toBeTruthy();
   });
 
-  it('should show Load button when not loaded', () => {
+  it('should show dash when not loaded', () => {
     component.dataset = { ...mockDataset, loaded: false };
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    const loadBtn = el.querySelector('button.btn--secondary');
-    expect(loadBtn?.textContent).toContain('Load');
+    const dims = el.querySelectorAll('.dim');
+    expect(dims.length).toBeGreaterThan(0);
   });
 
   it('should enter rename mode on rename button click', () => {
@@ -101,16 +101,6 @@ describe('DatasetCardComponent', () => {
     const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
     deleteBtn.click();
     expect(component.delete.emit).toHaveBeenCalled();
-  });
-
-  it('should emit load on load button click', () => {
-    spyOn(component.load, 'emit');
-    component.dataset = { ...mockDataset, loaded: false };
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    const loadBtn = el.querySelector('.btn--secondary') as HTMLElement;
-    loadBtn.click();
-    expect(component.load.emit).toHaveBeenCalled();
   });
 
   it('should format dates', () => {
