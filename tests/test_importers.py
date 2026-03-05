@@ -309,15 +309,19 @@ class TestFolderImporterMetadata:
 
 
 class TestBuiltinImporterNames:
-    def test_folder_not_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_folder_has_form_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "folder" not in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("folder")
+        assert imp is not None
+        assert imp.ui_mode == "form"
 
-    def test_pickle_still_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_pickle_has_file_upload_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "pickle" in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("pickle")
+        assert imp is not None
+        assert imp.ui_mode == "file_upload"
 
 
 # ---------------------------------------------------------------------------
