@@ -1,7 +1,7 @@
 <div class="sort-bar">
   <div class="sort-mode-group">
-    <span class="sort-label">Sort:</span>
-    <label class="sort-radio" [class.active]="sortMode === 'text'">
+    <span class="sort-label" title="Choose how items are ranked. Text uses a search query, Learned trains on your votes, Load applies a saved model.">Sort:</span>
+    <label class="sort-radio" [class.active]="sortMode === 'text'" title="Rank items by similarity to a text query using semantic embeddings (e.g. CLIP, CLAP, E5).">
       <input
         type="radio"
         name="sortMode"
@@ -11,7 +11,7 @@
       />
       Text
     </label>
-    <label class="sort-radio" [class.active]="sortMode === 'learned'">
+    <label class="sort-radio" [class.active]="sortMode === 'learned'" title="Train a model on your good/bad votes and rank items by predicted score. Requires at least 1 good and 1 bad vote.">
       <input
         type="radio"
         name="sortMode"
@@ -22,7 +22,7 @@
       />
       Learned
     </label>
-    <label class="sort-radio" [class.active]="sortMode === 'load'">
+    <label class="sort-radio" [class.active]="sortMode === 'load'" title="Load a previously saved model or detector and rank items using its predictions.">
       <input
         type="radio"
         name="sortMode"
