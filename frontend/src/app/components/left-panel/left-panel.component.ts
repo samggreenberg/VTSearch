@@ -43,6 +43,7 @@ export class LeftPanelComponent implements OnInit {
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() showThumbnails = true;
   @Input() loadSortLabel = '';
+  @Input() textQuery = '';
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();

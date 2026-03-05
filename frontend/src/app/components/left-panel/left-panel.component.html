@@ -21,6 +21,7 @@
       <vt-sort-bar
         [sortMode]="sortMode"
         [loadSortLabel]="loadSortLabel"
+        [initialTextQuery]="textQuery"
         [hasGoodVotes]="goodVotes.size > 0"
         [hasBadVotes]="badVotes.size > 0"
         (sortModeChange)="sortModeChange.emit($event)"

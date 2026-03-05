@@ -19,6 +19,7 @@ export class SortStateService {
   private readonly sortStatusSubject = new BehaviorSubject<string>('');
   private readonly inclusionSubject = new BehaviorSubject<number>(0);
   private readonly loadSortLabelSubject = new BehaviorSubject<string>('');
+  private readonly textQuerySubject = new BehaviorSubject<string>('');
 
   readonly sortMode$ = this.sortModeSubject.asObservable();
   readonly selectMode$ = this.selectModeSubject.asObservable();
@@ -28,6 +29,7 @@ export class SortStateService {
   readonly sortStatus$ = this.sortStatusSubject.asObservable();
   readonly inclusion$ = this.inclusionSubject.asObservable();
   readonly loadSortLabel$ = this.loadSortLabelSubject.asObservable();
+  readonly textQuery$ = this.textQuerySubject.asObservable();
 
   get sortMode(): SortMode {
     return this.sortModeSubject.value;
@@ -61,6 +63,10 @@ export class SortStateService {
     return this.loadSortLabelSubject.value;
   }
 
+  get textQuery(): string {
+    return this.textQuerySubject.value;
+  }
+
   setSortMode(mode: SortMode): void {
     this.sortModeSubject.next(mode);
   }
@@ -90,6 +96,10 @@ export class SortStateService {
     this.loadSortLabelSubject.next(label);
   }
 
+  setTextQuery(query: string): void {
+    this.textQuerySubject.next(query);
+  }
+
   clear(): void {
     this.sortModeSubject.next('text');
     this.selectModeSubject.next('top');
@@ -99,5 +109,6 @@ export class SortStateService {
     this.sortStatusSubject.next('');
     this.inclusionSubject.next(0);
     this.loadSortLabelSubject.next('');
+    this.textQuerySubject.next('');
   }
 }

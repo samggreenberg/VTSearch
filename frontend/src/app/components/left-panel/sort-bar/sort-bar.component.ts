@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -12,9 +12,10 @@ import { SortMode } from '../left-panel.component';
   templateUrl: './sort-bar.component.html',
   styleUrl: './sort-bar.component.scss',
 })
-export class SortBarComponent implements OnDestroy {
+export class SortBarComponent implements OnInit, OnDestroy {
   @Input() sortMode: SortMode = 'text';
   @Input() loadSortLabel = '';
+  @Input() initialTextQuery = '';
   @Input() hasGoodVotes = false;
   @Input() hasBadVotes = false;
 
@@ -36,6 +37,12 @@ export class SortBarComponent implements OnDestroy {
           this.textSort.emit(text.trim());
         }
       });
+  }
+
+  ngOnInit(): void {
+    if (this.initialTextQuery) {
+      this.textQuery = this.initialTextQuery;
+    }
   }
 
   ngOnDestroy(): void {
