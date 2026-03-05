@@ -543,7 +543,7 @@
           <div class="settings-section">
             <div class="settings-section-title">Appearance</div>
             <div class="settings-row">
-              <span class="settings-label">Theme</span>
+              <span class="settings-label" title="Color theme for the application interface">Theme</span>
               <div class="theme-selector">
                 <button class="theme-btn active" data-theme="dark">Dark</button>
                 <button class="theme-btn" data-theme="light">Light</button>
@@ -551,22 +551,22 @@
               </div>
             </div>
             <div class="settings-row">
-              <label for="swipe-animation-checkbox" class="settings-label">Swipe Animation</label>
+              <label for="swipe-animation-checkbox" class="settings-label" title="Should we display the swipe animation on media vote?">Swipe Animation</label>
               <input type="checkbox" id="swipe-animation-checkbox" checked style="accent-color:var(--accent)">
             </div>
             <div class="settings-row">
-              <label for="show-thumbnails-left-checkbox" class="settings-label">Show Left Thumbnails</label>
+              <label for="show-thumbnails-left-checkbox" class="settings-label" title="Show thumbnail strip on the left side of the media viewer">Show Left Thumbnails</label>
               <input type="checkbox" id="show-thumbnails-left-checkbox" style="accent-color:var(--accent)">
             </div>
             <div class="settings-row">
-              <label for="show-thumbnails-right-checkbox" class="settings-label">Show Right Thumbnails</label>
+              <label for="show-thumbnails-right-checkbox" class="settings-label" title="Show thumbnail strip on the right side of the media viewer">Show Right Thumbnails</label>
               <input type="checkbox" id="show-thumbnails-right-checkbox" checked style="accent-color:var(--accent)">
             </div>
           </div>
           <div class="settings-section">
             <div class="settings-section-title">Sorting</div>
             <div class="settings-row">
-              <label for="enrich-descriptions-checkbox" class="settings-label">Enrich Sort Descriptions</label>
+              <label for="enrich-descriptions-checkbox" class="settings-label" title="Augment text-sort descriptions with additional context before computing embeddings">Enrich Sort Descriptions</label>
               <input type="checkbox" id="enrich-descriptions-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
@@ -576,26 +576,26 @@
           <div class="settings-section">
             <div class="settings-section-title">Calibration</div>
             <div class="settings-row">
-              <label for="calibrate-count-input" class="settings-label">Calibrate Count</label>
+              <label for="calibrate-count-input" class="settings-label" title="Number of cross-calibration rounds to run between detectors">Calibrate Count</label>
               <input type="number" id="calibrate-count-input" min="1" max="100" value="2" step="1" class="settings-number-input">
             </div>
             <div class="settings-row">
-              <label for="calibration-fraction-input" class="settings-label">Calibration Fraction</label>
+              <label for="calibration-fraction-input" class="settings-label" title="Fraction of the dataset used for each calibration round (0 to 1)">Calibration Fraction</label>
               <input type="number" id="calibration-fraction-input" min="0" max="1" value="0.5" step="0.05" class="settings-number-input">
             </div>
             <div class="settings-row">
-              <label for="safe-thresholds-checkbox" class="settings-label">Safe Thresholds</label>
+              <label for="safe-thresholds-checkbox" class="settings-label" title="Blend detector thresholds toward conservative values to reduce false positives">Safe Thresholds</label>
               <input type="checkbox" id="safe-thresholds-checkbox" style="accent-color:var(--accent)">
             </div>
           </div>
           <div class="settings-section">
             <div class="settings-section-title">Autopilot</div>
             <div class="settings-row">
-              <label for="autopilot-top-greens-input" class="settings-label">#GoodToStart</label>
+              <label for="autopilot-top-greens-input" class="settings-label" title="Number of good (green) votes required before autopilot begins voting automatically">#GoodToStart</label>
               <input type="number" id="autopilot-top-greens-input" min="1" value="3" step="1" class="settings-number-input">
             </div>
             <div class="settings-row">
-              <label for="autopilot-hard-reds-input" class="settings-label">#BadToStart</label>
+              <label for="autopilot-hard-reds-input" class="settings-label" title="Number of bad (red) votes required before autopilot begins voting automatically">#BadToStart</label>
               <input type="number" id="autopilot-hard-reds-input" min="1" value="4" step="1" class="settings-number-input">
             </div>
           </div>
@@ -618,7 +618,7 @@
             </div>
           </div>
           <div class="settings-section">
-            <div class="settings-section-title">Autoload Media Embedders</div>
+            <div class="settings-section-title" title="Embedding models to load automatically when a dataset of that media type is opened">Autoload Media Embedders</div>
             <div id="autoload-embedders-container">
               <!-- Populated dynamically from /api/embedders -->
             </div>
