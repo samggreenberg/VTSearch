@@ -2,14 +2,16 @@ import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewI
 import { CommonModule } from '@angular/common';
 import { Subject, timer, Subscription } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
-import { LeftPanelComponent, SortMode, SelectMode, SortedItem } from '../left-panel/left-panel.component';
+import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
-import { MediasApiService } from '../../services/medias-api.service';
 import { SortingApiService } from '../../services/sorting-api.service';
-import { SettingsApiService } from '../../services/settings-api.service';
-import { MediaItem, LabelingStatusResponse, AppSettings } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
+import { MediaStateService } from '../../services/media-state.service';
+import { VoteStateService } from '../../services/vote-state.service';
+import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
+import { SettingsStateService } from '../../services/settings-state.service';
+import { LabelingStatusResponse } from '../../models/api.models';
 
 @Component({
   selector: 'vt-label-view',
@@ -22,21 +24,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
-  medias: MediaItem[] = [];
-  sortOrder: SortedItem[] | null = null;
-  threshold: number | null = null;
-  selectedId: number | null = null;
-  goodVotes = new Set<number>();
-  badVotes = new Set<number>();
-  sortMode: SortMode = 'text';
-  selectMode: SelectMode = 'top';
-  inclusion = 0;
-  sortBusy = false;
-  sortStatus = '';
   labelingStatus: LabelingStatusResponse | null = null;
   showThumbnails = true;
-  loadSortLabel = '';
-  settings: AppSettings | null = null;
   leftWidth = 260;
   rightWidth = 300;
 
@@ -56,20 +45,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor(
-    private mediasApi: MediasApiService,
     private sortingApi: SortingApiService,
-    private settingsApi: SettingsApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
+    public mediaState: MediaStateService,
+    public voteState: VoteStateService,
+    public sortState: SortStateService,
+    private settingsState: SettingsStateService,
   ) {}
 
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
-    this.loadMedias();
-    this.loadVotes();
+    this.mediaState.loadMedias();
+    this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
+
+    this.mediaState.medias$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((medias) => {
+        if (this.autopilotTextSortPending && medias.length > 0) {
+          this.autopilotTextSortPending = false;
+          this.triggerAutopilotTextSort();
+        }
+      });
   }
 
   ngAfterViewInit(): void {
@@ -79,6 +79,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.voteState.stopPolling();
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
     document.removeEventListener('mousemove', this.boundRightMouseMove);
@@ -143,37 +144,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Data loading ---
 
-  private loadMedias(): void {
-    this.mediasApi.getMedias().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (medias) => {
-        this.medias = medias;
-        if (this.autopilotTextSortPending) {
-          this.autopilotTextSortPending = false;
-          this.triggerAutopilotTextSort();
-        }
-      },
-    });
-  }
-
-  private loadVotes(): void {
-    this.sortingApi.getVotes().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (votes) => {
-        this.goodVotes = new Set(votes.good);
-        this.badVotes = new Set(votes.bad);
-      },
-    });
-  }
-
   private loadSettings(): void {
-    this.settingsApi.getSettings().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (settings) => {
-        this.settings = settings;
+    this.settingsState.load();
+    this.settingsState.settings$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((settings) => {
+        if (!settings) return;
         this.showThumbnails = settings.show_thumbnails_left !== false;
         if (settings.inclusion != null) {
-          this.inclusion = settings.inclusion;
+          this.sortState.setInclusion(settings.inclusion);
         }
-      },
-    });
+      });
   }
 
   private startStatusPolling(): void {
@@ -192,42 +173,46 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Sort handlers ---
 
   onSortModeChange(mode: SortMode): void {
-    this.sortMode = mode;
+    this.sortState.setSortMode(mode);
   }
 
   onTextSort(text: string): void {
-    this.sortBusy = true;
-    this.sortStatus = 'Sorting...';
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Sorting...');
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
-        this.sortOrder = response.results.map((r) => ({ id: r.id, score: r.similarity }));
-        this.threshold = response.threshold;
-        this.sortBusy = false;
-        this.sortStatus = '';
+        this.sortState.setSortResults(
+          response.results.map((r) => ({ id: r.id, score: r.similarity })),
+          response.threshold,
+        );
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
         this.autoSelectNext();
       },
       error: () => {
-        this.sortBusy = false;
-        this.sortStatus = 'Sort failed';
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('Sort failed');
       },
     });
   }
 
   onLearnedSort(): void {
-    if (this.goodVotes.size === 0 || this.badVotes.size === 0) return;
-    this.sortBusy = true;
-    this.sortStatus = 'Training...';
+    if (this.voteState.goodVotes.size === 0 || this.voteState.badVotes.size === 0) return;
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Training...');
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
-        this.sortOrder = response.results.map((r) => ({ id: r.id, score: r.score }));
-        this.threshold = response.threshold;
-        this.sortBusy = false;
-        this.sortStatus = '';
+        this.sortState.setSortResults(
+          response.results.map((r) => ({ id: r.id, score: r.score })),
+          response.threshold,
+        );
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
         this.autoSelectNext();
       },
       error: () => {
-        this.sortBusy = false;
-        this.sortStatus = 'Training failed';
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('Training failed');
       },
     });
   }
@@ -239,23 +224,24 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Select mode ---
 
   onSelectModeChange(mode: SelectMode): void {
-    this.selectMode = mode;
+    this.sortState.setSelectMode(mode);
     if (mode === 'new') {
       this.fetchDiversityNext();
     }
   }
 
   private fetchDiversityNext(): void {
-    const scores = this.sortOrder
-      ? Object.fromEntries(this.sortOrder.map((s) => [String(s.id), s.score]))
+    const sortOrder = this.sortState.sortOrder;
+    const scores = sortOrder
+      ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
     this.sortingApi
-      .getDiversityTreeNext(scores, this.threshold ?? undefined)
+      .getDiversityTreeNext(scores, this.sortState.threshold ?? undefined)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           if (response.id !== null) {
-            this.selectedId = response.id;
+            this.mediaState.selectMedia(response.id);
           }
         },
       });
@@ -264,9 +250,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Inclusion ---
 
   onInclusionChange(value: number): void {
-    this.inclusion = value;
+    this.sortState.setInclusion(value);
     this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
-    if (this.sortMode === 'learned' && this.goodVotes.size > 0 && this.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
       this.scheduleLearnedSort();
     }
   }
@@ -282,22 +268,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Media selection ---
 
-  get selectedMedia(): MediaItem | null {
-    if (this.selectedId === null) return null;
-    return this.medias.find((m) => m.id === this.selectedId) ?? null;
-  }
-
   onMediaSelect(id: number): void {
-    this.selectedId = id;
+    this.mediaState.selectMedia(id);
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    // Refresh votes from backend (center panel already did the API call)
-    this.loadVotes();
-    // Auto-advance to next media
+    this.voteState.loadVotes();
     this.autoSelectNext();
-    // Kick off background learned sort if in learned mode
-    if (this.sortMode === 'learned' && this.goodVotes.size > 0 && this.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
       this.scheduleLearnedSort();
     }
   }
@@ -311,10 +289,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Autopilot ---
 
   onAutopilotStart(): void {
-    this.selectMode = 'top';
+    this.sortState.setSelectMode('top');
     const textQuery = this.labelSession.textQuery;
     if (textQuery) {
-      if (this.medias.length > 0) {
+      if (this.mediaState.medias.length > 0) {
         this.triggerAutopilotTextSort();
       } else {
         this.autopilotTextSortPending = true;
@@ -336,26 +314,29 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Helpers ---
 
   private autoSelectNext(): void {
-    if (!this.sortOrder || this.sortOrder.length === 0) return;
+    const sortOrder = this.sortState.sortOrder;
+    if (!sortOrder || sortOrder.length === 0) return;
+    const goodVotes = this.voteState.goodVotes;
+    const badVotes = this.voteState.badVotes;
 
-    if (this.selectMode === 'top') {
-      const next = this.sortOrder.find(
-        (s) => !this.goodVotes.has(s.id) && !this.badVotes.has(s.id),
+    if (this.sortState.selectMode === 'top') {
+      const next = sortOrder.find(
+        (s) => !goodVotes.has(s.id) && !badVotes.has(s.id),
       );
-      if (next) this.selectedId = next.id;
-    } else if (this.selectMode === 'hard' && this.threshold !== null) {
+      if (next) this.mediaState.selectMedia(next.id);
+    } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
       let best: SortedItem | null = null;
       let bestDist = Infinity;
-      for (const s of this.sortOrder) {
-        if (this.goodVotes.has(s.id) || this.badVotes.has(s.id)) continue;
-        const dist = Math.abs(s.score - this.threshold);
+      for (const s of sortOrder) {
+        if (goodVotes.has(s.id) || badVotes.has(s.id)) continue;
+        const dist = Math.abs(s.score - this.sortState.threshold!);
         if (dist < bestDist) {
           bestDist = dist;
           best = s;
         }
       }
-      if (best) this.selectedId = best.id;
-    } else if (this.selectMode === 'new') {
+      if (best) this.mediaState.selectMedia(best.id);
+    } else if (this.sortState.selectMode === 'new') {
       this.fetchDiversityNext();
     }
   }

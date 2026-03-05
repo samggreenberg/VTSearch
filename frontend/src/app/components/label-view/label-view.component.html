@@ -1,20 +1,20 @@
 <div class="layout" #layout>
   <div class="panel-left">
     <vt-left-panel
-      [medias]="medias"
-      [sortOrder]="sortOrder"
-      [threshold]="threshold"
-      [selectedId]="selectedId"
-      [goodVotes]="goodVotes"
-      [badVotes]="badVotes"
-      [sortMode]="sortMode"
-      [selectMode]="selectMode"
-      [inclusion]="inclusion"
-      [sortBusy]="sortBusy"
-      [sortStatus]="sortStatus"
+      [medias]="mediaState.medias"
+      [sortOrder]="sortState.sortOrder"
+      [threshold]="sortState.threshold"
+      [selectedId]="mediaState.selectedId"
+      [goodVotes]="voteState.goodVotes"
+      [badVotes]="voteState.badVotes"
+      [sortMode]="sortState.sortMode"
+      [selectMode]="sortState.selectMode"
+      [inclusion]="sortState.inclusion"
+      [sortBusy]="sortState.sortBusy"
+      [sortStatus]="sortState.sortStatus"
       [labelingStatus]="labelingStatus"
       [showThumbnails]="showThumbnails"
-      [loadSortLabel]="loadSortLabel"
+      [loadSortLabel]="sortState.loadSortLabel"
       (sortModeChange)="onSortModeChange($event)"
       (selectModeChange)="onSelectModeChange($event)"
       (inclusionChange)="onInclusionChange($event)"
@@ -33,7 +33,7 @@
   ></div>
   <div class="panel-center">
     <vt-center-panel
-      [media]="selectedMedia"
+      [media]="mediaState.selectedMedia"
       (mediaVoted)="onMediaVoted($event)"
     />
   </div>
@@ -43,7 +43,7 @@
   ></div>
   <div class="panel-right">
     <vt-right-panel
-      [medias]="medias"
+      [medias]="mediaState.medias"
       (mediaSelected)="onMediaSelect($event)"
     />
   </div>

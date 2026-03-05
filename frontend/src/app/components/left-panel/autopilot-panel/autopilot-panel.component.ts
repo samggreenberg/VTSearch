@@ -1,18 +1,13 @@
 import { Component, Input, Output, EventEmitter, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LabelingStatusResponse } from '../../../models/api.models';
+import {
+  AutopilotStateService,
+  AutopilotPhase,
+  AutopilotState,
+} from '../../../services/autopilot-state.service';
 
-export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'hard' | 'new' | 'done';
-
-export interface AutopilotState {
-  phase: AutopilotPhase;
-  goodToStart: number;
-  badToStart: number;
-  smartStatus: string;
-  stableStatus: string;
-  spanStatus: string;
-  fracDiversity: number;
-}
+export type { AutopilotPhase, AutopilotState };
 
 interface StepDisplay {
   phase: AutopilotPhase;
@@ -36,18 +31,14 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Output() started = new EventEmitter<void>();
   @Output() stopped = new EventEmitter<void>();
 
-  state: AutopilotState = {
-    phase: 'idle',
-    goodToStart: 3,
-    badToStart: 4,
-    smartStatus: '',
-    stableStatus: '',
-    spanStatus: '',
-    fracDiversity: 0,
-  };
+  constructor(public autopilotState: AutopilotStateService) {}
+
+  get state(): AutopilotState {
+    return this.autopilotState.state;
+  }
 
   get running(): boolean {
-    return this.state.phase !== 'idle';
+    return this.autopilotState.running;
   }
 
   get steps(): StepDisplay[] {
@@ -77,49 +68,23 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     if (!this.running) return;
 
     if (changes['labelingStatus'] && this.labelingStatus) {
-      this.state.smartStatus = (this.labelingStatus.smart?.status as string) || '';
-      this.state.stableStatus = (this.labelingStatus.stable?.status as string) || '';
-      this.state.spanStatus = (this.labelingStatus.span?.status as string) || '';
-      if (this.labelingStatus.span?.['diversity_level'] != null) {
-        this.state.fracDiversity = this.labelingStatus.span['diversity_level'] as number;
-      }
+      this.autopilotState.updateFromLabelingStatus(this.labelingStatus);
     }
 
     if (changes['goodVotes'] || changes['badVotes'] || changes['labelingStatus']) {
-      this.checkPhaseTransition();
+      this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
     }
   }
 
   activate(): void {
     if (this.running) return;
-    this.state = {
-      ...this.state,
-      phase: 'good',
-      smartStatus: '',
-      stableStatus: '',
-      spanStatus: '',
-      fracDiversity: 0,
-    };
+    this.autopilotState.activate();
     this.started.emit();
   }
 
   deactivate(): void {
-    this.state = { ...this.state, phase: 'idle' };
+    this.autopilotState.deactivate();
     this.stopped.emit();
-  }
-
-  private checkPhaseTransition(): void {
-    const st = this.state;
-
-    if (st.phase === 'good' && this.goodVotes.size >= st.goodToStart) {
-      this.state = { ...st, phase: 'bad' };
-    } else if (st.phase === 'bad' && this.badVotes.size >= st.badToStart) {
-      this.state = { ...st, phase: 'hard' };
-    } else if (st.phase === 'hard' && st.smartStatus === 'green' && st.stableStatus === 'green') {
-      this.state = { ...st, phase: 'new' };
-    } else if (st.phase === 'new' && st.spanStatus === 'green') {
-      this.state = { ...st, phase: 'done' };
-    }
   }
 
   private phaseLabel(phase: AutopilotPhase): string {

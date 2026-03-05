@@ -1,11 +1,11 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, timer } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
-import { SortingApiService } from '../../services/sorting-api.service';
-import { SettingsApiService } from '../../services/settings-api.service';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
-import { MediaItem, VotesResponse } from '../../models/api.models';
+import { MediaItem } from '../../models/api.models';
+import { VoteStateService } from '../../services/vote-state.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
@@ -39,28 +39,23 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   showThumbnails = true;
 
   private destroy$ = new Subject<void>();
-  private refresh$ = new Subject<void>();
 
   constructor(
-    private sortingApi: SortingApiService,
-    private settingsApi: SettingsApiService,
     private modelsApi: TrainableModelsApiService,
+    public voteState: VoteStateService,
+    private settingsState: SettingsStateService,
   ) {}
 
   ngOnInit(): void {
+    this.settingsState.load();
     this.loadSettings();
-    this.startPolling();
+    this.voteState.startPolling();
+    this.subscribeToVotes();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this.refresh$.next();
-    this.refresh$.complete();
-  }
-
-  refreshVotes(): void {
-    this.refresh$.next();
   }
 
   onSortModeChange(mode: LabelSortMode): void {
@@ -83,28 +78,36 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   }
 
   private loadSettings(): void {
-    this.settingsApi.getSettings()
+    this.settingsState.settings$
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: settings => {
+          if (!settings) return;
           this.showThumbnails = settings.show_thumbnails_right ?? true;
         },
       });
   }
 
-  private startPolling(): void {
-    timer(0, 2000)
-      .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getVotes()),
-      )
-      .subscribe({
-        next: (votes: VotesResponse) => {
-          this.goodIds = votes.good;
-          this.badIds = votes.bad;
-          this.clickTimes = votes.click_times;
-          this.learnedScores = votes.learned_scores;
-        },
+  private subscribeToVotes(): void {
+    this.voteState.goodVotes$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((votes) => {
+        this.goodIds = Array.from(votes);
+      });
+    this.voteState.badVotes$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((votes) => {
+        this.badIds = Array.from(votes);
+      });
+    this.voteState.clickTimes$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((times) => {
+        this.clickTimes = times;
+      });
+    this.voteState.learnedScores$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((scores) => {
+        this.learnedScores = scores;
       });
   }
 }
