@@ -2,9 +2,9 @@
 
 A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
 
-## Setup
+## Setup and running tests
 
-See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, and installing dependencies.
+See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
 
 ## Running the app
 
@@ -33,10 +33,6 @@ When the app is running, click the hamburger menu in the top-left corner to open
 See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
 You can also load your own data from pickle files or folders via the same menu.
-
-## Running the tests
-
-See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including the default fast CPU mode and additional modes for full CPU, GPU, and all tests.
 
 ## Project structure
 
