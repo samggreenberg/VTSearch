@@ -242,9 +242,9 @@ header h1 { margin-left: 0; }
 .ap-step-detail .ap-indicator-dot[data-status="green"] { background: #2ecc71; border-color: #27ae60; }
 
 /* Left panel – media list */
-.panel-left { width: 185px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-panel); display: flex; flex-direction: column; position: relative; }
+.panel-left { width: 185px; min-width: 185px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-panel); display: flex; flex-direction: column; position: relative; }
 .sort-bar { padding: 8px 28px 12px 10px; border-bottom: 1px solid var(--border); }
-.sort-mode { display: flex; gap: 10px; margin-bottom: 6px; }
+.sort-mode { display: flex; flex-wrap: nowrap; gap: 10px; margin-bottom: 6px; white-space: nowrap; }
 .sort-mode label { font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 3px; }
 .sort-mode input[type="radio"] { accent-color: var(--accent); margin: 0; }
 .sort-bar .sort-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 4px; }
