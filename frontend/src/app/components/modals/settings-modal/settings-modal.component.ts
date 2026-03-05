@@ -5,7 +5,7 @@ import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { AppSettings } from '../../../models/api.models';
-import { ThemeService } from '../../../services/theme.service';
+import { Theme, ThemeService } from '../../../services/theme.service';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -46,7 +46,7 @@ export class SettingsModalComponent implements OnInit {
 
   onThemeChange(theme: string): void {
     this.settings.theme = theme;
-    this.themeService.setTheme(theme);
+    this.themeService.setTheme(theme as Theme);
     this.save();
   }
 
@@ -79,7 +79,7 @@ export class SettingsModalComponent implements OnInit {
       next: (defaults) => {
         this.settings = defaults;
         if (defaults.theme) {
-          this.themeService.setTheme(defaults.theme);
+          this.themeService.setTheme(defaults.theme as Theme);
         }
         this.save();
       },
