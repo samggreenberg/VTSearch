@@ -356,7 +356,7 @@ class TestDashboardModelRegistryColumns:
         assert m["autodetect"] is True
 
     def test_model_registry_includes_loaded_field(self, client):
-        """Registered models include the loaded boolean (renamed to Loaded? in UI)."""
+        """Registered models include the loaded boolean (not shown in UI)."""
         register_model(name="ld-model", media_type="audio", trainable=True)
         resp = client.get("/api/models/registry")
         data = resp.get_json()

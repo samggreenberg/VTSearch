@@ -1528,7 +1528,6 @@
         <th data-sort="last_trained_at">Last Trained<span class="sort-arrow"></span></th>
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
         <th>Autorun?</th>
-        <th>Loaded?</th>
         <th class="col-actions-header"></th>
       </tr></thead><tbody></tbody></table>`;
 
@@ -1550,7 +1549,6 @@
       sorted.forEach(m => {
         const icon = mediaIcons[m.media_type] || "";
         const isSelected = dashSelectedModelIds.includes(m.id);
-        const isLoaded = !!m.loaded;
         const trainingText = m.trainable ? String(m.num_training || 0) : "-";
         const tr = document.createElement("tr");
         tr.className = "dash-model-row" + (isSelected ? " dash-selected" : "");
@@ -1571,7 +1569,6 @@
           <td class="col-last-trained">${escapeHtml(mLastTrained)}</td>
           <td class="col-date">${escapeHtml(mCreated)}</td>
           <td class="col-autorun"><input type="checkbox" class="dash-autorun-cb" ${isAutorun ? "checked" : ""} title="Include in CLI autorun" aria-label="Autorun"></td>
-          <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
           <td class="col-actions"><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
 
