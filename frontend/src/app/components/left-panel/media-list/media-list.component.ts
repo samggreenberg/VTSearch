@@ -19,6 +19,7 @@ export class MediaListComponent implements AfterViewChecked {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() showThumbnails = true;
+  @Input() showScores = true;
 
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() scrollUpdate = new EventEmitter<{ scrollTop: number; scrollHeight: number; clientHeight: number }>();
@@ -43,7 +44,7 @@ export class MediaListComponent implements AfterViewChecked {
           thresholdInserted = true;
         }
 
-        items.push({ media, score: sorted.score, showThreshold });
+        items.push({ media, score: this.showScores ? sorted.score : null, showThreshold });
       }
     } else {
       for (const media of this.medias) {
