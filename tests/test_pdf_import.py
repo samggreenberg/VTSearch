@@ -109,10 +109,25 @@ class TestFolderImporterPdf:
         mt.type_id = "image"
         mt.folder_import_name = "images"
         mt.file_extensions = ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"]
-        mt.embed_media.return_value = np.zeros(768)
-        mt.embed_pil_image.return_value = np.zeros(768)
         mt.load_media_data.return_value = {"media_bytes": b"fake", "duration": 0, "width": 100, "height": 100}
         return mt
+
+    def _make_fake_embedder(self):
+        emb = mock.MagicMock()
+        emb.name = "clip"
+        emb.media_type_id = "image"
+        emb._model = True
+        emb.embed_media.return_value = np.zeros(768)
+        emb.embed_pil_image.return_value = np.zeros(768)
+        return emb
+
+    def _patch_media_registry(self, mt, emb):
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
+        return stack
 
     def test_pdf_pages_added_to_medias(self, tmp_path):
         """PDFs in an image folder should produce per-page medias."""
@@ -124,9 +139,10 @@ class TestFolderImporterPdf:
         (tmp_path / "photo.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
 
         mt = self._make_fake_image_media_type()
+        emb = self._make_fake_embedder()
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt, emb):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         # 1 regular image + 2 PDF pages = 3 total
@@ -141,9 +157,10 @@ class TestFolderImporterPdf:
         (tmp_path / "photo.png").write_bytes(b"\x89PNG" + b"\x00" * 100)
 
         mt = self._make_fake_image_media_type()
+        emb = self._make_fake_embedder()
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt, emb):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["origin"] and m["origin"]["importer"] == "pdf"]
@@ -159,9 +176,10 @@ class TestFolderImporterPdf:
         (tmp_path / "img.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
 
         mt = self._make_fake_image_media_type()
+        emb = self._make_fake_embedder()
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt, emb):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         pdf_names = sorted(m["filename"] for m in medias.values() if m["filename"].startswith("slides.pdf-"))
@@ -175,9 +193,10 @@ class TestFolderImporterPdf:
         _create_test_pdf(pdf, num_pages=2)
 
         mt = self._make_fake_image_media_type()
+        emb = self._make_fake_embedder()
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt, emb):
             IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
 
         assert len(medias) == 2

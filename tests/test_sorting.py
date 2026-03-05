@@ -434,13 +434,15 @@ class TestLoadEmbedderConcurrentCallback:
         from vtsearch.routes.sorting import _load_embedder_with_progress
 
         original_cb = MagicMock(name="original_cb")
-        mock_mt = MagicMock()
-        mock_mt._model = None
-        mock_mt._on_progress = original_cb
-        mock_mt.load_models.side_effect = RuntimeError("boom")
+        mock_emb = MagicMock()
+        mock_emb._model = None
+        mock_emb._on_progress = original_cb
+        mock_emb.load_models.side_effect = RuntimeError("boom")
 
-        with unittest.mock.patch("vtsearch.media.get", return_value=mock_mt):
+        with unittest.mock.patch(
+            "vtsearch.routes.sorting._get_embedder_for_loaded_data", return_value=mock_emb
+        ):
             with pytest.raises(RuntimeError):
                 _load_embedder_with_progress("audio", 5)
 
-        assert mock_mt._on_progress is original_cb
+        assert mock_emb._on_progress is original_cb

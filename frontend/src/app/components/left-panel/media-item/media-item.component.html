@@ -1,0 +1,20 @@
+<div
+  class="media-item"
+  [class.active]="active"
+  [class.labeled-good]="voteLabel === 'good'"
+  [class.labeled-bad]="voteLabel === 'bad'"
+  role="option"
+  [attr.aria-selected]="active"
+  tabindex="0"
+  (click)="onClick()"
+  (keydown.enter)="onClick()"
+  (keydown.space)="onClick()"
+>
+  @if (thumbnailUrl) {
+    <img class="media-thumbnail" [src]="thumbnailUrl" alt="" loading="lazy" />
+  }
+  <span class="media-name">{{ displayName }}</span>
+  @if (score !== null) {
+    <span class="media-score">{{ score | number:'1.2-2' }}</span>
+  }
+</div>

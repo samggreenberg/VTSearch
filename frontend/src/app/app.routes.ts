@@ -1,9 +1,9 @@
 import { Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
-import { LabelComponent } from './components/label/label.component';
+import { LabelViewComponent } from './components/label-view/label-view.component';
 
 export const routes: Routes = [
   { path: 'dashboard', component: DashboardComponent },
-  { path: 'label', component: LabelComponent },
+  { path: 'label', component: LabelViewComponent },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
 ];

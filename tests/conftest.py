@@ -192,12 +192,13 @@ app_module.init_medias()
 # other routes that call embed_text don't trigger CLAP loading either.
 _patch_embed_audio.stop()
 
-# Grab the audio media-type singleton so the per-test fixture can patch
-# embed_text and load_models on it, preventing CLAP from loading during
-# /api/sort and similar calls.
-from vtsearch.media import get as _media_get
+# Grab the audio media-type singleton and the audio embedder so the per-test
+# fixture can patch embed_text/embed_media/load_models on both, preventing
+# CLAP from loading during /api/sort and similar calls.
+from vtsearch.media import get as _media_get, embedders_for_type as _embedders_for_type
 
 _audio_mt = _media_get("audio")
+_audio_emb = _embedders_for_type("audio")[0]
 
 
 @pytest.fixture(autouse=True)
@@ -239,6 +240,9 @@ def _stub_embedding_models():
         patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
         patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
         patch.object(_audio_mt, "load_models"),
+        patch.object(_audio_emb, "embed_media", side_effect=_fake_embed_audio),
+        patch.object(_audio_emb, "embed_text", side_effect=_fake_embed_text),
+        patch.object(_audio_emb, "load_models"),
     ):
         yield
 

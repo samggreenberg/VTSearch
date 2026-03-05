@@ -157,7 +157,7 @@ class TestLabelFileSortModelSelection:
             medias.update(saved)
 
     def test_uses_current_media_type_embedder(self, client, tmp_path):
-        """The endpoint should call embed_media on the media type matching the loaded dataset,
+        """The endpoint should call embed_media on the embedder matching the loaded dataset,
         not hardcode embed_audio_file / CLAP."""
         # Determine the current media type from loaded test medias
         media_type = next(iter(medias.values())).get("type", "audio")
@@ -171,11 +171,11 @@ class TestLabelFileSortModelSelection:
 
         fake_emb = np.random.default_rng(42).standard_normal(embedding_dim).astype(np.float32)
 
-        from vtsearch.media import get as media_get
+        from vtsearch.media import embedders_for_type
 
-        mt = media_get(media_type)
+        emb = embedders_for_type(media_type)[0]
 
-        with patch.object(mt, "embed_media", return_value=fake_emb) as mock_embed:
+        with patch.object(emb, "embed_media", return_value=fake_emb) as mock_embed:
             buf = self._make_label_file([(good_file, "good"), (bad_file, "bad")])
             resp = client.post(
                 "/api/label-file-sort",
@@ -186,7 +186,7 @@ class TestLabelFileSortModelSelection:
             data = resp.get_json()
             assert "results" in data
             assert data["loaded"] == 2
-            # Verify embed_media was called (not embed_audio_file)
+            # Verify embed_media was called on the embedder
             assert mock_embed.call_count == 2
 
     def test_invalid_label_file_returns_400(self, client):

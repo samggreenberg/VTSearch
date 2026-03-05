@@ -612,22 +612,9 @@
             </div>
           </div>
           <div class="settings-section">
-            <div class="settings-section-title">Autoload Media Types</div>
-            <div class="settings-row">
-              <label for="fav-mt-audio" class="settings-label">Audio</label>
-              <input type="checkbox" id="fav-mt-audio" data-media-type="audio" style="accent-color:var(--accent)">
-            </div>
-            <div class="settings-row">
-              <label for="fav-mt-image" class="settings-label">Image</label>
-              <input type="checkbox" id="fav-mt-image" data-media-type="image" style="accent-color:var(--accent)">
-            </div>
-            <div class="settings-row">
-              <label for="fav-mt-paragraph" class="settings-label">Text</label>
-              <input type="checkbox" id="fav-mt-paragraph" data-media-type="paragraph" style="accent-color:var(--accent)">
-            </div>
-            <div class="settings-row">
-              <label for="fav-mt-video" class="settings-label">Video</label>
-              <input type="checkbox" id="fav-mt-video" data-media-type="video" style="accent-color:var(--accent)">
+            <div class="settings-section-title">Autoload Media Embedders</div>
+            <div id="autoload-embedders-container">
+              <!-- Populated dynamically from /api/embedders -->
             </div>
           </div>
           <div class="settings-actions">

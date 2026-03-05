@@ -1,0 +1,15 @@
+<div class="inclusion-slider">
+  <label class="inclusion-label" for="inclusion-slider">
+    Inclusion
+    <span class="inclusion-value">{{ displayValue }}</span>
+  </label>
+  <input
+    id="inclusion-slider"
+    type="range"
+    min="-10"
+    max="10"
+    [value]="value"
+    (input)="onInput($event)"
+    aria-label="Inclusion slider"
+  />
+</div>

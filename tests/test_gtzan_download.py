@@ -284,19 +284,21 @@ class TestLoadUrbansound8kMetadata:
 class TestLoadDemoSourceGtzan:
     """AudioMediaType.load_demo_source with source='gtzan'."""
 
-    def _make_audio_media_type(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+    def _make_mock_embedder(self):
+        import numpy as np
 
-        mt = AudioMediaType()
-        # Stub the model + processor so we never hit the real network.
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb.media_type_id = "audio"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(512))
+        return mock_emb
 
     def test_gtzan_source_populates_clips(self, tmp_path):
         """load_demo_source with source='gtzan' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
             "blues/blues.00001.wav": {"category": "blues", "path": tmp_path / "blues.00001.wav"},
@@ -307,11 +309,9 @@ class TestLoadDemoSourceGtzan:
         for meta in fake_metadata.values():
             meta["path"].write_bytes(b"RIFF" + b"\x00" * 40)
 
-        mt = self._make_audio_media_type()
-        import numpy as np
-
-        mt.embed_media = MagicMock(return_value=np.zeros(512))
+        mt = AudioMediaType()
         mt.load_media_data = MagicMock(return_value={"media_bytes": b"", "duration": 1.0})
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -325,6 +325,7 @@ class TestLoadDemoSourceGtzan:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2
@@ -335,6 +336,7 @@ class TestLoadDemoSourceGtzan:
         """slice_start/slice_end limits files per category."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.audio.media_type import AudioMediaType
 
         fake_metadata = {}
         for i in range(10):
@@ -342,11 +344,9 @@ class TestLoadDemoSourceGtzan:
             p.write_bytes(b"RIFF" + b"\x00" * 40)
             fake_metadata[f"blues/blues.{i:05d}.wav"] = {"category": "blues", "path": p}
 
-        mt = self._make_audio_media_type()
-        import numpy as np
-
-        mt.embed_media = MagicMock(return_value=np.zeros(512))
+        mt = AudioMediaType()
         mt.load_media_data = MagicMock(return_value={"media_bytes": b"", "duration": 1.0})
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -360,6 +360,7 @@ class TestLoadDemoSourceGtzan:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 3
@@ -368,18 +369,21 @@ class TestLoadDemoSourceGtzan:
 class TestLoadDemoSourceSpeechCommands:
     """AudioMediaType.load_demo_source with source='speech_commands_v2'."""
 
-    def _make_audio_media_type(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+    def _make_mock_embedder(self):
+        import numpy as np
 
-        mt = AudioMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb.media_type_id = "audio"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(512))
+        return mock_emb
 
     def test_speech_commands_source_populates_clips(self, tmp_path):
         """load_demo_source with source='speech_commands_v2' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
             "yes/u1.wav": {"category": "yes", "path": tmp_path / "u1.wav"},
@@ -388,11 +392,9 @@ class TestLoadDemoSourceSpeechCommands:
         for meta in fake_metadata.values():
             meta["path"].write_bytes(b"RIFF" + b"\x00" * 40)
 
-        mt = self._make_audio_media_type()
-        import numpy as np
-
-        mt.embed_media = MagicMock(return_value=np.zeros(512))
+        mt = AudioMediaType()
         mt.load_media_data = MagicMock(return_value={"media_bytes": b"", "duration": 1.0})
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -406,6 +408,7 @@ class TestLoadDemoSourceSpeechCommands:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2
@@ -416,18 +419,21 @@ class TestLoadDemoSourceSpeechCommands:
 class TestLoadDemoSourceUrbansound8k:
     """AudioMediaType.load_demo_source with source='urbansound8k'."""
 
-    def _make_audio_media_type(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+    def _make_mock_embedder(self):
+        import numpy as np
 
-        mt = AudioMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb.media_type_id = "audio"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(512))
+        return mock_emb
 
     def test_urbansound8k_source_populates_clips(self, tmp_path):
         """load_demo_source with source='urbansound8k' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.audio.media_type import AudioMediaType
 
         f1 = tmp_path / "100032-3-0-0.wav"
         f2 = tmp_path / "200032-8-0-0.wav"
@@ -439,11 +445,9 @@ class TestLoadDemoSourceUrbansound8k:
             "200032-8-0-0.wav": {"category": "siren", "fold": 2, "class_id": 8, "path": f2},
         }
 
-        mt = self._make_audio_media_type()
-        import numpy as np
-
-        mt.embed_media = MagicMock(return_value=np.zeros(512))
+        mt = AudioMediaType()
         mt.load_media_data = MagicMock(return_value={"media_bytes": b"", "duration": 1.0})
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -457,6 +461,7 @@ class TestLoadDemoSourceUrbansound8k:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2

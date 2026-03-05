@@ -48,6 +48,7 @@ _DEFAULTS: dict[str, Any] = {
     "show_thumbnails_left": False,
     "show_thumbnails_right": True,
     "autoload_media_types": [],
+    "autoload_media_embedders": [],
     "autorun_processors": [],
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
@@ -209,7 +210,10 @@ def _valid_media_types() -> tuple[str, ...]:
 
 
 def get_autoload_media_types() -> list[str]:
-    """Return the list of autoload media type IDs (empty list if none set)."""
+    """Return the list of autoload media type IDs (empty list if none set).
+
+    .. deprecated:: Use :func:`get_autoload_media_embedders` instead.
+    """
     valid = _valid_media_types()
     with _settings_lock:
         raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
@@ -219,7 +223,10 @@ def get_autoload_media_types() -> list[str]:
 
 
 def set_autoload_media_types(value: list[str]) -> None:
-    """Set and persist the full list of autoload media types."""
+    """Set and persist the full list of autoload media types.
+
+    .. deprecated:: Use :func:`set_autoload_media_embedders` instead.
+    """
     valid = _valid_media_types()
     for v in value:
         if v not in valid:
@@ -231,7 +238,10 @@ def set_autoload_media_types(value: list[str]) -> None:
 
 
 def toggle_autoload_media_type(type_id: str) -> list[str]:
-    """Toggle a single media type's autoload status.  Returns the updated list."""
+    """Toggle a single media type's autoload status.  Returns the updated list.
+
+    .. deprecated:: Use :func:`toggle_autoload_media_embedder` instead.
+    """
     if type_id not in _valid_media_types():
         raise ValueError(f"Invalid media type: {type_id!r}")
     with _settings_lock:
@@ -241,6 +251,50 @@ def toggle_autoload_media_type(type_id: str) -> list[str]:
         else:
             current.append(type_id)
         set_autoload_media_types(current)
+        return current
+
+
+def _valid_embedder_names() -> tuple[str, ...]:
+    """Return the names of all registered embedders (lazy import to avoid circular deps)."""
+    from vtsearch.media import all_embedders
+
+    return tuple(e.name for e in all_embedders())
+
+
+def get_autoload_media_embedders() -> list[str]:
+    """Return the list of autoload embedder names (empty list if none set)."""
+    with _settings_lock:
+        raw = _ensure_loaded().get("autoload_media_embedders", _DEFAULTS["autoload_media_embedders"])
+        if isinstance(raw, list):
+            valid = _valid_embedder_names()
+            return [v for v in raw if v in valid]
+        return []
+
+
+def set_autoload_media_embedders(value: list[str]) -> None:
+    """Set and persist the full list of autoload embedder names."""
+    valid = _valid_embedder_names()
+    for v in value:
+        if v not in valid:
+            raise ValueError(f"Invalid embedder: {v!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autoload_media_embedders"] = list(dict.fromkeys(value))
+        _save(s)
+
+
+def toggle_autoload_media_embedder(embedder_name: str) -> list[str]:
+    """Toggle a single embedder's autoload status.  Returns the updated list."""
+    valid = _valid_embedder_names()
+    if embedder_name not in valid:
+        raise ValueError(f"Invalid embedder: {embedder_name!r}")
+    with _settings_lock:
+        current = get_autoload_media_embedders()
+        if embedder_name in current:
+            current.remove(embedder_name)
+        else:
+            current.append(embedder_name)
+        set_autoload_media_embedders(current)
         return current
 
 

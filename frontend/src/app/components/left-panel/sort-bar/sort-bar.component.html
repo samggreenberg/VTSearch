@@ -1,0 +1,77 @@
+<div class="sort-bar">
+  <div class="sort-mode-group">
+    <span class="sort-label">Sort</span>
+    <label class="sort-radio" [class.active]="sortMode === 'text'">
+      <input
+        type="radio"
+        name="sortMode"
+        value="text"
+        [checked]="sortMode === 'text'"
+        (change)="onSortModeChange('text')"
+      />
+      Text
+    </label>
+    <label class="sort-radio" [class.active]="sortMode === 'learned'">
+      <input
+        type="radio"
+        name="sortMode"
+        value="learned"
+        [checked]="sortMode === 'learned'"
+        [disabled]="learnedDisabled"
+        (change)="onSortModeChange('learned')"
+      />
+      Learned
+    </label>
+    <label class="sort-radio" [class.active]="sortMode === 'load'">
+      <input
+        type="radio"
+        name="sortMode"
+        value="load"
+        [checked]="sortMode === 'load'"
+        (change)="onSortModeChange('load')"
+      />
+      Load
+    </label>
+  </div>
+
+  @if (sortMode === 'text') {
+    <div class="text-sort-wrap">
+      <input
+        class="form-input text-sort-input"
+        type="text"
+        placeholder="Describe what you're looking for..."
+        [value]="textQuery"
+        (input)="onTextInput($any($event.target).value)"
+        aria-label="Text sort query"
+      />
+    </div>
+  }
+
+  @if (sortMode === 'learned') {
+    <div class="learned-sort-wrap">
+      @if (learnedDisabled) {
+        <span class="sort-hint">Need at least 1 good and 1 bad vote</span>
+      } @else {
+        <span class="sort-desc">Sorting by trained model</span>
+      }
+    </div>
+  }
+
+  @if (sortMode === 'load') {
+    <div class="load-sort-wrap">
+      @if (loadSortLabel) {
+        <span class="sort-desc">{{ loadSortLabel }}</span>
+      } @else {
+        <span class="sort-hint">No sort loaded</span>
+      }
+    </div>
+  }
+
+  @if (status) {
+    <div class="sort-status" aria-live="polite">{{ status }}</div>
+  }
+
+  @if (busy) {
+    <vt-progress-bar [indeterminate]="true" />
+  }
+</div>
