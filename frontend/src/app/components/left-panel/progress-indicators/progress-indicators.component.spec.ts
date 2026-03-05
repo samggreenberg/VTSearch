@@ -74,6 +74,29 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.spanSubtext).toBe('2.5/4');
   });
 
+  it('should show sort overlay when sortBusy is true', () => {
+    component.sortBusy = true;
+    component.sortStatus = 'Sorting...';
+    fixture.detectChanges();
+    const overlay = fixture.nativeElement.querySelector('.sort-overlay');
+    expect(overlay).toBeTruthy();
+    expect(overlay.textContent).toContain('Sorting...');
+    expect(fixture.nativeElement.querySelector('.labeling-indicator')).toBeNull();
+  });
+
+  it('should show progress bar inside sort overlay when busy', () => {
+    component.sortBusy = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.sort-overlay vt-progress-bar')).toBeTruthy();
+  });
+
+  it('should show indicators when sortBusy is false', () => {
+    component.sortBusy = false;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.sort-overlay')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.labeling-indicator').length).toBe(3);
+  });
+
   it('should set data-status attribute on indicators', () => {
     component.labelingStatus = {
       smart: { status: 'green' },

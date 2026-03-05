@@ -1,40 +1,49 @@
 <div class="progress-check-bar">
-  <button
-    class="labeling-indicator"
-    [attr.data-status]="smartStatus"
-    (click)="onClick('smart')"
-    aria-label="Smart indicator"
-  >
-    <span class="indicator-dot"></span>
-    <span class="indicator-label">Smart</span>
-    @if (smartSubtext) {
-      <span class="indicator-subtext">{{ smartSubtext }}</span>
-    }
-  </button>
+  @if (sortBusy) {
+    <div class="sort-overlay" aria-live="polite">
+      @if (sortStatus) {
+        <span class="sort-overlay-status">{{ sortStatus }}</span>
+      }
+      <vt-progress-bar [indeterminate]="true" />
+    </div>
+  } @else {
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="smartStatus"
+      (click)="onClick('smart')"
+      aria-label="Smart indicator"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Smart</span>
+      @if (smartSubtext) {
+        <span class="indicator-subtext">{{ smartSubtext }}</span>
+      }
+    </button>
 
-  <button
-    class="labeling-indicator"
-    [attr.data-status]="stableStatus"
-    (click)="onClick('stable')"
-    aria-label="Stable indicator"
-  >
-    <span class="indicator-dot"></span>
-    <span class="indicator-label">Stable</span>
-    @if (stableSubtext) {
-      <span class="indicator-subtext">{{ stableSubtext }}</span>
-    }
-  </button>
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="stableStatus"
+      (click)="onClick('stable')"
+      aria-label="Stable indicator"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Stable</span>
+      @if (stableSubtext) {
+        <span class="indicator-subtext">{{ stableSubtext }}</span>
+      }
+    </button>
 
-  <button
-    class="labeling-indicator"
-    [attr.data-status]="spanStatus"
-    (click)="onClick('span')"
-    aria-label="Diverse indicator"
-  >
-    <span class="indicator-dot"></span>
-    <span class="indicator-label">Diverse</span>
-    @if (spanSubtext) {
-      <span class="indicator-subtext">{{ spanSubtext }}</span>
-    }
-  </button>
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="spanStatus"
+      (click)="onClick('span')"
+      aria-label="Diverse indicator"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Diverse</span>
+      @if (spanSubtext) {
+        <span class="indicator-subtext">{{ spanSubtext }}</span>
+      }
+    </button>
+  }
 </div>

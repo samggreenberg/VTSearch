@@ -1,6 +1,26 @@
 .progress-check-bar {
   display: flex;
   gap: 4px;
+  min-height: 48px;
+  align-items: stretch;
+}
+
+.sort-overlay {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--indicator-border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+}
+
+.sort-overlay-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .labeling-indicator {

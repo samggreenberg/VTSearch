@@ -82,18 +82,6 @@ describe('SortBarComponent', () => {
     expect(fixture.nativeElement.querySelector('.sort-hint')?.textContent).toContain('Need at least');
   });
 
-  it('should show status when provided', () => {
-    component.status = 'Sorting...';
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.sort-status')?.textContent).toContain('Sorting...');
-  });
-
-  it('should show progress bar when busy', () => {
-    component.busy = true;
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('vt-progress-bar')).toBeTruthy();
-  });
-
   it('should show load sort label', () => {
     component.sortMode = 'load';
     component.loadSortLabel = 'Detector A';

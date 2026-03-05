@@ -20,8 +20,6 @@
     <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
       <vt-sort-bar
         [sortMode]="sortMode"
-        [busy]="sortBusy"
-        [status]="sortStatus"
         [loadSortLabel]="loadSortLabel"
         [hasGoodVotes]="goodVotes.size > 0"
         [hasBadVotes]="badVotes.size > 0"
@@ -43,6 +41,8 @@
 
       <vt-progress-indicators
         [labelingStatus]="labelingStatus"
+        [sortBusy]="sortBusy"
+        [sortStatus]="sortStatus"
         (indicatorClick)="indicatorClick.emit($event)"
       />
 
