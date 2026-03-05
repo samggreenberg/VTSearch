@@ -148,6 +148,50 @@ This installs Flask, NumPy, PyTorch, and other ML / media processing dependencie
 pip install -r requirements-dev.txt
 ```
 
+## Building the frontend (optional)
+
+The Angular frontend is pre-built and committed to `static/`, so you can skip this step if you're only working on the backend. If you need to modify the frontend, you'll need **Node.js 18+** and **npm**.
+
+Check if they're installed:
+
+```bash
+node --version
+npm --version
+```
+
+If not installed:
+
+Ubuntu / Debian:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+macOS (with Homebrew):
+
+```bash
+brew install node
+```
+
+Then install dependencies and build:
+
+```bash
+cd frontend
+npm install
+npm run build:prod
+cd ..
+```
+
+This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build — it installs the Angular CLI and other tools locally.
+
+For development with live reload (proxies API calls to Flask at localhost:5000):
+
+```bash
+cd frontend
+npm start
+```
+
 ## Running the app
 
 Start the server:
