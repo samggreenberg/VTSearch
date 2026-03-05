@@ -291,32 +291,33 @@ header h1 { margin-left: 0; }
 .stripe-highlight { position: absolute; left: 0; right: 0; background: var(--accent-highlight-bg); border-top: 1px solid var(--accent-highlight-border); border-bottom: 1px solid var(--accent-highlight-border); pointer-events: none; transition: top 0.05s, height 0.05s; z-index: 0; }
 
 /* Center panel – player */
-.panel-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; overflow-y: auto; }
-.panel-center.empty { color: var(--text-placeholder); font-size: 1rem; }
+.panel-center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 16px; overflow-y: auto; }
+.panel-center.empty { color: var(--text-placeholder); font-size: 1rem; justify-content: center; }
 
 /* Waveform canvas */
 #waveform-canvas { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); }
 
-audio { width: 100%; max-width: 480px; }
+audio { width: 100%; max-width: 480px; flex-shrink: 0; }
 video { max-width: 100%; }
 
 /* Metadata grid */
 .metadata-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 24px;
+  gap: 4px 24px;
   width: 600px;
   background: var(--bg-surface);
-  padding: 10px 20px;
+  padding: 8px 20px;
   border-radius: 8px;
   border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .metadata-item { display: flex; flex-direction: column; gap: 4px; }
 .metadata-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .metadata-value { font-size: 0.9rem; color: var(--text-primary); font-family: monospace; }
 .metadata-md5 { font-size: 0.75rem; word-break: break-all; }
 
-.vote-buttons { display: flex; gap: 16px; }
+.vote-buttons { display: flex; gap: 16px; flex-shrink: 0; }
 .vote-buttons button { padding: 10px 28px; border: 2px solid; border-radius: 8px; font-size: 1rem; cursor: pointer; background: transparent; transition: all 0.15s; }
 .btn-good { color: var(--color-good); border-color: var(--color-good); }
 .btn-good:hover { font-weight: 700; }
@@ -507,7 +508,7 @@ video { max-width: 100%; }
 
 /* Media swipe wrapper – must participate in panel-center flex layout so that
    children (especially images with flex:1/min-height:0) are properly constrained. */
-.media-swipe-wrapper { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.media-swipe-wrapper { flex: 1; min-height: 120px; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 
 /* Swipe vote animation */
 @keyframes swipe-right {
@@ -603,7 +604,7 @@ video { max-width: 100%; }
 /* Image view controls (zoom, rotate, reset) */
 .image-view-controls {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 4px 0; opacity: 0.5; transition: opacity 0.2s;
+  padding: 4px 0; opacity: 0.5; transition: opacity 0.2s; flex-shrink: 0;
 }
 .image-view-controls:hover { opacity: 1; }
 .ivc-btn {
