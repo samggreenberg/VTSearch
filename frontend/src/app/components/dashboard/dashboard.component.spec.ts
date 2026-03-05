@@ -121,9 +121,10 @@ describe('DashboardComponent', () => {
     flushInitialRequests();
     component.sortDatasets('name');
     expect(component.datasetSortIndicator('name')).toContain('\u25B2');
+    expect(component.isDatasetSortActive('name')).toBeTrue();
     component.sortDatasets('name');
     expect(component.datasetSortIndicator('name')).toContain('\u25BC');
-    expect(component.datasetSortIndicator('other')).toBe('');
+    expect(component.isDatasetSortActive('other')).toBeFalse();
   });
 
   describe('button state', () => {

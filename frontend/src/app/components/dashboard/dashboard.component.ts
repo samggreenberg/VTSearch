@@ -303,13 +303,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   datasetSortIndicator(column: string): string {
-    if (this.datasetSortColumn !== column) return '';
-    return this.datasetSortAsc ? ' \u25B2' : ' \u25BC';
+    if (this.datasetSortColumn !== column) return '\u25B2';
+    return this.datasetSortAsc ? '\u25B2' : '\u25BC';
+  }
+
+  isDatasetSortActive(column: string): boolean {
+    return this.datasetSortColumn === column;
   }
 
   modelSortIndicator(column: string): string {
-    if (this.modelSortColumn !== column) return '';
-    return this.modelSortAsc ? ' \u25B2' : ' \u25BC';
+    if (this.modelSortColumn !== column) return '\u25B2';
+    return this.modelSortAsc ? '\u25B2' : '\u25BC';
+  }
+
+  isModelSortActive(column: string): boolean {
+    return this.modelSortColumn === column;
   }
 
   // --- Button state ---
