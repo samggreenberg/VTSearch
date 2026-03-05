@@ -103,9 +103,7 @@
       >
         Label
       </button>
-      @if (!labelEnabled && labelHint) {
-        <span class="btn-disabled-reason">{{ labelHint }}</span>
-      }
+      <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
     </div>
     <div class="action-btn-group">
       <button
@@ -116,9 +114,7 @@
       >
         Find
       </button>
-      @if (!findEnabled && findHint) {
-        <span class="btn-disabled-reason">{{ findHint }}</span>
-      }
+      <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
     </div>
   </div>
 </div>
