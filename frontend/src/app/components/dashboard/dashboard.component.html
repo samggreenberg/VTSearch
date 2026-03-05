@@ -57,12 +57,12 @@
     <div class="dashboard-section-header">
       <span class="dashboard-section-title">Models</span>
       <div class="dashboard-section-actions">
-        <!-- Add model button — Phase 7 will implement the full picker -->
+        <button class="btn btn--primary btn--sm" (click)="openNewModelModal()">+</button>
       </div>
     </div>
 
     @if (models.length === 0) {
-      <p class="empty-state">No models yet.</p>
+      <p class="empty-state">No models yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
         <table class="dash-table">
@@ -118,5 +118,12 @@
   <vt-dataset-importer-modal
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
+  />
+}
+
+@if (newModelModalOpen) {
+  <vt-new-model-modal
+    (closed)="closeNewModelModal()"
+    (created)="onModelCreated()"
   />
 }
