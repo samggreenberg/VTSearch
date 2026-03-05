@@ -16,7 +16,6 @@ to know first.
 7. [Deployment checklist](#deployment-checklist)
 8. [Common workflows](#common-workflows)
 9. [Known constraints and trade-offs](#known-constraints-and-trade-offs)
-10. [Feature ideas and future direction](#feature-ideas-and-future-direction)
 
 ---
 
@@ -48,7 +47,6 @@ runs locally or in Docker.
 | [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
-| [FEATURE_IDEAS.md](FEATURE_IDEAS.md) | 132 brainstormed feature ideas |
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
 
@@ -321,19 +319,3 @@ The `numpy<2` pin avoids breaking changes in numpy 2.x that affect
 PyTorch and other dependencies. Upgrading requires testing across the full
 dependency chain.
 
----
-
-## Feature ideas and future direction
-
-See [FEATURE_IDEAS.md](FEATURE_IDEAS.md) for a brainstorm of 132 potential
-features spanning sorting, active learning, UI/UX, datasets, export,
-evaluation, media types, infrastructure, and accessibility. Highlights
-include:
-
-- Multi-query and negative-query text sorting
-- Uncertainty sampling and active learning
-- Grid view, keyboard shortcuts, and responsive layout
-- S3 / cloud storage importers
-- ONNX / TorchScript model export
-- Distributed computation and job queues
-- Internationalization and accessibility improvements
