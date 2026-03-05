@@ -4,20 +4,13 @@
   gap: 12px;
 }
 
-.autopilot-idle {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 8px;
-}
-
 .autopilot-desc {
   font-size: 0.82rem;
   color: var(--text-secondary);
   text-align: center;
   line-height: 1.4;
   margin: 0;
+  padding: 8px 8px 0;
 }
 
 .autopilot-active {
@@ -97,7 +90,3 @@
   color: var(--text-muted);
 }
 
-.ap-stop-btn {
-  align-self: center;
-  margin-top: 8px;
-}

@@ -63,6 +63,14 @@ export class LeftPanelComponent {
   activeTab: 'manual' | 'autopilot' = 'manual';
 
   setTab(tab: 'manual' | 'autopilot'): void {
+    if (tab === this.activeTab) return;
+    const previous = this.activeTab;
     this.activeTab = tab;
+    if (previous === 'autopilot') {
+      this.autopilotStop.emit();
+    }
+    if (tab === 'autopilot') {
+      this.autopilotStart.emit();
+    }
   }
 }

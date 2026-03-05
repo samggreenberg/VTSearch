@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LabelingStatusResponse } from '../../../models/api.models';
 
@@ -28,13 +28,13 @@ interface StepDisplay {
   templateUrl: './autopilot-panel.component.html',
   styleUrl: './autopilot-panel.component.scss',
 })
-export class AutopilotPanelComponent implements OnChanges {
+export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() labelingStatus: LabelingStatusResponse | null = null;
 
-  @Output() start = new EventEmitter<void>();
-  @Output() stop = new EventEmitter<void>();
+  @Output() started = new EventEmitter<void>();
+  @Output() stopped = new EventEmitter<void>();
 
   state: AutopilotState = {
     phase: 'idle',
@@ -69,6 +69,10 @@ export class AutopilotPanelComponent implements OnChanges {
     });
   }
 
+  ngOnInit(): void {
+    this.activate();
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.running) return;
 
@@ -86,7 +90,8 @@ export class AutopilotPanelComponent implements OnChanges {
     }
   }
 
-  onStart(): void {
+  activate(): void {
+    if (this.running) return;
     this.state = {
       ...this.state,
       phase: 'good',
@@ -95,12 +100,12 @@ export class AutopilotPanelComponent implements OnChanges {
       spanStatus: '',
       fracDiversity: 0,
     };
-    this.start.emit();
+    this.started.emit();
   }
 
-  onStop(): void {
+  deactivate(): void {
     this.state = { ...this.state, phase: 'idle' };
-    this.stop.emit();
+    this.stopped.emit();
   }
 
   private checkPhaseTransition(): void {
