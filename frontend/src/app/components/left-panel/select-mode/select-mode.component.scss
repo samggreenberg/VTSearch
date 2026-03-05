@@ -1,14 +1,15 @@
 .select-mode-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
 }
 
 .sort-label {
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
-  min-width: 32px;
+  width: 100%;
 }
 
 .sort-radio {
