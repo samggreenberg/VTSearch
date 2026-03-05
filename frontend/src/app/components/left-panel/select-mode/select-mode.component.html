@@ -1,6 +1,6 @@
 <div class="select-mode-group">
-  <span class="sort-label">Select</span>
-  <label class="sort-radio" [class.active]="selectMode === 'top'">
+  <span class="sort-label" title="Choose which unlabeled item to present next for labeling.">Select:</span>
+  <label class="sort-radio" [class.active]="selectMode === 'top'" title="Pick the highest-ranked unlabeled item. Best for quickly finding strong matches.">
     <input
       type="radio"
       name="selectMode"
@@ -10,7 +10,7 @@
     />
     Top
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'hard'">
+  <label class="sort-radio" [class.active]="selectMode === 'hard'" title="Pick the item closest to the decision boundary. These uncertain cases improve model accuracy fastest.">
     <input
       type="radio"
       name="selectMode"
@@ -20,7 +20,7 @@
     />
     Hard
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'new'">
+  <label class="sort-radio" [class.active]="selectMode === 'new'" title="Pick an item from an underexplored region of the dataset using diversity sampling. Ensures broad coverage.">
     <input
       type="radio"
       name="selectMode"
