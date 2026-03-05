@@ -167,21 +167,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadDataset(dataset: any): void {
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
-    this.progressIndeterminate = true;
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => {
-        this.startProgressPolling();
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
-      },
-    });
-  }
-
   // --- Model actions ---
 
   renameModel(model: any, newName: string): void {
