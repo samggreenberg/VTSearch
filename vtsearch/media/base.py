@@ -294,6 +294,32 @@ class MediaType(ABC):
         return []
 
     # ------------------------------------------------------------------
+    # Display metadata
+    # ------------------------------------------------------------------
+
+    def display_metadata(self, media: dict) -> dict[str, Any]:
+        """Build an ordered dict of display-worthy metadata for *media*.
+
+        The returned dict maps human-readable labels to values.  These are
+        shown in the labeling UI's metadata grid.  The base implementation
+        includes **Category** and **File Size** when present.  Subclasses
+        override this to add type-specific fields (Duration, Dimensions,
+        Word Count, etc.).
+
+        Importers can additionally set ``media["custom_metadata"]`` to
+        supply per-item fields (e.g. ``{"Uploaded By": "alice"}``).  The
+        API route merges both sources before sending the response.
+        """
+        result: dict[str, Any] = {}
+        cat = media.get("category")
+        if cat and cat not in ("unknown", "custom"):
+            result["Category"] = cat
+        fs = media.get("file_size")
+        if fs:
+            result["File Size"] = fs
+        return result
+
+    # ------------------------------------------------------------------
     # Viewer behaviour
     # ------------------------------------------------------------------
 

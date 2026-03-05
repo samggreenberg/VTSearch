@@ -59,29 +59,36 @@ def list_medias() -> Response:
     """Return metadata for all loaded medias as a JSON array.
 
     Excludes heavyweight fields (``embedding``, ``media_bytes``,
-    ``media_string``) from the response. Only includes the
-    ``frequency`` field when it is present (synthetic medias only).
+    ``media_string``) from the response.
+
+    Each item contains the required fields ``id``, ``type``, ``filename``,
+    ``md5``, and a ``custom_metadata`` dict of display-worthy key/value
+    pairs contributed by the media type and/or importer.
 
     Returns:
-        A JSON array of media metadata dicts, each containing: ``id``, ``type``,
-        ``duration``, ``file_size``, ``filename``, ``category``, ``md5``, and
-        optionally ``frequency``, ``width``, ``height``, ``word_count``.
+        A JSON array of media metadata dicts.
     """
+    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
     result: list[dict[str, Any]] = []
     for c in snapshot_medias().values():
+        media_type_id = c.get("type", "audio")
         media_data: dict[str, Any] = {
             "id": c["id"],
-            "type": c.get("type", "audio"),
-            "duration": c["duration"],
-            "file_size": c["file_size"],
+            "type": media_type_id,
             "filename": c.get("filename", f"media_{c['id']}.wav"),
-            "category": c.get("category", "unknown"),
             "md5": c["md5"],
         }
-        # Only include optional fields when present
-        for key in ("frequency", "width", "height", "word_count"):
-            if key in c:
-                media_data[key] = c[key]
+        # Build custom_metadata from media type + any importer-supplied fields
+        try:
+            mt = get_media_type(media_type_id)
+            custom: dict[str, Any] = mt.display_metadata(c)
+        except (KeyError, Exception):
+            custom = {}
+        importer_custom = c.get("custom_metadata")
+        if importer_custom:
+            custom.update(importer_custom)
+        media_data["custom_metadata"] = custom
         result.append(media_data)
     return jsonify(result)
 

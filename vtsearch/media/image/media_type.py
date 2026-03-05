@@ -120,6 +120,23 @@ class ImageMediaType(MediaType):
         return ["width", "height"]
 
     # ------------------------------------------------------------------
+    # Display metadata
+    # ------------------------------------------------------------------
+
+    def display_metadata(self, media: dict) -> dict:
+        result: dict = {}
+        cat = media.get("category")
+        if cat and cat not in ("unknown", "custom"):
+            result["Category"] = cat
+        w, h = media.get("width"), media.get("height")
+        if w and h:
+            result["Dimensions"] = f"{w}\u00d7{h}"
+        fs = media.get("file_size")
+        if fs:
+            result["File Size"] = fs
+        return result
+
+    # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
 

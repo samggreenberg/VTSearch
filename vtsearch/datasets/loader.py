@@ -876,6 +876,9 @@ def load_dataset_from_pickle(
                 }
                 for field in _extra_fields.get(media_type, []):
                     media_data[field] = media_info.get(field)
+                cm = media_info.get("custom_metadata")
+                if cm:
+                    media_data["custom_metadata"] = cm
 
                 medias[media_id] = media_data
                 loaded_count += 1
@@ -949,6 +952,9 @@ def load_dataset_from_pickle(
                 }
                 for field in _extra_fields.get(media_type, []):
                     media_data[field] = media_info.get(field)
+                cm = media_info.get("custom_metadata")
+                if cm:
+                    media_data["custom_metadata"] = cm
 
                 medias[media_id] = media_data
                 loaded_count += 1
@@ -1064,6 +1070,9 @@ def load_dataset_from_pickle_chunked(
                 }
                 for field in _extra_fields.get(media_type, []):
                     media_data[field] = media_info.get(field)
+                cm = media_info.get("custom_metadata")
+                if cm:
+                    media_data["custom_metadata"] = cm
 
                 chunk_medias[new_id] = media_data
                 new_id += 1
@@ -1131,6 +1140,9 @@ def load_dataset_from_pickle_chunked(
                 }
                 for field in _extra_fields.get(media_type, []):
                     media_data[field] = media_info.get(field)
+                cm = media_info.get("custom_metadata")
+                if cm:
+                    media_data["custom_metadata"] = cm
 
                 chunk_medias[new_id] = media_data
                 new_id += 1
@@ -1306,6 +1318,7 @@ def export_dataset_to_file(
                 "character_count": media.get("character_count"),
                 "width": media.get("width"),
                 "height": media.get("height"),
+                "custom_metadata": media.get("custom_metadata"),
             }
             for cid, media in medias.items()
         }
