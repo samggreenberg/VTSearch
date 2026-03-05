@@ -768,8 +768,9 @@
     }
     if (st.phase === "new") {
       const frac = st.fracDiversity ?? 0;
+      const fracFloored = Math.floor(frac * 10) / 10;
       const pct = Math.min(100, Math.max(0, Math.round((frac / 4) * 100)));
-      return `Diversity ${frac.toFixed(1)} / 4 `
+      return `Diversity ${fracFloored.toFixed(1)} / 4 `
         + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
     }
     return "";
@@ -5812,9 +5813,10 @@
       const dvChart = document.getElementById("diversity-chart");
       if (dvChart) {
         dvChart.setAttribute("role", "img");
-        const lastLevel = data.diversity_level_over_time && data.diversity_level_over_time.length > 0
-          ? data.diversity_level_over_time[data.diversity_level_over_time.length - 1].diversity_level.toFixed(2)
-          : "N/A";
+        const lastLevelRaw = data.diversity_level_over_time && data.diversity_level_over_time.length > 0
+          ? data.diversity_level_over_time[data.diversity_level_over_time.length - 1].diversity_level
+          : null;
+        const lastLevel = lastLevelRaw !== null ? (Math.floor(lastLevelRaw * 100) / 100).toFixed(2) : "N/A";
         dvChart.setAttribute("aria-label", `Diversity level chart with ${(data.diversity_level_over_time || []).length} data points. Latest level: ${lastLevel}`);
       }
       // Update span info text from cached status
