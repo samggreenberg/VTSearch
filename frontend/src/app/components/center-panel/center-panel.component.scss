@@ -4,17 +4,23 @@
   min-height: 0;
 }
 
+// LAYOUT INTENT: When media is selected, the layout is a flex column:
+//   1. Media viewer (flex: 1, grows to fill all remaining space)
+//   2. Metadata grid (flex-shrink: 0, hugs the voting buttons)
+//   3. Voting buttons (flex-shrink: 0, pinned to bottom)
+// Do NOT add justify-content: center here — it adds wasted space above/below
+// the media. The .empty state is the only case that needs centering.
 .center-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  padding: 4px 16px;
+  padding: 4px 8px;
   overflow: hidden;
 
   &.empty {
+    justify-content: center;
     color: var(--text-placeholder);
     font-size: 1rem;
   }

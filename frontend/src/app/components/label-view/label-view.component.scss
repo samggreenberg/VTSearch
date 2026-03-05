@@ -24,12 +24,14 @@
   }
 }
 
+// LAYOUT INTENT: The center panel child (vt-center-panel) must stretch to fill
+// the entire grid cell. Do NOT add align-items: center or justify-content: center
+// here — that prevents the child from using the full height, wasting space and
+// shrinking the media viewer.
 .panel-center {
   overflow: hidden;
   background: var(--bg-panel);
   display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .divider-right {

@@ -1,3 +1,9 @@
+// LAYOUT INTENT: The voting overlay must not shrink — it stays pinned at the
+// bottom of the center panel. Do NOT remove flex-shrink: 0 from :host.
+:host {
+  flex-shrink: 0;
+}
+
 .vote-buttons {
   display: flex;
   gap: 12px;
