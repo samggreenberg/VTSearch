@@ -62,4 +62,9 @@ export class DatasetCardComponent {
     if (!timestamp) return '-';
     return new Date(timestamp * 1000).toLocaleDateString();
   }
+
+  capitalizeType(type: string | undefined): string {
+    if (!type) return '-';
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  }
 }

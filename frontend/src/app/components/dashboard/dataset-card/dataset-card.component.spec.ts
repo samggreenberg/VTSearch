@@ -36,9 +36,10 @@ describe('DatasetCardComponent', () => {
     expect(el.textContent).toContain('Test Dataset');
   });
 
-  it('should display media type', () => {
+  it('should display capitalized media type with icon', () => {
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('audio');
+    expect(el.textContent).toContain('Audio');
+    expect(el.querySelector('.type-icon')).toBeTruthy();
   });
 
   it('should display item count', () => {
