@@ -1,0 +1,24 @@
+@if (open) {
+<div
+  class="modal-backdrop"
+  (click)="onBackdropClick($event)"
+  (keydown)="onKeydown($event)"
+  role="dialog"
+  aria-modal="true"
+  [attr.aria-label]="title"
+  tabindex="-1"
+>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>{{ title }}</h2>
+      <button class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <ng-content />
+    </div>
+    <div class="modal-footer">
+      <ng-content select="[modal-footer]" />
+    </div>
+  </div>
+</div>
+}

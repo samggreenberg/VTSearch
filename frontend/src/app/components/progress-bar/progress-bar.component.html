@@ -1,0 +1,13 @@
+<div
+  class="progress-track"
+  role="progressbar"
+  [attr.aria-valuenow]="indeterminate ? null : value"
+  [attr.aria-valuemin]="0"
+  [attr.aria-valuemax]="max"
+>
+  <div
+    class="progress-fill"
+    [class.indeterminate]="indeterminate"
+    [style.width.%]="indeterminate ? 100 : percentage"
+  ></div>
+</div>

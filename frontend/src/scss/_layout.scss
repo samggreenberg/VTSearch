@@ -1,0 +1,24 @@
+// 3-panel grid layout
+
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.panel-left,
+.panel-center,
+.panel-right {
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--bg-panel);
+}
+
+.panel-left {
+  border-right: 1px solid var(--border);
+}
+
+.panel-right {
+  border-left: 1px solid var(--border);
+}
