@@ -45,7 +45,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (importer.fields) {
       for (const field of importer.fields) {
         if (field.default !== undefined) {
-          this.formValues[field.name] = field.default;
+          this.formValues[field.key] = field.default;
         }
       }
     }
@@ -73,7 +73,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.error = '';
 
     // If there's a file field, use loadFile; otherwise runImporter
-    const fileField = this.selectedImporter.fields?.find((f) => f.type === 'file');
+    const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
       this.datasetsApi.loadFile(this.selectedFile).subscribe({
         next: () => {

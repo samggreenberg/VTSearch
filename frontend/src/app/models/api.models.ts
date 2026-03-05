@@ -150,11 +150,15 @@ export interface ImporterInfo {
 }
 
 export interface ImporterField {
-  name: string;
-  type: string;
+  key: string;
+  field_type: string;
   label?: string;
+  description?: string;
+  accept?: string;
+  options?: string[];
+  default?: string;
   required?: boolean;
-  default?: unknown;
+  placeholder?: string;
 }
 
 export interface ImportersResponse {

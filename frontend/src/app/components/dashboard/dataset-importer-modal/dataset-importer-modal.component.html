@@ -20,39 +20,40 @@
       <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
 
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
-        @for (field of selectedImporter.fields; track field.name) {
+        @for (field of selectedImporter.fields; track field.key) {
           <div class="form-group">
-            <label class="form-label" [for]="'field-' + field.name">
-              {{ field.label || field.name }}
+            <label class="form-label" [for]="'field-' + field.key">
+              {{ field.label || field.key }}
               @if (field.required) {
                 <span class="required">*</span>
               }
             </label>
 
-            @if (field.type === 'file') {
+            @if (field.field_type === 'file') {
               <input
-                [id]="'field-' + field.name"
+                [id]="'field-' + field.key"
                 type="file"
                 class="form-input"
-                (change)="onFileSelected($event, field.name)"
+                [accept]="field.accept || ''"
+                (change)="onFileSelected($event, field.key)"
               />
-            } @else if (field.type === 'select') {
+            } @else if (field.field_type === 'select') {
               <select
-                [id]="'field-' + field.name"
+                [id]="'field-' + field.key"
                 class="form-select"
-                [(ngModel)]="formValues[field.name]"
+                [(ngModel)]="formValues[field.key]"
               >
-                @if (field.default === undefined) {
-                  <option value="">-- Select --</option>
+                @for (opt of field.options || []; track opt) {
+                  <option [value]="opt">{{ opt }}</option>
                 }
               </select>
             } @else {
               <input
-                [id]="'field-' + field.name"
+                [id]="'field-' + field.key"
                 type="text"
                 class="form-input"
-                [(ngModel)]="formValues[field.name]"
-                [placeholder]="field.label || field.name"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.description || field.label || field.key"
               />
             }
           </div>
