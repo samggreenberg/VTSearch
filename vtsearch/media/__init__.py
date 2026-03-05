@@ -77,6 +77,25 @@ def get_by_extension(ext: str) -> "MediaType | None":
     return None
 
 
+def all_folder_names() -> list[str]:
+    """Return the :attr:`~MediaType.folder_import_name` of every registered type.
+
+    Used by dataset importers to populate their media-type selection fields
+    dynamically, so adding a new media type to the registry is all that's
+    needed — no importer code changes required.
+    """
+    return [mt.folder_import_name for mt in _registry.values()]
+
+
+def all_type_ids() -> list[str]:
+    """Return the :attr:`~MediaType.type_id` of every registered type.
+
+    Used by settings validation so the set of valid media types stays in
+    sync with the registry automatically.
+    """
+    return list(_registry.keys())
+
+
 def all_types_dict() -> list[dict]:
     """Return a list of JSON-serialisable dicts describing all registered types.
 
@@ -160,6 +179,8 @@ __all__ = [
     "get_by_folder_name",
     "get_by_extension",
     "all_types",
+    "all_folder_names",
+    "all_type_ids",
     "all_types_dict",
     "all_demo_datasets",
     "set_progress_callback",

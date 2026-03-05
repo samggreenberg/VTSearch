@@ -170,10 +170,18 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files contained in the archive.",
-            options=["sounds", "videos", "images", "paragraphs"],
             default="sounds",
         ),
     ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        from vtsearch.media import all_folder_names
+
+        for f in self.fields:
+            if f.key == "media_type":
+                f.options = all_folder_names()
+                break
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
