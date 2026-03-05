@@ -38,11 +38,9 @@
     />
   </div>
   <div class="panel-right">
-    <div class="placeholder">
-      <p>Labels panel coming in Phase 6</p>
-      @if (goodVotes.size > 0 || badVotes.size > 0) {
-        <p class="vote-summary">{{ goodVotes.size }} good, {{ badVotes.size }} bad</p>
-      }
-    </div>
+    <vt-right-panel
+      [medias]="medias"
+      (mediaSelected)="onMediaSelect($event)"
+    />
   </div>
 </div>
