@@ -1327,7 +1327,7 @@
         <th data-sort="created_at">Created<span class="sort-arrow"></span></th>
         <th data-sort="origin">Origin<span class="sort-arrow"></span></th>
         <th>Details</th>
-        <th>Loaded?</th>
+        <th data-sort="loaded">Loaded?<span class="sort-arrow"></span></th>
         <th class="col-actions-header"></th>
       </tr></thead>
       <tbody></tbody></table>`;
@@ -1338,6 +1338,10 @@
     function renderDatasetRows() {
       const sorted = [...dashRegisteredDatasets].sort((a, b) => {
         let va = a[datasetSort.key], vb = b[datasetSort.key];
+        if (datasetSort.key === "loaded") {
+          va = a.loaded ? 1 : 0; vb = b.loaded ? 1 : 0;
+          return datasetSort.asc ? (va - vb) : (vb - va);
+        }
         if (datasetSort.key === "num_items" || datasetSort.key === "num_dupes" || datasetSort.key === "created_at") {
           return datasetSort.asc ? ((va || 0) - (vb || 0)) : ((vb || 0) - (va || 0));
         }
