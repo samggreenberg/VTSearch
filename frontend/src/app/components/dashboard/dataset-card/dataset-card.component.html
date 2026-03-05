@@ -2,12 +2,12 @@
 <td>
   @if (editing) {
     <input
+      #renameInput
       class="form-input inline-edit"
       [(ngModel)]="editName"
       (keydown)="onRenameKeydown($event)"
       (blur)="confirmRename()"
       (click)="$event.stopPropagation()"
-      autofocus
     />
   } @else {
     <span class="name-cell">
