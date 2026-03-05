@@ -3,20 +3,17 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, takeUntil } from 'rxjs/operators';
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { SortMode } from '../left-panel.component';
 
 @Component({
   selector: 'vt-sort-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './sort-bar.component.html',
   styleUrl: './sort-bar.component.scss',
 })
 export class SortBarComponent implements OnDestroy {
   @Input() sortMode: SortMode = 'text';
-  @Input() busy = false;
-  @Input() status = '';
   @Input() loadSortLabel = '';
   @Input() hasGoodVotes = false;
   @Input() hasBadVotes = false;
