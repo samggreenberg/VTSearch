@@ -6,9 +6,16 @@
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .dashboard-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -16,6 +23,7 @@
 }
 
 .dashboard-section-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -56,7 +64,9 @@
 }
 
 .dashboard-grid {
-  overflow-x: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .dash-table {
@@ -72,6 +82,10 @@
   }
 
   th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-surface);
+    z-index: 1;
     color: var(--text-secondary);
     font-weight: 500;
     font-size: 0.78rem;
@@ -115,6 +129,8 @@
 }
 
 .empty-state {
+  flex: 1 1 0;
+  min-height: 0;
   color: var(--text-muted);
   text-align: center;
   padding: 24px;
@@ -122,6 +138,7 @@
 }
 
 .dashboard-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 12px;
   justify-content: center;

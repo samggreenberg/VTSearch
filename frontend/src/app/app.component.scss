@@ -117,7 +117,8 @@ header {
 
 .main-content {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 // Keep the 3-panel layout classes for future phases (4-6)
