@@ -57,3 +57,21 @@
   padding: 1px 6px;
   font-size: 0.75rem;
 }
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--color-bad);
+    background: var(--bad-bg);
+  }
+}
