@@ -98,7 +98,7 @@ describe('DatasetCardComponent', () => {
   it('should emit delete on delete button click', () => {
     spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    const deleteBtn = el.querySelector('.btn--danger') as HTMLElement;
+    const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
     deleteBtn.click();
     expect(component.delete.emit).toHaveBeenCalled();
   });
