@@ -133,10 +133,12 @@ class TestCombineDatasetsMetadata:
 
 
 class TestCombineDatasetsBuiltinExclusion:
-    def test_combine_datasets_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_combine_datasets_has_custom_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "combine_datasets" in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("combine_datasets")
+        assert imp is not None
+        assert imp.ui_mode == "custom"
 
     def test_combine_datasets_not_in_extended_list(self, client):
         resp = client.get("/api/dataset/importers")

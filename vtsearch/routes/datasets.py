@@ -63,10 +63,6 @@ datasets_bp = Blueprint("datasets", __name__)
 # Register the UI sub-blueprint.
 datasets_bp.register_blueprint(datasets_ui_bp)
 
-# Names of importers that have dedicated, hand-crafted UI sections in the
-# frontend.  They are excluded from the generic /api/dataset/importers list
-# so the frontend doesn't render a duplicate panel for them.
-_BUILTIN_IMPORTER_NAMES = {"pickle", "combine_datasets"}
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +146,8 @@ def dataset_progress():
 
 @datasets_bp.route("/api/dataset/importers")
 def dataset_importers():
-    """List all registered importers (excluding those with dedicated UI)."""
-    extended = [imp.to_dict() for imp in list_importers() if imp.name not in _BUILTIN_IMPORTER_NAMES]
+    """List all registered importers (excluding those with non-form UI)."""
+    extended = [imp.to_dict() for imp in list_importers() if imp.ui_mode == "form"]
     return jsonify({"importers": extended})
 
 
@@ -630,9 +626,16 @@ def load_dataset_from_source():
 
 
 def _load_from_origin(source: dict):
-    """Start loading a dataset from a raw origin dict (internal helper)."""
+    """Start loading a dataset from a raw origin dict (internal helper).
+
+    Special pseudo-origins (``"dupe_set"``, ``"demo"``) are handled inline.
+    All real importers are dispatched generically via
+    :meth:`~DatasetImporter.reload_from_origin`.
+    """
     importer_name = source.get("importer", "")
     params = source.get("params", {})
+
+    # --- pseudo-origins (not real importers) ---
 
     if importer_name == "dupe_set":
         members = source.get("members", [])
@@ -654,44 +657,26 @@ def _load_from_origin(source: dict):
         )
         return jsonify({"ok": True, "message": "Loading started"})
 
-    if importer_name == "pickle":
-        pkl_path = params.get("path", "")
-        try:
-            _paths.validate_server_filepath(str(pkl_path)) if pkl_path else None
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-        if not pkl_path or not Path(pkl_path).is_file():
-            return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
-        origin = {"importer": "pickle", "params": params}
+    # --- real importers: generic dispatch ---
 
-        def load_pkl():
-            update_progress("loading", "Loading dataset from file...", 0, 0)
-            load_dataset_from_pickle(Path(pkl_path), medias)
-
-        _run_origin_load_in_background(load_pkl, origin)
-        return jsonify({"ok": True, "message": "Loading started"})
-
-    if importer_name == "folder":
-        folder_path = params.get("path", "")
-        try:
-            _paths.validate_server_filepath(str(folder_path)) if folder_path else None
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-        if not folder_path or not Path(folder_path).is_dir():
-            return jsonify({"error": f"Folder not found: {folder_path}"}), 400
-        importer = get_importer("folder")
-        if importer is None:
-            return jsonify({"error": "folder importer not available"}), 500
-        field_values = {"path": folder_path}
-        media_type = params.get("media_type", "")
-        if media_type:
-            field_values["media_type"] = media_type
-        _run_importer_in_background(importer, field_values)
-        return jsonify({"ok": True, "message": "Loading started"})
-
-    # Generic fallback: try the named importer with the stored params
     importer = get_importer(importer_name)
     if importer is None:
         return jsonify({"error": f"Unknown importer: {importer_name}"}), 400
-    _run_importer_in_background(importer, params)
+
+    if not importer.can_reload_from_origin(source):
+        return jsonify({"error": f"Cannot reload from {importer_name} origin (source not available)"}), 400
+
+    field_values = importer.reload_from_origin(source)
+    if field_values is None:
+        return jsonify({"error": f"Cannot reload from {importer_name} origin"}), 400
+
+    # Validate any server file paths in the field values
+    for key, val in field_values.items():
+        if isinstance(val, str) and ("/" in val or "\\" in val):
+            try:
+                _paths.validate_server_filepath(val)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+
+    _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})

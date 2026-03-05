@@ -37,6 +37,7 @@ class DisplayLabelsetExporter(LabelsetExporter):
     display_name = "Display Results"
     description = "Display the results in the browser (GUI) or print to console (CLI)."
     icon = "🖥️"
+    hidden_from_picker = True
     fields = []  # no questions to ask
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
