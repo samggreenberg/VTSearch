@@ -157,9 +157,20 @@
   gap: 4px;
 }
 
+// DESIGN CONSTRAINT: The Label/Find buttons must NOT move when their hint text
+// appears or disappears. This class uses visibility (not display) toggling in the
+// template, plus a fixed single-line height here, so the hint area always reserves
+// exactly the same space regardless of whether the hint is shown or hidden.
+// Do NOT remove white-space/overflow/height constraints or switch to display:none —
+// that will cause the buttons to jump around.
 .btn-disabled-reason {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
-  min-height: 1.2em;
+  height: 1.2em;
+  line-height: 1.2em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
 }

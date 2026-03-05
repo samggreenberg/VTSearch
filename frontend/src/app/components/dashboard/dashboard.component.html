@@ -92,7 +92,12 @@
     }
   </div>
 
-  <!-- Action Buttons -->
+  <!-- Action Buttons
+       DESIGN CONSTRAINT: Label/Find buttons must stay in the same position whether
+       their hint is visible or not. The btn-disabled-reason spans use visibility
+       (NOT display) toggling and have a fixed height in SCSS so they always reserve
+       the same space. Do NOT switch to *ngIf/display:none or remove the fixed-height
+       styles — that will cause the buttons to jump around. -->
   <div class="dashboard-actions">
     <div class="action-btn-group">
       <button
