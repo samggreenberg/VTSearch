@@ -18,22 +18,27 @@
   gap: 6px;
 }
 
-.rename-btn {
+.actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-btn {
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-
-  :host:hover & {
-    opacity: 1;
-  }
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
 
   &:hover {
     color: var(--text-primary);
+    background: var(--bg-hover);
   }
 }
 

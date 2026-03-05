@@ -61,7 +61,7 @@ describe('DatasetCardComponent', () => {
 
   it('should enter rename mode on rename button click', () => {
     const el = fixture.nativeElement as HTMLElement;
-    const renameBtn = el.querySelector('.rename-btn') as HTMLElement;
+    const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
     fixture.detectChanges();
     expect(component.editing).toBeTrue();
