@@ -3,17 +3,19 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
+import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { VtDialogService } from './services/dialog.service';
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
+  showSettings = false;
   isOnLabelView = false;
   labelsStatus = '';
   detectorStatus = '';
@@ -105,6 +107,6 @@ export class AppComponent {
 
   onSettings(): void {
     this.menuOpen = false;
-    this.dialog.alert('Settings not yet available in the Angular frontend.', 'info');
+    this.showSettings = true;
   }
 }

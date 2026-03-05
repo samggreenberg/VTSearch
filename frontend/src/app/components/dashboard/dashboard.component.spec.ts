@@ -298,26 +298,6 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/models/registry').flush({ models: [] });
   }));
 
-  it('should load a dataset and start progress polling', () => {
-    const datasets = [{ id: 'd1', name: 'ToLoad', loaded: false }];
-    flushInitialRequests(datasets);
-
-    component.loadDataset(datasets[0]);
-    expect(component.loading).toBeTrue();
-
-    const req = httpMock.expectOne('/api/datasets/registry/d1/load');
-    expect(req.request.method).toBe('POST');
-    req.flush({});
-
-    // Progress polling starts
-    const progressReq = httpMock.expectOne('/api/dataset/progress');
-    progressReq.flush({ status: 'idle' });
-
-    // After idle, it should refresh
-    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
-  });
-
   it('should open and close importer modal', () => {
     flushInitialRequests();
     expect(component.importerModalOpen).toBeFalse();

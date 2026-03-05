@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
 import { VtDialogService } from './services/dialog.service';
@@ -17,6 +19,8 @@ describe('AppComponent', () => {
       imports: [AppComponent],
       providers: [
         provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: VtDialogService, useValue: dialogSpy },
       ],
     }).compileComponents();
@@ -153,11 +157,11 @@ describe('AppComponent', () => {
     expect(fixture.componentInstance.menuOpen).toBeFalse();
   });
 
-  it('should show Settings dialog when Settings clicked', () => {
+  it('should open Settings modal when Settings clicked', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.menuOpen = true;
     fixture.componentInstance.onSettings();
-    expect(dialogSpy.alert).toHaveBeenCalled();
+    expect(fixture.componentInstance.showSettings).toBeTrue();
     expect(fixture.componentInstance.menuOpen).toBeFalse();
   });
 });

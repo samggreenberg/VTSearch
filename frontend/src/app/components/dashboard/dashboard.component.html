@@ -43,7 +43,6 @@
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
                 (delete)="deleteDataset(dataset)"
-                (load)="loadDataset(dataset)"
               />
             }
           </tbody>
@@ -74,7 +73,6 @@
               <th>Trainable</th>
               <th (click)="sortModels('last_trained_at')" class="sortable">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
               <th (click)="sortModels('created_at')" class="sortable">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
-              <th>Loaded</th>
               <th>Actions</th>
             </tr>
           </thead>

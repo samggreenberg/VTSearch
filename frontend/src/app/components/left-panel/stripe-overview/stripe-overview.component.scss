@@ -1,9 +1,15 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+}
+
 .stripe-overview {
   width: 12px;
-  flex-shrink: 0;
+  height: 100%;
   position: relative;
   background: var(--bg-subtle);
   border-left: 1px solid var(--border-subtle);
+  cursor: pointer;
 }
 
 .stripe-container {

@@ -20,7 +20,6 @@ export class DatasetCardComponent {
   }
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
-  @Output() load = new EventEmitter<void>();
 
   editing = false;
   editName = '';
@@ -54,11 +53,6 @@ export class DatasetCardComponent {
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();
-  }
-
-  onLoad(event: MouseEvent): void {
-    event.stopPropagation();
-    this.load.emit();
   }
 
   formatDate(timestamp: number | null): string {
