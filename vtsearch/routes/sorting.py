@@ -41,7 +41,6 @@ from vtsearch.utils import (
     get_vote_click_times,
     good_votes,
     label_history,
-    medias,
     resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
@@ -566,7 +565,7 @@ def label_file_sort():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    if not medias:
+    if not snapshot_medias():
         return jsonify({"error": "No medias loaded"}), 400
 
     # Determine embedder from loaded dataset

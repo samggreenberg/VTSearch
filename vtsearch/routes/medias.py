@@ -6,7 +6,7 @@ import io
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
@@ -83,7 +83,7 @@ def list_medias() -> Response:
         try:
             mt = get_media_type(media_type_id)
             custom: dict[str, Any] = mt.display_metadata(c)
-        except (KeyError, Exception):
+        except KeyError:
             custom = {}
         importer_custom = c.get("custom_metadata")
         if importer_custom:
