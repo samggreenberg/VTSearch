@@ -221,10 +221,17 @@ header h1 { margin-left: 0; }
 .autopilot-status-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-surface); color: var(--text-primary); font-size: 0.85rem; outline: none; margin-top: 4px; }
 .autopilot-status-input:focus { border-color: var(--accent); }
 /* Autopilot checklist */
-.autopilot-steps { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
-.ap-step { padding: 5px 8px; border-radius: 4px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.35; transition: background 0.15s, opacity 0.15s; }
-.ap-step.done { text-decoration: line-through; opacity: 0.45; }
-.ap-step.active { background: var(--bg-surface); color: var(--text-primary); font-weight: 600; text-decoration: none; opacity: 1; border-left: 3px solid var(--accent); padding-left: 5px; }
+.autopilot-steps { margin-top: 10px; display: flex; flex-direction: column; gap: 0; }
+.ap-step { padding: 6px 8px 6px 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.35; transition: opacity 0.15s; display: flex; align-items: flex-start; gap: 8px; position: relative; }
+.ap-step:not(:last-child)::after { content: ""; position: absolute; left: 10px; top: 22px; bottom: -6px; width: 2px; background: var(--border); }
+.ap-step.done:not(:last-child)::after { background: var(--accent); }
+.ap-step-number { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.68rem; font-weight: 700; border: 2px solid var(--border); background: var(--bg-surface); color: var(--text-muted); position: relative; z-index: 1; }
+.ap-step.done .ap-step-number { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ap-step.active .ap-step-number { border-color: var(--accent); color: var(--accent); background: var(--bg-surface); }
+.ap-step.future .ap-step-number { border-color: var(--border); color: var(--text-muted); }
+.ap-step-content { flex: 1; min-width: 0; padding-top: 2px; }
+.ap-step.done .ap-step-content { text-decoration: line-through; opacity: 0.55; }
+.ap-step.active { color: var(--text-primary); font-weight: 600; opacity: 1; }
 .ap-step.future { opacity: 0.55; }
 .ap-step-detail { font-weight: 400; font-size: 0.72rem; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
 .ap-step-detail .ap-progress-bar { display: inline-block; width: 80px; height: 6px; background: var(--border); border-radius: 3px; vertical-align: middle; margin: 0 4px; overflow: hidden; }

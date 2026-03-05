@@ -723,17 +723,17 @@
       else if (i === phaseIdx) cls += " active";
       else cls += " future";
 
-      html += `<div class="${cls}">${step.label}`;
+      html += `<div class="${cls}"><span class="ap-step-number">${i + 1}</span><span class="ap-step-content">${step.label}`;
 
       // Active step gets an expanded detail line
       if (!isDone && i === phaseIdx) {
         html += `<div class="ap-step-detail">${_autopilotDetail(st)}</div>`;
       }
-      html += "</div>";
+      html += "</span></div>";
     }
 
     if (isDone) {
-      html += `<div class="ap-step active" style="border-left-color:#2ecc71">Done! All indicators green.</div>`;
+      html += `<div class="ap-step active"><span class="ap-step-number" style="background:#2ecc71;border-color:#2ecc71;color:#fff">&#10003;</span><span class="ap-step-content">Done! All indicators green.</span></div>`;
     }
 
     autopilotStepsDiv.innerHTML = html;
