@@ -71,4 +71,19 @@ describe('ModalComponent', () => {
     fixture.nativeElement.querySelector('.modal-content').click();
     expect(host.closeCalled).toBeFalse();
   });
+
+  it('should hide close button when showCloseButton is false', () => {
+    host.isOpen = true;
+    fixture.detectChanges();
+    const modal = fixture.debugElement.children[0].componentInstance as ModalComponent;
+    modal.showCloseButton = false;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.modal-close')).toBeNull();
+  });
+
+  it('should show close button by default', () => {
+    host.isOpen = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.modal-close')).toBeTruthy();
+  });
 });

@@ -43,6 +43,17 @@ describe('DialogHostComponent', () => {
     expect(result).toBeFalse();
   });
 
+  it('should not show close button on dialog modal', async () => {
+    const promise = dialogService.confirm('Delete?');
+    fixture.detectChanges();
+
+    const closeBtn = fixture.nativeElement.querySelector('.modal-close');
+    expect(closeBtn).toBeNull();
+
+    component.onButtonClick(true);
+    await promise;
+  });
+
   it('should render alert dialog', async () => {
     const promise = dialogService.alert('Something happened');
     fixture.detectChanges();

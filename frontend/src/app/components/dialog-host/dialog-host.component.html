@@ -1,4 +1,4 @@
-<vt-modal [open]="dialog.dialogOpen" [title]="dialog.getIcon() + ' ' + dialog.dialogTitle" (closed)="onClosed()">
+<vt-modal [open]="dialog.dialogOpen" [title]="dialog.getIcon() + ' ' + dialog.dialogTitle" [showCloseButton]="false" (closed)="onClosed()">
   <p>{{ dialog.dialogMessage }}</p>
   @if (dialog.dialogShowInput) {
     <input
