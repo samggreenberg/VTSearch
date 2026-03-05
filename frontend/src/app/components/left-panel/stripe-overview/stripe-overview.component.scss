@@ -1,6 +1,8 @@
 :host {
   display: block;
   flex-shrink: 0;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .stripe-overview {
