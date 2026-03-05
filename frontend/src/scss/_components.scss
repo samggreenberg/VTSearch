@@ -91,8 +91,9 @@
   inset: 0;
   background: var(--modal-backdrop);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: 8vh;
   z-index: 1000;
 }
 
