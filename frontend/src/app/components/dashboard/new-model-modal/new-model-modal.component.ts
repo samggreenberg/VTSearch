@@ -34,6 +34,16 @@ export class NewModelModalComponent implements OnInit {
         this.mediaTypes = (res.media_types || []).map((t) => t.type_id || t.name);
       },
     });
+    this.datasetsApi.getRegistry().subscribe({
+      next: (res) => {
+        const types = new Set(
+          (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
+        );
+        if (types.size === 1) {
+          this.mediaType = [...types][0];
+        }
+      },
+    });
   }
 
   submit(): void {
