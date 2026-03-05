@@ -8,14 +8,9 @@ import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { MediaItem, LabelingStatusResponse } from '../../models/api.models';
+import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
-export type SortMode = 'text' | 'learned' | 'load';
-export type SelectMode = 'top' | 'hard' | 'new';
-
-export interface SortedItem {
-  id: number;
-  score: number;
-}
+export { SortMode, SelectMode, SortedItem };
 
 @Component({
   selector: 'vt-left-panel',

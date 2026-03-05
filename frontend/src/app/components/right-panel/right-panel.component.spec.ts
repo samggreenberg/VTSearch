@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick, discardPeriodicTasks } from
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { RightPanelComponent } from './right-panel.component';
+import { VoteStateService } from '../../services/vote-state.service';
 
 describe('RightPanelComponent', () => {
   let component: RightPanelComponent;
@@ -22,6 +23,8 @@ describe('RightPanelComponent', () => {
   function cleanup(): void {
     // Destroy component to cancel all subscriptions, then flush any outstanding
     component.ngOnDestroy();
+    const voteState = TestBed.inject(VoteStateService);
+    voteState.stopPolling();
     httpMock.match(() => true); // discard any pending requests
   }
 

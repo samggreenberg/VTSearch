@@ -1,12 +1,13 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, forkJoin, timer } from 'rxjs';
+import { Subject, timer } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
+import { DatasetStateService } from '../../services/dataset-state.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
@@ -28,13 +29,9 @@ import { NewModelModalComponent } from './new-model-modal/new-model-modal.compon
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  datasets: any[] = [];
-  models: any[] = [];
   selectedDatasetIds: Set<string> = new Set();
   selectedModelIds: Set<string> = new Set();
 
-  loading = false;
-  progressMessage = '';
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
@@ -56,6 +53,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
+    public datasetState: DatasetStateService,
   ) {}
 
   ngOnInit(): void {
@@ -69,22 +67,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.polling$.complete();
   }
 
+  get datasets(): any[] {
+    return this.datasetState.datasets;
+  }
+
+  get models(): any[] {
+    return this.datasetState.models;
+  }
+
+  get loading(): boolean {
+    return this.datasetState.loading;
+  }
+
+  get progressMessage(): string {
+    return this.datasetState.progressMessage;
+  }
+
   refresh(): void {
-    forkJoin({
-      datasets: this.datasetsApi.getRegistry(),
-      models: this.modelsApi.getRegistry(),
-    }).subscribe({
-      next: ({ datasets, models }) => {
-        this.datasets = (datasets as any).datasets || [];
-        this.models = (models as any).models || [];
-        if (this.datasets.length === 1 && this.selectedDatasetIds.size === 0) {
-          this.selectedDatasetIds.add(this.datasets[0].id);
+    this.datasetState.refresh();
+    // Auto-select single items after refresh
+    this.datasetState.datasets$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((datasets) => {
+        if (datasets.length === 1 && this.selectedDatasetIds.size === 0) {
+          this.selectedDatasetIds.add(datasets[0].id);
         }
-        if (this.models.length === 1 && this.selectedModelIds.size === 0) {
-          this.selectedModelIds.add(this.models[0].id);
+      });
+    this.datasetState.models$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((models) => {
+        if (models.length === 1 && this.selectedModelIds.size === 0) {
+          this.selectedModelIds.add(models[0].id);
         }
-      },
-    });
+      });
   }
 
   // --- Dataset selection ---
@@ -137,7 +152,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   renameDataset(dataset: any, newName: string): void {
     this.datasetsApi.renameRegistered(dataset.id, newName).subscribe({
-      next: () => this.refresh(),
+      next: () => this.datasetState.refresh(),
     });
   }
 
@@ -147,21 +162,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
         this.selectedDatasetIds.delete(dataset.id);
-        this.refresh();
+        this.datasetState.refresh();
       },
     });
   }
 
   loadDataset(dataset: any): void {
-    this.loading = true;
-    this.progressMessage = `Loading ${dataset.name}...`;
+    this.datasetState.setLoading(true);
+    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
     this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling();
       },
       error: () => {
-        this.loading = false;
+        this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
       },
     });
@@ -171,7 +186,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   renameModel(model: any, newName: string): void {
     this.modelsApi.renameInRegistry(model.id, newName).subscribe({
-      next: () => this.refresh(),
+      next: () => this.datasetState.refresh(),
     });
   }
 
@@ -181,7 +196,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.modelsApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
         this.selectedModelIds.delete(model.id);
-        this.refresh();
+        this.datasetState.refresh();
       },
     });
   }
@@ -203,15 +218,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onDemoSelected(demo: any): void {
     this.importerModalOpen = false;
-    this.loading = true;
-    this.progressMessage = `Loading demo: ${demo.label}...`;
+    this.datasetState.setLoading(true);
+    this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
     this.progressIndeterminate = true;
     this.datasetsApi.loadDemo(demo.name).subscribe({
       next: () => {
         this.startProgressPolling();
       },
       error: () => {
-        this.loading = false;
+        this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
       },
     });
@@ -229,13 +244,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onModelCreated(): void {
     this.newModelModalOpen = false;
-    this.refresh();
+    this.datasetState.refresh();
   }
 
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
-    this.loading = true;
+    this.datasetState.setLoading(true);
     this.progressIndeterminate = true;
     this.polling$.next(); // cancel previous polling
 
@@ -252,13 +267,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.progressValue = progress.progress;
             this.progressTotal = progress.total;
           }
-          this.progressMessage = progress.message || 'Loading...';
+          this.datasetState.setProgressMessage(progress.message || 'Loading...');
 
           if (progress.status === 'idle' || progress.status === 'error') {
-            this.loading = false;
+            this.datasetState.setLoading(false);
             this.progressIndeterminate = false;
             this.polling$.next();
-            this.refresh();
+            this.datasetState.refresh();
             if (progress.status === 'idle' && onComplete) {
               onComplete();
             }
@@ -381,8 +396,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     // Dataset not loaded — load it first, then navigate
-    this.loading = true;
-    this.progressMessage = `Loading ${dataset.name}...`;
+    this.datasetState.setLoading(true);
+    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
     this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
@@ -392,7 +407,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
       },
       error: () => {
-        this.loading = false;
+        this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
       },
     });

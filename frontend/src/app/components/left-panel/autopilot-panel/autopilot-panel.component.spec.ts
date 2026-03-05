@@ -1,9 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
+import { AutopilotStateService } from '../../../services/autopilot-state.service';
 
 describe('AutopilotPanelComponent', () => {
   let component: AutopilotPanelComponent;
   let fixture: ComponentFixture<AutopilotPanelComponent>;
+  let autopilotState: AutopilotStateService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -12,7 +14,12 @@ describe('AutopilotPanelComponent', () => {
 
     fixture = TestBed.createComponent(AutopilotPanelComponent);
     component = fixture.componentInstance;
+    autopilotState = TestBed.inject(AutopilotStateService);
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    autopilotState.clear();
   });
 
   it('should create', () => {
@@ -25,6 +32,7 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should emit started on init', () => {
+    autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     const comp = fresh.componentInstance;
     spyOn(comp.started, 'emit');
@@ -46,7 +54,10 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from bad to hard phase', () => {
-    component.state = { ...component.state, phase: 'bad' };
+    // Advance to bad phase first
+    autopilotState.checkPhaseTransition(3, 0);
+    expect(component.state.phase).toBe('bad');
+
     component.badVotes = new Set([1, 2, 3, 4]);
     component.ngOnChanges({
       badVotes: { currentValue: component.badVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
@@ -55,7 +66,11 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from hard to new when smart+stable are green', () => {
-    component.state = { ...component.state, phase: 'hard' };
+    // Advance to hard phase
+    autopilotState.checkPhaseTransition(3, 0);
+    autopilotState.checkPhaseTransition(3, 4);
+    expect(component.state.phase).toBe('hard');
+
     component.labelingStatus = {
       smart: { status: 'green' },
       stable: { status: 'green' },
@@ -68,7 +83,17 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from new to done when span is green', () => {
-    component.state = { ...component.state, phase: 'new', smartStatus: 'green', stableStatus: 'green' };
+    // Advance to new phase
+    autopilotState.checkPhaseTransition(3, 0);
+    autopilotState.checkPhaseTransition(3, 4);
+    autopilotState.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: '' },
+    });
+    autopilotState.checkPhaseTransition(10, 10);
+    expect(component.state.phase).toBe('new');
+
     component.labelingStatus = {
       smart: { status: 'green' },
       stable: { status: 'green' },

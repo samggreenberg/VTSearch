@@ -105,7 +105,7 @@ describe('CenterPanelComponent', () => {
     votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
-    expect(component.goodVotes.has(1)).toBeTrue();
+    expect(component.voteState.goodVotes.has(1)).toBeTrue();
   });
 
   it('should prevent double voting', () => {
@@ -117,13 +117,13 @@ describe('CenterPanelComponent', () => {
     httpMock.expectNone('/api/medias/1/vote');
   });
 
-  it('should load votes', () => {
-    component.loadVotes();
+  it('should load votes via voteState', () => {
+    component.voteState.loadVotes();
     const req = httpMock.expectOne('/api/votes');
     req.flush({ good: [1, 2], bad: [3], click_times: {}, learned_scores: {} });
-    expect(component.goodVotes.has(1)).toBeTrue();
-    expect(component.goodVotes.has(2)).toBeTrue();
-    expect(component.badVotes.has(3)).toBeTrue();
+    expect(component.voteState.goodVotes.has(1)).toBeTrue();
+    expect(component.voteState.goodVotes.has(2)).toBeTrue();
+    expect(component.voteState.badVotes.has(3)).toBeTrue();
   });
 
   it('should format metadata values', () => {

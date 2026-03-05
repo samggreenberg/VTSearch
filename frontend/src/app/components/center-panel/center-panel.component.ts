@@ -1,11 +1,11 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { MediaItem, VotesResponse } from '../../models/api.models';
+import { MediaItem } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
-import { SortingApiService } from '../../services/sorting-api.service';
-import { SettingsApiService } from '../../services/settings-api.service';
 import { KeyboardService } from '../../services/keyboard.service';
+import { VoteStateService } from '../../services/vote-state.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
@@ -35,8 +35,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
   @ViewChild(VideoPlayerComponent) videoPlayer?: VideoPlayerComponent;
 
-  goodVotes = new Set<number>();
-  badVotes = new Set<number>();
   isVoting = false;
   volume = 1;
   swipeAnimation = true;
@@ -46,9 +44,9 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   constructor(
     private mediasApi: MediasApiService,
-    private sortingApi: SortingApiService,
-    private settingsApi: SettingsApiService,
     private keyboard: KeyboardService,
+    public voteState: VoteStateService,
+    private settingsState: SettingsStateService,
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -62,9 +60,8 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.subs.forEach((s) => s.unsubscribe());
   }
 
-  /** Initialize: load votes, settings, start keyboard listener. */
+  /** Initialize: load settings, start keyboard listener. */
   init(): void {
-    this.loadVotes();
     this.loadSettings();
     this.keyboard.start();
     this.subs.push(
@@ -91,11 +88,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get isGood(): boolean {
-    return this.media ? this.goodVotes.has(this.media.id) : false;
+    return this.media ? this.voteState.goodVotes.has(this.media.id) : false;
   }
 
   get isBad(): boolean {
-    return this.media ? this.badVotes.has(this.media.id) : false;
+    return this.media ? this.voteState.badVotes.has(this.media.id) : false;
   }
 
   get customMetadata(): Record<string, unknown> {
@@ -123,7 +120,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
     this.mediasApi.vote(this.media.id, vote).subscribe({
       next: () => {
-        this.loadVotes();
+        this.voteState.loadVotes();
         if (this.swipeAnimation && this.media) {
           this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
           setTimeout(() => {
@@ -142,18 +139,15 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     });
   }
 
-  loadVotes(): void {
-    this.sortingApi.getVotes().subscribe((data: VotesResponse) => {
-      this.goodVotes = new Set(data.good);
-      this.badVotes = new Set(data.bad);
-    });
-  }
-
   private loadSettings(): void {
-    this.settingsApi.getSettings().subscribe((settings) => {
-      this.volume = settings.volume ?? 1;
-      this.swipeAnimation = settings.swipe_animation !== false;
-    });
+    this.settingsState.load();
+    this.subs.push(
+      this.settingsState.settings$.subscribe((settings) => {
+        if (!settings) return;
+        this.volume = settings.volume ?? 1;
+        this.swipeAnimation = settings.swipe_animation !== false;
+      }),
+    );
   }
 
   private adjustVolume(delta: number): void {
@@ -164,7 +158,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     if (this.videoPlayer) {
       this.videoPlayer.adjustVolume(delta);
     }
-    this.settingsApi.updateSettings({ volume: this.volume }).subscribe();
+    this.settingsState.update({ volume: this.volume }).subscribe();
   }
 
   private togglePlayback(): void {

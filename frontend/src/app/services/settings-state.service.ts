@@ -1,0 +1,42 @@
+import { Injectable, OnDestroy } from '@angular/core';
+import { BehaviorSubject, Subject, Observable } from 'rxjs';
+import { takeUntil, tap } from 'rxjs/operators';
+import { AppSettings } from '../models/api.models';
+import { SettingsApiService } from './settings-api.service';
+
+@Injectable({ providedIn: 'root' })
+export class SettingsStateService implements OnDestroy {
+  private readonly settingsSubject = new BehaviorSubject<AppSettings | null>(null);
+  private readonly destroy$ = new Subject<void>();
+
+  readonly settings$ = this.settingsSubject.asObservable();
+
+  constructor(private settingsApi: SettingsApiService) {}
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  get settings(): AppSettings | null {
+    return this.settingsSubject.value;
+  }
+
+  load(): void {
+    this.settingsApi
+      .getSettings()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((settings) => this.settingsSubject.next(settings));
+  }
+
+  update(changes: Partial<AppSettings>): Observable<AppSettings> {
+    return this.settingsApi.updateSettings(changes).pipe(
+      takeUntil(this.destroy$),
+      tap((updated) => this.settingsSubject.next(updated)),
+    );
+  }
+
+  clear(): void {
+    this.settingsSubject.next(null);
+  }
+}
