@@ -396,8 +396,13 @@ export interface AutoDetectResultsData {
 
 // --- Embedders ---
 
+export interface EmbedderInfo {
+  name: string;
+  media_type_id: string;
+}
+
 export interface EmbeddersResponse {
-  embedders: string[];
+  embedders: EmbedderInfo[];
 }
 
 // --- Export Result ---

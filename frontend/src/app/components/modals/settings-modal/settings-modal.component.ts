@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
-import { AppSettings } from '../../../models/api.models';
+import { AppSettings, EmbedderInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 
 @Component({
@@ -18,7 +18,7 @@ export class SettingsModalComponent implements OnInit {
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
-  embedders: string[] = [];
+  embedders: EmbedderInfo[] = [];
   loading = true;
   error = '';
 
@@ -60,16 +60,16 @@ export class SettingsModalComponent implements OnInit {
     this.save();
   }
 
-  isEmbedderAutoloaded(embedder: string): boolean {
-    return (this.settings.autoload_media_types || []).includes(embedder);
+  isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
+    return (this.settings.autoload_media_types || []).includes(embedder.name);
   }
 
-  toggleEmbedder(embedder: string): void {
+  toggleEmbedder(embedder: EmbedderInfo): void {
     const current = this.settings.autoload_media_types || [];
-    if (current.includes(embedder)) {
-      this.settings.autoload_media_types = current.filter((e) => e !== embedder);
+    if (current.includes(embedder.name)) {
+      this.settings.autoload_media_types = current.filter((e) => e !== embedder.name);
     } else {
-      this.settings.autoload_media_types = [...current, embedder];
+      this.settings.autoload_media_types = [...current, embedder.name];
     }
     this.save();
   }
