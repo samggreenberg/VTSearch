@@ -1,0 +1,25 @@
+.analysis-loading {
+  text-align: center;
+  padding: 2rem;
+
+  p {
+    margin-bottom: 1rem;
+  }
+}
+
+.progress-text {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.chart-container {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
+
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+}

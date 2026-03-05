@@ -1,0 +1,29 @@
+<vt-modal [title]="title" [open]="true" (closed)="close()">
+  <div class="export-section">
+    <h3>Export Detector Weights</h3>
+    <div class="export-options">
+      <button class="btn btn--primary" (click)="exportBrowser()">Browser Download</button>
+      <button class="btn btn--secondary" (click)="exportServer()">Save to Server</button>
+    </div>
+  </div>
+
+  @if (labelExporters.length > 0) {
+    <div class="export-section">
+      <h3>Export Detector Labels</h3>
+      <div class="exporter-picker">
+        @for (exp of labelExporters; track exp.name) {
+          <button class="exporter-card" (click)="exportLabels(exp)">
+            <span class="exporter-name">{{ exp.label || exp.name }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (status) {
+    <p class="status-text">{{ status }}</p>
+  }
+  @if (error) {
+    <p class="error-text">{{ error }}</p>
+  }
+</vt-modal>

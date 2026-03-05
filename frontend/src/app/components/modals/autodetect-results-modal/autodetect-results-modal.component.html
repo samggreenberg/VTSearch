@@ -1,0 +1,108 @@
+<vt-modal title="Auto-Detect Results" [open]="true" (closed)="close()">
+  <!-- Summary -->
+  <div class="results-summary">
+    <span><strong>Media Type:</strong> {{ data.media_type }}</span>
+    <span><strong>Detectors Run:</strong> {{ data.detectors_run }}</span>
+    @if (exportSides === 'good') {
+      <span><strong>Good Results:</strong> {{ goodCount }}</span>
+    } @else if (exportSides === 'bad') {
+      <span><strong>Bad Results:</strong> {{ badCount }}</span>
+    } @else {
+      <span><strong>Good:</strong> {{ goodCount }} <strong>Bad:</strong> {{ badCount }}</span>
+    }
+  </div>
+
+  <!-- Results table -->
+  <div class="results-table-wrapper">
+    @if (displayHits.length === 0) {
+      <p class="empty-state">No hits found.</p>
+    } @else {
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Origin</th>
+            <th>Name</th>
+            <th>MD5</th>
+            <th>Filename</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (hit of displayHits; track hit.md5) {
+            <tr>
+              <td class="col-secondary">{{ formatOrigin(hit) }}</td>
+              <td>{{ hit.origin_name || hit.filename || '' }}</td>
+              <td class="col-muted">{{ hit.md5 }}</td>
+              <td class="col-secondary">{{ hit.filename }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+
+  <!-- Export controls -->
+  <div class="export-controls">
+    <div class="export-sides">
+      <label><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
+      <label><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
+      <label><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
+    </div>
+
+    <div class="export-row">
+      <select class="form-select" [(ngModel)]="selectedExporter" (ngModelChange)="onExporterChange()">
+        @for (exp of exporters; track exp.name) {
+          <option [value]="exp.name">{{ exp.label || exp.name }}</option>
+        }
+      </select>
+    </div>
+
+    @for (field of exporterFields; track field.key) {
+      <div class="form-group">
+        <label class="form-label">{{ field.label || field.key }}{{ field.required ? ' *' : '' }}</label>
+        @if (field.field_type === 'select') {
+          <select class="form-select" [(ngModel)]="exportFieldValues[field.key]">
+            @for (opt of field.options || []; track opt) {
+              <option [value]="opt">{{ opt }}</option>
+            }
+          </select>
+        } @else {
+          <input [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : 'text'" class="form-input" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
+        }
+      </div>
+    }
+
+    <label class="checkbox-row">
+      <input type="checkbox" [(ngModel)]="fillFromSort" (ngModelChange)="onFillToggle()" />
+      Fill from Sort
+    </label>
+    @if (fillInfo) {
+      <p class="fill-info">{{ fillInfo }}</p>
+    }
+
+    <div class="copy-row">
+      <select class="form-select" [(ngModel)]="copyColumn">
+        <option value="origin+name">Origin + Name</option>
+        <option value="name">Name</option>
+        <option value="md5">MD5</option>
+        <option value="filename">Filename</option>
+        <option value="origin">Origin</option>
+      </select>
+      <select class="form-select" [(ngModel)]="copySeparator">
+        <option value="newline">Newline</option>
+        <option value=",">Comma</option>
+        <option value="tab">Tab</option>
+        <option value="space">Space</option>
+      </select>
+      <button class="btn btn--secondary" (click)="copyToClipboard()">{{ copyButtonText }}</button>
+    </div>
+  </div>
+
+  @if (exportStatus) {
+    <p class="export-status" [style.color]="exportStatusColor">{{ exportStatus }}</p>
+  }
+
+  <div class="export-actions" modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Close</button>
+    <button class="btn btn--primary" (click)="runExport()">Run Export</button>
+  </div>
+</vt-modal>

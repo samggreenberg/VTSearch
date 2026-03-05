@@ -327,3 +327,82 @@ export interface ServerMediaFilesResponse {
 export interface DetectorServerFilesResponse {
   files: string[];
 }
+
+// --- Eval / Progress Charts ---
+
+export interface ErrorCostDataPoint {
+  num_labels: number;
+  error_cost: number;
+}
+
+export interface StabilityDataPoint {
+  num_labels: number;
+  num_flips: number;
+}
+
+export interface DiversityDataPoint {
+  num_labels: number;
+  diversity_level: number;
+  depth: number;
+}
+
+export interface TrainAndScoreResponse {
+  error_cost?: ErrorCostDataPoint[];
+  stability?: StabilityDataPoint[];
+  diversity?: DiversityDataPoint[];
+  [key: string]: unknown;
+}
+
+export interface VotingIterationsResponse {
+  progress: number;
+  total: number;
+  done: boolean;
+  [key: string]: unknown;
+}
+
+// --- Auto-detect Results ---
+
+export interface AutoDetectHit {
+  md5: string;
+  filename?: string;
+  origin_name?: string;
+  origin?: {
+    importer?: string;
+    params?: Record<string, string>;
+  };
+  label?: string;
+  [key: string]: unknown;
+}
+
+export interface AutoDetectDetectorResult {
+  hits: AutoDetectHit[];
+  negative_hits?: AutoDetectHit[];
+  total_hits?: number;
+  [key: string]: unknown;
+}
+
+export interface AutoDetectResultsData {
+  media_type?: string;
+  detectors_run?: string;
+  results: Record<string, AutoDetectDetectorResult>;
+  // Find mode fields
+  models?: string[];
+  datasets?: string[];
+  multiple_datasets?: boolean;
+  multiple_models?: boolean;
+  [key: string]: unknown;
+}
+
+// --- Embedders ---
+
+export interface EmbeddersResponse {
+  embedders: string[];
+}
+
+// --- Export Result ---
+
+export interface ExportResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}

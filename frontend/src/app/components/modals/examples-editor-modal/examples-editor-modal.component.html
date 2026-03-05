@@ -1,0 +1,57 @@
+<vt-modal title="Edit Examples" [open]="true" (closed)="close()">
+  @if (loading) {
+    <p class="empty-state">Loading examples...</p>
+  } @else {
+    <div class="examples-sections">
+      <div class="examples-section">
+        <h3>Good Examples ({{ goodExamples.length }})</h3>
+        <div class="examples-grid">
+          @for (ex of examples; track $index; let i = $index) {
+            @if (ex.type === 'good') {
+              <div class="example-card">
+                <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
+                <button class="remove-btn" (click)="removeExample(i)" aria-label="Remove">&times;</button>
+              </div>
+            }
+          }
+        </div>
+        <label class="btn btn--secondary btn--sm add-btn">
+          + Add Good
+          <input type="file" (change)="onFileSelected($event, 'good')" hidden />
+        </label>
+      </div>
+
+      <div class="examples-section">
+        <h3>Bad Examples ({{ badExamples.length }})</h3>
+        <div class="examples-grid">
+          @for (ex of examples; track $index; let i = $index) {
+            @if (ex.type === 'bad') {
+              <div class="example-card">
+                <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
+                <button class="remove-btn" (click)="removeExample(i)" aria-label="Remove">&times;</button>
+              </div>
+            }
+          }
+        </div>
+        <label class="btn btn--secondary btn--sm add-btn">
+          + Add Bad
+          <input type="file" (change)="onFileSelected($event, 'bad')" hidden />
+        </label>
+      </div>
+    </div>
+
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
+    @if (status) {
+      <p class="success-text">{{ status }}</p>
+    }
+  }
+
+  <div class="editor-actions" modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Cancel</button>
+    <button class="btn btn--primary" (click)="save()" [disabled]="saving">
+      {{ saving ? 'Saving...' : 'Save' }}
+    </button>
+  </div>
+</vt-modal>

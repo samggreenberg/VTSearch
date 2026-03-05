@@ -18,6 +18,8 @@ import {
   LabelingStatusResponse,
   DiversityTreeNextResponse,
   ServerMediaFilesResponse,
+  TrainAndScoreResponse,
+  VotingIterationsResponse,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -120,5 +122,13 @@ export class SortingApiService {
       return this.http.post<DiversityTreeNextResponse>('/api/diversity-tree/next', { scores, threshold });
     }
     return this.http.get<DiversityTreeNextResponse>('/api/diversity-tree/next');
+  }
+
+  trainAndScore(metric: string): Observable<TrainAndScoreResponse> {
+    return this.http.post<TrainAndScoreResponse>('/api/eval/train-and-score', { metric });
+  }
+
+  getVotingIterations(): Observable<VotingIterationsResponse> {
+    return this.http.get<VotingIterationsResponse>('/api/eval/voting-iterations');
   }
 }
