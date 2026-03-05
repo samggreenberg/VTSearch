@@ -1,0 +1,19 @@
+<canvas
+  #waveformCanvas
+  class="waveform-canvas"
+  width="600"
+  height="120"
+  role="img"
+  aria-label="Audio waveform visualization"
+></canvas>
+<audio
+  #audioEl
+  controls
+  controlsList="nodownload"
+  loop
+  autoplay
+  [src]="audioSrc"
+  [attr.aria-label]="media?.filename || 'Audio media'"
+  (volumechange)="onVolumeChange()"
+  class="audio-element"
+></audio>
