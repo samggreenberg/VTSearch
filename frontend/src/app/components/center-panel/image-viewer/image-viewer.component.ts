@@ -24,7 +24,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   imageSrc = '';
   zoom = 1;
   rotation = 0;
-  zoomLabel = '1.0\u00d7';
+  zoomLabel = '1\u00d7';
 
   private panX = 0;
   private panY = 0;
@@ -36,7 +36,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   private mouseMoveHandler: ((e: MouseEvent) => void) | null = null;
   private mouseUpHandler: (() => void) | null = null;
 
-  readonly minZoom = 0.25;
+  readonly minZoom = 1;
   readonly maxZoom = 5;
   readonly zoomStep = 0.05;
 
@@ -117,7 +117,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const max = this.getMaxPan();
     this.panX = Math.max(-max.x, Math.min(max.x, this.panX));
     this.panY = Math.max(-max.y, Math.min(max.y, this.panY));
-    this.zoomLabel = this.zoom.toFixed(1) + '\u00d7';
+    const zoomVal = this.zoom;
+    this.zoomLabel = (zoomVal === Math.floor(zoomVal) ? zoomVal.toFixed(0) : zoomVal.toFixed(1)) + '\u00d7';
   }
 
   private clampZoom(val: number): number {
