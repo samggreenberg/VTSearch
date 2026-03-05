@@ -48,6 +48,17 @@
   font-size: 0.83rem;
 }
 
+.type-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.type-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
 .check {
   color: var(--color-good);
 }
