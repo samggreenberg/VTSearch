@@ -73,8 +73,8 @@
         [goodVotes]="goodVotes"
         [badVotes]="badVotes"
         [labelingStatus]="labelingStatus"
-        (start)="autopilotStart.emit()"
-        (stop)="autopilotStop.emit()"
+        (started)="autopilotStart.emit()"
+        (stopped)="autopilotStop.emit()"
       />
     </div>
   }

@@ -19,34 +19,25 @@ describe('AutopilotPanelComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should start in idle state', () => {
-    expect(component.state.phase).toBe('idle');
-    expect(component.running).toBeFalse();
-  });
-
-  it('should show start button when idle', () => {
-    expect(fixture.nativeElement.querySelector('.autopilot-idle')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('.autopilot-active')).toBeNull();
-  });
-
-  it('should transition to good phase on start', () => {
-    spyOn(component.start, 'emit');
-    component.onStart();
+  it('should auto-start on init in good phase', () => {
     expect(component.state.phase).toBe('good');
     expect(component.running).toBeTrue();
-    expect(component.start.emit).toHaveBeenCalled();
   });
 
-  it('should show steps when running', () => {
-    component.onStart();
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.autopilot-active')).toBeTruthy();
+  it('should emit started on init', () => {
+    const fresh = TestBed.createComponent(AutopilotPanelComponent);
+    const comp = fresh.componentInstance;
+    spyOn(comp.started, 'emit');
+    fresh.detectChanges();
+    expect(comp.started.emit).toHaveBeenCalled();
+  });
+
+  it('should show steps immediately', () => {
     const steps = fixture.nativeElement.querySelectorAll('.ap-step');
     expect(steps.length).toBe(5);
   });
 
   it('should transition from good to bad phase', () => {
-    component.onStart();
     component.goodVotes = new Set([1, 2, 3]);
     component.ngOnChanges({
       goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
@@ -55,7 +46,6 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from bad to hard phase', () => {
-    component.onStart();
     component.state = { ...component.state, phase: 'bad' };
     component.badVotes = new Set([1, 2, 3, 4]);
     component.ngOnChanges({
@@ -65,7 +55,6 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from hard to new when smart+stable are green', () => {
-    component.onStart();
     component.state = { ...component.state, phase: 'hard' };
     component.labelingStatus = {
       smart: { status: 'green' },
@@ -79,7 +68,6 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should transition from new to done when span is green', () => {
-    component.onStart();
     component.state = { ...component.state, phase: 'new', smartStatus: 'green', stableStatus: 'green' };
     component.labelingStatus = {
       smart: { status: 'green' },
@@ -92,17 +80,30 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('done');
   });
 
-  it('should stop autopilot', () => {
-    spyOn(component.stop, 'emit');
-    component.onStart();
-    component.onStop();
+  it('should deactivate autopilot', () => {
+    spyOn(component.stopped, 'emit');
+    component.deactivate();
     expect(component.state.phase).toBe('idle');
     expect(component.running).toBeFalse();
-    expect(component.stop.emit).toHaveBeenCalled();
+    expect(component.stopped.emit).toHaveBeenCalled();
+  });
+
+  it('should re-activate after deactivate', () => {
+    component.deactivate();
+    spyOn(component.started, 'emit');
+    component.activate();
+    expect(component.state.phase).toBe('good');
+    expect(component.running).toBeTrue();
+    expect(component.started.emit).toHaveBeenCalled();
+  });
+
+  it('should not re-activate if already running', () => {
+    spyOn(component.started, 'emit');
+    component.activate();
+    expect(component.started.emit).not.toHaveBeenCalled();
   });
 
   it('should mark current step as active and future steps as future', () => {
-    component.onStart();
     const steps = component.steps;
     expect(steps[0].state).toBe('active');
     expect(steps[1].state).toBe('future');

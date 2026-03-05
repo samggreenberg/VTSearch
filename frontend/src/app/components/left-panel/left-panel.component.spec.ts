@@ -58,6 +58,25 @@ describe('LeftPanelComponent', () => {
     expect(tabsAfter[1].classList.contains('active')).toBeTrue();
   });
 
+  it('should emit autopilotStart when switching to autopilot tab', () => {
+    spyOn(component.autopilotStart, 'emit');
+    component.setTab('autopilot');
+    expect(component.autopilotStart.emit).toHaveBeenCalled();
+  });
+
+  it('should emit autopilotStop when switching from autopilot to manual tab', () => {
+    component.setTab('autopilot');
+    spyOn(component.autopilotStop, 'emit');
+    component.setTab('manual');
+    expect(component.autopilotStop.emit).toHaveBeenCalled();
+  });
+
+  it('should not emit when setting the same tab', () => {
+    spyOn(component.autopilotStart, 'emit');
+    component.setTab('manual');
+    expect(component.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
   it('should emit sortModeChange', () => {
     spyOn(component.sortModeChange, 'emit');
     component.sortModeChange.emit('learned');
