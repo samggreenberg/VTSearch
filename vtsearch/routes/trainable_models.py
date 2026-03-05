@@ -87,7 +87,7 @@ def _list_all() -> list[dict]:
         models.append({
             "name": data["name"],
             "text_query": data.get("text_query", ""),
-            "media_type": data.get("media_type", "any"),
+            "media_type": data.get("media_type", ""),
             "examples": data.get("examples", []),
             "num_labels": len(labels),
             "created_at": data.get("created_at", 0),
