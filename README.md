@@ -66,7 +66,6 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
-│   ├── FEATURE_IDEAS.md            # Brainstorm of potential features
 │   ├── demos.md                    # Demo dataset listing
 │   └── old_io.md                   # Retired IO module reference implementations
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
