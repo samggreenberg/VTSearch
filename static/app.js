@@ -1854,6 +1854,7 @@
           await fetch("/api/dataset/clear", { method: "POST" });
           medias = [];
           votes = { good: [], bad: [], click_times: {}, learned_scores: {} };
+          _rebuildVoteSets();
           selected = null;
           datasetLoaded = false;
           showDashboard();
