@@ -44,7 +44,7 @@ describe('SettingsModalComponent', () => {
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
     settingsReq.flush(mockSettings);
-    embeddersReq.flush({ embedders: ['audio', 'images', 'text'] });
+    embeddersReq.flush({ embedders: [{ name: 'audio', media_type_id: 'audio' }, { name: 'images', media_type_id: 'image' }, { name: 'text', media_type_id: 'text' }] });
   }
 
   it('should create', () => {
@@ -82,17 +82,17 @@ describe('SettingsModalComponent', () => {
 
   it('should check if embedder is autoloaded', () => {
     flushInit();
-    expect(component.isEmbedderAutoloaded('audio')).toBeTrue();
-    expect(component.isEmbedderAutoloaded('images')).toBeFalse();
+    expect(component.isEmbedderAutoloaded({ name: 'audio', media_type_id: 'audio' })).toBeTrue();
+    expect(component.isEmbedderAutoloaded({ name: 'images', media_type_id: 'image' })).toBeFalse();
   });
 
   it('should toggle embedder in autoload list', () => {
     flushInit();
-    component.toggleEmbedder('images');
+    component.toggleEmbedder({ name: 'images', media_type_id: 'image' });
     expect(component.settings.autoload_media_types).toContain('images');
     httpMock.expectOne('/api/settings').flush(mockSettings);
 
-    component.toggleEmbedder('audio');
+    component.toggleEmbedder({ name: 'audio', media_type_id: 'audio' });
     expect(component.settings.autoload_media_types).not.toContain('audio');
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
