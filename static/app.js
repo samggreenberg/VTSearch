@@ -365,7 +365,7 @@
       const removeBtn = document.createElement("button");
       removeBtn.className = "example-remove";
       removeBtn.setAttribute("aria-label", "Remove example");
-      removeBtn.textContent = "\u00D7";
+      removeBtn.textContent = "\uD83D\uDDD1\uFE0F";
       removeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const updated = examples.filter((_, j) => j !== i);
@@ -2405,7 +2405,7 @@
         html += `<div class="combine-item">`;
         html += `<span class="combine-item-name">${escapeHtml(ds.name)}</span>`;
         html += `<span class="combine-item-count">${ds.count} medias</span>`;
-        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&times;</button>`;
+        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&#128465;&#65039;</button>`;
         html += `</div>`;
       });
     }
