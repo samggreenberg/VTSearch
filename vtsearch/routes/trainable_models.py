@@ -129,6 +129,8 @@ def create_trainable_model():
         return jsonify({"error": "name is required"}), 400
     if not text_query and not examples:
         return jsonify({"error": "text_query or examples is required"}), 400
+    if not media_type or media_type == "any":
+        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
     path = _model_path(name)
     if path.exists():
@@ -142,7 +144,7 @@ def create_trainable_model():
     model_data = {
         "name": name,
         "text_query": text_query,
-        "media_type": media_type or "any",
+        "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
         "labelset": {"labels": []},
@@ -153,7 +155,7 @@ def create_trainable_model():
         "success": True,
         "name": name,
         "text_query": text_query,
-        "media_type": media_type or "any",
+        "media_type": media_type,
         "examples": examples or [],
         "num_labels": 0,
     }), 201
@@ -353,6 +355,8 @@ def register_model_route():
 
     if not name:
         return jsonify({"error": "name is required"}), 400
+    if not media_type or media_type == "any":
+        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
     # If trainable, also create the trainable model file if needed
     if trainable and not trainable_model_name:
@@ -365,7 +369,7 @@ def register_model_route():
             model_data = {
                 "name": name,
                 "text_query": text_query,
-                "media_type": media_type or "any",
+                "media_type": media_type,
                 "examples": examples,
                 "created_at": time.time(),
                 "labelset": {"labels": []},
@@ -374,7 +378,7 @@ def register_model_route():
 
     entry = register_model(
         name=name,
-        media_type=media_type or "any",
+        media_type=media_type,
         trainable=trainable,
         text_query=text_query,
         detector_name=detector_name,

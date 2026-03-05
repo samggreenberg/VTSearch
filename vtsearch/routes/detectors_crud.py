@@ -107,7 +107,7 @@ def add_autorun_detector_route():
                 model_data = {
                     "name": name,
                     "text_query": text_query,
-                    "media_type": media_type or "any",
+                    "media_type": media_type,
                     "examples": examples or [],
                     "created_at": _time.time(),
                     "labelset": {"labels": []},

@@ -24,7 +24,7 @@ class TestCreateTrainableModel:
     def test_create_success(self, client):
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "sounds of dogs barking"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "sounds of dogs barking"},
         )
         assert res.status_code == 201
         data = res.get_json()
@@ -44,26 +44,42 @@ class TestCreateTrainableModel:
     def test_create_missing_text_query(self, client):
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Test"},
+            json={"name": "Test", "media_type": "audio"},
         )
         assert res.status_code == 400
         assert "text_query" in res.get_json()["error"]
 
+    def test_create_missing_media_type(self, client):
+        res = client.post(
+            "/api/trainable-models",
+            json={"name": "Test", "text_query": "sounds"},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
+    def test_create_rejects_any_media_type(self, client):
+        res = client.post(
+            "/api/trainable-models",
+            json={"name": "Test", "media_type": "any", "text_query": "sounds"},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
     def test_create_duplicate(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "dogs"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs"},
         )
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "dogs again"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs again"},
         )
         assert res.status_code == 409
 
     def test_file_created_on_disk(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Test Model", "text_query": "test"},
+            json={"name": "Test Model", "media_type": "audio", "text_query": "test"},
         )
         files = list(get_trainable_models_dir().glob("*.json"))
         assert len(files) == 1
@@ -83,11 +99,11 @@ class TestListTrainableModels:
     def test_list_after_create(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Model A", "text_query": "a"},
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
             "/api/trainable-models",
-            json={"name": "Model B", "text_query": "b"},
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
         res = client.get("/api/trainable-models")
         data = res.get_json()
@@ -100,7 +116,7 @@ class TestGetTrainableModel:
     def test_get_existing(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "My Model", "text_query": "test query"},
+            json={"name": "My Model", "media_type": "audio", "text_query": "test query"},
         )
         res = client.get("/api/trainable-models/My%20Model")
         assert res.status_code == 200
@@ -118,7 +134,7 @@ class TestDeleteTrainableModel:
     def test_delete_existing(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "To Delete", "text_query": "test"},
+            json={"name": "To Delete", "media_type": "audio", "text_query": "test"},
         )
         res = client.delete("/api/trainable-models/To%20Delete")
         assert res.status_code == 200
@@ -137,7 +153,7 @@ class TestRenameTrainableModel:
     def test_rename_success(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Old Name", "text_query": "test"},
+            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
             "/api/trainable-models/Old%20Name/rename",
@@ -167,7 +183,7 @@ class TestRenameTrainableModel:
     def test_rename_missing_new_name(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Test", "text_query": "test"},
+            json={"name": "Test", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
             "/api/trainable-models/Test/rename",
@@ -182,7 +198,7 @@ class TestRenameTrainableModel:
         # Create a trainable model and register it in the model registry
         client.post(
             "/api/trainable-models",
-            json={"name": "Original", "text_query": "test"},
+            json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
             "/api/models/registry",
@@ -213,11 +229,11 @@ class TestRenameTrainableModel:
     def test_rename_conflict(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Model A", "text_query": "a"},
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
             "/api/trainable-models",
-            json={"name": "Model B", "text_query": "b"},
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
         res = client.put(
             "/api/trainable-models/Model%20A/rename",
@@ -231,7 +247,7 @@ class TestSaveLabels:
         """Save labels when there are no votes — should produce empty labelset."""
         client.post(
             "/api/trainable-models",
-            json={"name": "Labeler", "text_query": "test"},
+            json={"name": "Labeler", "media_type": "audio", "text_query": "test"},
         )
         res = client.post("/api/trainable-models/Labeler/labels")
         assert res.status_code == 200
@@ -259,7 +275,7 @@ class TestSaveLabels:
 
         client.post(
             "/api/trainable-models",
-            json={"name": "Voted Model", "text_query": "test"},
+            json={"name": "Voted Model", "media_type": "audio", "text_query": "test"},
         )
         res = client.post("/api/trainable-models/Voted%20Model/labels")
         assert res.status_code == 200
@@ -308,7 +324,7 @@ class TestSaveLabels:
         }
         try:
             client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
-            client.post("/api/trainable-models", json={"name": "DupeTest", "text_query": "test"})
+            client.post("/api/trainable-models", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
 
             res = client.post("/api/trainable-models/DupeTest/labels")
             assert res.status_code == 200
@@ -339,8 +355,8 @@ class TestLabelVoteIsolation:
             pytest.skip("Need at least 4 medias")
 
         # Create two trainable models
-        client.post("/api/trainable-models", json={"name": "Model A", "text_query": "a"})
-        client.post("/api/trainable-models", json={"name": "Model B", "text_query": "b"})
+        client.post("/api/trainable-models", json={"name": "Model A", "media_type": "audio", "text_query": "a"})
+        client.post("/api/trainable-models", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
 
         # Simulate labeling with Model A: vote on ids[0] and ids[1]
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
@@ -369,7 +385,7 @@ class TestLabelVoteIsolation:
             pytest.skip("Need at least 4 medias")
 
         # Create model and label 2 items
-        client.post("/api/trainable-models", json={"name": "Target", "text_query": "t"})
+        client.post("/api/trainable-models", json={"name": "Target", "media_type": "audio", "text_query": "t"})
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
         client.post("/api/trainable-models/Target/labels")
