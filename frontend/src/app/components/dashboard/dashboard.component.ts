@@ -197,6 +197,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.startProgressPolling();
   }
 
+  onDemoSelected(demo: any): void {
+    this.importerModalOpen = false;
+    this.loading = true;
+    this.progressMessage = `Loading demo: ${demo.label}...`;
+    this.progressIndeterminate = true;
+    this.datasetsApi.loadDemo(demo.name).subscribe({
+      next: () => {
+        this.startProgressPolling();
+      },
+      error: () => {
+        this.loading = false;
+        this.progressIndeterminate = false;
+      },
+    });
+  }
+
   // --- New model modal ---
 
   openNewModelModal(): void {

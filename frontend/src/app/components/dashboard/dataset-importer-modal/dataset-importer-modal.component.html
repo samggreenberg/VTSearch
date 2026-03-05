@@ -1,4 +1,4 @@
-<vt-modal [title]="view === 'picker' ? 'Add Dataset' : selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
+<vt-modal [title]="view === 'picker' ? 'Add Dataset' : view === 'demo' ? 'Load Demo Dataset' : selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
   @if (view === 'picker') {
     <div class="importer-picker">
       @if (importers.length === 0) {
@@ -11,6 +11,66 @@
             <span class="importer-desc">{{ imp.description }}</span>
           }
         </button>
+      }
+      <button class="importer-card demo-card" (click)="openDemoPicker()">
+        <span class="importer-name">Load Demo Dataset</span>
+        <span class="importer-desc">Choose from a selection of pre-configured demo datasets</span>
+      </button>
+    </div>
+  }
+
+  @if (view === 'demo') {
+    <div class="demo-picker">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+
+      @if (demoLoading) {
+        <p class="empty-state">Loading demo datasets...</p>
+      } @else if (demos.length === 0) {
+        <p class="empty-state">No demo datasets available.</p>
+      } @else {
+        <div class="demo-tab-bar">
+          @for (tab of demoTabs; track tab) {
+            <button
+              class="demo-tab"
+              [class.active]="activeTab === tab"
+              (click)="selectDemoTab(tab)"
+            >{{ getTabLabel(tab) }}</button>
+          }
+        </div>
+
+        <div class="demo-content-area">
+          <table class="demo-table">
+            <thead>
+              <tr>
+                <th (click)="sortDemoBy('label')" class="sortable col-name">Name{{ demoSortIndicator('label') }}</th>
+                <th (click)="sortDemoBy('num_files')" class="sortable col-num"># Media{{ demoSortIndicator('num_files') }}</th>
+                <th (click)="sortDemoBy('num_categories')" class="sortable col-num"># Cat.{{ demoSortIndicator('num_categories') }}</th>
+                <th (click)="sortDemoBy('description')" class="sortable col-desc">Description{{ demoSortIndicator('description') }}</th>
+                <th (click)="sortDemoBy('status')" class="sortable col-status">Readiness{{ demoSortIndicator('status') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (demo of filteredDemos; track demo.name) {
+                <tr
+                  class="demo-row"
+                  [class.ready]="demo.status === 'ready'"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-label]="demo.label + ': ' + demo.description"
+                  (click)="selectDemo(demo)"
+                  (keydown.enter)="selectDemo(demo)"
+                  (keydown.space)="$event.preventDefault(); selectDemo(demo)"
+                >
+                  <td class="col-name">{{ demo.label }}</td>
+                  <td class="col-num">{{ demo.num_files }}</td>
+                  <td class="col-num">{{ demo.num_categories }}</td>
+                  <td class="col-desc" [title]="demo.description">{{ demo.description.length > 60 ? demo.description.slice(0, 57) + '...' : demo.description }}</td>
+                  <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
     </div>
   }

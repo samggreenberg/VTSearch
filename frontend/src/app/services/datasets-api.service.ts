@@ -5,6 +5,7 @@ import {
   DatasetStatus,
   DatasetProgress,
   ImportersResponse,
+  DemoListResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
   ConverterInfo,
@@ -29,6 +30,10 @@ export class DatasetsApiService {
 
   getAllImporters(): Observable<ImportersResponse> {
     return this.http.get<ImportersResponse>('/api/dataset/all-importers');
+  }
+
+  getDemoList(): Observable<DemoListResponse> {
+    return this.http.get<DemoListResponse>('/api/dataset/demo-list');
   }
 
   getMediaTypes(): Observable<MediaTypesResponse> {

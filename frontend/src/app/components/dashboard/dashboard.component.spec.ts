@@ -272,4 +272,28 @@ describe('DashboardComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.dash-table')).toBeTruthy();
   });
+
+  it('should load demo dataset on demoSelected', () => {
+    flushInitialRequests();
+    component.importerModalOpen = true;
+    const demo = { name: 'gtzan', label: 'GTZAN' };
+    component.onDemoSelected(demo);
+
+    expect(component.importerModalOpen).toBeFalse();
+    expect(component.loading).toBeTrue();
+    expect(component.progressMessage).toContain('GTZAN');
+
+    const req = httpMock.expectOne('/api/dataset/load-demo');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body.name).toBe('gtzan');
+    req.flush({});
+
+    // Progress polling starts
+    const progressReq = httpMock.expectOne('/api/dataset/progress');
+    progressReq.flush({ status: 'idle' });
+
+    // After idle, it should refresh
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+  });
 });
