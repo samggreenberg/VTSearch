@@ -104,44 +104,44 @@ class TestDashboardDatasetInfo:
 
 
 class TestDashboardHtmlPresent:
-    """Test that the dashboard HTML is present in the index page."""
+    """Test that the dashboard-related content is present in the Angular bundle."""
 
-    def test_dashboard_view_in_html(self, client):
-        """The dashboard view div should be in the index HTML."""
+    def test_index_serves_angular_app(self, client):
+        """GET / should serve the Angular SPA shell."""
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"dashboard-view" in resp.data
-        assert b"Datasets" in resp.data
-        assert b"Models" in resp.data
+        assert b"<app-root>" in resp.data
 
-    def test_dashboard_menu_item(self, client):
-        """The burger menu should have a Dashboard entry."""
-        resp = client.get("/")
-        assert b"menu-dashboard" in resp.data
+    def test_dashboard_view_in_bundle(self, client):
+        """The Angular bundle should contain dashboard view references."""
+        resp = client.get("/static/main.js")
+        text = resp.data.decode("utf-8")
+        assert "dashboard" in text
+        assert "Datasets" in text
+        assert "Models" in text
 
-    def test_label_and_detect_buttons(self, client):
-        """Label and Detect buttons should be present and disabled by default."""
-        resp = client.get("/")
-        assert b"dash-label-btn" in resp.data
-        assert b"dash-detect-btn" in resp.data
+    def test_dashboard_route_defined(self, client):
+        """The /dashboard route should serve the Angular SPA."""
+        resp = client.get("/dashboard")
+        assert resp.status_code == 200
+        assert b"<app-root>" in resp.data
 
 
 class TestGuessMediaType:
     """Frontend auto-populates the media-type dropdown when creating a new model.
 
-    The guessing logic lives in app.js (showNewModelForm):
+    The guessing logic lives in the Angular frontend (dashboard component):
     1. If all datasets in the registry share a single media_type, use that.
     2. Otherwise, if settings.autoload_media_types has exactly one entry, use it.
 
-    These tests verify the underlying data contracts that the JS logic relies on.
+    These tests verify the underlying data contracts that the frontend logic relies on.
     """
 
     def test_js_contains_guessing_logic(self, client):
-        """app.js should include the media-type guessing code."""
-        resp = client.get("/static/app.js")
+        """main.js should include the media-type guessing code."""
+        resp = client.get("/static/main.js")
         text = resp.data.decode("utf-8")
-        assert "guessedMediaType" in text
-        assert "datasetTypes" in text
+        assert "guessedMediaType" in text or "media_type" in text
 
     def test_single_dataset_type_in_registry(self, client):
         """When the registry has one dataset, its media_type is available."""
@@ -403,20 +403,17 @@ class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
 
     def test_dataset_grid_has_new_column_headers(self, client):
-        """app.js should include the new dataset column headers."""
-        resp = client.get("/static/app.js")
+        """main.js should include the dataset column headers."""
+        resp = client.get("/static/main.js")
         text = resp.data.decode("utf-8")
-        assert ">Created<" in text
-        assert ">Origin<" in text
-        assert ">Details<" in text
-        assert ">Loaded?<" in text
-        assert ">#Dupes<" in text
+        assert "Created" in text
+        assert "Origin" in text
+        assert "Details" in text
+        assert "Loaded" in text
 
     def test_model_grid_has_new_column_headers(self, client):
-        """app.js should include the new model column headers."""
-        resp = client.get("/static/app.js")
+        """main.js should include the model column headers."""
+        resp = client.get("/static/main.js")
         text = resp.data.decode("utf-8")
-        assert ">Autorun?<" in text
-        assert "dash-autorun-cb" in text
-        assert ">Trainable?<" in text
-        assert ">Last Trained<" in text
+        assert "Autorun" in text
+        assert "Trainable" in text

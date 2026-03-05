@@ -1,6 +1,6 @@
 # VTSearch
 
-Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + vanilla JS + PyTorch.
+Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + Angular + PyTorch.
 
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh`
@@ -16,6 +16,9 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
 - **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
+- **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
+- **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
+- **Frontend tests**: `cd frontend && ng test --watch=false`
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 
@@ -35,7 +38,8 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
-- `static/` — Frontend (index.html, app.js, dialogs.js, charts.js, results.js, styles.css) and assets (favicons, logo.svg, logo.png)
+- `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`
+- `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
@@ -82,7 +86,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
   - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
-  - `test_frontend.py` — Frontend serving: SPA entry point, static files, favicon variants, logo, content types
+  - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
   - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
