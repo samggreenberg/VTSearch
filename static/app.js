@@ -1257,9 +1257,9 @@
       }
 
       dashLabelBtn.disabled = labelDisabled;
-      // Show hint inside button
+      // Show hint inside button (use \u00A0 placeholder to keep height stable)
       const labelHintEl = dashLabelBtn.querySelector(".dash-btn-hint");
-      if (labelHintEl) labelHintEl.textContent = labelHint;
+      if (labelHintEl) labelHintEl.textContent = labelHint || "\u00A0";
     }
 
     // --- Find button validation ---
@@ -1288,9 +1288,9 @@
       }
 
       dashDetectBtn.disabled = findDisabled;
-      // Show hint inside button
+      // Show hint inside button (use \u00A0 placeholder to keep height stable)
       const findHintEl = dashDetectBtn.querySelector(".dash-btn-hint");
-      if (findHintEl) findHintEl.textContent = findHint;
+      if (findHintEl) findHintEl.textContent = findHint || "\u00A0";
     }
   }
 
