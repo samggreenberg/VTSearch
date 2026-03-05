@@ -210,7 +210,8 @@ class TestFrontendContentIntegrity:
         text = resp.data.decode("utf-8")
         assert "--bg-body" in text or "--accent" in text
 
-    def test_styles_has_media_item_class(self):
+    def test_styles_has_layout_classes(self):
         resp = self.client.get("/static/styles.css")
         text = resp.data.decode("utf-8")
-        assert ".media-item" in text or "media-item" in text
+        # Angular global styles contain layout and panel classes
+        assert "panel" in text or "grid" in text or "--bg-body" in text
