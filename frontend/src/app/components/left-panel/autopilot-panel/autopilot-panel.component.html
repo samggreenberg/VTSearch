@@ -1,9 +1,5 @@
 <div class="autopilot-panel">
   <div class="autopilot-active">
-    <div class="autopilot-header">
-      <span class="ap-help-icon" [title]="overallHelp">?</span>
-    </div>
-
     <div class="autopilot-steps">
       @for (step of steps; track step.phase) {
         <div
@@ -22,9 +18,8 @@
             }
           </div>
           <div class="ap-step-content">
-            <span class="ap-step-label">
+            <span class="ap-step-label" [title]="step.helpText">
               {{ step.label }}
-              <span class="ap-help-icon small" [title]="step.helpText">?</span>
             </span>
             @if (step.detail || step.statusIcons.length) {
               <span class="ap-step-detail">

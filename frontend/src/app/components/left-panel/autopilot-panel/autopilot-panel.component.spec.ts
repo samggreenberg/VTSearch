@@ -128,18 +128,11 @@ describe('AutopilotPanelComponent', () => {
     expect(component.started.emit).not.toHaveBeenCalled();
   });
 
-  it('should show overall help icon with tooltip', () => {
-    const helpIcon = fixture.nativeElement.querySelector('.autopilot-header .ap-help-icon');
-    expect(helpIcon).toBeTruthy();
-    expect(helpIcon.textContent.trim()).toBe('?');
-    expect(helpIcon.title).toContain('Autopilot guides you');
-  });
-
-  it('should show help icon on each step with tooltip', () => {
-    const stepHelpIcons = fixture.nativeElement.querySelectorAll('.ap-step .ap-help-icon.small');
-    expect(stepHelpIcons.length).toBe(5);
-    expect(stepHelpIcons[0].title).toContain('good');
-    expect(stepHelpIcons[1].title).toContain('not what you want');
+  it('should show tooltip on each step label via title attribute', () => {
+    const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
+    expect(stepLabels.length).toBe(5);
+    expect(stepLabels[0].title).toContain('good');
+    expect(stepLabels[1].title).toContain('not what you want');
   });
 
   it('should mark current step as active and future steps as future', () => {
