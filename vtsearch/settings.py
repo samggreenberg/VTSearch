@@ -202,7 +202,11 @@ for _key, _cast, _coerce in _SETTING_SPECS:
 del _key, _cast, _coerce, _g, _s
 
 
-VALID_MEDIA_TYPES = ("audio", "document", "image", "paragraph", "video")
+def _valid_media_types() -> tuple[str, ...]:
+    """Return valid media type IDs from the media registry."""
+    from vtsearch.media import all_type_ids
+
+    return tuple(all_type_ids())
 
 
 def get_autoload_media_types() -> list[str]:
@@ -210,10 +214,11 @@ def get_autoload_media_types() -> list[str]:
 
     .. deprecated:: Use :func:`get_autoload_media_embedders` instead.
     """
+    valid = _valid_media_types()
     with _settings_lock:
         raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
         if isinstance(raw, list):
-            return [v for v in raw if v in VALID_MEDIA_TYPES]
+            return [v for v in raw if v in valid]
         return []
 
 
@@ -222,8 +227,9 @@ def set_autoload_media_types(value: list[str]) -> None:
 
     .. deprecated:: Use :func:`set_autoload_media_embedders` instead.
     """
+    valid = _valid_media_types()
     for v in value:
-        if v not in VALID_MEDIA_TYPES:
+        if v not in valid:
             raise ValueError(f"Invalid media type: {v!r}")
     with _settings_lock:
         s = _ensure_loaded()
@@ -236,7 +242,7 @@ def toggle_autoload_media_type(type_id: str) -> list[str]:
 
     .. deprecated:: Use :func:`toggle_autoload_media_embedder` instead.
     """
-    if type_id not in VALID_MEDIA_TYPES:
+    if type_id not in _valid_media_types():
         raise ValueError(f"Invalid media type: {type_id!r}")
     with _settings_lock:
         current = get_autoload_media_types()

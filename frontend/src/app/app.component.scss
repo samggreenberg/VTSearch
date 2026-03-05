@@ -1,0 +1,74 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+
+  .header-logo {
+    height: 28px;
+    width: auto;
+  }
+
+  h1 {
+    font-size: 1.2rem;
+    margin: 0;
+    color: var(--text-primary);
+  }
+}
+
+.burger-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+
+  span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--text-primary);
+  }
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+// Keep the 3-panel layout classes for future phases (4-6)
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.panel-left,
+.panel-center,
+.panel-right {
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+}
+
+.panel-right {
+  border-right: none;
+}
+
+.placeholder {
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 40%;
+  font-style: italic;
+}

@@ -1,0 +1,46 @@
+<vt-modal [open]="true" title="New Model" (closed)="close()">
+  <div class="new-model-form">
+    <div class="form-group">
+      <label for="model-name">Model Name <span class="required">*</span></label>
+      <input
+        id="model-name"
+        class="form-input"
+        [(ngModel)]="name"
+        placeholder="e.g. Dog Barks"
+        autofocus
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="model-media-type">Media Type</label>
+      <select id="model-media-type" class="form-input" [(ngModel)]="mediaType">
+        @for (mt of mediaTypes; track mt) {
+          <option [value]="mt">{{ mt }}</option>
+        }
+        <option value="any">any</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="model-query">Text Query / Example <span class="required">*</span></label>
+      <input
+        id="model-query"
+        class="form-input"
+        [(ngModel)]="textQuery"
+        placeholder="e.g. dog barking sounds"
+      />
+      <span class="info-text">Describes what this model should find.</span>
+    </div>
+
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
+  </div>
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Cancel</button>
+    <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
+      {{ submitting ? 'Creating...' : 'Create' }}
+    </button>
+  </div>
+</vt-modal>

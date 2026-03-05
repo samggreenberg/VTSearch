@@ -365,7 +365,7 @@
       const removeBtn = document.createElement("button");
       removeBtn.className = "example-remove";
       removeBtn.setAttribute("aria-label", "Remove example");
-      removeBtn.textContent = "\u00D7";
+      removeBtn.textContent = "\uD83D\uDDD1\uFE0F";
       removeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const updated = examples.filter((_, j) => j !== i);
@@ -768,8 +768,9 @@
     }
     if (st.phase === "new") {
       const frac = st.fracDiversity ?? 0;
+      const fracFloored = Math.floor(frac * 10) / 10;
       const pct = Math.min(100, Math.max(0, Math.round((frac / 4) * 100)));
-      return `Diversity ${frac.toFixed(1)} / 4 `
+      return `Diversity ${fracFloored.toFixed(1)} / 4 `
         + `<span class="ap-progress-bar"><span class="ap-progress-fill" style="width:${pct}%"></span></span>`;
     }
     return "";
@@ -1359,7 +1360,7 @@
 
         const nameTd = document.createElement("td");
         nameTd.className = "col-name";
-        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button>`;
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(ds.name)}</span>`;
         tr.appendChild(nameTd);
         const dsCreated = ds.created_at ? new Date(ds.created_at * 1000).toLocaleDateString() : "-";
         const dsOrigin = ds.origin || "unknown";
@@ -1379,7 +1380,7 @@
           <td class="col-origin" title="${escapeHtml(dsOrigin)}">${escapeHtml(dsOrigin)}</td>
           <td class="col-details" title="${escapeHtml(dsDetails)}">${escapeHtml(dsDetails)}</td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
+          <td class="col-actions"><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename dataset">&#9998;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove dataset" aria-label="Remove dataset">&#128465;</button></td>
         `);
 
         // Inline rename
@@ -1559,7 +1560,7 @@
 
         const nameTd = document.createElement("td");
         nameTd.className = "col-name";
-        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button>`;
+        nameTd.innerHTML = `<span class="dash-name-text">${escapeHtml(m.name)}</span>`;
         tr.appendChild(nameTd);
         const mCreated = m.created_at ? new Date(m.created_at * 1000).toLocaleDateString() : "-";
         const mLastTrained = m.last_trained_at ? new Date(m.last_trained_at * 1000).toLocaleDateString() : "-";
@@ -1572,7 +1573,7 @@
           <td class="col-date">${escapeHtml(mCreated)}</td>
           <td class="col-autorun"><input type="checkbox" class="dash-autorun-cb" ${isAutorun ? "checked" : ""} title="Include in CLI autorun" aria-label="Autorun"></td>
           <td class="col-loaded">${isLoaded ? '<span style="color:var(--color-good)">✓</span>' : ''}</td>
-          <td class="col-actions"><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
+          <td class="col-actions"><button class="btn-icon dash-rename-btn" title="Rename" aria-label="Rename model">&#9998;</button><button class="btn-icon btn-icon-danger dash-delete-btn" title="Remove model" aria-label="Remove model">&#128465;</button></td>
         `);
 
         // Inline rename
@@ -2436,7 +2437,7 @@
         html += `<div class="combine-item">`;
         html += `<span class="combine-item-name">${escapeHtml(ds.name)}</span>`;
         html += `<span class="combine-item-count">${ds.count} medias</span>`;
-        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&times;</button>`;
+        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&#128465;&#65039;</button>`;
         html += `</div>`;
       });
     }
@@ -2976,8 +2977,8 @@
       const res = await fetch("/api/exporters");
       if (res.ok) labelsetExporters = await res.json();
     } catch (_) { /* ignore */ }
-    // Filter out the GUI exporter (not useful for file-based export)
-    labelsetExporters = labelsetExporters.filter(e => e.name !== "gui");
+    // Filter out exporters that are hidden from picker (e.g. the GUI exporter)
+    labelsetExporters = labelsetExporters.filter(e => !e.hidden_from_picker);
 
     let html = `
       <div id="detector-export-browser-btn" class="option-card" role="button" tabindex="0">
@@ -3918,8 +3919,22 @@
     _rebuildVoteSets();
     renderVotes();
     renderStripe();
+    _syncMediaListVoteClasses();
     updateSortModeAvailability();
     if (selected) renderCenter();
+  }
+
+  /**
+   * Sync vote label classes (labeled-good / labeled-bad) on existing
+   * media-list items without rebuilding the DOM.
+   */
+  function _syncMediaListVoteClasses() {
+    const items = mediaList.querySelectorAll("[data-media-id]");
+    items.forEach(el => {
+      const id = parseInt(el.getAttribute("data-media-id"), 10);
+      el.classList.toggle("labeled-good", goodVoteSet.has(id));
+      el.classList.toggle("labeled-bad", badVoteSet.has(id));
+    });
   }
 
   async function fetchInclusion() {
@@ -3973,6 +3988,7 @@
       if (isGood) className += " labeled-good";
       if (isBad) className += " labeled-bad";
       div.className = className;
+      div.setAttribute("data-media-id", c.id);
       div.setAttribute("role", "option");
       div.setAttribute("tabindex", "0");
       div.setAttribute("aria-selected", selected === c.id ? "true" : "false");
@@ -4007,8 +4023,16 @@
   }
 
   function selectMedia(id) {
+    const prev = selected;
     selected = id;
-    renderMediaList();
+
+    // Try lightweight in-place selection update instead of full DOM rebuild.
+    // This avoids destroying and re-creating all thumbnail <img>/<video>
+    // elements, which would cause the browser to re-fetch visible media.
+    const didLightweight = _updateSelectionInPlace(prev, id);
+    if (!didLightweight) {
+      renderMediaList();
+    }
     renderCenter();
 
     const activeItem = mediaList.querySelector(".media-item.active");
@@ -4020,6 +4044,58 @@
     if (c) {
       announce(`Selected ${c.filename || 'Media #' + c.id}`);
     }
+  }
+
+  /**
+   * Update the active selection highlight in the media list and stripe
+   * without rebuilding the DOM.  Returns true if it succeeded, false if
+   * a full rebuild is needed (e.g. the list hasn't been rendered yet).
+   */
+  function _updateSelectionInPlace(prevId, newId) {
+    // If the media list has no items with data-media-id, fall back to full rebuild.
+    if (!mediaList.querySelector("[data-media-id]")) return false;
+
+    // Deactivate previously selected item
+    if (prevId != null) {
+      const prevEl = mediaList.querySelector(`[data-media-id="${prevId}"]`);
+      if (prevEl) {
+        prevEl.classList.remove("active");
+        prevEl.setAttribute("aria-selected", "false");
+      }
+    }
+
+    // Activate newly selected item
+    const newEl = mediaList.querySelector(`[data-media-id="${newId}"]`);
+    if (newEl) {
+      newEl.classList.add("active");
+      newEl.setAttribute("aria-selected", "true");
+    }
+
+    // Update stripe selected dot in-place
+    _updateStripeSelectedDot(newId);
+
+    return true;
+  }
+
+  /**
+   * Move the "selected" dot on the stripe to reflect the new selection
+   * without rebuilding the entire stripe.
+   */
+  function _updateStripeSelectedDot(newId) {
+    // Remove old selected dot
+    const oldDot = stripeContainer.querySelector(".stripe-dot.selected");
+    if (oldDot) oldDot.remove();
+
+    if (!sortOrder || sortOrder.length === 0) return;
+
+    const totalClips = sortOrder.length;
+    const idx = sortOrder.findIndex(item => item.id === newId);
+    if (idx < 0) return;
+
+    const dot = document.createElement("div");
+    dot.className = "stripe-dot selected";
+    dot.style.top = `${(idx / totalClips) * 100}%`;
+    stripeContainer.appendChild(dot);
   }
 
   // Stored references for window-level mouse handlers used by image pan,
@@ -4085,43 +4161,26 @@
           <span class="metadata-label">Name</span>
           <span class="metadata-value">${escapeHtml(c.filename || 'Media #' + c.id)}</span>
         </div>
-        ${c.frequency ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Frequency</span>
-          <span class="metadata-value">${escapeHtml(String(c.frequency))} Hz</span>
-        </div>` : ''}
-        ${c.category && c.category !== 'unknown' ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Category</span>
-          <span class="metadata-value">${escapeHtml(c.category)}</span>
-        </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">Media Type</span>
           <span class="metadata-value">${escapeHtml(mtInfo ? mtInfo.name : mediaType)}</span>
         </div>
-        ${(c.duration && c.duration > 0) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Duration</span>
-          <span class="metadata-value">${c.duration.toFixed(1)}s</span>
-        </div>` : ''}
-        ${(c.width && c.height) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Dimensions</span>
-          <span class="metadata-value">${c.width}×${c.height}</span>
-        </div>` : ''}
-        ${(c.word_count) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Word Count</span>
-          <span class="metadata-value">${c.word_count}</span>
-        </div>
-        <div class="metadata-item">
-          <span class="metadata-label">Characters</span>
-          <span class="metadata-value">${c.character_count}</span>
-        </div>` : ''}
-        ${c.file_size ? `<div class="metadata-item">
-          <span class="metadata-label">File Size</span>
-          <span class="metadata-value">${(c.file_size / 1024).toFixed(1)} KB</span>
-        </div>` : ''}
+        ${Object.entries(c.custom_metadata || {}).map(([label, value]) => {
+          let displayValue;
+          if (label === 'File Size' && typeof value === 'number') {
+            displayValue = (value / 1024).toFixed(1) + ' KB';
+          } else if (label === 'Duration' && typeof value === 'number') {
+            displayValue = value.toFixed(1) + 's';
+          } else if (label === 'Frequency' && typeof value === 'number') {
+            displayValue = value + ' Hz';
+          } else {
+            displayValue = escapeHtml(String(value));
+          }
+          return `<div class="metadata-item">
+          <span class="metadata-label">${escapeHtml(label)}</span>
+          <span class="metadata-value">${displayValue}</span>
+        </div>`;
+        }).join('')}
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
           <span class="metadata-value metadata-md5">${escapeHtml(c.md5)}</span>
@@ -5790,9 +5849,10 @@
       const dvChart = document.getElementById("diversity-chart");
       if (dvChart) {
         dvChart.setAttribute("role", "img");
-        const lastLevel = data.diversity_level_over_time && data.diversity_level_over_time.length > 0
-          ? data.diversity_level_over_time[data.diversity_level_over_time.length - 1].diversity_level.toFixed(2)
-          : "N/A";
+        const lastLevelRaw = data.diversity_level_over_time && data.diversity_level_over_time.length > 0
+          ? data.diversity_level_over_time[data.diversity_level_over_time.length - 1].diversity_level
+          : null;
+        const lastLevel = lastLevelRaw !== null ? (Math.floor(lastLevelRaw * 100) / 100).toFixed(2) : "N/A";
         dvChart.setAttribute("aria-label", `Diversity level chart with ${(data.diversity_level_over_time || []).length} data points. Latest level: ${lastLevel}`);
       }
       // Update span info text from cached status
@@ -5895,7 +5955,7 @@
 
     // Also add demo datasets as an option
     const options = importers.map(imp => `
-      <div class="dataset-importer-option option-card" data-name="${escapeHtml(imp.name)}" data-type="importer">
+      <div class="dataset-importer-option option-card" data-name="${escapeHtml(imp.name)}" data-type="importer" data-ui-mode="${escapeHtml(imp.ui_mode || 'form')}">
         <span class="option-card-icon">${escapeHtml(imp.icon || '\uD83D\uDD0C')}</span>
         <div>
           <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
@@ -5923,15 +5983,16 @@
       el.setAttribute("tabindex", "0");
       const name = el.dataset.name;
       const type = el.dataset.type;
+      const uiMode = el.dataset.uiMode || "form";
       el.addEventListener("click", () => {
         if (type === "demo") {
           showDashDemoDatasetPicker();
-        } else if (name === "pickle") {
-          // Pickle = file upload — close modal and trigger file input
+        } else if (uiMode === "file_upload") {
+          // File upload importers — close modal and trigger file input
           datasetImporterModal.classList.remove("show");
           dashFileInput.click();
-        } else if (name === "combine_datasets") {
-          // Combine = close modal and go to welcome screen combine flow
+        } else if (uiMode === "custom") {
+          // Custom UI importers — close modal and show dedicated UI
           datasetImporterModal.classList.remove("show");
           showCombineDatasetsForm();
           datasetWelcome.style.display = "flex";
@@ -6427,10 +6488,13 @@
       } catch (_) { /* ignore */ }
     }
 
-    // Build media type options from the registry
-    const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
-      `<option value="${escapeHtml(id)}"${id === guessedMediaType ? " selected" : ""}>${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
-    ).join("");
+    // Build media type options from the registry (exclude "any" — users must pick a real type)
+    const mtEntries = Object.entries(mediaTypesMap).filter(([id]) => id !== "any");
+    const hasGuessed = guessedMediaType && mtEntries.some(([id]) => id === guessedMediaType);
+    const mtOptions = (hasGuessed ? "" : `<option value="" disabled selected>-- Select media type --</option>`) +
+      mtEntries.map(([id, mt]) =>
+        `<option value="${escapeHtml(id)}"${id === guessedMediaType ? " selected" : ""}>${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
+      ).join("");
 
     // Build example type options: built-in + importers
     let exTypeOptions = `<option value="text">Text description</option>`;
@@ -6481,6 +6545,7 @@
     const exampleTypeSelect = processorImporterFormDiv.querySelector("#new-model-example-type");
     const exampleAddBtn = processorImporterFormDiv.querySelector("#new-model-example-add");
     const nameInput = processorImporterFormDiv.querySelector("input[name='name']");
+    const mediaTypeSelect = processorImporterFormDiv.querySelector("select[name='media_type']");
 
     // Track examples locally
     let newModelExamples = [];
@@ -6495,10 +6560,12 @@
 
     function updateOkBtn() {
       const name = nameInput ? nameInput.value.trim() : "";
-      okBtn.disabled = !(name && newModelExamples.length > 0);
+      const mt = mediaTypeSelect ? mediaTypeSelect.value : "";
+      okBtn.disabled = !(name && mt && newModelExamples.length > 0);
     }
 
     if (nameInput) nameInput.addEventListener("input", updateOkBtn);
+    if (mediaTypeSelect) mediaTypeSelect.addEventListener("change", updateOkBtn);
 
     // Initial render
     refreshNewModelGrid();

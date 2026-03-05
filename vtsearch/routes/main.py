@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, send_from_directory
@@ -49,6 +50,27 @@ def favicon_variant(variant: str) -> tuple[str, int] | Response:
     if not (static / filename).exists():
         return "", 204
     return send_from_directory(str(static), filename, mimetype="image/x-icon")
+
+
+@main_bp.route("/ng/")
+@main_bp.route("/ng/<path:path>")
+def serve_angular(path: str = "") -> Response:
+    """Serve the Angular SPA from static/ng/.
+
+    Any path under ``/ng/`` that matches an actual file is served directly;
+    everything else falls back to ``index.html`` so Angular's client-side
+    router can handle it.
+    """
+    ng_dir = str(_static_dir() / "ng")
+    if not os.path.isdir(ng_dir):
+        return Response(
+            "Angular app not built yet. Run: cd frontend && npm install && npm run build:prod",
+            status=404,
+            mimetype="text/plain",
+        )
+    if path and os.path.exists(os.path.join(ng_dir, path)):
+        return send_from_directory(ng_dir, path)
+    return send_from_directory(ng_dir, "index.html")
 
 
 @main_bp.route("/logo.svg")

@@ -32,6 +32,7 @@ class PickleDatasetImporter(DatasetImporter):
     name = "pickle"
     display_name = "Pickle File"
     description = "Load a previously exported .pkl dataset file."
+    ui_mode = "file_upload"
     fields = [
         ImporterField(
             key="file",
@@ -78,6 +79,23 @@ class PickleDatasetImporter(DatasetImporter):
         if not file_path.exists():
             raise FileNotFoundError(f"Dataset file not found: {file_path}")
         yield from load_dataset_from_pickle_chunked(file_path, chunk_size, thin=thin)
+
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        params = origin.get("params", {})
+        filename = params.get("filename", params.get("path", ""))
+        return f"file:{filename}" if filename else "pickle"
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        params = origin.get("params", {})
+        pkl_path = params.get("path", "")
+        return bool(pkl_path) and Path(pkl_path).is_file()
+
+    def reload_from_origin(self, origin: dict[str, Any]) -> dict[str, Any] | None:
+        params = origin.get("params", {})
+        pkl_path = params.get("path", "")
+        if not pkl_path or not Path(pkl_path).is_file():
+            return None
+        return {"file": pkl_path}
 
 
 IMPORTER = PickleDatasetImporter()

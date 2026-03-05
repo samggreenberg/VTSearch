@@ -116,6 +116,19 @@ class PluginBase:
     #: Ordered list of fields the user must fill.
     fields: list[PluginField]
 
+    #: How the frontend should render this plugin's UI.
+    #: ``"form"`` — generic form built from :attr:`fields` (default).
+    #: ``"file_upload"`` — the frontend should use its native file picker.
+    #: ``"custom"`` — the plugin has a dedicated UI section in the frontend.
+    #: ``"none"`` — no user-facing UI (e.g. the GUI exporter is handled
+    #:   automatically by the frontend results view).
+    ui_mode: str = "form"
+
+    #: When ``True``, this plugin is excluded from the generic picker list
+    #: in the frontend.  Useful for plugins that are always invoked through
+    #: a dedicated code path (e.g. the GUI exporter).
+    hidden_from_picker: bool = False
+
     # -- CLI support --------------------------------------------------------
 
     def add_cli_arguments(self, parser: argparse.ArgumentParser) -> None:
@@ -154,6 +167,8 @@ class PluginBase:
             "description": self.description,
             "icon": self.icon,
             "fields": [f.to_dict() for f in self.fields],
+            "ui_mode": self.ui_mode,
+            "hidden_from_picker": self.hidden_from_picker,
         }
 
 

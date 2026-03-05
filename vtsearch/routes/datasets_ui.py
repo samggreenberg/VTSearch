@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS
+from vtsearch.routes.datasets_loading import _origin_to_str
 from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
@@ -129,17 +130,7 @@ def dashboard_dataset_info():
     for m in snap.values():
         o = m.get("origin")
         if o:
-            importer = o.get("importer", "")
-            params = o.get("params", {})
-            # Build a human-readable origin string
-            if importer == "demo":
-                origin = f"demo:{params.get('name', '')}"
-            elif importer == "pickle":
-                origin = f"file:{params.get('filename', '')}"
-            elif importer == "folder":
-                origin = f"folder:{params.get('path', '')}"
-            elif importer:
-                origin = importer
+            origin = _origin_to_str(o)
             break
 
     # Use display name override if set, otherwise derive from origin

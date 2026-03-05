@@ -166,7 +166,6 @@ class FolderDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files to scan for in the folder.",
-            options=["sounds", "videos", "images", "paragraphs", "documents"],
             default="sounds",
         ),
         ImporterField(
@@ -176,6 +175,15 @@ class FolderDatasetImporter(DatasetImporter):
             description="Absolute path to the directory containing media files.",
         ),
     ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        from vtsearch.media import all_folder_names
+
+        for f in self.fields:
+            if f.key == "media_type":
+                f.options = all_folder_names()
+                break
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
@@ -259,6 +267,15 @@ class FolderDatasetImporter(DatasetImporter):
         if converters:
             origin["params"]["converters"] = converters
         return origin
+
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        params = origin.get("params", {})
+        return f"folder:{params.get('path', '')}"
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        params = origin.get("params", {})
+        folder_path = params.get("path", "")
+        return bool(folder_path) and Path(folder_path).is_dir()
 
 
 IMPORTER = FolderDatasetImporter()

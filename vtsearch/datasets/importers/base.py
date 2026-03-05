@@ -18,6 +18,8 @@ Example – a minimal SFTP importer skeleton::
     # vtsearch/datasets/importers/sftp/__init__.py
     from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
+    from vtsearch.media import all_folder_names
+
     class SftpImporter(DatasetImporter):
         name         = "sftp"
         display_name = "SFTP Server"
@@ -29,7 +31,7 @@ Example – a minimal SFTP importer skeleton::
             ImporterField("path",       "Remote Path", "text"),
             ImporterField(
                 "media_type", "Media Type", "select",
-                options=["sounds", "videos", "images", "paragraphs"],
+                options=all_folder_names(),
                 default="sounds",
             ),
         ]
@@ -62,6 +64,16 @@ class DatasetImporter(PluginBase):
     Subclass this, set the class-level attributes, implement :meth:`run`,
     and expose a module-level ``IMPORTER = YourImporter()`` – the registry
     picks it up automatically.
+
+    Custom metadata
+    ---------------
+    Importers can attach arbitrary per-media display metadata by setting
+    ``media["custom_metadata"]`` to a ``dict[str, Any]`` mapping
+    human-readable labels to values.  For example, an S3 importer might
+    set ``{"Uploaded By": "alice", "Bucket": "my-data"}``.  These fields
+    are merged with the media type's built-in display fields and rendered
+    in the labeling UI.  The dict is also persisted through pickle
+    export/import.
 
     Content vectors
     ---------------
@@ -271,3 +283,46 @@ class DatasetImporter(PluginBase):
             if val:
                 params[f.key] = str(val)
         return {"importer": self.name, "params": params}
+
+    # ------------------------------------------------------------------
+    # Origin display and reload
+    # ------------------------------------------------------------------
+
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        """Return a human-readable string for an origin dict from this importer.
+
+        The default implementation returns ``"<name>:<first_param_value>"``
+        or just ``"<name>"`` when there are no params.  Subclasses may
+        override for a more descriptive representation.
+        """
+        params = origin.get("params", {})
+        if params:
+            first_val = next(iter(params.values()))
+            return f"{self.name}:{first_val}"
+        return self.name
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        """Return whether this importer can re-load data from *origin*.
+
+        The default implementation returns ``True`` — most importers can
+        reload from their stored params.  Importers that require browser
+        uploads (e.g. pickle) should return ``False`` unless the params
+        contain enough info to reload (e.g. a server file path).
+
+        Subclasses should override when their reload capability depends on
+        the specific origin params (e.g. checking if a file still exists).
+        """
+        return True
+
+    def reload_from_origin(self, origin: dict[str, Any]) -> dict[str, Any] | None:
+        """Extract field_values from an origin dict suitable for :meth:`run`.
+
+        Returns a field_values dict that can be passed to
+        :meth:`run` / ``_run_importer_in_background()``, or ``None`` if
+        the origin cannot be reloaded.
+
+        The default implementation returns the origin's ``params`` dict
+        directly, which works for importers whose fields accept plain
+        strings.
+        """
+        return dict(origin.get("params", {}))

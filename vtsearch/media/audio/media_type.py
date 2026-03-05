@@ -74,6 +74,26 @@ class AudioMediaType(MediaType):
         return ["wav_bytes"]
 
     # ------------------------------------------------------------------
+    # Display metadata
+    # ------------------------------------------------------------------
+
+    def display_metadata(self, media: dict) -> dict:
+        result: dict = {}
+        freq = media.get("frequency")
+        if freq:
+            result["Frequency"] = freq
+        cat = media.get("category")
+        if cat and cat not in ("unknown", "custom"):
+            result["Category"] = cat
+        dur = media.get("duration")
+        if dur and dur > 0:
+            result["Duration"] = dur
+        fs = media.get("file_size")
+        if fs:
+            result["File Size"] = fs
+        return result
+
+    # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
 

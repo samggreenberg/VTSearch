@@ -103,7 +103,7 @@ class S3Importer(DatasetImporter):
             key="media_type",
             label="Media Type",
             field_type="select",
-            options=["sounds", "videos", "images", "paragraphs"],
+            options=all_folder_names(),  # from vtsearch.media
             default="sounds",
         ),
     ]

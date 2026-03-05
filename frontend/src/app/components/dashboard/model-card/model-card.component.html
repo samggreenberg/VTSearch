@@ -1,0 +1,46 @@
+<td>
+  @if (editing) {
+    <input
+      class="form-input inline-edit"
+      [(ngModel)]="editName"
+      (keydown)="onRenameKeydown($event)"
+      (blur)="confirmRename()"
+      (click)="$event.stopPropagation()"
+      autofocus
+    />
+  } @else {
+    <span class="name-cell">
+      {{ model.name }}
+      <button class="rename-btn" (click)="startRename($event)" title="Rename" aria-label="Rename model">&#9998;</button>
+    </span>
+  }
+</td>
+<td>{{ model.media_type || '-' }}</td>
+<td>{{ model.num_training ?? 0 }}</td>
+<td>
+  @if (model.trainable) {
+    <span class="check" aria-label="Trainable">&#10003;</span>
+  } @else {
+    <span class="dim">-</span>
+  }
+</td>
+<td>{{ formatDate(model.last_trained_at) }}</td>
+<td>{{ formatDate(model.created_at) }}</td>
+<td>
+  @if (model.loaded) {
+    <span class="check" aria-label="Loaded">&#10003;</span>
+  } @else {
+    <span class="dim">-</span>
+  }
+</td>
+<td>
+  <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete model" title="Delete">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"></polyline>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+      <path d="M10 11v6"></path>
+      <path d="M14 11v6"></path>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+    </svg>
+  </button>
+</td>
