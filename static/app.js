@@ -6429,10 +6429,13 @@
       } catch (_) { /* ignore */ }
     }
 
-    // Build media type options from the registry
-    const mtOptions = Object.entries(mediaTypesMap).map(([id, mt]) =>
-      `<option value="${escapeHtml(id)}"${id === guessedMediaType ? " selected" : ""}>${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
-    ).join("");
+    // Build media type options from the registry (exclude "any" — users must pick a real type)
+    const mtEntries = Object.entries(mediaTypesMap).filter(([id]) => id !== "any");
+    const hasGuessed = guessedMediaType && mtEntries.some(([id]) => id === guessedMediaType);
+    const mtOptions = (hasGuessed ? "" : `<option value="" disabled selected>-- Select media type --</option>`) +
+      mtEntries.map(([id, mt]) =>
+        `<option value="${escapeHtml(id)}"${id === guessedMediaType ? " selected" : ""}>${escapeHtml(mt.icon || "")} ${escapeHtml(mt.name || id)}</option>`
+      ).join("");
 
     // Build example type options: built-in + importers
     let exTypeOptions = `<option value="text">Text description</option>`;
@@ -6483,6 +6486,7 @@
     const exampleTypeSelect = processorImporterFormDiv.querySelector("#new-model-example-type");
     const exampleAddBtn = processorImporterFormDiv.querySelector("#new-model-example-add");
     const nameInput = processorImporterFormDiv.querySelector("input[name='name']");
+    const mediaTypeSelect = processorImporterFormDiv.querySelector("select[name='media_type']");
 
     // Track examples locally
     let newModelExamples = [];
@@ -6497,10 +6501,12 @@
 
     function updateOkBtn() {
       const name = nameInput ? nameInput.value.trim() : "";
-      okBtn.disabled = !(name && newModelExamples.length > 0);
+      const mt = mediaTypeSelect ? mediaTypeSelect.value : "";
+      okBtn.disabled = !(name && mt && newModelExamples.length > 0);
     }
 
     if (nameInput) nameInput.addEventListener("input", updateOkBtn);
+    if (mediaTypeSelect) mediaTypeSelect.addEventListener("change", updateOkBtn);
 
     // Initial render
     refreshNewModelGrid();
