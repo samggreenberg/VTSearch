@@ -307,7 +307,7 @@
   const dashProgressMessage = document.getElementById("dash-progress-message");
   const menuDashboard = document.getElementById("menu-dashboard");
   let showThumbnailsRight = true;
-  const favMtCheckboxes = document.querySelectorAll("[data-media-type]");
+  const autoloadEmbeddersContainer = document.getElementById("autoload-embedders-container");
   const autopilotTopGreensInput = document.getElementById("autopilot-top-greens-input");
   const autopilotHardRedsInput = document.getElementById("autopilot-hard-reds-input");
   const savedDatasetsDirInput = document.getElementById("saved-datasets-dir-input");
@@ -2050,14 +2050,42 @@
     fileInput.value = "";
   });
 
-  async function loadDemo(name) {
+  async function loadDemo(name, embedderName) {
+    // If no embedder specified, check if the demo's media type has multiple
+    // embedders and prompt the user to choose.
+    if (!embedderName) {
+      try {
+        const [demoRes, embRes] = await Promise.all([fetch("/api/dataset/demo-list"), fetch("/api/embedders")]);
+        if (demoRes.ok && embRes.ok) {
+          const demoData = await demoRes.json();
+          const embData = await embRes.json();
+          const ds = (demoData.datasets || []).find(d => d.name === name);
+          if (ds) {
+            const mt = ds.media_type || "audio";
+            const avail = (embData.embedders || []).filter(e => e.media_type_id === mt);
+            if (avail.length > 1) {
+              // Show a simple prompt to pick an embedder
+              const choices = avail.map(e => e.name).join(", ");
+              const pick = prompt(`Multiple embedders available for ${mt}: ${choices}\nEnter embedder name:`, avail[0].name);
+              if (!pick) return;  // user cancelled
+              embedderName = pick.trim();
+            } else if (avail.length === 1) {
+              embedderName = avail[0].name;
+            }
+          }
+        }
+      } catch (_) { /* proceed without embedder selection */ }
+    }
+
     startProgressPolling();
 
     try {
+      const body = { name };
+      if (embedderName) body.embedder = embedderName;
       const res = await fetch("/api/dataset/load-demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -2198,14 +2226,18 @@
         // Build tab bar and content sections
         const availableTypes = mediaOrder;
 
-        // Fetch the user's autoload media types to pick the initial tab
+        // Fetch the user's autoload embedders to pick the initial tab
         let initialTab = availableTypes[0] || Object.keys(mediaTypesMap)[0] || "audio";
         try {
-          const settingsRes = await fetch("/api/settings");
-          if (settingsRes.ok) {
+          const [settingsRes, embRes] = await Promise.all([fetch("/api/settings"), fetch("/api/embedders")]);
+          if (settingsRes.ok && embRes.ok) {
             const settingsData = await settingsRes.json();
-            const favs = settingsData.autoload_media_types || [];
-            const firstFav = favs.find(f => availableTypes.includes(f));
+            const embData = await embRes.json();
+            const favEmbNames = settingsData.autoload_media_embedders || [];
+            const allEmbs = embData.embedders || [];
+            // Map embedder names to their media type IDs
+            const favTypes = favEmbNames.map(n => (allEmbs.find(e => e.name === n) || {}).media_type_id).filter(Boolean);
+            const firstFav = favTypes.find(f => availableTypes.includes(f));
             if (firstFav) {
               initialTab = firstFav;
             }
@@ -3189,10 +3221,42 @@
     }
     if (autopilotTopGreensInput) autopilotTopGreensInput.value = data.autopilot_top_greens;
     if (autopilotHardRedsInput) autopilotHardRedsInput.value = data.autopilot_hard_reds;
-    const favList = data.autoload_media_types || [];
-    favMtCheckboxes.forEach(cb => {
-      cb.checked = favList.includes(cb.dataset.mediaType);
-    });
+    // Populate autoload embedders checkboxes dynamically
+    if (autoloadEmbeddersContainer) {
+      const embFavList = data.autoload_media_embedders || [];
+      fetch("/api/embedders").then(r => r.json()).then(embData => {
+        autoloadEmbeddersContainer.innerHTML = "";
+        const embedders = embData.embedders || [];
+        embedders.forEach(emb => {
+          const row = document.createElement("div");
+          row.className = "settings-row";
+          const label = document.createElement("label");
+          label.className = "settings-label";
+          label.textContent = `${emb.name} (${emb.media_type_id})`;
+          label.htmlFor = `fav-emb-${emb.name}`;
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.id = `fav-emb-${emb.name}`;
+          cb.dataset.embedderName = emb.name;
+          cb.checked = embFavList.includes(emb.name);
+          cb.style.accentColor = "var(--accent)";
+          cb.addEventListener("change", () => {
+            const selected = [];
+            autoloadEmbeddersContainer.querySelectorAll("input[data-embedder-name]").forEach(c => {
+              if (c.checked) selected.push(c.dataset.embedderName);
+            });
+            fetch("/api/settings", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ autoload_media_embedders: selected }),
+            }).catch(() => {});
+          });
+          row.appendChild(label);
+          row.appendChild(cb);
+          autoloadEmbeddersContainer.appendChild(row);
+        });
+      }).catch(() => {});
+    }
     if (savedDatasetsDirInput) savedDatasetsDirInput.value = data.saved_datasets_dir || "";
     if (detectorsDirInput) detectorsDirInput.value = data.detectors_dir || "";
     if (trainableModelsDirInput) trainableModelsDirInput.value = data.trainable_models_dir || "";
@@ -3279,18 +3343,7 @@
     });
   }
 
-  // Autoload media type toggles
-  favMtCheckboxes.forEach(cb => {
-    cb.addEventListener("change", () => {
-      const selected = [];
-      favMtCheckboxes.forEach(c => { if (c.checked) selected.push(c.dataset.mediaType); });
-      fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ autoload_media_types: selected }),
-      }).catch(() => {});
-    });
-  });
+  // Autoload media embedder toggles are set up dynamically in populateSettingsModal
 
   // Default button — reset all settings to defaults
   if (settingsDefaultBtn) {
@@ -6215,14 +6268,17 @@
       });
     }
 
-    // Pick initial tab
+    // Pick initial tab based on autoload embedders
     let initialTab = mediaOrder[0] || Object.keys(mediaTypesMap)[0] || "audio";
     try {
-      const settingsRes = await fetch("/api/settings");
-      if (settingsRes.ok) {
+      const [settingsRes, embRes] = await Promise.all([fetch("/api/settings"), fetch("/api/embedders")]);
+      if (settingsRes.ok && embRes.ok) {
         const settingsData = await settingsRes.json();
-        const favs = settingsData.autoload_media_types || [];
-        const firstFav = favs.find(f => mediaOrder.includes(f));
+        const embData = await embRes.json();
+        const favEmbNames = settingsData.autoload_media_embedders || [];
+        const allEmbs = embData.embedders || [];
+        const favTypes = favEmbNames.map(n => (allEmbs.find(e => e.name === n) || {}).media_type_id).filter(Boolean);
+        const firstFav = favTypes.find(f => mediaOrder.includes(f));
         if (firstFav) initialTab = firstFav;
       }
     } catch (_) {}
@@ -6420,11 +6476,14 @@
       guessedMediaType = datasetTypes[0];
     } else {
       try {
-        const sRes = await fetch("/api/settings");
-        if (sRes.ok) {
+        const [sRes, embRes] = await Promise.all([fetch("/api/settings"), fetch("/api/embedders")]);
+        if (sRes.ok && embRes.ok) {
           const sData = await sRes.json();
-          const autoloads = sData.autoload_media_types || [];
-          if (autoloads.length === 1) guessedMediaType = autoloads[0];
+          const embData = await embRes.json();
+          const autoloads = sData.autoload_media_embedders || [];
+          const allEmbs = embData.embedders || [];
+          const favTypes = [...new Set(autoloads.map(n => (allEmbs.find(e => e.name === n) || {}).media_type_id).filter(Boolean))];
+          if (favTypes.length === 1) guessedMediaType = favTypes[0];
         }
       } catch (_) { /* ignore */ }
     }

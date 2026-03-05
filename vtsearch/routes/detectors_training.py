@@ -247,18 +247,17 @@ def import_detector_labels():
     media_type_hint = request.form.get("media_type", "").strip()
 
     # Use the media type registry for extension → type lookup and embedding.
-    from vtsearch.media import get as media_get
-    from vtsearch.media import get_by_extension
+    from vtsearch.media import embedders_for_type, get_by_extension
 
     def _media_type_for_path(p: Path) -> str | None:
         mt = get_by_extension(p.suffix)
         return mt.type_id if mt else None
 
     def _embed(media_type: str, p: Path):
-        try:
-            return media_get(media_type).embed_media(p)
-        except KeyError:
+        avail = embedders_for_type(media_type)
+        if not avail:
             return None
+        return avail[0].embed_media(p)
 
     try:
         text = file.read().decode("utf-8")

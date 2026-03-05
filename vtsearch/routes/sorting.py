@@ -85,32 +85,50 @@ def _cosine_sort(query_vec):
 _embedder_load_lock = threading.Lock()
 
 
+def _get_embedder_for_loaded_data():
+    """Return the appropriate embedder for the currently loaded dataset."""
+    snap = snapshot_medias()
+    if not snap:
+        return None
+    first = next(iter(snap.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("type", "audio")
+
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 def _load_embedder_with_progress(media_type, total_steps):
-    """Load the embedding model for *media_type*, forwarding progress to the sort progress bar.
+    """Load the embedding model, forwarding progress to the sort progress bar.
 
     If the model is already loaded this is a no-op.  A lock serialises
     concurrent callers so that only one request touches ``_on_progress``
     at a time, preventing the save/restore from trampling another
     request's callback.
     """
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-    except KeyError:
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
         return
 
     with _embedder_load_lock:
-        if getattr(mt, "_model", None) is not None:
+        if getattr(emb, "_model", None) is not None:
             return
 
         update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
-        original_cb = mt._on_progress
-        mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+        original_cb = emb._on_progress
+        emb._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
         try:
-            mt.load_models()
+            emb.load_models()
         finally:
-            mt._on_progress = original_cb
+            emb._on_progress = original_cb
 
 
 @sorting_bp.route("/api/sort", methods=["POST"])
@@ -131,7 +149,9 @@ def sort_clips():
         update_sort_progress("idle")
         return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(snap.values())).get("type", "audio")
+    first = next(iter(snap.values()))
+    media_type = first.get("type", "audio")
+    embedder_name = first.get("embedder", "")
     total_steps = 1 + len(snap) + 1
 
     _load_embedder_with_progress(media_type, total_steps)
@@ -140,7 +160,7 @@ def sort_clips():
     from vtsearch import settings
 
     enrich = settings.get_enrich_descriptions()
-    text_vec = embed_text_query(text, media_type, enrich=enrich)
+    text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
     if text_vec is None:
         update_sort_progress("idle")
         return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
@@ -433,18 +453,17 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     """Embed a media file and sort all loaded medias by cosine similarity.
 
     Returns ``(results_list, threshold)`` on success or raises on error.
-    The file at *file_path* is embedded using the media type of the currently
+    The file at *file_path* is embedded using the embedder of the currently
     loaded dataset.
     """
     snap = snapshot_medias()
     if not snap:
         raise ValueError("No medias loaded")
 
-    media_type = next(iter(snap.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    mt = media_get(media_type)
-    example_embedding = mt.embed_media(file_path)
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
+        raise ValueError("No embedder available for loaded dataset")
+    example_embedding = emb.embed_media(file_path)
 
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
@@ -550,11 +569,10 @@ def label_file_sort():
     if not medias:
         return jsonify({"error": "No medias loaded"}), 400
 
-    # Determine media type from loaded dataset and get the appropriate embedder
-    media_type = next(iter(medias.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    mt = media_get(media_type)
+    # Determine embedder from loaded dataset
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
+        return jsonify({"error": "No embedder available for loaded dataset"}), 400
 
     try:
         # Parse the label file
@@ -598,8 +616,8 @@ def label_file_sort():
                 skipped_count += 1
                 continue
 
-            # Embed the media file using the appropriate model for the current media type
-            embedding = mt.embed_media(media_path)
+            # Embed the media file using the dataset's embedder
+            embedding = emb.embed_media(media_path)
             if embedding is None:
                 skipped_count += 1
                 continue

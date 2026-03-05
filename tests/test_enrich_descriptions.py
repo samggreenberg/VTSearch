@@ -18,11 +18,11 @@ import pytest
 
 from vtsearch.eval.config import EvalQuery
 from vtsearch.eval.runner import eval_text_sort
-from vtsearch.media.audio.media_type import AudioMediaType
-from vtsearch.media.base import MediaType
-from vtsearch.media.image.media_type import ImageMediaType
-from vtsearch.media.text.media_type import TextMediaType
-from vtsearch.media.video.media_type import VideoMediaType
+from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.base import MediaEmbedder
+from vtsearch.media.image.embedder import ImageClipEmbedder
+from vtsearch.media.text.embedder import TextE5Embedder
+from vtsearch.media.video.embedder import VideoXClipEmbedder
 from vtsearch.models.embeddings import embed_text_query
 
 
@@ -33,44 +33,44 @@ from vtsearch.models.embeddings import embed_text_query
 
 class TestDescriptionWrappers:
     def test_audio_has_wrappers(self):
-        mt = AudioMediaType()
-        wrappers = mt.description_wrappers
+        emb = AudioClapEmbedder()
+        wrappers = emb.description_wrappers
         assert len(wrappers) >= 3
         for w in wrappers:
             assert "{text}" in w
 
     def test_image_has_wrappers(self):
-        mt = ImageMediaType()
-        wrappers = mt.description_wrappers
+        emb = ImageClipEmbedder()
+        wrappers = emb.description_wrappers
         assert len(wrappers) >= 3
         for w in wrappers:
             assert "{text}" in w
 
     def test_text_has_wrappers(self):
-        mt = TextMediaType()
-        wrappers = mt.description_wrappers
+        emb = TextE5Embedder()
+        wrappers = emb.description_wrappers
         assert len(wrappers) >= 3
         for w in wrappers:
             assert "{text}" in w
 
     def test_video_has_wrappers(self):
-        mt = VideoMediaType()
-        wrappers = mt.description_wrappers
+        emb = VideoXClipEmbedder()
+        wrappers = emb.description_wrappers
         assert len(wrappers) >= 3
         for w in wrappers:
             assert "{text}" in w
 
     def test_wrappers_include_bare_text(self):
-        """Each media type should include a plain '{text}' wrapper."""
-        for mt_cls in (AudioMediaType, ImageMediaType, TextMediaType, VideoMediaType):
-            mt = mt_cls()
-            assert "{text}" in mt.description_wrappers, f"{mt_cls.__name__} missing bare '{{text}}' wrapper"
+        """Each embedder should include a plain '{text}' wrapper."""
+        for emb_cls in (AudioClapEmbedder, ImageClipEmbedder, TextE5Embedder, VideoXClipEmbedder):
+            emb = emb_cls()
+            assert "{text}" in emb.description_wrappers, f"{emb_cls.__name__} missing bare '{{text}}' wrapper"
 
     def test_wrappers_format_correctly(self):
         """All wrappers should format without errors."""
-        for mt_cls in (AudioMediaType, ImageMediaType, TextMediaType, VideoMediaType):
-            mt = mt_cls()
-            for wrapper in mt.description_wrappers:
+        for emb_cls in (AudioClapEmbedder, ImageClipEmbedder, TextE5Embedder, VideoXClipEmbedder):
+            emb = emb_cls()
+            for wrapper in emb.description_wrappers:
                 result = wrapper.format(text="test query")
                 assert "test query" in result
 
@@ -81,37 +81,17 @@ class TestDescriptionWrappers:
 
 
 class TestEmbedTextEnriched:
-    def _make_mock_media_type(self, wrappers, embed_fn):
-        """Create a minimal concrete MediaType subclass for testing."""
+    def _make_mock_embedder(self, wrappers, embed_fn):
+        """Create a minimal concrete MediaEmbedder subclass for testing."""
 
-        class MockMediaType(MediaType):
+        class MockEmbedder(MediaEmbedder):
             @property
-            def type_id(self):
+            def name(self):
                 return "mock"
 
             @property
-            def name(self):
-                return "Mock"
-
-            @property
-            def icon(self):
-                return "?"
-
-            @property
-            def file_extensions(self):
-                return []
-
-            @property
-            def loops(self):
-                return False
-
-            @property
-            def demo_datasets(self):
-                return []
-
-            @property
-            def description_wrappers(self):
-                return wrappers
+            def media_type_id(self):
+                return "mock"
 
             def load_models(self):
                 pass
@@ -122,15 +102,11 @@ class TestEmbedTextEnriched:
             def embed_text(self, text):
                 return embed_fn(text)
 
-            def load_media_data(self, file_path):
-                return {"duration": 0}
+            @property
+            def description_wrappers(self):
+                return wrappers
 
-            def media_response(self, media):
-                from vtsearch.media.base import MediaResponse
-
-                return MediaResponse(data=b"", mimetype="text/plain")
-
-        return MockMediaType()
+        return MockEmbedder()
 
     def test_enriched_averages_wrapper_embeddings(self):
         """embed_text_enriched should average embeddings across wrappers."""
@@ -146,7 +122,7 @@ class TestEmbedTextEnriched:
             else:
                 return np.array([0.0, 0.0, 1.0])
 
-        mt = self._make_mock_media_type(
+        mt = self._make_mock_embedder(
             wrappers=["a photo of {text}", "an image of {text}", "{text}"],
             embed_fn=mock_embed,
         )
@@ -169,7 +145,7 @@ class TestEmbedTextEnriched:
         def mock_embed(text):
             return np.array([1.0, 2.0, 3.0])
 
-        mt = self._make_mock_media_type(wrappers=[], embed_fn=mock_embed)
+        mt = self._make_mock_embedder(wrappers=[], embed_fn=mock_embed)
         result = mt.embed_text_enriched("test")
         np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0]))
 
@@ -183,7 +159,7 @@ class TestEmbedTextEnriched:
                 return None  # Fail for wrapped texts
             return np.array([1.0, 0.0])  # Succeed for plain fallback
 
-        mt = self._make_mock_media_type(
+        mt = self._make_mock_embedder(
             wrappers=["wrapper1 {text}", "wrapper2 {text}"],
             embed_fn=mock_embed,
         )
@@ -199,7 +175,7 @@ class TestEmbedTextEnriched:
                 return None
             return np.array([1.0, 0.0])
 
-        mt = self._make_mock_media_type(
+        mt = self._make_mock_embedder(
             wrappers=["good {text}", "bad {text}"],
             embed_fn=mock_embed,
         )
@@ -215,7 +191,7 @@ class TestEmbedTextEnriched:
         def mock_embed(text):
             return np.array([3.0, 4.0])
 
-        mt = self._make_mock_media_type(
+        mt = self._make_mock_embedder(
             wrappers=["w1 {text}", "w2 {text}"],
             embed_fn=mock_embed,
         )
@@ -233,14 +209,16 @@ class TestEmbedTextQueryEnrich:
         """enrich=False should call embed_text, not embed_text_enriched."""
         mock_vec = np.array([1.0, 0.0])
 
-        class FakeMT:
+        class FakeEmbedder:
+            media_type_id = "audio"
+
             def embed_text(self, text):
                 return mock_vec
 
             def embed_text_enriched(self, text):
                 raise AssertionError("Should not be called")
 
-        with patch("vtsearch.media.get", return_value=FakeMT()):
+        with patch("vtsearch.models.embeddings._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=False)
         np.testing.assert_array_equal(result, mock_vec)
 
@@ -248,14 +226,16 @@ class TestEmbedTextQueryEnrich:
         """enrich=True should call embed_text_enriched."""
         mock_vec = np.array([0.0, 1.0])
 
-        class FakeMT:
+        class FakeEmbedder:
+            media_type_id = "audio"
+
             def embed_text(self, text):
                 raise AssertionError("Should not be called")
 
             def embed_text_enriched(self, text):
                 return mock_vec
 
-        with patch("vtsearch.media.get", return_value=FakeMT()):
+        with patch("vtsearch.models.embeddings._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=True)
         np.testing.assert_array_equal(result, mock_vec)
 
