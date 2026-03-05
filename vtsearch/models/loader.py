@@ -93,35 +93,61 @@ def _make_console_progress(original_callback):
 
 
 def preload_autoload_media_types() -> list[str]:
-    """Eagerly load embedding models for all autoload media types.
+    """Eagerly load embedding models for autoload embedders (and legacy media types).
 
-    Reads ``autoload_media_types`` from persisted settings and calls
-    :meth:`~vtsearch.media.base.MediaType.load_models` on each one so
+    Reads ``autoload_media_embedders`` from persisted settings and calls
+    :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each one so
     that models are warm before the user opens the GUI.
+
+    Falls back to ``autoload_media_types`` for backward compatibility: if
+    ``autoload_media_embedders`` is empty but ``autoload_media_types`` has
+    entries, the first registered embedder for each type is loaded.
 
     Prints intermediate status messages and download progress bars to
     the console so that the user can see what is happening during the
     (potentially long) model loading phase.
 
-    Returns the list of type IDs that were preloaded.
+    Returns the list of embedder names that were preloaded.
     """
-    from vtsearch.media import get as media_get
-    from vtsearch.settings import get_autoload_media_types
+    from vtsearch.media import embedders_for_type, get_embedder
+    from vtsearch.settings import get_autoload_media_embedders, get_autoload_media_types
 
     preloaded: list[str] = []
+
+    # Prefer the new embedder-based setting
+    embedder_names = get_autoload_media_embedders()
+    if embedder_names:
+        for emb_name in embedder_names:
+            try:
+                emb = get_embedder(emb_name)
+                print(f"  Preloading {emb_name} embedder...", flush=True)
+                original_cb = emb._on_progress
+                emb._on_progress = _make_console_progress(original_cb)
+                try:
+                    emb.load_models()
+                finally:
+                    emb._on_progress = original_cb
+                preloaded.append(emb_name)
+            except Exception as exc:
+                print(f"  Warning: failed to preload {emb_name}: {exc}", flush=True)
+        return preloaded
+
+    # Legacy fallback: autoload_media_types → first embedder for each type
     for type_id in get_autoload_media_types():
         try:
-            mt = media_get(type_id)
-            print(f"  Preloading {mt.name} embedder...", flush=True)
-            # Temporarily wrap the media type's progress callback so
-            # that status updates are also printed to the console.
-            original_cb = mt._on_progress
-            mt._on_progress = _make_console_progress(original_cb)
+            avail = embedders_for_type(type_id)
+            if not avail:
+                print(f"  Warning: no embedder for media type {type_id}", flush=True)
+                continue
+            emb = avail[0]
+            print(f"  Preloading {emb.name} embedder...", flush=True)
+            original_cb = emb._on_progress
+            emb._on_progress = _make_console_progress(original_cb)
             try:
-                mt.load_models()
+                emb.load_models()
             finally:
-                mt._on_progress = original_cb
-            preloaded.append(type_id)
+                emb._on_progress = original_cb
+            preloaded.append(emb.name)
         except Exception as exc:
             print(f"  Warning: failed to preload {type_id}: {exc}", flush=True)
     return preloaded
@@ -130,34 +156,38 @@ def preload_autoload_media_types() -> list[str]:
 # ---------------------------------------------------------------------------
 # Backward-compatible getter functions
 #
-# These return the model instances held by their respective MediaType objects.
+# These return the model instances held by their respective embedder objects.
 # Existing callers that import these functions directly continue to work.
 # ---------------------------------------------------------------------------
 
 
 def get_clap_model():
-    """Return ``(clap_model, clap_processor)`` from the audio media type."""
-    from vtsearch.media import get as media_get
+    """Return ``(clap_model, clap_processor)`` from the CLAP embedder."""
+    from vtsearch.media import get_embedder
 
-    return media_get("audio")._get_model_and_processor()
+    emb = get_embedder("clap")
+    return emb._get_model_and_processor()
 
 
 def get_xclip_model():
-    """Return ``(xclip_model, xclip_processor)`` from the video media type."""
-    from vtsearch.media import get as media_get
+    """Return ``(xclip_model, xclip_processor)`` from the X-CLIP embedder."""
+    from vtsearch.media import get_embedder
 
-    return media_get("video")._get_model_and_processor()
+    emb = get_embedder("xclip")
+    return emb._get_model_and_processor()
 
 
 def get_clip_model():
-    """Return ``(clip_model, clip_processor)`` from the image media type."""
-    from vtsearch.media import get as media_get
+    """Return ``(clip_model, clip_processor)`` from the CLIP embedder."""
+    from vtsearch.media import get_embedder
 
-    return media_get("image")._get_model_and_processor()
+    emb = get_embedder("clip")
+    return emb._get_model_and_processor()
 
 
 def get_e5_model():
-    """Return the E5 ``SentenceTransformer`` from the text media type."""
-    from vtsearch.media import get as media_get
+    """Return the E5 ``SentenceTransformer`` from the E5 embedder."""
+    from vtsearch.media import get_embedder
 
-    return media_get("paragraph")._get_model()
+    emb = get_embedder("e5")
+    return emb._get_model()

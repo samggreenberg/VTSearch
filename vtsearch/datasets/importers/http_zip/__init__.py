@@ -199,8 +199,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
+        emb_name = field_values.get("embedder", "")
         try:
-            load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
+            load_dataset_from_folder(
+                extract_dir, media_type, medias, on_progress=progress, thin=thin, embedder_name=emb_name,
+            )
             # Run any user-selected converters on the extracted folder.
             _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
         finally:
@@ -252,8 +255,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         extract_dir = self._download_and_extract(field_values)
         media_type = field_values.get("media_type", "sounds")
+        emb_name = field_values.get("embedder", "")
         try:
-            yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+            yield from load_dataset_from_folder_chunked(
+                extract_dir, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+            )
             # Run converters on the extracted folder and yield as a chunk.
             converters_str = field_values.get("converters", "")
             if converters_str:

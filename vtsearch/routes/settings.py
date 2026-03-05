@@ -132,6 +132,15 @@ def update_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
+    if "autoload_media_embedders" in body:
+        val = body["autoload_media_embedders"]
+        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+            return jsonify({"error": "autoload_media_embedders must be a list of strings"}), 400
+        try:
+            settings.set_autoload_media_embedders(val)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
     # Directory path settings
     for dir_key, setter in (
         ("saved_datasets_dir", settings.set_saved_datasets_dir),

@@ -82,6 +82,14 @@ def media_types_list():
     return jsonify({"media_types": all_types_dict()})
 
 
+@datasets_bp.route("/api/embedders")
+def embedders_list():
+    """Return all registered embedders with their metadata."""
+    from vtsearch.media import all_embedders_dict
+
+    return jsonify({"embedders": all_embedders_dict()})
+
+
 # ---------------------------------------------------------------------------
 # Converter chooser
 # ---------------------------------------------------------------------------
@@ -418,13 +426,14 @@ def load_demo_dataset_route():
         return data
 
     dataset_name = data.get("name")
+    embedder_name = data.get("embedder", "")
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
     demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
     _run_origin_load_in_background(
-        lambda: load_demo_dataset(dataset_name, medias),
+        lambda: load_demo_dataset(dataset_name, medias, embedder_name=embedder_name),
         demo_origin,
         name=dataset_name,
     )

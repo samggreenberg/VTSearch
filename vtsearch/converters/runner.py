@@ -75,9 +75,9 @@ def run_converters_on_folder(
     if on_progress is None:
         on_progress = _default_progress()
 
-    from vtsearch.media import get as media_get, get_by_folder_name  # noqa: PLC0415
+    from vtsearch.media import embedders_for_type, get as media_get, get_by_folder_name  # noqa: PLC0415
 
-    # Resolve target media type and load its embedding model.
+    # Resolve target media type and its embedder.
     target_mt = get_by_folder_name(target_media_type)
 
     # Filter to converters that actually target this media type.
@@ -85,8 +85,12 @@ def run_converters_on_folder(
     if not valid_converters:
         return
 
-    if getattr(target_mt, "_model", None) is None:
-        target_mt.load_models()
+    # Resolve the embedder for the target media type
+    avail = embedders_for_type(target_mt.type_id)
+    target_emb = avail[0] if avail else None
+
+    if target_emb is not None and getattr(target_emb, "_model", None) is None:
+        target_emb.load_models()
 
     media_id = max(medias.keys(), default=0) + 1
 
@@ -167,7 +171,7 @@ def run_converters_on_folder(
                 origin_name = f"{source_rel}\u2192{output_filename}"
 
                 # Embed the converted output.
-                embedding = _embed_converted_output(target_mt, output)
+                embedding = _embed_converted_output(target_emb, output)
                 if embedding is None:
                     continue
 
@@ -177,6 +181,7 @@ def run_converters_on_folder(
                 media_data: dict[str, Any] = {
                     "id": media_id,
                     "type": target_mt.type_id,
+                    "embedder": target_emb.name if target_emb else "",
                     "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
                     "md5": md5,
                     "embedding": embedding,
@@ -208,13 +213,16 @@ def run_converters_on_folder(
                 media_id += 1
 
 
-def _embed_converted_output(target_mt, output: dict[str, Any]):
-    """Embed converter output using the target media type's embedder.
+def _embed_converted_output(target_emb, output: dict[str, Any]):
+    """Embed converter output using the target embedder.
 
     Writes the output to a temporary file and calls ``embed_media()``,
     which is the most general approach across all media types.
     """
     import numpy as np  # noqa: PLC0415
+
+    if target_emb is None:
+        return None
 
     media_bytes = output.get("media_bytes")
     media_string = output.get("media_string")
@@ -226,7 +234,7 @@ def _embed_converted_output(target_mt, output: dict[str, Any]):
             tmp.write(media_bytes)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_mt.embed_media(tmp_path)
+            embedding = target_emb.embed_media(tmp_path)
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding
@@ -237,7 +245,7 @@ def _embed_converted_output(target_mt, output: dict[str, Any]):
             tmp.write(media_string)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_mt.embed_media(tmp_path)
+            embedding = target_emb.embed_media(tmp_path)
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding

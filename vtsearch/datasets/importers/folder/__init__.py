@@ -29,25 +29,42 @@ def _load_pdf_images(
     folder: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
+    embedder_name: str = "",
 ) -> None:
     """Expand all PDFs in *folder* into per-page image medias.
 
-    Each page is rendered at 150 DPI, embedded with CLIP, and appended to
-    *medias* with sequential IDs continuing from the current maximum.  The
-    ``origin`` is set to ``{"importer": "pdf", "params": {"path": ...}}``
-    so the provenance points back to the source document.
+    Each page is rendered at 150 DPI, embedded with the image embedder, and
+    appended to *medias* with sequential IDs continuing from the current
+    maximum.  The ``origin`` is set to ``{"importer": "pdf", "params":
+    {"path": ...}}`` so the provenance points back to the source document.
     """
     pdf_files = sorted(folder.rglob("*.pdf"))
     if not pdf_files:
         return
 
     from vtsearch.datasets.pdf import render_pdf_pages  # noqa: PLC0415
-    from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+    from vtsearch.media import embedders_for_type, get_by_folder_name, get_embedder  # noqa: PLC0415
 
     mt = get_by_folder_name("images")
-    if getattr(mt, "_model", None) is None:
-        mt.load_models()
 
+    # Resolve the embedder
+    emb = None
+    if embedder_name:
+        try:
+            emb = get_embedder(embedder_name)
+        except KeyError:
+            pass
+    if emb is None:
+        avail = embedders_for_type(mt.type_id)
+        if avail:
+            emb = avail[0]
+    if emb is None:
+        return
+
+    if getattr(emb, "_model", None) is None:
+        emb.load_models()
+
+    embedder_id = emb.name
     media_id = max(medias.keys(), default=0) + 1
 
     for pdf_path in pdf_files:
@@ -58,7 +75,7 @@ def _load_pdf_images(
         pdf_rel = pdf_path.relative_to(folder).as_posix()
 
         for page_name, pil_image in pages:
-            embedding = mt.embed_pil_image(pil_image)
+            embedding = emb.embed_pil_image(pil_image)
             if embedding is None:
                 continue
 
@@ -78,6 +95,7 @@ def _load_pdf_images(
             media_data: dict[str, Any] = {
                 "id": media_id,
                 "type": mt.type_id,
+                "embedder": embedder_id,
                 "file_size": len(image_bytes),
                 "md5": hashlib.md5(image_bytes).hexdigest(),
                 "embedding": embedding,
@@ -162,16 +180,17 @@ class FolderDatasetImporter(DatasetImporter):
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
+        emb_name = field_values.get("embedder", "")
         has_regular = True
         try:
-            load_dataset_from_folder(folder, media_type, medias, thin=thin)
+            load_dataset_from_folder(folder, media_type, medias, thin=thin, embedder_name=emb_name)
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
             if media_type != "images" and not field_values.get("converters"):
                 raise
             has_regular = False
         if media_type == "images":
-            _load_pdf_images(folder, medias, thin=thin)
+            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name)
 
         # Run any user-selected converters.
         _run_selected_converters(folder, media_type, field_values, medias, thin=thin)
@@ -196,8 +215,11 @@ class FolderDatasetImporter(DatasetImporter):
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
+        emb_name = field_values.get("embedder", "")
         try:
-            yield from load_dataset_from_folder_chunked(folder, media_type, chunk_size, thin=thin)
+            yield from load_dataset_from_folder_chunked(
+                folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+            )
         except ValueError:
             if media_type != "images" and not field_values.get("converters"):
                 raise

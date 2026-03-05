@@ -31,6 +31,27 @@ def clear_dataset():
     clear_all()
 
 
+def _get_embedder_for_clips():
+    """Return the embedder for the current dataset, or None."""
+    snap = snapshot_medias()
+    if not snap:
+        return None
+    first = next(iter(snap.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("type", "audio")
+
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 def _load_embedder_for_clips() -> None:
     """Eagerly load the embedder for the current dataset's media type.
 
@@ -46,21 +67,15 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
-    snap = snapshot_medias()
-    if not snap:
+    emb = _get_embedder_for_clips()
+    if emb is None:
+        update_progress("idle", "Ready")
         return
-    media_type = next(iter(snap.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-    except KeyError:
-        return
-    mt.load_models()
+    emb.load_models()
     # Warm up the text encoder so the first text sort is instant.
     update_progress("loading", "Warming up text encoder…", 0, 0)
     try:
-        mt.embed_text("warmup")
+        emb.embed_text("warmup")
     except Exception:
         pass
     update_progress("idle", "Ready")

@@ -433,6 +433,7 @@ def load_dataset_from_folder(
     on_progress: Optional[ProgressCallback] = None,
     origin: dict[str, Any] | None = None,
     thin: bool = False,
+    embedder_name: str = "",
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -477,12 +478,15 @@ def load_dataset_from_folder(
             disk instead of reading all bytes into ``media_bytes``.  This saves
             memory for CLI workflows that only need embeddings for scoring.
             MD5 is still computed via streaming (constant memory).
+        embedder_name: Optional name of a registered embedder to use.
+            When empty, the first registered embedder for the media type
+            is used.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
             files are found in ``folder_path``.
     """
-    from vtsearch.media import get_by_folder_name
+    from vtsearch.media import embedders_for_type, get_by_folder_name, get_embedder
 
     if on_progress is None:
         on_progress = _default_progress()
@@ -494,10 +498,22 @@ def load_dataset_from_folder(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
+    # Resolve the embedder
+    emb = None
+    if embedder_name:
+        try:
+            emb = get_embedder(embedder_name)
+        except KeyError:
+            raise ValueError(f"Unknown embedder: {embedder_name}")
+    else:
+        avail = embedders_for_type(mt.type_id)
+        if avail:
+            emb = avail[0]
+
     # Eagerly load models before starting the embedding timer so that
     # download / weight-loading time does not pollute the progress bar.
-    if getattr(mt, "_model", None) is None:
-        mt.load_models()
+    if emb is not None and getattr(emb, "_model", None) is None:
+        emb.load_models()
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
@@ -532,9 +548,13 @@ def load_dataset_from_folder(
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
             else:
-                embedding = mt.embed_media(file_path)
+                if emb is None:
+                    continue
+                embedding = emb.embed_media(file_path)
                 if embedding is None:
                     continue
+
+            embedder_id = emb.name if emb else ""
 
             if thin:
                 # Thin mode: store file path reference, skip loading bytes.
@@ -548,6 +568,7 @@ def load_dataset_from_folder(
                 media_data: dict[str, Any] = {
                     "id": media_id,
                     "type": mt.type_id,
+                    "embedder": embedder_id,
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
                     "embedding": embedding,
@@ -575,6 +596,7 @@ def load_dataset_from_folder(
                 media_data = {
                     "id": media_id,
                     "type": mt.type_id,
+                    "embedder": embedder_id,
                     "file_size": len(file_bytes),
                     "md5": md5,
                     "embedding": embedding,
@@ -615,6 +637,7 @@ def load_dataset_from_folder_chunked(
     on_progress: Optional[ProgressCallback] = None,
     origin: dict[str, Any] | None = None,
     thin: bool = False,
+    embedder_name: str = "",
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -634,6 +657,9 @@ def load_dataset_from_folder_chunked(
             lookup logic as *content_vectors*).
         origin: Optional origin dict to attach to each media.
         thin: When ``True``, store ``media_path`` instead of ``media_bytes``.
+        embedder_name: Optional name of a registered embedder to use.
+            When empty, the first registered embedder for the media type
+            is used.
 
     Yields:
         A dict mapping int media IDs (starting at 1) to media data dicts.
@@ -643,7 +669,7 @@ def load_dataset_from_folder_chunked(
         ValueError: If ``media_type`` is not recognised, or if no matching
             files are found in ``folder_path``.
     """
-    from vtsearch.media import get_by_folder_name
+    from vtsearch.media import embedders_for_type, get_by_folder_name, get_embedder
 
     if on_progress is None:
         on_progress = _default_progress()
@@ -655,10 +681,22 @@ def load_dataset_from_folder_chunked(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
+    # Resolve the embedder
+    emb = None
+    if embedder_name:
+        try:
+            emb = get_embedder(embedder_name)
+        except KeyError:
+            raise ValueError(f"Unknown embedder: {embedder_name}")
+    else:
+        avail = embedders_for_type(mt.type_id)
+        if avail:
+            emb = avail[0]
+
     # Eagerly load models before starting the embedding timer so that
     # download / weight-loading time does not pollute the progress bar.
-    if getattr(mt, "_model", None) is None:
-        mt.load_models()
+    if emb is not None and getattr(emb, "_model", None) is None:
+        emb.load_models()
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
@@ -670,6 +708,7 @@ def load_dataset_from_folder_chunked(
         raise ValueError(f"No {media_type} files found in folder")
 
     total_files = len(media_files)
+    embedder_id = emb.name if emb else ""
 
     # Process in groups of chunk_size
     for start in range(0, total_files, chunk_size):
@@ -693,7 +732,9 @@ def load_dataset_from_folder_chunked(
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
             else:
-                embedding = mt.embed_media(file_path)
+                if emb is None:
+                    continue
+                embedding = emb.embed_media(file_path)
                 if embedding is None:
                     continue
 
@@ -707,6 +748,7 @@ def load_dataset_from_folder_chunked(
                 media_data: dict[str, Any] = {
                     "id": media_id,
                     "type": mt.type_id,
+                    "embedder": embedder_id,
                     "file_size": file_path.stat().st_size,
                     "md5": md5,
                     "embedding": embedding,
@@ -733,6 +775,7 @@ def load_dataset_from_folder_chunked(
                 media_data = {
                     "id": media_id,
                     "type": mt.type_id,
+                    "embedder": embedder_id,
                     "file_size": len(file_bytes),
                     "md5": md5,
                     "embedding": embedding,
@@ -1140,24 +1183,33 @@ def load_dataset_from_pickle_chunked(
             yield chunk_medias
 
 
-def embed_image_file_from_pil(image: Image.Image) -> Optional[np.ndarray]:
+def embed_image_file_from_pil(image: Image.Image, embedder_name: str = "") -> Optional[np.ndarray]:
     """Generate a CLIP embedding vector for a PIL Image object.
 
     A convenience wrapper for cases where the image is already in memory
     (e.g. reconstructed from a NumPy array during CIFAR-10 loading).
 
-    Delegates to :meth:`~vtsearch.media.image.media_type.ImageMediaType.embed_pil_image`.
+    Delegates to the image embedder's ``embed_pil_image`` method.
 
     Args:
         image: A PIL Image in any mode.
+        embedder_name: Optional name of a registered embedder.  When empty,
+            the first image embedder is used.
 
     Returns:
         A 1-D ``numpy.ndarray`` of shape ``(embedding_dim,)``, or ``None`` if
-        the CLIP model is not loaded or an exception occurs.
+        no image embedder is available or an exception occurs.
     """
-    from vtsearch.media import get as media_get
+    from vtsearch.media import embedders_for_type, get_embedder
 
-    return media_get("image").embed_pil_image(image)
+    if embedder_name:
+        emb = get_embedder(embedder_name)
+    else:
+        avail = embedders_for_type("image")
+        if not avail:
+            return None
+        emb = avail[0]
+    return emb.embed_pil_image(image)
 
 
 def load_demo_dataset(
@@ -1165,6 +1217,7 @@ def load_demo_dataset(
     medias: dict[int, dict[str, Any]],
     e5_model: Any = None,
     on_progress: Optional[ProgressCallback] = None,
+    embedder_name: str = "",
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -1187,6 +1240,9 @@ def load_demo_dataset(
         e5_model: Deprecated — kept for backward compatibility but no longer
             used.  The text embedding model is obtained from the media type
             registry.
+        embedder_name: Optional name of a registered embedder to use.
+            When empty, the first registered embedder for the media type
+            is used.
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -1216,8 +1272,19 @@ def load_demo_dataset(
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
-    # Delegate to the media type's load_demo_source() method
-    from vtsearch.media import get as media_get
+    # Resolve the embedder
+    from vtsearch.media import embedders_for_type, get as media_get, get_embedder
+
+    embedder = None
+    if embedder_name:
+        try:
+            embedder = get_embedder(embedder_name)
+        except KeyError:
+            raise ValueError(f"Unknown embedder: {embedder_name}")
+    else:
+        avail = embedders_for_type(media_type_id)
+        if avail:
+            embedder = avail[0]
 
     mt = media_get(media_type_id)
 
@@ -1234,6 +1301,7 @@ def load_demo_dataset(
         slice_end=slice_end,
         clips=medias,
         on_progress=on_progress,
+        embedder=embedder,
     )
 
     # Stamp the demo origin on all medias (fresh dict per media to avoid shared-reference mutation bugs)
