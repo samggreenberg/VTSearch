@@ -11,7 +11,7 @@
   let selected = null;
   let sortOrder = null;   // null = default, or [{id, score}, ...]
   let sortMode = "text";  // "text" | "learned" | "load"
-  let selectMode = "top"; // "top" | "hard"
+  let selectMode = "top"; // "top" | "bottom" | "hard"
   let threshold = null;    // threshold for Good/Bad boundary
   let sortTimer = null;
   let inclusion = 0;       // Inclusion setting: -10 to +10
@@ -905,11 +905,12 @@
 
     if (st.phase === "good") {
       if (votes.good.length >= st.goodToStart) {
-        // Transition to Bad phase — switch select mode to Hard.
+        // Transition to Bad phase — switch select mode to Bottom so the user
+        // sees items least similar to the example (clear negatives).
         // Good→Bad only changes select mode (no sort change, no media jerk),
         // so apply immediately even mid-vote.
         st.phase = "bad";
-        _apSetSelectMode("hard");
+        _apSetSelectMode("bottom");
         checkAutopilotPhase(); // re-check in case bad threshold also met
         return;
       }
@@ -3722,6 +3723,9 @@
     if (selectMode === "top") {
       // Select highest scoring unlabeled media (or first in order for null sort)
       nextClip = unlabeled[0];
+    } else if (selectMode === "bottom") {
+      // Select lowest scoring unlabeled media (last in sort order)
+      nextClip = unlabeled[unlabeled.length - 1];
     } else {
       // Select unlabeled media closest to threshold by list position,
       // breaking ties by score distance

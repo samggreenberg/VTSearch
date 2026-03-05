@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, timer, Subscription } from 'rxjs';
+import { Subject, timer, Subscription, pairwise } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
@@ -11,6 +11,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { LabelingStatusResponse } from '../../models/api.models';
 
 @Component({
@@ -52,6 +53,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public voteState: VoteStateService,
     public sortState: SortStateService,
     private settingsState: SettingsStateService,
+    private autopilotStateService: AutopilotStateService,
   ) {}
 
   ngOnInit(): void {
@@ -69,6 +71,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.autopilotTextSortPending = false;
           this.triggerAutopilotTextSort();
         }
+      });
+
+    this.autopilotStateService.state$
+      .pipe(pairwise(), takeUntil(this.destroy$))
+      .subscribe(([prev, curr]) => {
+        if (prev.phase === curr.phase) return;
+        if (curr.phase === 'good') this.sortState.setSelectMode('top');
+        else if (curr.phase === 'bad') this.sortState.setSelectMode('bottom');
+        else if (curr.phase === 'hard') this.sortState.setSelectMode('hard');
+        else if (curr.phase === 'new') this.sortState.setSelectMode('new');
       });
   }
 
@@ -324,6 +336,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         (s) => !goodVotes.has(s.id) && !badVotes.has(s.id),
       );
       if (next) this.mediaState.selectMedia(next.id);
+    } else if (this.sortState.selectMode === 'bottom') {
+      for (let i = sortOrder.length - 1; i >= 0; i--) {
+        const s = sortOrder[i];
+        if (!goodVotes.has(s.id) && !badVotes.has(s.id)) {
+          this.mediaState.selectMedia(s.id);
+          break;
+        }
+      }
     } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
       let best: SortedItem | null = null;
       let bestDist = Infinity;
