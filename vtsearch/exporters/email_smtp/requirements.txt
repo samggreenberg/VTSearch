@@ -1,1 +1,1 @@
-# No additional packages required – uses only Python stdlib (smtplib, email).
+dnspython>=2.0.0

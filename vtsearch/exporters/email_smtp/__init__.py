@@ -1,11 +1,10 @@
-"""Email (SMTP) exporter – sends auto-detect results via e-mail.
+"""Email exporter – sends auto-detect results directly via MX lookup.
 
-Uses only Python's built-in ``smtplib`` and ``email`` stdlib modules.
-No additional pip packages are required.
+Connects directly to the recipient's mail server (via DNS MX record lookup)
+so no SMTP credentials or server configuration are needed.  The sender
+address is always ``VTSearch@fake.ai``.
 
-Tested against Gmail (smtp.gmail.com:587 with an App Password) and generic
-STARTTLS-capable SMTP servers.  For Gmail, enable 2-step verification and
-generate an App Password at https://myaccount.google.com/apppasswords.
+Requires the ``dnspython`` package for MX record resolution.
 """
 
 from __future__ import annotations
@@ -15,7 +14,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
+import dns.resolver
+
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+FROM_ADDRESS = "VTSearch@fake.ai"
 
 
 def _build_plain_text(results: dict[str, Any]) -> str:
@@ -72,17 +75,24 @@ def _build_html(results: dict[str, Any]) -> str:
     )
 
 
-class EmailLabelsetExporter(LabelsetExporter):
-    """Send auto-detect results by e-mail via an SMTP server.
+def _resolve_mx(domain: str) -> str:
+    """Return the highest-priority MX host for *domain*."""
+    answers = dns.resolver.resolve(domain, "MX")
+    best = min(answers, key=lambda r: r.preference)
+    return str(best.exchange).rstrip(".")
 
-    Supports any STARTTLS-capable SMTP server (Gmail, Outlook, custom, etc.).
-    The message is sent as multipart/alternative with both plain-text and HTML
-    parts; the raw JSON is also attached inline.
+
+class EmailLabelsetExporter(LabelsetExporter):
+    """Send auto-detect results by e-mail via direct MX delivery.
+
+    Looks up the recipient domain's MX record and connects directly — no
+    SMTP credentials or server configuration required.  The sender address
+    is always ``VTSearch@fake.ai``.
     """
 
     name = "email_smtp"
     display_name = "Send by Email"
-    description = "Email the results summary to any address via SMTP."
+    description = "Email the results summary to any address."
     icon = "📧"
     fields = [
         ExporterField(
@@ -92,52 +102,19 @@ class EmailLabelsetExporter(LabelsetExporter):
             description="The email address to send the results to.",
             placeholder="recipient@example.com",
         ),
-        ExporterField(
-            key="from_email",
-            label="Sender Email",
-            field_type="email",
-            description="The email address used as the sender (must match your SMTP account).",
-            placeholder="you@example.com",
-        ),
-        ExporterField(
-            key="smtp_password",
-            label="SMTP Password / App Password",
-            field_type="password",
-            description=(
-                "Your SMTP password. For Gmail, use an App Password (see https://myaccount.google.com/apppasswords)."
-            ),
-        ),
-        ExporterField(
-            key="smtp_host",
-            label="SMTP Host",
-            field_type="text",
-            description="The outgoing mail server hostname.",
-            placeholder="smtp.gmail.com",
-            default="smtp.gmail.com",
-        ),
-        ExporterField(
-            key="smtp_port",
-            label="SMTP Port",
-            field_type="text",
-            description="Port for STARTTLS connections (usually 587).",
-            placeholder="587",
-            default="587",
-        ),
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         to_addr = field_values.get("to", "").strip()
-        from_addr = field_values.get("from_email", "").strip()
-        password = field_values.get("smtp_password", "")
-        smtp_host = field_values.get("smtp_host", "smtp.gmail.com").strip()
-        smtp_port = int(field_values.get("smtp_port", "587").strip() or "587")
 
         if not to_addr:
             raise ValueError("Recipient email address is required.")
-        if not from_addr:
-            raise ValueError("Sender email address is required.")
-        if not password:
-            raise ValueError("SMTP password is required.")
+
+        if "@" not in to_addr:
+            raise ValueError("Recipient email address is invalid.")
+
+        domain = to_addr.rsplit("@", 1)[1]
+        mx_host = _resolve_mx(domain)
 
         media_type = results.get("media_type", "unknown")
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
@@ -145,7 +122,7 @@ class EmailLabelsetExporter(LabelsetExporter):
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = from_addr
+        msg["From"] = FROM_ADDRESS
         msg["To"] = to_addr
 
         plain = _build_plain_text(results)
@@ -153,14 +130,12 @@ class EmailLabelsetExporter(LabelsetExporter):
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+        with smtplib.SMTP(mx_host, 25, timeout=30) as server:
             server.ehlo()
-            server.starttls()
-            server.login(from_addr, password)
-            server.sendmail(from_addr, [to_addr], msg.as_string())
+            server.sendmail(FROM_ADDRESS, [to_addr], msg.as_string())
 
         return {
-            "message": (f"Email with {total_hits} hit(s) sent to {to_addr} via {smtp_host}:{smtp_port}."),
+            "message": (f"Email with {total_hits} hit(s) sent to {to_addr} via {mx_host}."),
             "to": to_addr,
         }
 

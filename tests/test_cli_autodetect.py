@@ -866,41 +866,9 @@ class TestExporterCLIArguments:
             [
                 "--to",
                 "recipient@example.com",
-                "--from-email",
-                "sender@example.com",
-                "--smtp-password",
-                "secret",
             ]
         )
         assert args.to == "recipient@example.com"
-        assert args.from_email == "sender@example.com"
-        assert args.smtp_password == "secret"
-        assert args.smtp_host == "smtp.gmail.com"
-        assert args.smtp_port == "587"
-
-    def test_email_smtp_exporter_custom_host_and_port(self):
-        from vtsearch.exporters.email_smtp import EmailLabelsetExporter
-
-        exp = EmailLabelsetExporter()
-        parser = argparse.ArgumentParser()
-        exp.add_cli_arguments(parser)
-
-        args = parser.parse_args(
-            [
-                "--to",
-                "a@b.com",
-                "--from-email",
-                "c@d.com",
-                "--smtp-password",
-                "pw",
-                "--smtp-host",
-                "mail.example.com",
-                "--smtp-port",
-                "465",
-            ]
-        )
-        assert args.smtp_host == "mail.example.com"
-        assert args.smtp_port == "465"
 
     def test_gui_exporter_adds_no_args(self):
         from vtsearch.exporters.gui import DisplayLabelsetExporter
@@ -925,15 +893,7 @@ class TestExporterCLIArguments:
 
         exp = EmailLabelsetExporter()
         # Should not raise
-        exp.validate_cli_field_values(
-            {
-                "to": "a@b.com",
-                "from_email": "c@d.com",
-                "smtp_password": "pw",
-                "smtp_host": "smtp.gmail.com",
-                "smtp_port": "587",
-            }
-        )
+        exp.validate_cli_field_values({"to": "a@b.com"})
 
     def test_server_json_exporter_validate_passes(self):
         from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
