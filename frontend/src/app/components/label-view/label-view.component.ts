@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, timer, Subscription } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
@@ -16,6 +16,8 @@ import { MediaItem, LabelingStatusResponse, AppSettings } from '../../models/api
   styleUrl: './label-view.component.scss',
 })
 export class LabelViewComponent implements OnInit, OnDestroy {
+  @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
+
   medias: MediaItem[] = [];
   sortOrder: SortedItem[] | null = null;
   threshold: number | null = null;
@@ -31,18 +33,26 @@ export class LabelViewComponent implements OnInit, OnDestroy {
   showThumbnails = true;
   loadSortLabel = '';
   settings: AppSettings | null = null;
+  leftWidth = 260;
 
+  private readonly LEFT_MIN = 180;
+  private readonly LEFT_MAX = 500;
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
+  private dragging = false;
+  private boundMouseMove = this.onMouseMove.bind(this);
+  private boundMouseUp = this.onMouseUp.bind(this);
 
   constructor(
     private mediasApi: MediasApiService,
     private sortingApi: SortingApiService,
     private settingsApi: SettingsApiService,
+    private ngZone: NgZone,
   ) {}
 
   ngOnInit(): void {
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.loadMedias();
     this.loadVotes();
     this.loadSettings();
@@ -52,6 +62,36 @@ export class LabelViewComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    document.removeEventListener('mousemove', this.boundMouseMove);
+    document.removeEventListener('mouseup', this.boundMouseUp);
+  }
+
+  // --- Divider drag ---
+
+  onDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.dragging = true;
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundMouseMove);
+      document.addEventListener('mouseup', this.boundMouseUp);
+    });
+  }
+
+  private onMouseMove(event: MouseEvent): void {
+    if (!this.dragging) return;
+    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
+    let newWidth = event.clientX - layoutRect.left;
+    newWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, newWidth));
+    this.ngZone.run(() => {
+      this.leftWidth = newWidth;
+      this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
+    });
+  }
+
+  private onMouseUp(): void {
+    this.dragging = false;
+    document.removeEventListener('mousemove', this.boundMouseMove);
+    document.removeEventListener('mouseup', this.boundMouseUp);
   }
 
   // --- Data loading ---
