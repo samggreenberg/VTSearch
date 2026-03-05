@@ -181,9 +181,12 @@ class TestFavicon:
         resp = self.client.get("/favicon-angry.ico")
         assert resp.status_code == 404
 
-    def test_favicon_empty_variant_returns_404(self):
+    def test_favicon_empty_variant_returns_spa_fallback(self):
         resp = self.client.get("/favicon-.ico")
-        assert resp.status_code == 404
+        # Empty variant doesn't match the favicon-<variant>.ico route,
+        # so the catch-all serves the SPA (standard SPA fallback behavior).
+        assert resp.status_code == 200
+        assert b"<app-root>" in resp.data
 
     def test_favicon_content_type(self):
         resp = self.client.get("/favicon.ico")

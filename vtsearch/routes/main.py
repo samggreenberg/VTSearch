@@ -95,7 +95,15 @@ def catch_all(path: str) -> Response:
     route serves those files when they exist, and falls back to
     ``index.html`` for any other path so that Angular Router can handle
     client-side navigation.
+
+    Paths under ``/api/`` are excluded — unmatched API routes should
+    return 404, not the SPA page.
     """
+    # Don't intercept API routes; let Flask return its default 404.
+    if path.startswith("api/"):
+        from flask import abort
+
+        abort(404)
     static = _static_dir()
     # Resolve the candidate and ensure it stays within the static directory
     # to prevent path-traversal attacks (e.g. ../../etc/passwd).
