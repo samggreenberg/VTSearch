@@ -1,0 +1,72 @@
+.progress-check-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.labeling-indicator {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--indicator-border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color 0.2s;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &[data-status="green"] {
+    border-color: var(--status-green-border);
+
+    .indicator-dot {
+      background: var(--status-green-dot);
+    }
+
+    .indicator-label {
+      color: var(--status-green-label);
+    }
+
+    .indicator-subtext {
+      color: var(--status-green-sub);
+    }
+  }
+
+  &[data-status="yellow"] {
+    border-color: var(--status-yellow-border);
+
+    .indicator-dot {
+      background: var(--status-yellow-dot);
+    }
+
+    .indicator-label {
+      color: var(--status-yellow-label);
+    }
+
+    .indicator-subtext {
+      color: var(--status-yellow-sub);
+    }
+  }
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--indicator-dot);
+}
+
+.indicator-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.indicator-subtext {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}

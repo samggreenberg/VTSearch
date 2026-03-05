@@ -1,0 +1,45 @@
+.stripe-overview {
+  width: 12px;
+  flex-shrink: 0;
+  position: relative;
+  background: var(--bg-subtle);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.stripe-container {
+  position: absolute;
+  inset: 0;
+}
+
+.stripe-dot {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  border-radius: 1px;
+
+  &.good {
+    background: var(--color-good);
+  }
+
+  &.bad {
+    background: var(--color-bad);
+  }
+
+  &.selected {
+    background: var(--accent);
+    height: 3px;
+    left: 0;
+    right: 0;
+    z-index: 1;
+  }
+}
+
+.stripe-threshold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.6;
+}

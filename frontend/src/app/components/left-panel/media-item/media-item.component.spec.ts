@@ -1,0 +1,92 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MediaItemComponent } from './media-item.component';
+import { MediaItem } from '../../../models/api.models';
+
+describe('MediaItemComponent', () => {
+  let component: MediaItemComponent;
+  let fixture: ComponentFixture<MediaItemComponent>;
+
+  const mockMedia: MediaItem = {
+    id: 1,
+    type: 'audio',
+    duration: 5.0,
+    file_size: 1024,
+    filename: 'test.wav',
+    category: 'music',
+    md5: 'abc123',
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [MediaItemComponent],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(MediaItemComponent);
+    component = fixture.componentInstance;
+    component.media = mockMedia;
+    fixture.detectChanges();
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should display filename', () => {
+    expect(component.displayName).toBe('test.wav');
+  });
+
+  it('should fall back to description when no filename', () => {
+    component.media = { ...mockMedia, filename: '', description: 'A sound' };
+    expect(component.displayName).toBe('A sound');
+  });
+
+  it('should fall back to id when no filename or description', () => {
+    component.media = { ...mockMedia, filename: '', description: undefined };
+    expect(component.displayName).toBe('#1');
+  });
+
+  it('should emit select on click', () => {
+    spyOn(component.select, 'emit');
+    fixture.nativeElement.querySelector('.media-item').click();
+    expect(component.select.emit).toHaveBeenCalledWith(1);
+  });
+
+  it('should add active class when active', () => {
+    component.active = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.media-item.active')).toBeTruthy();
+  });
+
+  it('should add labeled-good class when vote is good', () => {
+    component.voteLabel = 'good';
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.media-item.labeled-good')).toBeTruthy();
+  });
+
+  it('should add labeled-bad class when vote is bad', () => {
+    component.voteLabel = 'bad';
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.media-item.labeled-bad')).toBeTruthy();
+  });
+
+  it('should not show thumbnail for audio type', () => {
+    expect(component.thumbnailUrl).toBeNull();
+  });
+
+  it('should show thumbnail for image type', () => {
+    component.media = { ...mockMedia, type: 'image' };
+    expect(component.thumbnailUrl).toBe('/api/medias/1/image');
+  });
+
+  it('should show score when provided', () => {
+    component.score = 0.85;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.media-score')).toBeTruthy();
+  });
+
+  it('should not show score when null', () => {
+    component.score = null;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.media-score')).toBeNull();
+  });
+});

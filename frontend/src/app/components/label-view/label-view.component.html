@@ -1,0 +1,48 @@
+<div class="layout">
+  <div class="panel-left">
+    <vt-left-panel
+      [medias]="medias"
+      [sortOrder]="sortOrder"
+      [threshold]="threshold"
+      [selectedId]="selectedId"
+      [goodVotes]="goodVotes"
+      [badVotes]="badVotes"
+      [sortMode]="sortMode"
+      [selectMode]="selectMode"
+      [inclusion]="inclusion"
+      [sortBusy]="sortBusy"
+      [sortStatus]="sortStatus"
+      [labelingStatus]="labelingStatus"
+      [showThumbnails]="showThumbnails"
+      [loadSortLabel]="loadSortLabel"
+      (sortModeChange)="onSortModeChange($event)"
+      (selectModeChange)="onSelectModeChange($event)"
+      (inclusionChange)="onInclusionChange($event)"
+      (textSort)="onTextSort($event)"
+      (learnedSort)="onLearnedSort()"
+      (loadSort)="onLoadSort()"
+      (mediaSelect)="onMediaSelect($event)"
+      (indicatorClick)="onIndicatorClick($event)"
+      (autopilotStart)="onAutopilotStart()"
+      (autopilotStop)="onAutopilotStop()"
+    />
+  </div>
+  <div class="panel-center">
+    <div class="placeholder">
+      @if (selectedId !== null) {
+        <p>Media #{{ selectedId }} selected</p>
+        <p class="hint">Center panel viewer coming in Phase 5</p>
+      } @else {
+        <p>Select a media item to view</p>
+      }
+    </div>
+  </div>
+  <div class="panel-right">
+    <div class="placeholder">
+      <p>Labels panel coming in Phase 6</p>
+      @if (goodVotes.size > 0 || badVotes.size > 0) {
+        <p class="vote-summary">{{ goodVotes.size }} good, {{ badVotes.size }} bad</p>
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,58 @@
+.sort-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sort-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  min-width: 32px;
+}
+
+.sort-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+  }
+
+  &.active {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+}
+
+.text-sort-input {
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+
+.sort-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.sort-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.sort-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
