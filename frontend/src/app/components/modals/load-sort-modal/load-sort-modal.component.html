@@ -1,0 +1,48 @@
+<vt-modal title="Load Sort" [open]="true" (closed)="close()">
+  @if (loading) {
+    <p class="empty-state">Loading...</p>
+  } @else {
+    <div class="load-sort-sections">
+      <!-- Sort by Detector -->
+      <div class="sort-section">
+        <h3>Sort by Detector</h3>
+        <label class="btn btn--secondary file-btn">
+          Local detector file
+          <input type="file" accept=".json,.pkl" (change)="onDetectorFileSelected($event)" hidden />
+        </label>
+        @if (serverDetectors.length > 0) {
+          <h4>Server Detectors</h4>
+          <div class="file-list">
+            @for (det of serverDetectors; track det) {
+              <button class="file-item" (click)="loadServerDetector(det)">{{ det }}</button>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Sort by Examples -->
+      <div class="sort-section">
+        <h3>Sort by Examples</h3>
+        <label class="btn btn--secondary file-btn">
+          Local example media
+          <input type="file" (change)="onMediaFileSelected($event)" hidden />
+        </label>
+        @if (serverMediaFiles.length > 0) {
+          <h4>Server Example Media</h4>
+          <div class="file-list">
+            @for (file of serverMediaFiles; track file) {
+              <button class="file-item" (click)="loadServerMedia(file)">{{ file }}</button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (status) {
+      <p class="status-text">{{ status }}</p>
+    }
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
+  }
+</vt-modal>

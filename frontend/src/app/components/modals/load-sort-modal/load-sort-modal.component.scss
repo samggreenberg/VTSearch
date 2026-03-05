@@ -1,0 +1,46 @@
+.load-sort-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.sort-section {
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  h4 {
+    margin: 0.75rem 0 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+}
+
+.file-btn {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.file-item {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8rem;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}

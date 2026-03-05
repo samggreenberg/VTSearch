@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { AppSettings, AutorunProcessor } from '../models/api.models';
+import { AppSettings, AutorunProcessor, EmbeddersResponse } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
@@ -29,5 +29,9 @@ export class SettingsApiService {
 
   deleteAutorunProcessor(name: string): Observable<unknown> {
     return this.http.delete(`/api/settings/autorun-processors/${name}`);
+  }
+
+  getEmbedders(): Observable<EmbeddersResponse> {
+    return this.http.get<EmbeddersResponse>('/api/embedders');
   }
 }

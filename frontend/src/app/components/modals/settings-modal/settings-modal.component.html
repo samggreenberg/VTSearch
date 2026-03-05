@@ -1,0 +1,90 @@
+<vt-modal title="Settings" [open]="true" (closed)="close()">
+  @if (loading) {
+    <p class="empty-state">Loading settings...</p>
+  } @else {
+    <div class="settings-grid">
+      <!-- Appearance -->
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <div class="form-group">
+          <label class="form-label">Theme</label>
+          <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="highviz">High Visibility</option>
+          </select>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
+          Swipe animation
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.show_thumbnails_left" (ngModelChange)="onToggle('show_thumbnails_left', $event)" />
+          Show thumbnails (left panel)
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.show_thumbnails_right" (ngModelChange)="onToggle('show_thumbnails_right', $event)" />
+          Show thumbnails (right panel)
+        </label>
+      </div>
+
+      <!-- Sorting & Calibration -->
+      <div class="settings-section">
+        <h3>Sorting &amp; Calibration</h3>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
+          Enrich descriptions
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
+          Safe thresholds
+        </label>
+        <div class="form-group">
+          <label class="form-label">Calibrate count</label>
+          <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Calibration fraction</label>
+          <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" />
+        </div>
+      </div>
+
+      <!-- Autopilot & Actions -->
+      <div class="settings-section">
+        <h3>Autopilot &amp; Actions</h3>
+        <div class="form-group">
+          <label class="form-label"># Good to start</label>
+          <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label"># Bad to start</label>
+          <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
+        </div>
+
+        @if (embedders.length > 0) {
+          <h4>Autoload Embedders</h4>
+          @for (embedder of embedders; track embedder) {
+            <label class="checkbox-row">
+              <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
+              {{ embedder }}
+            </label>
+          }
+        }
+      </div>
+    </div>
+
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
+  }
+
+  <div class="settings-actions" modal-footer>
+    <button class="btn btn--secondary" (click)="resetDefaults()">Default</button>
+    <label class="btn btn--secondary">
+      Import
+      <input type="file" accept=".json" (change)="importSettings($event)" hidden />
+    </label>
+    <button class="btn btn--secondary" (click)="exportSettings()">Export</button>
+    <button class="btn btn--primary" (click)="close()">Close</button>
+  </div>
+</vt-modal>
