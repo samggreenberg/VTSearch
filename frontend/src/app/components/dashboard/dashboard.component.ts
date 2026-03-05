@@ -348,7 +348,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.selectedDatasetIds.size === 0 && this.selectedModelIds.size === 0) return 'Select a dataset and a model';
     if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
     if (this.selectedModelIds.size === 0) return 'Select a model';
-    return '';
+    return 'Score selected datasets with selected models';
   }
 
   get labelHint(): string {
@@ -362,7 +362,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
-    return '';
+    return 'Label the selected dataset to train the selected model';
   }
 
   private storeSelectedModelTextQuery(): void {

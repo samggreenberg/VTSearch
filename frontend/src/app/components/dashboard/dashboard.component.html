@@ -2,7 +2,7 @@
   <!-- Dataset Section -->
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title">Datasets</span>
+      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching">Datasets</span>
       @if (loading) {
         <div class="dashboard-progress">
           <span class="progress-msg">{{ progressMessage }}</span>
@@ -14,7 +14,7 @@
         </div>
       }
       <div class="dashboard-section-actions">
-        <button class="btn btn--primary btn--sm" (click)="openImporterModal()">+</button>
+        <button class="btn btn--primary btn--sm" (click)="openImporterModal()" title="Import a new dataset">+</button>
       </div>
     </div>
 
@@ -25,14 +25,14 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
-              <th (click)="sortDatasets('media_type')" class="sortable">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
-              <th (click)="sortDatasets('num_items')" class="sortable">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
-              <th (click)="sortDatasets('num_dupes')" class="sortable">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
-              <th (click)="sortDatasets('created_at')" class="sortable">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
-              <th (click)="sortDatasets('origin')" class="sortable">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
-              <th>Loaded</th>
-              <th>Actions</th>
+              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
+              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
+              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
+              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
+              <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
+              <th title="Whether this dataset is currently loaded into memory">Loaded</th>
+              <th title="Available operations for this dataset">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -54,9 +54,9 @@
   <!-- Model Section -->
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title">Models</span>
+      <span class="dashboard-section-title" title="Trained models for scoring and finding media">Models</span>
       <div class="dashboard-section-actions">
-        <button class="btn btn--primary btn--sm" (click)="openNewModelModal()">+</button>
+        <button class="btn btn--primary btn--sm" (click)="openNewModelModal()" title="Create a new model">+</button>
       </div>
     </div>
 
@@ -67,13 +67,13 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
-              <th (click)="sortModels('media_type')" class="sortable">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
-              <th (click)="sortModels('num_training')" class="sortable"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
-              <th>Trainable</th>
-              <th (click)="sortModels('last_trained_at')" class="sortable">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
-              <th (click)="sortModels('created_at')" class="sortable">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
-              <th>Actions</th>
+              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
+              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
+              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
+              <th title="Whether the model has enough labels to train">Trainable</th>
+              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
+              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
+              <th title="Available operations for this model">Actions</th>
             </tr>
           </thead>
           <tbody>
