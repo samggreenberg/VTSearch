@@ -9,11 +9,17 @@ import {
 
 export type { AutopilotPhase, AutopilotState };
 
+interface StatusIcon {
+  color: 'green' | 'yellow';
+  ariaLabel: string;
+}
+
 interface StepDisplay {
   phase: AutopilotPhase;
   label: string;
   state: 'done' | 'active' | 'future';
   detail: string;
+  statusIcons: StatusIcon[];
 }
 
 @Component({
@@ -56,6 +62,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         label: this.phaseLabel(phase),
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
+        statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
       };
     });
   }
@@ -98,6 +105,15 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     }
   }
 
+  private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
+    if (phase !== 'hard') return [];
+    const st = this.state;
+    return [
+      { color: st.smartStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Smart: ${st.smartStatus === 'green' ? 'green' : 'pending'}` },
+      { color: st.stableStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Stable: ${st.stableStatus === 'green' ? 'green' : 'pending'}` },
+    ];
+  }
+
   private phaseDetail(phase: AutopilotPhase): string {
     const st = this.state;
     switch (phase) {
@@ -107,9 +123,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         return `${this.badVotes.size}/${st.badToStart} bad labels`;
       case 'hard': {
         const total = this.goodVotes.size + this.badVotes.size;
-        const smart = st.smartStatus === 'green' ? 'green' : 'pending';
-        const stable = st.stableStatus === 'green' ? 'green' : 'pending';
-        return `${total} labels | Smart: ${smart}, Stable: ${stable}`;
+        return `${total} labels`;
       }
       case 'new':
         return `Diversity: ${st.fracDiversity.toFixed(1)}`;
