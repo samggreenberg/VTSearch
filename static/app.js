@@ -3865,8 +3865,22 @@
     _rebuildVoteSets();
     renderVotes();
     renderStripe();
+    _syncMediaListVoteClasses();
     updateSortModeAvailability();
     if (selected) renderCenter();
+  }
+
+  /**
+   * Sync vote label classes (labeled-good / labeled-bad) on existing
+   * media-list items without rebuilding the DOM.
+   */
+  function _syncMediaListVoteClasses() {
+    const items = mediaList.querySelectorAll("[data-media-id]");
+    items.forEach(el => {
+      const id = parseInt(el.getAttribute("data-media-id"), 10);
+      el.classList.toggle("labeled-good", goodVoteSet.has(id));
+      el.classList.toggle("labeled-bad", badVoteSet.has(id));
+    });
   }
 
   async function fetchInclusion() {
@@ -3920,6 +3934,7 @@
       if (isGood) className += " labeled-good";
       if (isBad) className += " labeled-bad";
       div.className = className;
+      div.setAttribute("data-media-id", c.id);
       div.setAttribute("role", "option");
       div.setAttribute("tabindex", "0");
       div.setAttribute("aria-selected", selected === c.id ? "true" : "false");
@@ -3954,8 +3969,16 @@
   }
 
   function selectMedia(id) {
+    const prev = selected;
     selected = id;
-    renderMediaList();
+
+    // Try lightweight in-place selection update instead of full DOM rebuild.
+    // This avoids destroying and re-creating all thumbnail <img>/<video>
+    // elements, which would cause the browser to re-fetch visible media.
+    const didLightweight = _updateSelectionInPlace(prev, id);
+    if (!didLightweight) {
+      renderMediaList();
+    }
     renderCenter();
 
     const activeItem = mediaList.querySelector(".media-item.active");
@@ -3967,6 +3990,58 @@
     if (c) {
       announce(`Selected ${c.filename || 'Media #' + c.id}`);
     }
+  }
+
+  /**
+   * Update the active selection highlight in the media list and stripe
+   * without rebuilding the DOM.  Returns true if it succeeded, false if
+   * a full rebuild is needed (e.g. the list hasn't been rendered yet).
+   */
+  function _updateSelectionInPlace(prevId, newId) {
+    // If the media list has no items with data-media-id, fall back to full rebuild.
+    if (!mediaList.querySelector("[data-media-id]")) return false;
+
+    // Deactivate previously selected item
+    if (prevId != null) {
+      const prevEl = mediaList.querySelector(`[data-media-id="${prevId}"]`);
+      if (prevEl) {
+        prevEl.classList.remove("active");
+        prevEl.setAttribute("aria-selected", "false");
+      }
+    }
+
+    // Activate newly selected item
+    const newEl = mediaList.querySelector(`[data-media-id="${newId}"]`);
+    if (newEl) {
+      newEl.classList.add("active");
+      newEl.setAttribute("aria-selected", "true");
+    }
+
+    // Update stripe selected dot in-place
+    _updateStripeSelectedDot(newId);
+
+    return true;
+  }
+
+  /**
+   * Move the "selected" dot on the stripe to reflect the new selection
+   * without rebuilding the entire stripe.
+   */
+  function _updateStripeSelectedDot(newId) {
+    // Remove old selected dot
+    const oldDot = stripeContainer.querySelector(".stripe-dot.selected");
+    if (oldDot) oldDot.remove();
+
+    if (!sortOrder || sortOrder.length === 0) return;
+
+    const totalClips = sortOrder.length;
+    const idx = sortOrder.findIndex(item => item.id === newId);
+    if (idx < 0) return;
+
+    const dot = document.createElement("div");
+    dot.className = "stripe-dot selected";
+    dot.style.top = `${(idx / totalClips) * 100}%`;
+    stripeContainer.appendChild(dot);
   }
 
   // Stored references for window-level mouse handlers used by image pan,
