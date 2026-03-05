@@ -36,7 +36,10 @@ export class DatasetsApiService {
   }
 
   getConverters(target?: string): Observable<ConverterInfo[]> {
-    const params = target ? { target } : {};
+    const params: Record<string, string> = {};
+    if (target) {
+      params['target'] = target;
+    }
     return this.http.get<ConverterInfo[]>('/api/converters', { params });
   }
 

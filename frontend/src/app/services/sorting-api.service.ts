@@ -61,7 +61,10 @@ export class SortingApiService {
   }
 
   exportLabels(goodsOnly?: boolean): Observable<LabelsExportResponse> {
-    const params = goodsOnly ? { goods_only: 'true' } : {};
+    const params: Record<string, string> = {};
+    if (goodsOnly) {
+      params['goods_only'] = 'true';
+    }
     return this.http.get<LabelsExportResponse>('/api/labels/export', { params });
   }
 
