@@ -2944,8 +2944,8 @@
       const res = await fetch("/api/exporters");
       if (res.ok) labelsetExporters = await res.json();
     } catch (_) { /* ignore */ }
-    // Filter out the GUI exporter (not useful for file-based export)
-    labelsetExporters = labelsetExporters.filter(e => e.name !== "gui");
+    // Filter out exporters that are hidden from picker (e.g. the GUI exporter)
+    labelsetExporters = labelsetExporters.filter(e => !e.hidden_from_picker);
 
     let html = `
       <div id="detector-export-browser-btn" class="option-card" role="button" tabindex="0">
@@ -5842,7 +5842,7 @@
 
     // Also add demo datasets as an option
     const options = importers.map(imp => `
-      <div class="dataset-importer-option option-card" data-name="${escapeHtml(imp.name)}" data-type="importer">
+      <div class="dataset-importer-option option-card" data-name="${escapeHtml(imp.name)}" data-type="importer" data-ui-mode="${escapeHtml(imp.ui_mode || 'form')}">
         <span class="option-card-icon">${escapeHtml(imp.icon || '\uD83D\uDD0C')}</span>
         <div>
           <div class="option-card-title">${escapeHtml(imp.display_name)}</div>
@@ -5870,15 +5870,16 @@
       el.setAttribute("tabindex", "0");
       const name = el.dataset.name;
       const type = el.dataset.type;
+      const uiMode = el.dataset.uiMode || "form";
       el.addEventListener("click", () => {
         if (type === "demo") {
           showDashDemoDatasetPicker();
-        } else if (name === "pickle") {
-          // Pickle = file upload — close modal and trigger file input
+        } else if (uiMode === "file_upload") {
+          // File upload importers — close modal and trigger file input
           datasetImporterModal.classList.remove("show");
           dashFileInput.click();
-        } else if (name === "combine_datasets") {
-          // Combine = close modal and go to welcome screen combine flow
+        } else if (uiMode === "custom") {
+          // Custom UI importers — close modal and show dedicated UI
           datasetImporterModal.classList.remove("show");
           showCombineDatasetsForm();
           datasetWelcome.style.display = "flex";

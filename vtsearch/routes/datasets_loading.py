@@ -81,20 +81,33 @@ def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
 
 
 def _origin_to_str(origin: dict | None) -> str:
-    """Convert an origin dict to a human-readable string."""
+    """Convert an origin dict to a human-readable string.
+
+    Delegates to the importer's :meth:`origin_display` when available,
+    falling back to a generic ``"<importer_name>:<first_param>"`` format.
+    """
     if not origin:
         return "unknown"
-    importer = origin.get("importer", "")
+    importer_name = origin.get("importer", "")
+    if not importer_name:
+        return "unknown"
+
+    # Special pseudo-origins that are not real importers
     params = origin.get("params", {})
-    if importer == "demo":
+    if importer_name == "demo":
         return f"demo:{params.get('name', '')}"
-    elif importer == "pickle":
-        return f"file:{params.get('filename', '')}"
-    elif importer == "folder":
-        return f"folder:{params.get('path', '')}"
-    elif importer:
-        return importer
-    return "unknown"
+
+    from vtsearch.datasets.importers import get_importer
+
+    importer = get_importer(importer_name)
+    if importer is not None:
+        return importer.origin_display(origin)
+
+    # Unknown importer — generic fallback
+    if params:
+        first_val = next(iter(params.values()))
+        return f"{importer_name}:{first_val}"
+    return importer_name
 
 
 def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: dict | None = None) -> None:

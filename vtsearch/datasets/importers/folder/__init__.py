@@ -246,5 +246,14 @@ class FolderDatasetImporter(DatasetImporter):
             origin["params"]["converters"] = converters
         return origin
 
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        params = origin.get("params", {})
+        return f"folder:{params.get('path', '')}"
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        params = origin.get("params", {})
+        folder_path = params.get("path", "")
+        return bool(folder_path) and Path(folder_path).is_dir()
+
 
 IMPORTER = FolderDatasetImporter()

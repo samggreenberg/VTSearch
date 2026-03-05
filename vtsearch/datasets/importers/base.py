@@ -273,3 +273,46 @@ class DatasetImporter(PluginBase):
             if val:
                 params[f.key] = str(val)
         return {"importer": self.name, "params": params}
+
+    # ------------------------------------------------------------------
+    # Origin display and reload
+    # ------------------------------------------------------------------
+
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        """Return a human-readable string for an origin dict from this importer.
+
+        The default implementation returns ``"<name>:<first_param_value>"``
+        or just ``"<name>"`` when there are no params.  Subclasses may
+        override for a more descriptive representation.
+        """
+        params = origin.get("params", {})
+        if params:
+            first_val = next(iter(params.values()))
+            return f"{self.name}:{first_val}"
+        return self.name
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        """Return whether this importer can re-load data from *origin*.
+
+        The default implementation returns ``True`` — most importers can
+        reload from their stored params.  Importers that require browser
+        uploads (e.g. pickle) should return ``False`` unless the params
+        contain enough info to reload (e.g. a server file path).
+
+        Subclasses should override when their reload capability depends on
+        the specific origin params (e.g. checking if a file still exists).
+        """
+        return True
+
+    def reload_from_origin(self, origin: dict[str, Any]) -> dict[str, Any] | None:
+        """Extract field_values from an origin dict suitable for :meth:`run`.
+
+        Returns a field_values dict that can be passed to
+        :meth:`run` / ``_run_importer_in_background()``, or ``None`` if
+        the origin cannot be reloaded.
+
+        The default implementation returns the origin's ``params`` dict
+        directly, which works for importers whose fields accept plain
+        strings.
+        """
+        return dict(origin.get("params", {}))
