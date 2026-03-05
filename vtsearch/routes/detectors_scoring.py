@@ -106,8 +106,10 @@ def auto_detect():
     def _run_single_detector(detector_name, detector_data):
         """Run a single detector and return (name, result_dict) or None on failure."""
         try:
-            weights = detector_data["weights"]
-            threshold = detector_data["threshold"]
+            weights = detector_data.get("weights")
+            if weights is None:
+                return None  # skip untrained detectors
+            threshold = detector_data.get("threshold", 0.5)
 
             model = build_model_from_weights(weights)
 

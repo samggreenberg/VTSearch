@@ -66,11 +66,18 @@ def add_autorun_detector_route():
     name = data.get("name", "").strip()
     media_type = data.get("media_type", "").strip()
     weights = data.get("weights")
-    threshold = data.get("threshold", 0.5)
+    raw_threshold = data.get("threshold", 0.5)
+    try:
+        threshold = float(raw_threshold)
+    except (TypeError, ValueError):
+        return jsonify({"error": "threshold must be a number"}), 400
     autodetect = data.get("autodetect", False)
 
     examples = data.get("examples")
-    num_labels = int(data.get("num_labels", 0))
+    try:
+        num_labels = int(data.get("num_labels", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "num_labels must be a number"}), 400
 
     if not name:
         return jsonify({"error": "name is required"}), 400

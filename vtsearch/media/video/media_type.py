@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
-
-from vtsearch.config import MODELS_CACHE_DIR, UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR, XCLIP_MODEL_ID
+from vtsearch.config import UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,

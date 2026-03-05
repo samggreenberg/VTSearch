@@ -1011,28 +1011,6 @@
    * Fire-and-forget: persist current votes to the trainable model's labelset.
    * Called after every vote when in dashboard train mode.
    */
-  function _persistTrainableModelLabels() {
-    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
-    const name = _dashboardTrainMode.model.name;
-    fetch(`/api/trainable-models/${encodeURIComponent(name)}/labels`, {
-      method: "POST",
-    }).catch(() => {});
-  }
-
-  /**
-   * Save the current votes to the trainable model's labelset (awaitable).
-   * Called when leaving train mode (e.g. navigating back to dashboard).
-   */
-  async function saveTrainableModelLabels() {
-    if (!_dashboardTrainMode || !_dashboardTrainMode.model) return;
-    const name = _dashboardTrainMode.model.name;
-    try {
-      await fetch(`/api/trainable-models/${encodeURIComponent(name)}/labels`, {
-        method: "POST",
-      });
-    } catch (_) { /* ignore */ }
-  }
-
   // ---- Dataset Management ----
 
   async function checkDatasetStatus() {
@@ -2049,7 +2027,7 @@
             if (avail.length > 1) {
               // Show a simple prompt to pick an embedder
               const choices = avail.map(e => e.name).join(", ");
-              const pick = prompt(`Multiple embedders available for ${mt}: ${choices}\nEnter embedder name:`, avail[0].name);
+              const pick = await vtPrompt(`Multiple embedders available for ${mt}: ${choices}\nEnter embedder name:`, avail[0].name);
               if (!pick) return;  // user cancelled
               embedderName = pick.trim();
             } else if (avail.length === 1) {
@@ -2966,6 +2944,7 @@
     if (!filename || !filename.trim()) return;
 
     if (menuDetectorStatus) menuDetectorStatus.textContent = "Saving detector to server\u2026";
+    try {
 
     const res = await fetch(`/api/autorun-detectors/${encodeURIComponent(detectorName)}/export-server`, {
       method: "POST",
@@ -3018,6 +2997,9 @@
     } else {
       const err = await res.json().catch(() => ({}));
       if (menuDetectorStatus) { menuDetectorStatus.textContent = err.error || "Server export failed"; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
+    }
+    } catch (err) {
+      if (menuDetectorStatus) { menuDetectorStatus.textContent = `Export error: ${err.message}`; setTimeout(() => { menuDetectorStatus.textContent = ""; }, 3000); }
     }
   }
 
@@ -3965,6 +3947,10 @@
   let _ivcWindowUpHandler = null;
 
   function renderCenter() {
+    // Clean up window-level image pan handlers from previous render
+    if (_ivcWindowMoveHandler) { window.removeEventListener("mousemove", _ivcWindowMoveHandler); _ivcWindowMoveHandler = null; }
+    if (_ivcWindowUpHandler) { window.removeEventListener("mouseup", _ivcWindowUpHandler); _ivcWindowUpHandler = null; }
+
     const c = medias.find(x => x.id === selected);
     if (!c) return;
     const isGood = goodVoteSet.has(c.id);
@@ -6800,7 +6786,7 @@
               await vtAlert("Find failed.", "error");
               return;
             }
-            res.json().then(data => displayAutodetectResults(data));
+            res.json().then(data => displayAutodetectResults(data)).catch(() => {});
           }, 500);
         }
         if (datasetLoaded) {
