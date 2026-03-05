@@ -35,6 +35,7 @@ __all__ = [
     "Detector",
     "Extractor",
     "MediaClipper",
+    "MediaEmbedder",
     "MediaResponse",
     "MediaType",
     "Processor",
@@ -116,6 +117,117 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
 
 
+class MediaEmbedder(ABC):
+    """Abstract base class for media embedders.
+
+    A *media embedder* takes a media file (or a text description) and produces
+    a fixed-size vector embedding.  Each embedder is associated with exactly one
+    :class:`MediaType` (via :attr:`media_type_id`), but a single media type may
+    have multiple embedders (e.g. different CLIP variants for images).
+
+    Subclasses must implement:
+
+    * :attr:`name` — unique human-readable identifier (also used as the
+      registry key).
+    * :attr:`media_type_id` — which media type this embedder works with.
+    * :meth:`load_models` — load (and cache) the embedding model.
+    * :meth:`embed_media` — embed a media file from disk.
+    * :meth:`embed_text` — embed a text query in the same vector space.
+    """
+
+    def __init__(self) -> None:
+        self._on_progress: ProgressCallback = _noop_progress
+
+    # ------------------------------------------------------------------
+    # Identity
+    # ------------------------------------------------------------------
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this embedder, e.g. ``"clap"``, ``"clip"``."""
+
+    @property
+    @abstractmethod
+    def media_type_id(self) -> str:
+        """The ``type_id`` of the media type this embedder works with."""
+
+    # ------------------------------------------------------------------
+    # Model lifecycle
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def load_models(self) -> None:
+        """Load (and cache) the embedding model.
+
+        Called lazily the first time this embedder needs to produce a vector.
+        Implementations must be idempotent — a second call should be a no-op.
+        """
+
+    # ------------------------------------------------------------------
+    # Embedding
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for the media file at *file_path*.
+
+        Returns ``None`` if the file cannot be embedded.
+        """
+
+    def embed_text(self, text: str) -> Optional[np.ndarray]:
+        """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
+
+        The default implementation returns ``None`` (text sorting unavailable).
+        """
+        return None
+
+    @property
+    def description_wrappers(self) -> list[str]:
+        """Wrapper templates for enriching sort descriptions.
+
+        Each template is a format string containing ``{text}``.  Override in
+        subclasses to provide media-specific wrappers that improve embedding quality.
+        """
+        return []
+
+    def embed_text_enriched(self, text: str) -> Optional[np.ndarray]:
+        """Embed *text* using the average over all description wrappers.
+
+        Falls back to :meth:`embed_text` if no wrappers are defined or all fail.
+        """
+        wrappers = self.description_wrappers
+        if not wrappers:
+            return self.embed_text(text)
+
+        embeddings = []
+        for wrapper in wrappers:
+            wrapped = wrapper.format(text=text)
+            vec = self.embed_text(wrapped)
+            if vec is not None:
+                embeddings.append(vec)
+
+        if not embeddings:
+            return self.embed_text(text)
+
+        avg = np.mean(embeddings, axis=0)
+        norm = np.linalg.norm(avg)
+        if norm > 0:
+            avg = avg / norm
+        return avg
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serialisable summary of this embedder."""
+        return {
+            "name": self.name,
+            "media_type_id": self.media_type_id,
+        }
+
+
 @dataclass
 class MediaResponse:
     """Framework-agnostic representation of media content for HTTP serving.
@@ -190,8 +302,6 @@ class MediaType(ABC):
     A *media type* bundles together everything the application needs to work
     with a particular kind of media:
 
-    * How to embed a file into a fixed-size vector (:meth:`embed_media`).
-    * How to embed a text query into the **same** vector space (:meth:`embed_text`).
     * Human-readable identity: :attr:`name` and :attr:`icon`.
     * Which file extensions to scan when importing a folder (:attr:`file_extensions`).
     * Whether the viewer should loop (:attr:`loops`).
@@ -200,6 +310,9 @@ class MediaType(ABC):
     * How to load media-specific media fields from a file (:meth:`load_media_data`).
     * An optional folder-import alias (:attr:`folder_import_name`) for the
       ``/api/dataset/load-folder`` endpoint.
+
+    Embedding is handled by :class:`MediaEmbedder` objects, which are registered
+    separately.  A media type may have zero, one, or many embedders.
 
     Adding a new media type
     -----------------------
@@ -312,82 +425,37 @@ class MediaType(ABC):
         """List of :class:`DemoDataset` objects available for this media type."""
 
     # ------------------------------------------------------------------
-    # Embeddings
+    # Embeddings (delegated to MediaEmbedder)
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def load_models(self) -> None:
         """Load (and cache) the embedding models for this media type.
 
-        Called lazily the first time this media type needs to embed something
-        (i.e. on the first ``embed_media``, ``embed_text``, or getter call).
-        Implementations must be idempotent — a second call should be a no-op.
+        Default implementation is a no-op.  Media types that still carry
+        their own model logic (legacy) can override this.
         """
 
-    @abstractmethod
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         """Return a fixed-size embedding vector for the media file at *file_path*.
 
-        Returns ``None`` if the file cannot be embedded (model not loaded,
-        corrupt file, etc.).
+        Returns ``None`` by default.  Overridden by media types that have
+        inline embedding logic (legacy) or that delegate to an embedder.
         """
+        return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
 
-        This is used for text-query sorting: the resulting vector is compared
-        against media embeddings via cosine similarity.
-
-        The default implementation returns ``None`` (null embedder), which
-        means text-query sorting is unavailable for this media type.  Media
-        types that support text sorting should override this method.
-
-        Returns ``None`` if the model is not loaded, encoding fails, or the
-        media type does not support text embedding.
+        Returns ``None`` by default.
         """
         return None
-
-    @property
-    def description_wrappers(self) -> list[str]:
-        """Return wrapper templates for enriching sort descriptions.
-
-        Each template is a format string containing ``{text}`` where the
-        user's description will be inserted.  Override in subclasses to
-        provide media-specific wrappers that improve embedding quality.
-
-        The default returns an empty list (no wrappers — plain embedding only).
-        """
-        return []
 
     def embed_text_enriched(self, text: str) -> Optional[np.ndarray]:
         """Embed *text* using the average over all description wrappers.
 
-        For each wrapper in :attr:`description_wrappers`, formats the wrapper
-        with *text*, embeds the result, and returns the mean of all resulting
-        vectors (L2-normalised).  Falls back to :meth:`embed_text` if no
-        wrappers are defined or all wrapper embeddings fail.
-
-        Returns ``None`` only if :meth:`embed_text` also returns ``None``.
+        Returns ``None`` by default.
         """
-        wrappers = self.description_wrappers
-        if not wrappers:
-            return self.embed_text(text)
-
-        embeddings = []
-        for wrapper in wrappers:
-            wrapped = wrapper.format(text=text)
-            vec = self.embed_text(wrapped)
-            if vec is not None:
-                embeddings.append(vec)
-
-        if not embeddings:
-            return self.embed_text(text)
-
-        avg = np.mean(embeddings, axis=0)
-        norm = np.linalg.norm(avg)
-        if norm > 0:
-            avg = avg / norm
-        return avg
+        return None
 
     # ------------------------------------------------------------------
     # Demo dataset loading
