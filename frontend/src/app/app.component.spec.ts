@@ -29,6 +29,16 @@ describe('AppComponent', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('VTSearch');
   });
 
+  it('should render logo in header', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const logo = compiled.querySelector('header .header-logo') as HTMLImageElement;
+    expect(logo).toBeTruthy();
+    expect(logo.src).toContain('logo.png');
+    expect(logo.alt).toBe('VTSearch logo');
+  });
+
   it('should render main content area with router outlet', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
