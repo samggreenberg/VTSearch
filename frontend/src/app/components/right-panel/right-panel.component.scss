@@ -1,0 +1,16 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel-right {
+  width: 220px;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}

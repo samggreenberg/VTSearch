@@ -1,0 +1,63 @@
+.train-context-bar {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--accent-highlight-bg);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.train-context-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.train-context-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  display: block;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.train-context-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.train-rename-btn {
+  vertical-align: middle;
+  margin-left: 4px;
+  font-size: 0.68rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 3px;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+}
+
+.train-rename-input {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  width: 100%;
+  max-width: 160px;
+}
