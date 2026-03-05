@@ -1,0 +1,22 @@
+@if (visible) {
+  <div class="stripe-overview" aria-label="Media minimap">
+    <div class="stripe-container">
+      @for (dot of dots; track $index) {
+        <div
+          class="stripe-dot"
+          [class.good]="dot.type === 'good'"
+          [class.bad]="dot.type === 'bad'"
+          [class.selected]="dot.type === 'selected'"
+          [style.top.%]="dot.top"
+        ></div>
+      }
+
+      @if (thresholdPosition !== null) {
+        <div
+          class="stripe-threshold"
+          [style.top.%]="thresholdPosition"
+        ></div>
+      }
+    </div>
+  </div>
+}

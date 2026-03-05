@@ -1,0 +1,33 @@
+<div class="select-mode-group">
+  <span class="sort-label">Select</span>
+  <label class="sort-radio" [class.active]="selectMode === 'top'">
+    <input
+      type="radio"
+      name="selectMode"
+      value="top"
+      [checked]="selectMode === 'top'"
+      (change)="onChange('top')"
+    />
+    Top
+  </label>
+  <label class="sort-radio" [class.active]="selectMode === 'hard'">
+    <input
+      type="radio"
+      name="selectMode"
+      value="hard"
+      [checked]="selectMode === 'hard'"
+      (change)="onChange('hard')"
+    />
+    Hard
+  </label>
+  <label class="sort-radio" [class.active]="selectMode === 'new'">
+    <input
+      type="radio"
+      name="selectMode"
+      value="new"
+      [checked]="selectMode === 'new'"
+      (change)="onChange('new')"
+    />
+    New
+  </label>
+</div>

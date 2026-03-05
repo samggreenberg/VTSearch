@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { Subject, forkJoin, timer } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
@@ -49,6 +50,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private polling$ = new Subject<void>();
 
   constructor(
+    private router: Router,
     private datasetsApi: DatasetsApiService,
     private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
@@ -344,7 +346,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onLabel(): void {
-    // Phase 4+ will implement the full labeling transition
+    this.router.navigate(['/label']);
   }
 
   onFind(): void {
