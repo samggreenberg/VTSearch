@@ -4,6 +4,7 @@ import { Subject, timer, Subscription } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent, SortMode, SelectMode, SortedItem } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsApiService } from '../../services/settings-api.service';
@@ -12,7 +13,7 @@ import { MediaItem, LabelingStatusResponse, AppSettings } from '../../models/api
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })

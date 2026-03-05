@@ -31,17 +31,22 @@ describe('LabelViewComponent', () => {
       { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
       { id: 2, type: 'audio', duration: 3, file_size: 512, filename: 'b.wav', category: '', md5: 'b2' },
     ]);
-    // Flush /api/votes
-    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    // Flush /api/settings
-    httpMock.expectOne('/api/settings').flush({ volume: 80 });
+    // Flush /api/votes (label-view + right-panel both poll)
+    httpMock.match('/api/votes').forEach(req =>
+      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+    );
+    // Flush /api/settings (label-view + right-panel both request)
+    httpMock.match('/api/settings').forEach(req =>
+      req.flush({ volume: 80 }),
+    );
     // Flush initial labeling-status poll
     httpMock.expectOne('/api/labeling-status').flush({});
   }
 
   afterEach(() => {
     component.ngOnDestroy();
-    httpMock.verify();
+    // Flush any outstanding polling requests from right-panel or label-view
+    httpMock.match(() => true);
   });
 
   it('should create', () => {
@@ -152,11 +157,11 @@ describe('LabelViewComponent', () => {
     expect(el.querySelector('vt-center-panel')).toBeTruthy();
   });
 
-  it('should show placeholder text for right panel', () => {
+  it('should render right panel component', () => {
     flushInitialRequests();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.panel-right .placeholder')).toBeTruthy();
+    expect(el.querySelector('vt-right-panel')).toBeTruthy();
   });
 
   it('should resolve selectedMedia from selectedId', () => {
