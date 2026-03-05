@@ -191,6 +191,72 @@ describe('DashboardComponent', () => {
       component.selectedModelIds.clear();
       expect(component.labelHint).toBe('Select a model');
     });
+
+    it('should hint about multiple datasets', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.add('d1');
+      component.selectedDatasetIds.add('d2');
+      expect(component.labelHint).toBe('Select exactly 1 dataset');
+    });
+
+    it('should hint about multiple models', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.add('d1');
+      component.selectedModelIds.add('m1');
+      component.selectedModelIds.add('m2');
+      expect(component.labelHint).toBe('Select exactly 1 model');
+    });
+
+    it('should hint about non-trainable model', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', trainable: false, media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+      expect(component.labelHint).toBe('Model is not trainable');
+    });
+
+    it('should hint about media type mismatch', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'image' }];
+      flushInitialRequests(datasets, models);
+      expect(component.labelHint).toBe('Media type mismatch');
+    });
+
+    it('should return empty hint when label is enabled', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+      expect(component.labelHint).toBe('');
+    });
+  });
+
+  describe('find hints', () => {
+    it('should hint about missing dataset and model', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.clear();
+      component.selectedModelIds.clear();
+      expect(component.findHint).toBe('Select a dataset and a model');
+    });
+
+    it('should hint about missing dataset', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.clear();
+      component.selectedModelIds.add('m1');
+      expect(component.findHint).toBe('Select a dataset');
+    });
+
+    it('should hint about missing model', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.add('d1');
+      component.selectedModelIds.clear();
+      expect(component.findHint).toBe('Select a model');
+    });
+
+    it('should return empty hint when find is enabled', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.add('d1');
+      component.selectedModelIds.add('m1');
+      expect(component.findHint).toBe('');
+    });
   });
 
   it('should rename a dataset', () => {

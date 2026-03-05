@@ -329,6 +329,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return true;
   }
 
+  get findHint(): string {
+    if (this.selectedDatasetIds.size === 0 && this.selectedModelIds.size === 0) return 'Select a dataset and a model';
+    if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
+    if (this.selectedModelIds.size === 0) return 'Select a model';
+    return '';
+  }
+
   get labelHint(): string {
     if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
     if (this.selectedDatasetIds.size > 1) return 'Select exactly 1 dataset';

@@ -96,21 +96,32 @@
 
   <!-- Action Buttons -->
   <div class="dashboard-actions">
-    <button
-      class="btn btn--primary"
-      [disabled]="!labelEnabled"
-      [title]="labelHint"
-      (click)="onLabel()"
-    >
-      Label
-    </button>
-    <button
-      class="btn btn--primary"
-      [disabled]="!findEnabled"
-      (click)="onFind()"
-    >
-      Find
-    </button>
+    <div class="action-btn-group">
+      <button
+        class="btn btn--primary"
+        [disabled]="!labelEnabled"
+        [title]="labelHint"
+        (click)="onLabel()"
+      >
+        Label
+      </button>
+      @if (!labelEnabled && labelHint) {
+        <span class="btn-disabled-reason">{{ labelHint }}</span>
+      }
+    </div>
+    <div class="action-btn-group">
+      <button
+        class="btn btn--primary"
+        [disabled]="!findEnabled"
+        [title]="findHint"
+        (click)="onFind()"
+      >
+        Find
+      </button>
+      @if (!findEnabled && findHint) {
+        <span class="btn-disabled-reason">{{ findHint }}</span>
+      }
+    </div>
   </div>
 </div>
 
