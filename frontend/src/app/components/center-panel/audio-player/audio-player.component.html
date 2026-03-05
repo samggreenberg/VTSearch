@@ -13,7 +13,7 @@
   loop
   autoplay
   [src]="audioSrc"
-  [attr.aria-label]="media?.filename || 'Audio media'"
+  [attr.aria-label]="media.filename || 'Audio media'"
   (volumechange)="onVolumeChange()"
   class="audio-element"
 ></audio>

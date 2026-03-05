@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
-import { NgIf, NgFor, KeyValuePipe } from '@angular/common';
+import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { MediaItem, VotesResponse } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -17,8 +17,6 @@ import { VotingOverlayComponent } from './voting-overlay/voting-overlay.componen
   selector: 'vt-center-panel',
   standalone: true,
   imports: [
-    NgIf,
-    NgFor,
     KeyValuePipe,
     AudioPlayerComponent,
     ImageViewerComponent,
@@ -101,7 +99,9 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get customMetadata(): Record<string, unknown> {
-    return (this.media as Record<string, unknown>)?.['custom_metadata'] as Record<string, unknown> || {};
+    if (!this.media) return {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.media as any)['custom_metadata'] as Record<string, unknown> || {};
   }
 
   formatMetadataValue(label: string, value: unknown): string {

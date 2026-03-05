@@ -14,15 +14,15 @@ describe('DatasetImporterModalComponent', () => {
       label: 'Load from Folder',
       description: 'Import media files from a folder',
       fields: [
-        { name: 'path', type: 'text', label: 'Folder Path', required: true },
-        { name: 'media_type', type: 'select', label: 'Media Type', default: 'audio' },
+        { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio' },
       ],
     },
     {
       name: 'pickle',
       label: 'Load from File',
       description: 'Load a .pkl dataset file',
-      fields: [{ name: 'file', type: 'file', label: 'Dataset File', required: true }],
+      fields: [{ key: 'file', field_type: 'file', label: 'Dataset File', required: true }],
     },
   ];
 

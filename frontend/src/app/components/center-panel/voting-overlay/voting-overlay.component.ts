@@ -1,10 +1,8 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { NgClass } from '@angular/common';
 
 @Component({
   selector: 'vt-voting-overlay',
   standalone: true,
-  imports: [NgClass],
   templateUrl: './voting-overlay.component.html',
   styleUrl: './voting-overlay.component.scss',
 })

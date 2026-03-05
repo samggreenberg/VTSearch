@@ -52,10 +52,10 @@ describe('MediasApiService', () => {
   });
 
   it('getParagraph should GET json', () => {
-    service.getParagraph(4).subscribe(data => expect(data.text).toBe('hello'));
+    service.getParagraph(4).subscribe(data => expect(data.content).toBe('hello'));
     const req = httpMock.expectOne('/api/medias/4/paragraph');
     expect(req.request.method).toBe('GET');
-    req.flush({ text: 'hello' });
+    req.flush({ content: 'hello', word_count: 1, character_count: 5 });
   });
 
   it('getMedia should GET blob', () => {
