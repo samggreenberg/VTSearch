@@ -34,37 +34,39 @@
     </label>
   </div>
 
-  @if (sortMode === 'text') {
-    <div class="text-sort-wrap">
-      <input
-        class="form-input text-sort-input"
-        type="text"
-        placeholder="Describe what you're looking for..."
-        [value]="textQuery"
-        (input)="onTextInput($any($event.target).value)"
-        aria-label="Text sort query"
-      />
-    </div>
-  }
+  <div class="sort-mode-content">
+    @if (sortMode === 'text') {
+      <div class="text-sort-wrap">
+        <input
+          class="form-input text-sort-input"
+          type="text"
+          placeholder="Describe what you're looking for..."
+          [value]="textQuery"
+          (input)="onTextInput($any($event.target).value)"
+          aria-label="Text sort query"
+        />
+      </div>
+    }
 
-  @if (sortMode === 'learned') {
-    <div class="learned-sort-wrap">
-      @if (learnedDisabled) {
-        <span class="sort-hint">Need at least 1 good and 1 bad vote</span>
-      } @else {
-        <span class="sort-desc">Sorting by trained model</span>
-      }
-    </div>
-  }
+    @if (sortMode === 'learned') {
+      <div class="learned-sort-wrap">
+        @if (learnedDisabled) {
+          <span class="sort-hint">Need at least 1 good and 1 bad vote</span>
+        } @else {
+          <span class="sort-desc">Sorting by trained model</span>
+        }
+      </div>
+    }
 
-  @if (sortMode === 'load') {
-    <div class="load-sort-wrap">
-      @if (loadSortLabel) {
-        <span class="sort-desc">{{ loadSortLabel }}</span>
-      } @else {
-        <span class="sort-hint">No sort loaded</span>
-      }
-    </div>
-  }
+    @if (sortMode === 'load') {
+      <div class="load-sort-wrap">
+        @if (loadSortLabel) {
+          <span class="sort-desc">{{ loadSortLabel }}</span>
+        } @else {
+          <span class="sort-hint">No sort loaded</span>
+        }
+      </div>
+    }
+  </div>
 
 </div>
