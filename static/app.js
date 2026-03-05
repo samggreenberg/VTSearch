@@ -27,7 +27,7 @@
   let waveformAudioCtx = null;       // Shared AudioContext for waveform decoding
   let swipeAnimation = true;         // Swipe animation on vote (persisted setting)
   let isVoting = false;              // Re-entrance guard for castVote
-  let _combineState = null;          // When non-null, we are in combine-datasets staging mode
+  let _combineState = null;          // When non-null, array of selected datasets for combining
   // Autopilot state machine: null when inactive, or {phase, goodToStart, badToStart, ...}
   // phase: "good" | "bad" | "hard" | "new" | "done"
   let _autopilotState = null;
@@ -1060,7 +1060,6 @@
     currentView = "welcome";
     // Clean up combine state if we're returning to the welcome screen.
     if (_combineState) {
-      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
       _combineState = null;
     }
     center.innerHTML = "";
@@ -1857,31 +1856,13 @@
 
     if (progress.error) {
       stopProgressPolling();
-      if (_combineState) {
-        showCombineDatasetsForm();
-        vtAlert(progress.error, "warning");
-      } else {
-        showWelcomeScreen();
-        vtAlert(progress.error, "warning");
-      }
+      showWelcomeScreen();
+      vtAlert(progress.error, "warning");
       return;
     }
 
     if (progress.status === "idle") {
       stopProgressPolling();
-
-      // If we are in combine-datasets staging mode, handle the staging result
-      // instead of loading the dataset into the training UI.
-      if (_combineState && progress.staging_result) {
-        _combineState.push(progress.staging_result);
-        showCombineDatasetsForm();
-        return;
-      }
-      if (_combineState && !progress.staging_result) {
-        // Staging failed or produced no result – return to the combine form.
-        showCombineDatasetsForm();
-        return;
-      }
 
       await checkDatasetStatus();
       if (datasetLoaded) {
@@ -2413,131 +2394,140 @@
   // ---- Combine Existing Datasets UI ----
 
   async function showCombineDatasetsForm() {
-    // Initialise state on first entry; preserved across re-renders.
-    if (!_combineState) _combineState = [];
+    _combineState = _combineState || [];
 
     datasetOptions.style.display = "none";
     datasetProgress.style.display = "none";
     demoDatasetsDiv.style.display = "none";
     backButton.style.display = "block";
 
-    const staged = _combineState;
+    // Fetch registered datasets from the registry
+    let registeredDatasets = [];
+    try {
+      const res = await fetch("/api/datasets/registry");
+      if (res.ok) {
+        const data = await res.json();
+        registeredDatasets = data.datasets || [];
+      }
+    } catch (_) { /* proceed with empty list */ }
+
+    const mediaIcons = Object.fromEntries(Object.entries(mediaTypesMap).map(([k, v]) => [k, v.icon]));
+    // Track selected dataset IDs
+    const selectedIds = new Set(_combineState.map(s => s.id));
 
     // --- Build the HTML ---
     let html = `<div class="form-container wide">`;
     html += `<h3 class="form-heading compact">\uD83D\uDD00 Combine Datasets</h3>`;
-    html += `<p class="form-text" style="margin-bottom:16px;">Add two or more datasets, then combine them. All must be the same media type. Duplicates are skipped automatically.</p>`;
+    html += `<p class="form-text" style="margin-bottom:16px;">Select two or more datasets to combine. All must be the same media type. Duplicates are skipped automatically.</p>`;
 
-    // Staged datasets list
-    html += `<div id="combine-staged-list" style="margin-bottom:16px;">`;
-    if (staged.length === 0) {
-      html += `<p class="form-text">No datasets added yet. Use the buttons below to add datasets.</p>`;
+    if (registeredDatasets.length === 0) {
+      html += `<p class="form-text" style="color:var(--text-muted);">No datasets available. Load some datasets first from the main screen.</p>`;
     } else {
-      staged.forEach((ds, i) => {
-        html += `<div class="combine-item">`;
-        html += `<span class="combine-item-name">${escapeHtml(ds.name)}</span>`;
-        html += `<span class="combine-item-count">${ds.count} medias</span>`;
-        html += `<button type="button" data-combine-remove="${i}" class="combine-item-remove" title="Remove">&#128465;&#65039;</button>`;
-        html += `</div>`;
-      });
-    }
-    html += `</div>`;
+      html += `<div class="combine-grid-wrapper">`;
+      html += `<table class="combine-dataset-table">`;
+      html += `<thead><tr>`;
+      html += `<th class="col-checkbox"></th>`;
+      html += `<th>Name</th>`;
+      html += `<th>Type</th>`;
+      html += `<th style="text-align:right">Items</th>`;
+      html += `</tr></thead><tbody>`;
 
-    // "Add dataset" section – same buttons as the welcome screen
-    html += `<div style="margin-bottom:16px;">`;
-    html += `<div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:8px;font-weight:600;">Add a dataset:</div>`;
-    html += `<div class="dataset-columns" id="combine-add-columns" style="gap:12px;">`;
-    html += `<div class="dataset-column" id="combine-load-column">`;
-    html += `<div class="dataset-column-header">Load</div>`;
-    html += `<button class="dataset-option" id="combine-add-file-btn"><h3>\uD83D\uDCC1 Load from File</h3><p>Upload a saved dataset file (.pkl)</p></button>`;
-    html += `</div>`;
-    html += `<div class="dataset-column" id="combine-generate-column">`;
-    html += `<div class="dataset-column-header">Generate</div>`;
-    html += `</div>`;
-    html += `</div></div>`;
+      registeredDatasets.forEach(ds => {
+        const checked = selectedIds.has(ds.id) ? " checked" : "";
+        const icon = mediaIcons[ds.media_type] || "";
+        const typeName = mediaTypesMap[ds.media_type] ? mediaTypesMap[ds.media_type].name : ds.media_type || "media";
+        html += `<tr class="combine-ds-row${checked ? " combine-selected" : ""}" data-combine-id="${escapeHtml(ds.id)}" data-combine-type="${escapeHtml(ds.media_type)}" data-combine-path="${escapeHtml(ds.pkl_path)}" data-combine-name="${escapeHtml(ds.name)}">`;
+        html += `<td class="col-checkbox"><input type="checkbox" class="combine-cb"${checked}></td>`;
+        html += `<td class="col-name">${escapeHtml(ds.name)}</td>`;
+        html += `<td class="col-type">${icon} ${escapeHtml(typeName)}</td>`;
+        html += `<td class="col-count" style="text-align:right">${ds.num_items || 0}</td>`;
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table></div>`;
+    }
+
+    // Validation hint area
+    html += `<div id="combine-hint" class="combine-hint"></div>`;
 
     // Combine button
-    html += `<button type="button" id="combine-submit-btn" class="btn-block-primary" disabled>Add at least 2 datasets</button>`;
+    html += `<button type="button" id="combine-submit-btn" class="btn-block-primary" disabled>Select at least 2 datasets</button>`;
     html += `</div>`;
 
     extendedImporterForm.innerHTML = html;
     extendedImporterForm.style.display = "block";
 
-    // --- Wire up remove buttons ---
-    extendedImporterForm.querySelectorAll("[data-combine-remove]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        staged.splice(parseInt(btn.dataset.combineRemove), 1);
-        showCombineDatasetsForm();
+    // --- Wire up selection logic ---
+    const submitBtn = document.getElementById("combine-submit-btn");
+    const hintEl = document.getElementById("combine-hint");
+
+    function updateCombineState() {
+      // Gather selected rows
+      const selected = [];
+      extendedImporterForm.querySelectorAll(".combine-ds-row").forEach(row => {
+        const cb = row.querySelector(".combine-cb");
+        if (cb.checked) {
+          selected.push({
+            id: row.dataset.combineId,
+            media_type: row.dataset.combineType,
+            path: row.dataset.combinePath,
+            name: row.dataset.combineName,
+          });
+          row.classList.add("combine-selected");
+        } else {
+          row.classList.remove("combine-selected");
+        }
+      });
+
+      // Persist selection for re-renders
+      _combineState = selected;
+
+      // Validate
+      const types = new Set(selected.map(s => s.media_type));
+      let disabled = false;
+      let hint = "";
+      let btnText = "";
+
+      if (selected.length < 2) {
+        disabled = true;
+        btnText = "Select at least 2 datasets";
+        hint = "";
+      } else if (types.size > 1) {
+        disabled = true;
+        btnText = "Cannot combine different media types";
+        hint = `Selected datasets have different types: ${[...types].join(", ")}`;
+      } else {
+        disabled = false;
+        btnText = `Combine ${selected.length} Datasets`;
+        hint = "";
+      }
+
+      submitBtn.disabled = disabled;
+      submitBtn.textContent = btnText;
+      hintEl.textContent = hint;
+    }
+
+    // Click on row toggles checkbox
+    extendedImporterForm.querySelectorAll(".combine-ds-row").forEach(row => {
+      row.addEventListener("click", (e) => {
+        if (e.target.tagName === "INPUT") return; // let checkbox handle itself
+        const cb = row.querySelector(".combine-cb");
+        cb.checked = !cb.checked;
+        updateCombineState();
+      });
+      row.querySelector(".combine-cb").addEventListener("change", () => {
+        updateCombineState();
       });
     });
 
-    // --- Wire up "Add from File" button ---
-    const combineFileInput = document.createElement("input");
-    combineFileInput.type = "file";
-    combineFileInput.accept = ".pkl";
-    combineFileInput.style.display = "none";
-    extendedImporterForm.appendChild(combineFileInput);
-
-    document.getElementById("combine-add-file-btn").addEventListener("click", () => {
-      combineFileInput.click();
-    });
-    combineFileInput.addEventListener("change", async () => {
-      const file = combineFileInput.files[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append("file", file);
-      try {
-        const res = await fetch("/api/dataset/stage-file", { method: "POST", body: formData });
-        if (!res.ok) {
-          const err = await res.json();
-          vtAlert(`Error: ${err.error}`, "warning");
-          return;
-        }
-        const result = await res.json();
-        staged.push(result);
-        showCombineDatasetsForm();
-      } catch (err) {
-        vtAlert(`Error: ${err.message}`, "warning");
-      }
-      combineFileInput.value = "";
-    });
-
-    // --- Populate extended importer buttons ---
-    const combineGenCol = document.getElementById("combine-generate-column");
-    const combineLoadCol = document.getElementById("combine-load-column");
-    try {
-      const res = await fetch("/api/dataset/importers");
-      if (res.ok) {
-        const data = await res.json();
-        for (const imp of data.importers) {
-          const btn = document.createElement("button");
-          btn.className = "dataset-option";
-          btn.innerHTML = `<h3>${escapeHtml(imp.icon || "\uD83D\uDD0C")} ${escapeHtml(imp.display_name)}</h3><p>${escapeHtml(imp.description)}</p>`;
-          btn.addEventListener("click", () => showCombineStagingImporterForm(imp));
-          combineGenCol.appendChild(btn);
-        }
-      }
-    } catch (_) { /* extended importers are optional */ }
-
-    // "Add Demo Dataset" button
-    const demoBtn = document.createElement("button");
-    demoBtn.className = "dataset-option";
-    demoBtn.innerHTML = `<h3>\uD83C\uDFC6 Load Demo Dataset</h3><p>Stage a demo dataset for combining</p>`;
-    demoBtn.addEventListener("click", () => showCombineStagingDemoList());
-    combineLoadCol.appendChild(demoBtn);
-
-    // --- Update submit button state ---
-    const submitBtn = document.getElementById("combine-submit-btn");
-    if (staged.length >= 2) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = `Combine ${staged.length} Datasets`;
-    }
+    // Initial state
+    updateCombineState();
 
     // --- Handle combine submit ---
     submitBtn.addEventListener("click", async () => {
-      if (staged.length < 2) return;
-      const paths = staged.map(ds => ds.path);
-      // Leave combine mode so the normal progress handler takes over.
+      const selected = _combineState;
+      if (selected.length < 2) return;
+      const paths = selected.map(ds => ds.path);
       _combineState = null;
       startProgressPolling();
       try {
@@ -2557,164 +2547,14 @@
         progressMessage.style.color = "var(--color-bad)";
         stopProgressPolling();
       }
-      // Clean up staging files in the background.
-      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
     });
-  }
-
-  // Show an extended importer form inside the combine flow (staging mode).
-  function showCombineStagingImporterForm(importer) {
-    datasetOptions.style.display = "none";
-    extendedImporterForm.style.display = "block";
-    backButton.style.display = "block";
-
-    let html = `<div class="form-container">`;
-    html += `<h3 class="form-heading">${escapeHtml(importer.display_name)}</h3>`;
-    html += `<p class="form-text">This will be added to the combine list.</p>`;
-    html += `<form id="combine-stage-form">`;
-    for (const field of importer.fields) {
-      html += `<div class="form-group">`;
-      html += `<label class="form-label">${escapeHtml(field.label)}${field.required ? " *" : ""}</label>`;
-      if (field.field_type === "file") {
-        html += `<input type="file" name="${escapeHtml(field.key)}" accept="${escapeHtml(field.accept)}" class="form-input" ${field.required ? "required" : ""}>`;
-      } else if (field.field_type === "select") {
-        html += `<select name="${escapeHtml(field.key)}" class="form-input">`;
-        for (const opt of field.options) {
-          html += `<option value="${escapeHtml(opt)}"${opt === field.default ? " selected" : ""}>${escapeHtml(opt)}</option>`;
-        }
-        html += `</select>`;
-      } else if (field.field_type === "folder") {
-        html += `<div class="form-row">`;
-        html += `<input type="text" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.description)}" class="form-input" style="flex:1;" data-folder-input="true" ${field.required ? "required" : ""}>`;
-        html += `<button type="button" data-browse-btn="true" class="btn-browse">Browse\u2026</button>`;
-        html += `</div>`;
-        html += `<input type="file" data-folder-picker="true" webkitdirectory style="display:none;">`;
-      } else {
-        const itype = field.field_type === "url" ? "url" : "text";
-        html += `<input type="${itype}" name="${escapeHtml(field.key)}" value="${escapeHtml(field.default)}" placeholder="${escapeHtml(field.description)}" class="form-input" ${field.required ? "required" : ""}>`;
-      }
-      if (field.description) {
-        html += `<div class="form-hint">${escapeHtml(field.description)}</div>`;
-      }
-      html += `</div>`;
-    }
-    html += `<button type="submit" class="btn-block-primary">Add to combine list</button>`;
-    html += `</form></div>`;
-
-    extendedImporterForm.innerHTML = html;
-
-    // Wire up folder browse buttons
-    const browseBtn = extendedImporterForm.querySelector("[data-browse-btn]");
-    const folderPicker = extendedImporterForm.querySelector("[data-folder-picker]");
-    const folderTextInput = extendedImporterForm.querySelector("[data-folder-input]");
-    if (browseBtn && folderPicker && folderTextInput) {
-      browseBtn.addEventListener("click", () => folderPicker.click());
-      folderPicker.addEventListener("change", () => {
-        if (folderPicker.files.length > 0) {
-          const topFolder = folderPicker.files[0].webkitRelativePath.split("/")[0];
-          if (!folderTextInput.value) {
-            folderTextInput.placeholder = `Selected: ${topFolder} \u2014 enter full path below`;
-          }
-        }
-      });
-    }
-
-    document.getElementById("combine-stage-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formEl = e.target;
-      const hasFiles = importer.fields.some(f => f.field_type === "file");
-      let body, headers = {};
-      if (hasFiles) {
-        body = new FormData(formEl);
-      } else {
-        const obj = {};
-        for (const field of importer.fields) {
-          obj[field.key] = formEl.elements[field.key].value;
-        }
-        body = JSON.stringify(obj);
-        headers["Content-Type"] = "application/json";
-      }
-      startProgressPolling();
-      try {
-        const res = await fetch(`/api/dataset/stage-import/${importer.name}`, { method: "POST", headers, body });
-        if (!res.ok) {
-          const err = await res.json();
-          progressMessage.textContent = `Error: ${err.error}`;
-          progressMessage.style.color = "var(--color-bad)";
-          stopProgressPolling();
-        }
-      } catch (err) {
-        progressMessage.textContent = `Error: ${err.message}`;
-        progressMessage.style.color = "var(--color-bad)";
-        stopProgressPolling();
-      }
-    });
-  }
-
-  // Show the demo dataset list inside the combine flow (staging mode).
-  async function showCombineStagingDemoList() {
-    datasetOptions.style.display = "none";
-    extendedImporterForm.style.display = "block";
-    backButton.style.display = "block";
-
-    let html = `<div class="form-container">`;
-    html += `<h3 class="form-heading">\uD83C\uDFC6 Add Demo Dataset</h3>`;
-    html += `<p class="form-text">Select a demo dataset to add to the combine list.</p>`;
-    html += `<div id="combine-demo-list"><p style="color:var(--text-dim);">Loading...</p></div>`;
-    html += `</div>`;
-    extendedImporterForm.innerHTML = html;
-
-    const listDiv = document.getElementById("combine-demo-list");
-    try {
-      const res = await fetch("/api/dataset/demo-list");
-      if (!res.ok) throw new Error("Failed to load");
-      const data = await res.json();
-      let listHtml = "";
-      for (const ds of data.datasets) {
-        listHtml += `<button class="dataset-option" data-demo-name="${escapeHtml(ds.name)}" style="width:100%;text-align:left;margin-bottom:6px;">`;
-        listHtml += `<h3>${escapeHtml(ds.label)}</h3>`;
-        listHtml += `<p>${escapeHtml(ds.description)} (${ds.num_files} files)</p>`;
-        listHtml += `</button>`;
-      }
-      listDiv.innerHTML = listHtml || `<p style="color:var(--text-dim);">No demo datasets available.</p>`;
-      listDiv.querySelectorAll("[data-demo-name]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const name = btn.dataset.demoName;
-          startProgressPolling();
-          try {
-            const res = await fetch(`/api/dataset/stage-demo/${encodeURIComponent(name)}`, { method: "POST" });
-            if (!res.ok) {
-              const err = await res.json();
-              progressMessage.textContent = `Error: ${err.error}`;
-              progressMessage.style.color = "var(--color-bad)";
-              stopProgressPolling();
-            }
-          } catch (err) {
-            progressMessage.textContent = `Error: ${err.message}`;
-            progressMessage.style.color = "var(--color-bad)";
-            stopProgressPolling();
-          }
-        });
-      });
-    } catch (e) {
-      listDiv.innerHTML = `<p style="color:var(--color-bad);">Error loading demos: ${escapeHtml(e.message)}</p>`;
-    }
   }
 
   loadExtendedImporters();
 
   backButton.addEventListener("click", async () => {
-    // If we are inside a staging sub-form (importer or demo) within the
-    // combine flow, go back to the combine form instead of the welcome screen.
-    const stageForm = document.getElementById("combine-stage-form");
-    const demoList = document.getElementById("combine-demo-list");
-    if (_combineState && (stageForm || demoList)) {
-      showCombineDatasetsForm();
-      return;
-    }
     // Leaving the combine flow entirely – clean up state.
     if (_combineState) {
-      fetch("/api/dataset/staging", { method: "DELETE" }).catch(() => {});
       _combineState = null;
     }
     // If we came from the dashboard, go back to dashboard
