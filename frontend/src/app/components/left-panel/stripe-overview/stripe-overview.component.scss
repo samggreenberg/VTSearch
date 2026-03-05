@@ -49,3 +49,14 @@
   background: var(--accent);
   opacity: 0.6;
 }
+
+.stripe-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--text-primary);
+  opacity: 0.12;
+  border-top: 1px solid var(--text-primary);
+  border-bottom: 1px solid var(--text-primary);
+  pointer-events: none;
+}

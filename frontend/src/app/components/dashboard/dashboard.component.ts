@@ -335,7 +335,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!model || !model.trainable) return false;
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
     if (!dataset) return false;
-    if (model.media_type !== 'any' && model.media_type !== dataset.media_type) return false;
+    if (model.media_type !== dataset.media_type) return false;
     return true;
   }
 
@@ -359,7 +359,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.models.find((m) => this.selectedModelIds.has(m.id));
     if (model && !model.trainable) return 'Model is not trainable';
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
-    if (model && dataset && model.media_type !== 'any' && model.media_type !== dataset.media_type) {
+    if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
     return '';

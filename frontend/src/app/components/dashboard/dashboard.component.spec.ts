@@ -159,11 +159,11 @@ describe('DashboardComponent', () => {
       expect(component.labelEnabled).toBeFalse();
     });
 
-    it('should enable Label when model media_type is "any"', () => {
+    it('should disable Label when model media_type is "any" (not a valid type)', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'any' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeTrue();
+      expect(component.labelEnabled).toBeFalse();
     });
 
     it('should disable Find with no selections', () => {
