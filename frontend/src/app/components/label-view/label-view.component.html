@@ -32,14 +32,10 @@
     (mousedown)="onDividerMouseDown($event)"
   ></div>
   <div class="panel-center">
-    <div class="placeholder">
-      @if (selectedId !== null) {
-        <p>Media #{{ selectedId }} selected</p>
-        <p class="hint">Center panel viewer coming in Phase 5</p>
-      } @else {
-        <p>Select a media item to view</p>
-      }
-    </div>
+    <vt-center-panel
+      [media]="selectedMedia"
+      (mediaVoted)="onMediaVoted($event)"
+    />
   </div>
   <div class="panel-right">
     <div class="placeholder">

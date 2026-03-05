@@ -15,8 +15,9 @@ export interface MediaItem {
 }
 
 export interface ParagraphResponse {
-  text: string;
-  stats?: Record<string, unknown>;
+  content: string;
+  word_count?: number;
+  character_count?: number;
 }
 
 export interface VoteResponse {

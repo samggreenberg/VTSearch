@@ -1,0 +1,88 @@
+import { Injectable, NgZone, OnDestroy } from '@angular/core';
+import { Subject } from 'rxjs';
+
+export type VoteDirection = 'good' | 'bad';
+
+export interface KeyboardAction {
+  type: 'vote' | 'volume' | 'playback';
+  direction?: VoteDirection;
+  volumeDelta?: number;
+}
+
+@Injectable({ providedIn: 'root' })
+export class KeyboardService implements OnDestroy {
+  readonly action$ = new Subject<KeyboardAction>();
+
+  private listener: ((e: KeyboardEvent) => void) | null = null;
+
+  constructor(private zone: NgZone) {}
+
+  /** Start listening for keyboard shortcuts on the document. */
+  start(): void {
+    if (this.listener) return;
+    this.listener = (e: KeyboardEvent) => this.handleKeydown(e);
+    this.zone.runOutsideAngular(() => {
+      document.addEventListener('keydown', this.listener!);
+    });
+  }
+
+  /** Stop listening for keyboard shortcuts. */
+  stop(): void {
+    if (this.listener) {
+      document.removeEventListener('keydown', this.listener);
+      this.listener = null;
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stop();
+    this.action$.complete();
+  }
+
+  private handleKeydown(e: KeyboardEvent): void {
+    // Skip when a modal is open
+    if (document.querySelector('.modal-backdrop')) return;
+
+    // Skip when typing in text fields
+    if (this.isTyping()) return;
+
+    // Skip when modifier keys are held
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        this.zone.run(() => this.action$.next({ type: 'vote', direction: 'good' }));
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        this.zone.run(() => this.action$.next({ type: 'vote', direction: 'bad' }));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: 0.05 }));
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: -0.05 }));
+        break;
+      case ' ':
+        e.preventDefault();
+        this.zone.run(() => this.action$.next({ type: 'playback' }));
+        break;
+    }
+  }
+
+  private isTyping(): boolean {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const type = (el as HTMLInputElement).type;
+      if (type !== 'checkbox' && type !== 'radio' && type !== 'range') return true;
+    }
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if ((el as HTMLElement).isContentEditable) return true;
+    return false;
+  }
+}

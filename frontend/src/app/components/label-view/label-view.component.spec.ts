@@ -145,12 +145,30 @@ describe('LabelViewComponent', () => {
     req.flush({ inclusion: 5 });
   }));
 
-  it('should show placeholder text for center and right panels', () => {
+  it('should render center panel component', () => {
     flushInitialRequests();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.panel-center .placeholder')).toBeTruthy();
+    expect(el.querySelector('vt-center-panel')).toBeTruthy();
+  });
+
+  it('should show placeholder text for right panel', () => {
+    flushInitialRequests();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.panel-right .placeholder')).toBeTruthy();
+  });
+
+  it('should resolve selectedMedia from selectedId', () => {
+    flushInitialRequests();
+    component.onMediaSelect(2);
+    expect(component.selectedMedia).toBeTruthy();
+    expect(component.selectedMedia!.id).toBe(2);
+  });
+
+  it('should return null selectedMedia when no selection', () => {
+    flushInitialRequests();
+    expect(component.selectedMedia).toBeNull();
   });
 
   it('should auto-select next unlabeled media after text sort (top mode)', () => {

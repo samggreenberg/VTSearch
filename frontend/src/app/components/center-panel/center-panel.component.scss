@@ -1,0 +1,91 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.center-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+
+  &.empty {
+    color: var(--text-placeholder);
+    font-size: 1rem;
+  }
+}
+
+.placeholder-text {
+  margin: 0;
+}
+
+// Swipe animation wrapper
+.media-swipe-wrapper {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes swipe-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes swipe-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-120%); opacity: 0; }
+}
+
+.swipe-right {
+  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.swipe-left {
+  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.center-panel:has(.swipe-right, .swipe-left) {
+  overflow: hidden;
+}
+
+// Metadata grid
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+}
+
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metadata-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metadata-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.metadata-md5 {
+  font-family: monospace;
+  font-size: 0.75rem;
+}

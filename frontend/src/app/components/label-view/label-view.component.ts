@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, timer, Subscription } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent, SortMode, SelectMode, SortedItem } from '../left-panel/left-panel.component';
+import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsApiService } from '../../services/settings-api.service';
@@ -11,12 +12,13 @@ import { MediaItem, LabelingStatusResponse, AppSettings } from '../../models/api
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
-export class LabelViewComponent implements OnInit, OnDestroy {
+export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
+  @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   medias: MediaItem[] = [];
   sortOrder: SortedItem[] | null = null;
@@ -57,6 +59,10 @@ export class LabelViewComponent implements OnInit, OnDestroy {
     this.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
+  }
+
+  ngAfterViewInit(): void {
+    setTimeout(() => this.centerPanel?.init());
   }
 
   ngOnDestroy(): void {
@@ -231,8 +237,24 @@ export class LabelViewComponent implements OnInit, OnDestroy {
 
   // --- Media selection ---
 
+  get selectedMedia(): MediaItem | null {
+    if (this.selectedId === null) return null;
+    return this.medias.find((m) => m.id === this.selectedId) ?? null;
+  }
+
   onMediaSelect(id: number): void {
     this.selectedId = id;
+  }
+
+  onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Refresh votes from backend (center panel already did the API call)
+    this.loadVotes();
+    // Auto-advance to next media
+    this.autoSelectNext();
+    // Kick off background learned sort if in learned mode
+    if (this.sortMode === 'learned' && this.goodVotes.size > 0 && this.badVotes.size > 0) {
+      this.scheduleLearnedSort();
+    }
   }
 
   // --- Indicators ---

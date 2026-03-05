@@ -1,0 +1,22 @@
+<div class="vote-buttons">
+  <button
+    class="btn-bad"
+    [class.voted]="isBad"
+    [class.vote-flash]="badFlash"
+    [disabled]="disabled"
+    (click)="onVoteBad()"
+    title="Mark this media as a Bad example."
+  >
+    Bad
+  </button>
+  <button
+    class="btn-good"
+    [class.voted]="isGood"
+    [class.vote-flash]="goodFlash"
+    [disabled]="disabled"
+    (click)="onVoteGood()"
+    title="Mark this media as a Good example."
+  >
+    Good
+  </button>
+</div>
