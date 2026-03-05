@@ -61,7 +61,13 @@ def serve_angular(path: str = "") -> Response:
     everything else falls back to ``index.html`` so Angular's client-side
     router can handle it.
     """
-    ng_dir = os.path.join(current_app.static_folder, "ng")
+    ng_dir = str(_static_dir() / "ng")
+    if not os.path.isdir(ng_dir):
+        return Response(
+            "Angular app not built yet. Run: cd frontend && npm install && npm run build:prod",
+            status=404,
+            mimetype="text/plain",
+        )
     if path and os.path.exists(os.path.join(ng_dir, path)):
         return send_from_directory(ng_dir, path)
     return send_from_directory(ng_dir, "index.html")
