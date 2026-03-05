@@ -614,7 +614,8 @@ video { max-width: 100%; }
 .combine-item { display: flex; align-items: center; padding: 8px 10px; margin-bottom: 4px; background: var(--bg-hover); border-radius: 4px; }
 .combine-item-name { flex: 1; color: var(--text-primary); font-size: 0.9rem; }
 .combine-item-count { color: var(--text-dim); font-size: 0.75rem; margin-right: 10px; }
-.combine-item-remove { background: none; border: none; color: var(--color-bad); cursor: pointer; font-size: 1rem; padding: 0 4px; }
+.combine-item-remove { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 0 4px; opacity: 0.5; transition: opacity 0.15s; }
+.combine-item-remove:hover { opacity: 1; }
 
 
 /* Missing elements prompt */
@@ -761,8 +762,8 @@ video { max-width: 100%; }
 .example-type-badge.type-detector { background: #4caf50; color: #fff; }
 .example-value { flex: 1; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .example-remove {
-  background: none; border: none; color: var(--color-bad); cursor: pointer;
-  font-size: 0.9rem; padding: 0 3px; opacity: 0.5; transition: opacity 0.15s;
+  background: none; border: none; cursor: pointer;
+  font-size: 0.8rem; padding: 0 3px; opacity: 0.5; transition: opacity 0.15s;
   flex-shrink: 0;
 }
 .example-remove:hover { opacity: 1; }
