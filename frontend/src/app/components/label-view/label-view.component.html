@@ -1,4 +1,4 @@
-<div class="layout">
+<div class="layout" #layout>
   <div class="panel-left">
     <vt-left-panel
       [medias]="medias"
@@ -27,6 +27,10 @@
       (autopilotStop)="onAutopilotStop()"
     />
   </div>
+  <div
+    class="divider-left"
+    (mousedown)="onDividerMouseDown($event)"
+  ></div>
   <div class="panel-center">
     <vt-center-panel
       [media]="selectedMedia"

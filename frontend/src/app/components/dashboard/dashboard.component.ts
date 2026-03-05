@@ -232,7 +232,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Progress polling ---
 
-  startProgressPolling(): void {
+  startProgressPolling(onComplete?: () => void): void {
     this.loading = true;
     this.progressIndeterminate = true;
     this.polling$.next(); // cancel previous polling
@@ -257,6 +257,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.progressIndeterminate = false;
             this.polling$.next();
             this.refresh();
+            if (progress.status === 'idle' && onComplete) {
+              onComplete();
+            }
           }
         },
       });
@@ -361,7 +364,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onLabel(): void {
-    this.router.navigate(['/label']);
+    const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
+    if (!dataset) return;
+
+    if (dataset.loaded) {
+      this.router.navigate(['/label']);
+      return;
+    }
+
+    // Dataset not loaded — load it first, then navigate
+    this.loading = true;
+    this.progressMessage = `Loading ${dataset.name}...`;
+    this.progressIndeterminate = true;
+    this.datasetsApi.loadRegistered(dataset.id).subscribe({
+      next: () => {
+        this.startProgressPolling(() => {
+          this.router.navigate(['/label']);
+        });
+      },
+      error: () => {
+        this.loading = false;
+        this.progressIndeterminate = false;
+      },
+    });
   }
 
   onFind(): void {

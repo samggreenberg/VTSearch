@@ -341,6 +341,78 @@ describe('DashboardComponent', () => {
     expect(el.querySelector('.dash-table')).toBeTruthy();
   });
 
+  describe('onLabel', () => {
+    it('should navigate directly when dataset is already loaded', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+
+      const routerSpy = spyOn(component['router'], 'navigate');
+      component.onLabel();
+
+      expect(routerSpy).toHaveBeenCalledWith(['/label']);
+      expect(component.loading).toBeFalse();
+    });
+
+    it('should load dataset first when not loaded, then navigate', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+
+      const routerSpy = spyOn(component['router'], 'navigate');
+      component.onLabel();
+
+      expect(component.loading).toBeTrue();
+      expect(component.progressMessage).toContain('DS');
+      expect(routerSpy).not.toHaveBeenCalled();
+
+      // Respond to load request
+      const loadReq = httpMock.expectOne('/api/datasets/registry/d1/load');
+      expect(loadReq.request.method).toBe('POST');
+      loadReq.flush({ ok: true });
+
+      // Progress polling returns idle -> should navigate
+      const progressReq = httpMock.expectOne('/api/dataset/progress');
+      progressReq.flush({ status: 'idle' });
+
+      expect(routerSpy).toHaveBeenCalledWith(['/label']);
+
+      // Refresh after completion
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    });
+
+    it('should not navigate on load error progress', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
+      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+
+      const routerSpy = spyOn(component['router'], 'navigate');
+      component.onLabel();
+
+      const loadReq = httpMock.expectOne('/api/datasets/registry/d1/load');
+      loadReq.flush({ ok: true });
+
+      // Progress polling returns error
+      const progressReq = httpMock.expectOne('/api/dataset/progress');
+      progressReq.flush({ status: 'error', message: 'Out of memory' });
+
+      expect(routerSpy).not.toHaveBeenCalled();
+
+      // Refresh after error
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    });
+
+    it('should do nothing when no dataset is selected', () => {
+      flushInitialRequests();
+      component.selectedDatasetIds.clear();
+      const routerSpy = spyOn(component['router'], 'navigate');
+      component.onLabel();
+      expect(routerSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it('should load demo dataset on demoSelected', () => {
     flushInitialRequests();
     component.importerModalOpen = true;
