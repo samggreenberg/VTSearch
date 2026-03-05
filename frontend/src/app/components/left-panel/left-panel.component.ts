@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
@@ -55,10 +55,18 @@ export class LeftPanelComponent implements OnInit {
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
 
+  @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
+
   activeTab: 'manual' | 'autopilot' = 'autopilot';
 
   ngOnInit(): void {
     this.autopilotStart.emit();
+  }
+
+  onStripeClick(index: number): void {
+    if (this.mediaListComponent) {
+      this.mediaListComponent.scrollToIndex(index);
+    }
   }
 
   setTab(tab: 'manual' | 'autopilot'): void {

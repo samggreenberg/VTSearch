@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SortedItem } from '../left-panel.component';
 
@@ -16,6 +16,18 @@ export class StripeOverviewComponent {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() totalCount = 0;
+
+  @Output() stripeClick = new EventEmitter<number>();
+
+  onStripeClick(event: MouseEvent): void {
+    if (!this.sortOrder || this.sortOrder.length === 0) return;
+    const el = event.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    const percentage = y / rect.height;
+    const index = Math.max(0, Math.min(Math.floor(percentage * this.sortOrder.length), this.sortOrder.length - 1));
+    this.stripeClick.emit(index);
+  }
 
   get visible(): boolean {
     return this.sortOrder !== null && this.sortOrder.length > 0;
