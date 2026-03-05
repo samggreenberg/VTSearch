@@ -1,0 +1,27 @@
+@if (visible) {
+  <div class="train-context-bar">
+    <div class="train-context-header">
+      <div>
+        <span class="train-context-label">Detector</span>
+        @if (!editing) {
+          <span class="train-context-name">{{ detectorName }}</span>
+          <button
+            class="btn-icon train-rename-btn"
+            title="Rename detector"
+            aria-label="Rename detector"
+            (click)="startRename()"
+          >&#9998;</button>
+        } @else {
+          <input
+            #renameInput
+            type="text"
+            class="train-rename-input"
+            [(ngModel)]="editValue"
+            (blur)="finishRename()"
+            (keydown)="onKeydown($event)"
+          />
+        }
+      </div>
+    </div>
+  </div>
+}

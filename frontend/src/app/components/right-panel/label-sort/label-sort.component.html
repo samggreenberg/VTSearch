@@ -1,0 +1,18 @@
+<div class="label-sort-bar">
+  <span class="sort-label">Sort labels</span>
+  <label for="label-sort-select" class="sr-only">Sort labels</label>
+  <select
+    id="label-sort-select"
+    class="label-sort-select"
+    [ngModel]="mode"
+    (ngModelChange)="onSortChange($event)"
+  >
+    <option value="time-desc">Newest first</option>
+    <option value="time-asc">Oldest first</option>
+    <option value="name-asc">Name A–Z</option>
+    <option value="name-desc">Name Z–A</option>
+    <option value="confidence-desc">Confidence ↓</option>
+    <option value="confidence-asc">Confidence ↑</option>
+    <option value="id-asc">ID ↑</option>
+  </select>
+</div>

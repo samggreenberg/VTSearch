@@ -1,0 +1,34 @@
+<div class="vote-section">
+  <h3 [class]="label">
+    {{ label === 'good' ? 'Good' : 'Bad' }}
+    <span class="label-count">({{ ids.length }})</span>
+  </h3>
+  <div class="vote-list">
+    @for (entry of sortedEntries; track trackById($index, entry)) {
+      <div
+        class="vote-entry"
+        [class.vote-entry-thumb]="useThumbnail(entry.id)"
+        role="button"
+        tabindex="0"
+        [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name"
+        (click)="onEntryClick(entry.id)"
+        (keydown)="onEntryKeydown($event, entry.id)"
+      >
+        @if (useThumbnail(entry.id)) {
+          @if (isVideo(entry.id)) {
+            <video class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" muted preload="metadata"></video>
+          } @else {
+            <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" />
+          }
+          <div class="vote-thumb-info">
+            <span class="vote-name">{{ entry.name }}</span>
+            <span class="vote-meta">{{ metaText(entry) }}</span>
+          </div>
+        } @else {
+          <span class="vote-name">{{ entry.name }}</span>
+          <span class="vote-meta">{{ metaText(entry) }}</span>
+        }
+      </div>
+    }
+  </div>
+</div>
