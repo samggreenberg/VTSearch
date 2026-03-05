@@ -62,4 +62,7 @@
 <div class="main-content" role="main">
   <router-outlet />
 </div>
+@if (showSettings) {
+  <vt-settings-modal (closed)="showSettings = false" />
+}
 <vt-dialog-host />
