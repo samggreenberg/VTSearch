@@ -7051,4 +7051,37 @@
     }
   }
 
+  // ---- Column resize handles ----
+  function initResizeHandle(handleId, panel, side) {
+    const handle = document.getElementById(handleId);
+    if (!handle || !panel) return;
+    let startX, startWidth;
+    handle.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = panel.getBoundingClientRect().width;
+      handle.classList.add("active");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      function onMouseMove(e) {
+        const dx = e.clientX - startX;
+        const newWidth = side === "left" ? startWidth + dx : startWidth - dx;
+        const clamped = Math.max(100, Math.min(newWidth, window.innerWidth * 0.4));
+        panel.style.width = clamped + "px";
+        panel.style.minWidth = clamped + "px";
+      }
+      function onMouseUp() {
+        handle.classList.remove("active");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    });
+  }
+  initResizeHandle("resize-handle-left", leftPanel, "left");
+  initResizeHandle("resize-handle-right", rightPanel, "right");
+
 })();
