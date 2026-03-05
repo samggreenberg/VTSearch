@@ -28,7 +28,7 @@ documents.  It combines:
   (video), E5-base-v2 (text) for embedding-based similarity search.
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
-- **Flask web UI** — vanilla JS frontend with a REST API.
+- **Flask web UI** — Angular SPA frontend with a REST API.
 - **Plugin systems** — auto-discovered dataset importers, results
   exporters, label importers, and processor importers.
 
@@ -132,7 +132,7 @@ VTSearch/
 │   │
 │   └── audio/                      WAV/tone generation utilities
 │
-├── static/                         Frontend (HTML + CSS + JS)
+├── static/                         Angular build output (HTML + CSS + JS)
 └── tests/                          Comprehensive test suite
 ```
 
@@ -197,7 +197,10 @@ modules on the right.
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
-- **Only `routes/*` imports global state** from `vtsearch.utils.state`.
+- **`routes/*` is the primary consumer of global state** from
+  `vtsearch.utils.state`.  A few non-route modules also import specific
+  helpers (e.g. `update_progress`, `next_media_id`) for progress
+  reporting and ID generation during dataset loading.
 
 ---
 

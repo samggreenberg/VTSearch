@@ -69,6 +69,7 @@ UI. They are **not** downloaded at startup.
 | Food-101 | Image | ETH Zurich | ~170 MB |
 | EuroSAT | Image | Zenodo | ~170 MB |
 | Stanford Dogs | Image | Stanford | ~170 MB |
+| UCSF Industry Documents | Document | UCSF IDL | ~50 MB |
 | 20 Newsgroups | Text | scikit-learn | ~14 MB |
 | AG News | Text | HuggingFace | ~15 MB |
 | BBC News | Text | Internet | ~15 MB |

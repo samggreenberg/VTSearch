@@ -90,8 +90,8 @@ We recommend cloning over SSH so you don't have to enter your password on every 
 ### Clone the repository
 
 ```bash
-git clone git@github.com:samggreenberg/vtsearch.git
-cd vtsearch
+git clone git@github.com:samggreenberg/VTSearch.git
+cd VTSearch
 ```
 
 ## Setting up a virtual environment
