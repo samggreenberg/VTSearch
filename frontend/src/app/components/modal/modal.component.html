@@ -11,7 +11,9 @@
   <div class="modal-content">
     <div class="modal-header">
       <h2>{{ title }}</h2>
-      <button class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+      @if (showCloseButton) {
+        <button class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+      }
     </div>
     <div class="modal-body">
       <ng-content />

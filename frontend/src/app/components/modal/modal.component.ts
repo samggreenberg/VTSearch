@@ -9,6 +9,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 export class ModalComponent {
   @Input() title = '';
   @Input() open = false;
+  @Input() showCloseButton = true;
   @Output() closed = new EventEmitter<void>();
 
   onBackdropClick(event: MouseEvent): void {
