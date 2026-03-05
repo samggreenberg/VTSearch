@@ -12,6 +12,11 @@ header {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
 
+  .header-logo {
+    height: 28px;
+    width: auto;
+  }
+
   h1 {
     font-size: 1.2rem;
     margin: 0;
