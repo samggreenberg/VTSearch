@@ -81,6 +81,26 @@ class TextMediaType(MediaType):
         return ["word_count", "character_count"]
 
     # ------------------------------------------------------------------
+    # Display metadata
+    # ------------------------------------------------------------------
+
+    def display_metadata(self, media: dict) -> dict:
+        result: dict = {}
+        cat = media.get("category")
+        if cat and cat not in ("unknown", "custom"):
+            result["Category"] = cat
+        wc = media.get("word_count")
+        if wc:
+            result["Word Count"] = wc
+        cc = media.get("character_count")
+        if cc:
+            result["Characters"] = cc
+        fs = media.get("file_size")
+        if fs:
+            result["File Size"] = fs
+        return result
+
+    # ------------------------------------------------------------------
     # Viewer
     # ------------------------------------------------------------------
 

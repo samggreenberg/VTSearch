@@ -63,6 +63,16 @@ class DatasetImporter(PluginBase):
     and expose a module-level ``IMPORTER = YourImporter()`` – the registry
     picks it up automatically.
 
+    Custom metadata
+    ---------------
+    Importers can attach arbitrary per-media display metadata by setting
+    ``media["custom_metadata"]`` to a ``dict[str, Any]`` mapping
+    human-readable labels to values.  For example, an S3 importer might
+    set ``{"Uploaded By": "alice", "Bucket": "my-data"}``.  These fields
+    are merged with the media type's built-in display fields and rendered
+    in the labeling UI.  The dict is also persisted through pickle
+    export/import.
+
     Content vectors
     ---------------
     Some importers provide pre-computed content vectors (embeddings) alongside

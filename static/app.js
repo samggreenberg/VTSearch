@@ -4032,43 +4032,26 @@
           <span class="metadata-label">Name</span>
           <span class="metadata-value">${escapeHtml(c.filename || 'Media #' + c.id)}</span>
         </div>
-        ${c.frequency ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Frequency</span>
-          <span class="metadata-value">${escapeHtml(String(c.frequency))} Hz</span>
-        </div>` : ''}
-        ${c.category && c.category !== 'unknown' ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Category</span>
-          <span class="metadata-value">${escapeHtml(c.category)}</span>
-        </div>` : ''}
         <div class="metadata-item">
           <span class="metadata-label">Media Type</span>
           <span class="metadata-value">${escapeHtml(mtInfo ? mtInfo.name : mediaType)}</span>
         </div>
-        ${(c.duration && c.duration > 0) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Duration</span>
-          <span class="metadata-value">${c.duration.toFixed(1)}s</span>
-        </div>` : ''}
-        ${(c.width && c.height) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Dimensions</span>
-          <span class="metadata-value">${c.width}×${c.height}</span>
-        </div>` : ''}
-        ${(c.word_count) ? `
-        <div class="metadata-item">
-          <span class="metadata-label">Word Count</span>
-          <span class="metadata-value">${c.word_count}</span>
-        </div>
-        <div class="metadata-item">
-          <span class="metadata-label">Characters</span>
-          <span class="metadata-value">${c.character_count}</span>
-        </div>` : ''}
-        ${c.file_size ? `<div class="metadata-item">
-          <span class="metadata-label">File Size</span>
-          <span class="metadata-value">${(c.file_size / 1024).toFixed(1)} KB</span>
-        </div>` : ''}
+        ${Object.entries(c.custom_metadata || {}).map(([label, value]) => {
+          let displayValue;
+          if (label === 'File Size' && typeof value === 'number') {
+            displayValue = (value / 1024).toFixed(1) + ' KB';
+          } else if (label === 'Duration' && typeof value === 'number') {
+            displayValue = value.toFixed(1) + 's';
+          } else if (label === 'Frequency' && typeof value === 'number') {
+            displayValue = value + ' Hz';
+          } else {
+            displayValue = escapeHtml(String(value));
+          }
+          return `<div class="metadata-item">
+          <span class="metadata-label">${escapeHtml(label)}</span>
+          <span class="metadata-value">${displayValue}</span>
+        </div>`;
+        }).join('')}
         <div class="metadata-item">
           <span class="metadata-label">MD5</span>
           <span class="metadata-value metadata-md5">${escapeHtml(c.md5)}</span>
