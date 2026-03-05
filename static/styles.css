@@ -610,12 +610,20 @@ video { max-width: 100%; }
 }
 .ivc-zoom-label { font-size: 0.7rem; color: var(--text-muted); min-width: 2.5em; text-align: center; }
 
-/* Combine datasets staged items */
-.combine-item { display: flex; align-items: center; padding: 8px 10px; margin-bottom: 4px; background: var(--bg-hover); border-radius: 4px; }
-.combine-item-name { flex: 1; color: var(--text-primary); font-size: 0.9rem; }
-.combine-item-count { color: var(--text-dim); font-size: 0.75rem; margin-right: 10px; }
-.combine-item-remove { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 0 4px; opacity: 0.5; transition: opacity 0.15s; }
-.combine-item-remove:hover { opacity: 1; }
+/* Combine datasets multi-select grid */
+.combine-grid-wrapper { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; }
+.combine-dataset-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.combine-dataset-table thead th { padding: 6px 10px; color: var(--text-secondary); font-size: 0.72rem; font-weight: 600; border-bottom: 1px solid var(--border); text-align: left; position: sticky; top: 0; background: var(--bg-surface); }
+.combine-dataset-table .col-checkbox { width: 32px; text-align: center; }
+.combine-ds-row { cursor: pointer; transition: background 0.15s; }
+.combine-ds-row td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.combine-ds-row:hover { background: var(--bg-subtle); }
+.combine-ds-row.combine-selected { background: var(--accent-highlight-bg); }
+.combine-ds-row.combine-selected .col-name { color: var(--accent); font-weight: 600; }
+.combine-ds-row .col-name { color: var(--text-primary); }
+.combine-ds-row .col-type { white-space: nowrap; color: var(--text-muted); }
+.combine-ds-row .col-count { font-family: monospace; font-size: 0.75rem; color: var(--text-muted); }
+.combine-hint { font-size: 0.8rem; color: var(--color-bad); min-height: 1.2em; margin-bottom: 8px; }
 
 
 /* Missing elements prompt */
