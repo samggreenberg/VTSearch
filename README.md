@@ -1,6 +1,6 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
+A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
 ## Setup and running tests
 
@@ -54,7 +54,7 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── processors/importers/       # Processor importer plugins
 │   ├── audio/                      # Audio generation utility
 │   └── utils/                      # Global state (medias, votes) & progress helpers
-├── static/                         # Frontend (HTML, JS, CSS, assets)
+├── static/                         # Angular build output (HTML, JS, CSS, assets)
 ├── tests/                          # Test suite (pytest)
 ├── docs/                           # Extended documentation
 │   ├── HANDOFF.md                  # Project handoff & orientation guide

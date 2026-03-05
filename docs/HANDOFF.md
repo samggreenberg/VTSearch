@@ -30,7 +30,7 @@ strategies:
 - **Learned sorting** — trains a small MLP neural network on user votes to
   predict good/bad labels.
 
-Built with Flask + vanilla JavaScript + PyTorch. Single-user, no auth,
+Built with Flask + Angular + PyTorch. Single-user, no auth,
 runs locally or in Docker.
 
 ---
@@ -165,15 +165,17 @@ argument parsing. Key startup sequence:
 | Dataset loading and downloading | `vtsearch/datasets/` |
 | Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/` |
 | Constants and model IDs | `vtsearch/config.py` |
-| Frontend | `static/index.html`, `static/app.js`, `static/dialogs.js`, `static/charts.js`, `static/results.js`, `static/styles.css` |
+| Frontend | `static/index.html`, `static/main.js`, `static/polyfills.js`, `static/styles.css` (Angular build output) |
 | Tests | `tests/` (see test list in CLAUDE.md) |
 
 ### Architectural boundaries
 
 - **Media types, models, exporters, and importers do NOT import Flask.**
   They are standalone and can be used in scripts or notebooks.
-- **Only `vtsearch/routes/` imports global state.** All ML and dataset
-  functions accept state as parameters.
+- **`vtsearch/routes/` is the primary consumer of global state.** ML
+  and dataset functions generally accept state as parameters, though
+  some modules import specific helpers (e.g. `update_progress`,
+  `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory with its own
   `requirements.txt`.
 
