@@ -83,3 +83,26 @@ def logo() -> tuple[str, int] | Response:
     if not (static / "logo.svg").exists():
         return "", 204
     return send_from_directory(str(static), "logo.svg", mimetype="image/svg+xml")
+
+
+@main_bp.route("/<path:path>")
+def catch_all(path: str) -> Response:
+    """Serve static files at root paths and fall back to Angular SPA.
+
+    The Angular build output (main.js, polyfills.js, styles.css, etc.) is
+    referenced from index.html with ``<base href="/">``, so the browser
+    requests them at ``/main.js`` rather than ``/static/main.js``.  This
+    route serves those files when they exist, and falls back to
+    ``index.html`` for any other path so that Angular Router can handle
+    client-side navigation.
+    """
+    static = _static_dir()
+    # Resolve the candidate and ensure it stays within the static directory
+    # to prevent path-traversal attacks (e.g. ../../etc/passwd).
+    try:
+        candidate = (static / path).resolve()
+    except (OSError, ValueError):
+        return _serve_angular_index()
+    if candidate.is_file() and str(candidate).startswith(str(static.resolve())):
+        return send_from_directory(str(static), path)
+    return _serve_angular_index()
