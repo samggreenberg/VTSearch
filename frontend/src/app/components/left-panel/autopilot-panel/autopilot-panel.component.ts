@@ -7,7 +7,7 @@ import {
   AutopilotState,
 } from '../../../services/autopilot-state.service';
 
-export { AutopilotPhase, AutopilotState };
+export type { AutopilotPhase, AutopilotState };
 
 interface StepDisplay {
   phase: AutopilotPhase;

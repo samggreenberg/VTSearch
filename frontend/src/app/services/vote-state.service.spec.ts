@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick, discardPeriodicTimers } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { VoteStateService } from './vote-state.service';
@@ -63,7 +63,7 @@ describe('VoteStateService', () => {
     expect(service.goodVotes.size).toBe(1);
 
     service.stopPolling();
-    discardPeriodicTimers();
+    discardPeriodicTasks();
   }));
 
   it('stopPolling should stop periodic fetches', fakeAsync(() => {
@@ -74,7 +74,7 @@ describe('VoteStateService', () => {
     tick(1000);
     httpMock.expectNone('/api/votes');
 
-    discardPeriodicTimers();
+    discardPeriodicTasks();
   }));
 
   it('clear should reset all state', () => {

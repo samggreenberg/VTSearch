@@ -10,7 +10,7 @@ import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.compo
 import { MediaItem, LabelingStatusResponse } from '../../models/api.models';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
-export { SortMode, SelectMode, SortedItem };
+export type { SortMode, SelectMode, SortedItem };
 
 @Component({
   selector: 'vt-left-panel',
