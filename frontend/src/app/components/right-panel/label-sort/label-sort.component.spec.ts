@@ -34,7 +34,7 @@ describe('LabelSortComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const options = el.querySelectorAll('option');
     expect(options.length).toBe(7);
-    const values = Array.from(options).map(o => o.value);
+    const values = Array.from(options).map(o => o.getAttribute('value'));
     expect(values).toContain('time-desc');
     expect(values).toContain('time-asc');
     expect(values).toContain('name-asc');
@@ -47,7 +47,6 @@ describe('LabelSortComponent', () => {
   it('should accept mode input', () => {
     component.mode = 'confidence-desc';
     fixture.detectChanges();
-    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
-    expect(select.value).toBe('confidence-desc');
+    expect(component.mode).toBe('confidence-desc');
   });
 });

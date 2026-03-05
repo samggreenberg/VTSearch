@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -18,7 +18,7 @@ export interface LabelEntry {
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
-export class LabelListComponent implements OnChanges {
+export class LabelListComponent implements OnInit, OnChanges {
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
   @Input() medias: MediaItem[] = [];
@@ -29,6 +29,10 @@ export class LabelListComponent implements OnChanges {
   @Output() mediaSelected = new EventEmitter<number>();
 
   sortedEntries: LabelEntry[] = [];
+
+  ngOnInit(): void {
+    this.sortedEntries = this.buildSortedEntries();
+  }
 
   ngOnChanges(_changes: SimpleChanges): void {
     this.sortedEntries = this.buildSortedEntries();

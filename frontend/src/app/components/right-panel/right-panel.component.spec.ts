@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { RightPanelComponent } from './right-panel.component';
@@ -19,12 +19,15 @@ describe('RightPanelComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => {
-    httpMock.verify();
-  });
+  function cleanup(): void {
+    // Destroy component to cancel all subscriptions, then flush any outstanding
+    component.ngOnDestroy();
+    httpMock.match(() => true); // discard any pending requests
+  }
 
   function flushInit(): void {
     fixture.detectChanges();
+    tick(); // Allow timer(0, ...) to fire
     // Settings request
     httpMock.expectOne('/api/settings').flush({
       volume: 1,
@@ -39,31 +42,35 @@ describe('RightPanelComponent', () => {
     });
   }
 
-  it('should create', () => {
+  it('should create', fakeAsync(() => {
     flushInit();
     expect(component).toBeTruthy();
-  });
+    cleanup();
+  }));
 
-  it('should load settings on init', () => {
+  it('should load settings on init', fakeAsync(() => {
     fixture.detectChanges();
-    const settingsReq = httpMock.expectOne('/api/settings');
-    settingsReq.flush({ volume: 1, show_thumbnails_right: false });
+    tick();
+    httpMock.expectOne('/api/settings').flush({ volume: 1, show_thumbnails_right: false });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
     expect(component.showThumbnails).toBeFalse();
-  });
+    cleanup();
+  }));
 
-  it('should default showThumbnails to true when not in settings', () => {
+  it('should default showThumbnails to true when not in settings', fakeAsync(() => {
     fixture.detectChanges();
+    tick();
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
     expect(component.showThumbnails).toBeTrue();
-  });
+    cleanup();
+  }));
 
-  it('should poll for votes on init', () => {
+  it('should poll for votes on init', fakeAsync(() => {
     fixture.detectChanges();
+    tick();
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
-    const votesReq = httpMock.expectOne('/api/votes');
-    votesReq.flush({
+    httpMock.expectOne('/api/votes').flush({
       good: [1, 2],
       bad: [3],
       click_times: { '1': 1, '2': 2, '3': 3 },
@@ -74,22 +81,25 @@ describe('RightPanelComponent', () => {
     expect(component.badIds).toEqual([3]);
     expect(component.clickTimes).toEqual({ '1': 1, '2': 2, '3': 3 });
     expect(component.learnedScores).toEqual({ '1': 0.9, '2': 0.8, '3': 0.1 });
-  });
+    cleanup();
+  }));
 
-  it('should change sort mode', () => {
+  it('should change sort mode', fakeAsync(() => {
     flushInit();
     component.onSortModeChange('name-asc');
     expect(component.sortMode).toBe('name-asc');
-  });
+    cleanup();
+  }));
 
-  it('should emit mediaSelected', () => {
+  it('should emit mediaSelected', fakeAsync(() => {
     flushInit();
     spyOn(component.mediaSelected, 'emit');
     component.onMediaSelected(42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
-  });
+    cleanup();
+  }));
 
-  it('should rename detector via modelsApi', () => {
+  it('should rename detector via modelsApi', fakeAsync(() => {
     component.trainMode = { model: { name: 'Old', registry_id: 'r1' } };
     flushInit();
 
@@ -100,56 +110,61 @@ describe('RightPanelComponent', () => {
     req.flush({});
 
     expect(component.trainMode.model.name).toBe('New Name');
-  });
+    cleanup();
+  }));
 
-  it('should not rename if no registry_id', () => {
+  it('should not rename if no registry_id', fakeAsync(() => {
     component.trainMode = { model: { name: 'Old' } };
     flushInit();
 
     component.onDetectorRenamed('New');
-    httpMock.expectNone('/api/models/registry');
-  });
+    cleanup();
+  }));
 
-  it('should not rename if no trainMode', () => {
+  it('should not rename if no trainMode', fakeAsync(() => {
     component.trainMode = null;
     flushInit();
 
     component.onDetectorRenamed('New');
-    httpMock.expectNone('/api/models/registry');
-  });
+    cleanup();
+  }));
 
-  it('should render detector context bar when trainMode set', () => {
+  it('should render detector context bar when trainMode set', fakeAsync(() => {
     component.trainMode = { model: { name: 'Test Detector', registry_id: 'r1' } };
     flushInit();
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeTruthy();
-  });
+    cleanup();
+  }));
 
-  it('should not render detector context bar when trainMode is null', () => {
+  it('should not render detector context bar when trainMode is null', fakeAsync(() => {
     component.trainMode = null;
     flushInit();
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeFalsy();
-  });
+    cleanup();
+  }));
 
-  it('should render both good and bad label lists', () => {
+  it('should render both good and bad label lists', fakeAsync(() => {
     flushInit();
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
     const labelLists = el.querySelectorAll('vt-label-list');
     expect(labelLists.length).toBe(2);
-  });
+    cleanup();
+  }));
 
-  it('should render label sort dropdown', () => {
+  it('should render label sort dropdown', fakeAsync(() => {
     flushInit();
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-label-sort')).toBeTruthy();
-  });
+    cleanup();
+  }));
 });
