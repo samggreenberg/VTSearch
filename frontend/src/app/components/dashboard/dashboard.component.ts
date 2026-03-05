@@ -9,6 +9,7 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
+import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -19,6 +20,7 @@ import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-
     DatasetCardComponent,
     ModelCardComponent,
     DatasetImporterModalComponent,
+    NewModelModalComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -36,6 +38,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressIndeterminate = false;
 
   importerModalOpen = false;
+  newModelModalOpen = false;
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -192,6 +195,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onImportComplete(): void {
     this.importerModalOpen = false;
     this.startProgressPolling();
+  }
+
+  // --- New model modal ---
+
+  openNewModelModal(): void {
+    this.newModelModalOpen = true;
+  }
+
+  closeNewModelModal(): void {
+    this.newModelModalOpen = false;
+  }
+
+  onModelCreated(): void {
+    this.newModelModalOpen = false;
+    this.refresh();
   }
 
   // --- Progress polling ---
