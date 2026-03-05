@@ -165,9 +165,27 @@ export interface ImportersResponse {
   importers: ImporterInfo[];
 }
 
+export interface DemoDataset {
+  name: string;
+  label: string;
+  status: 'ready' | 'needs_embedding' | 'needs_download';
+  ready: boolean;
+  num_files: number;
+  download_size_mb: number;
+  description: string;
+  media_type: string;
+  num_categories: number;
+}
+
+export interface DemoListResponse {
+  datasets: DemoDataset[];
+}
+
 export interface MediaTypeInfo {
   type_id: string;
   name: string;
+  icon?: string;
+  tab_title?: string;
 }
 
 export interface MediaTypesResponse {

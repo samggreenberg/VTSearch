@@ -26,6 +26,36 @@ describe('DatasetImporterModalComponent', () => {
     },
   ];
 
+  const mockDemos = [
+    {
+      name: 'gtzan',
+      label: 'GTZAN',
+      status: 'needs_download',
+      ready: false,
+      num_files: 1000,
+      download_size_mb: 1200,
+      description: 'Music genre classification',
+      media_type: 'audio',
+      num_categories: 10,
+    },
+    {
+      name: 'flowers102',
+      label: 'Oxford Flowers 102',
+      status: 'ready',
+      ready: true,
+      num_files: 8189,
+      download_size_mb: 330,
+      description: '102 flower categories',
+      media_type: 'images',
+      num_categories: 102,
+    },
+  ];
+
+  const mockMediaTypes = [
+    { type_id: 'audio', name: 'Audio', icon: '\uD83C\uDFB5', tab_title: 'Audio' },
+    { type_id: 'images', name: 'Images', icon: '\uD83D\uDDBC\uFE0F', tab_title: 'Images' },
+  ];
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DatasetImporterModalComponent],
@@ -61,13 +91,15 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.view).toBe('picker');
   });
 
-  it('should render importer cards', () => {
+  it('should render importer cards plus demo card', () => {
     flushImporters();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const cards = el.querySelectorAll('.importer-card');
-    expect(cards.length).toBe(2);
+    // 2 importers + 1 demo card
+    expect(cards.length).toBe(3);
     expect(cards[0].textContent).toContain('Load from Folder');
+    expect(cards[2].textContent).toContain('Load Demo Dataset');
   });
 
   it('should switch to form view on importer selection', () => {
@@ -143,5 +175,140 @@ describe('DatasetImporterModalComponent', () => {
     req.flush({});
 
     expect(component.importStarted.emit).toHaveBeenCalled();
+  });
+
+  // --- Demo picker tests ---
+
+  it('should switch to demo view when openDemoPicker is called', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    expect(component.view).toBe('demo');
+    expect(component.demoLoading).toBeTrue();
+
+    // Flush media types and demo list requests
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    expect(component.demoLoading).toBeFalse();
+    expect(component.demos.length).toBe(2);
+  });
+
+  it('should build tabs from media types in demo data', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    expect(component.demoTabs).toEqual(['audio', 'images']);
+    expect(component.activeTab).toBe('audio');
+  });
+
+  it('should filter demos by active tab', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    expect(component.filteredDemos.length).toBe(1);
+    expect(component.filteredDemos[0].name).toBe('gtzan');
+
+    component.selectDemoTab('images');
+    expect(component.filteredDemos.length).toBe(1);
+    expect(component.filteredDemos[0].name).toBe('flowers102');
+  });
+
+  it('should sort demos by column', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    // Default sort is num_files ascending
+    expect(component.demoSortKey).toBe('num_files');
+    expect(component.demoSortAsc).toBeTrue();
+
+    // Click same column to toggle direction
+    component.sortDemoBy('num_files');
+    expect(component.demoSortAsc).toBeFalse();
+
+    // Click different column to switch
+    component.sortDemoBy('label');
+    expect(component.demoSortKey).toBe('label');
+    expect(component.demoSortAsc).toBeTrue();
+  });
+
+  it('should emit demoSelected and close on demo selection', () => {
+    flushImporters();
+    spyOn(component.demoSelected, 'emit');
+    spyOn(component.closed, 'emit');
+
+    component.openDemoPicker();
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    component.selectDemo(mockDemos[0] as any);
+    expect(component.demoSelected.emit).toHaveBeenCalledWith(mockDemos[0] as any);
+    expect(component.closed.emit).toHaveBeenCalled();
+  });
+
+  it('should go back from demo to picker view', () => {
+    flushImporters();
+    component.openDemoPicker();
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    expect(component.view).toBe('demo');
+    component.back();
+    expect(component.view).toBe('picker');
+  });
+
+  it('should render demo tab bar and table in template', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const tabs = el.querySelectorAll('.demo-tab');
+    expect(tabs.length).toBe(2);
+
+    const rows = el.querySelectorAll('.demo-row');
+    expect(rows.length).toBe(1); // Only audio tab active, one audio demo
+  });
+
+  it('should get correct tab label from media types', () => {
+    flushImporters();
+    component.mediaTypes = mockMediaTypes as any;
+
+    expect(component.getTabLabel('audio')).toContain('Audio');
+    expect(component.getTabLabel('unknown')).toBe('unknown');
+  });
+
+  it('should return correct status badge class', () => {
+    flushImporters();
+    expect(component.statusBadgeClass('ready')).toBe('badge-ready');
+    expect(component.statusBadgeClass('needs_embedding')).toBe('badge-embedding');
+    expect(component.statusBadgeClass('needs_download')).toBe('badge-download');
+  });
+
+  it('should handle demo fetch failure gracefully', () => {
+    flushImporters();
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush(
+      { error: 'Server error' },
+      { status: 500, statusText: 'Internal Server Error' },
+    );
+
+    expect(component.demoLoading).toBeFalse();
+    expect(component.demos.length).toBe(0);
   });
 });
