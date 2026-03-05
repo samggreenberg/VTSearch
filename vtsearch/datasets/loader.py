@@ -450,8 +450,7 @@ def load_dataset_from_folder(
     The ``medias`` dict is cleared before loading begins.
 
     ``media_type`` is looked up in the media type registry by
-    :attr:`~vtsearch.media.base.MediaType.folder_import_name` (e.g.
-    ``"sounds"``, ``"videos"``, ``"images"``, ``"paragraphs"``).  Adding a
+    :attr:`~vtsearch.media.base.MediaType.folder_import_name`.  Adding a
     new media type to the registry automatically makes it available here
     without any changes to this function.
 

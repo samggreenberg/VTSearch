@@ -621,7 +621,7 @@ class RSSDatasetImporter(DatasetImporter):
         ImporterField(key="url", label="Feed URL", field_type="url",
                       description="URL of an RSS or Atom feed with media enclosures."),
         ImporterField(key="media_type", label="Media Type", field_type="select",
-                      options=["sounds", "videos", "images", "paragraphs"], default="sounds",
+                      options=all_folder_names(), default="sounds",  # from vtsearch.media
                       description="Type of media to extract from the feed."),
         ImporterField(key="max_episodes", label="Max Episodes", field_type="text",
                       default="50", required=False,

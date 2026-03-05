@@ -18,6 +18,8 @@ Example – a minimal SFTP importer skeleton::
     # vtsearch/datasets/importers/sftp/__init__.py
     from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
+    from vtsearch.media import all_folder_names
+
     class SftpImporter(DatasetImporter):
         name         = "sftp"
         display_name = "SFTP Server"
@@ -29,7 +31,7 @@ Example – a minimal SFTP importer skeleton::
             ImporterField("path",       "Remote Path", "text"),
             ImporterField(
                 "media_type", "Media Type", "select",
-                options=["sounds", "videos", "images", "paragraphs"],
+                options=all_folder_names(),
                 default="sounds",
             ),
         ]
