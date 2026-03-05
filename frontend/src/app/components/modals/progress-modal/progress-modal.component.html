@@ -1,9 +1,17 @@
 <vt-modal [title]="title" [open]="true" (closed)="close()">
   @if (analyzing) {
     <div class="analysis-loading">
-      <p aria-live="polite">Training models over label history...</p>
-      <vt-progress-bar [value]="analysisProgress" [max]="100"></vt-progress-bar>
-      <p class="progress-text">{{ analysisProgress }}%</p>
+      @if (useCachedHistory) {
+        <p aria-live="polite">Loading indicator history...</p>
+      } @else {
+        <p aria-live="polite">Training models over label history...</p>
+        <vt-progress-bar [value]="analysisProgress" [max]="100"></vt-progress-bar>
+        <p class="progress-text">{{ analysisProgress }}%</p>
+      }
+    </div>
+  } @else if (emptyHistory) {
+    <div class="analysis-loading">
+      <p>No score history available yet. Label more items to build up history.</p>
     </div>
   } @else {
     <div class="chart-container">

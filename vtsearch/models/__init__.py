@@ -16,7 +16,14 @@ from vtsearch.models.loader import (
     initialize_models,
     preload_autoload_media_types,
 )
-from vtsearch.models.progress import analyze_labeling_progress, clear_progress_cache, compute_labeling_status
+from vtsearch.models.progress import (
+    analyze_labeling_progress,
+    calculate_diversity_level_over_time,
+    calculate_error_cost_over_time,
+    calculate_prediction_stability_over_time,
+    clear_progress_cache,
+    compute_labeling_status,
+)
 from vtsearch.models.training import (
     build_model,
     build_model_from_weights,
@@ -55,6 +62,9 @@ __all__ = [
     "calculate_cross_calibration_threshold",
     # Progress
     "analyze_labeling_progress",
+    "calculate_diversity_level_over_time",
+    "calculate_error_cost_over_time",
+    "calculate_prediction_stability_over_time",
     "clear_progress_cache",
     "compute_labeling_status",
 ]

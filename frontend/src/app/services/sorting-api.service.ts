@@ -20,6 +20,7 @@ import {
   ServerMediaFilesResponse,
   TrainAndScoreResponse,
   VotingIterationsResponse,
+  IndicatorScoreHistoryResponse,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -115,6 +116,12 @@ export class SortingApiService {
 
   getLabelingStatus(): Observable<LabelingStatusResponse> {
     return this.http.get<LabelingStatusResponse>('/api/labeling-status');
+  }
+
+  getIndicatorScoreHistory(metric: string): Observable<IndicatorScoreHistoryResponse> {
+    return this.http.get<IndicatorScoreHistoryResponse>('/api/indicator-score-history', {
+      params: { metric },
+    });
   }
 
   getDiversityTreeNext(scores?: Record<string, number>, threshold?: number): Observable<DiversityTreeNextResponse> {
