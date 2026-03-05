@@ -86,6 +86,17 @@
         color: var(--text-primary);
       }
     }
+
+    .sort-indicator {
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+      visibility: hidden;
+
+      &.active {
+        visibility: visible;
+      }
+    }
   }
 
   tbody tr {

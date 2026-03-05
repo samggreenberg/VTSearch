@@ -25,12 +25,12 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable">Name{{ datasetSortIndicator('name') }}</th>
-              <th (click)="sortDatasets('media_type')" class="sortable">Type{{ datasetSortIndicator('media_type') }}</th>
-              <th (click)="sortDatasets('num_items')" class="sortable">Items{{ datasetSortIndicator('num_items') }}</th>
-              <th (click)="sortDatasets('num_dupes')" class="sortable">Dupes{{ datasetSortIndicator('num_dupes') }}</th>
-              <th (click)="sortDatasets('created_at')" class="sortable">Created{{ datasetSortIndicator('created_at') }}</th>
-              <th (click)="sortDatasets('origin')" class="sortable">Origin{{ datasetSortIndicator('origin') }}</th>
+              <th (click)="sortDatasets('name')" class="sortable">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
+              <th (click)="sortDatasets('media_type')" class="sortable">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
+              <th (click)="sortDatasets('num_items')" class="sortable">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
+              <th (click)="sortDatasets('created_at')" class="sortable">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
+              <th (click)="sortDatasets('origin')" class="sortable">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
               <th>Loaded</th>
               <th>Actions</th>
             </tr>
@@ -68,12 +68,12 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable">Name{{ modelSortIndicator('name') }}</th>
-              <th (click)="sortModels('media_type')" class="sortable">Type{{ modelSortIndicator('media_type') }}</th>
-              <th (click)="sortModels('num_training')" class="sortable"># Training{{ modelSortIndicator('num_training') }}</th>
+              <th (click)="sortModels('name')" class="sortable">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
+              <th (click)="sortModels('media_type')" class="sortable">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
+              <th (click)="sortModels('num_training')" class="sortable"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
               <th>Trainable</th>
-              <th (click)="sortModels('last_trained_at')" class="sortable">Last Trained{{ modelSortIndicator('last_trained_at') }}</th>
-              <th (click)="sortModels('created_at')" class="sortable">Created{{ modelSortIndicator('created_at') }}</th>
+              <th (click)="sortModels('last_trained_at')" class="sortable">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
+              <th (click)="sortModels('created_at')" class="sortable">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
               <th>Loaded</th>
               <th>Actions</th>
             </tr>
