@@ -489,11 +489,12 @@ video { max-width: 100%; }
 .vt-dialog-btn.secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* Settings modal */
-.settings-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 24px; }
+.settings-modal-wide { max-width: 1100px; }
+.settings-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 28px; }
 .settings-columns > div { display: flex; flex-direction: column; }
-.settings-section { margin-bottom: 16px; }
-.settings-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px; }
-.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+.settings-section { margin-bottom: 12px; }
+.settings-section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 6px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; }
 .settings-row + .settings-row { border-top: 1px solid var(--border-subtle); }
 .settings-label { font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; }
 .settings-number-input { width: 72px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-primary); font-size: 0.85rem; text-align: center; outline: none; }
