@@ -1,0 +1,33 @@
+<!-- Renders as a <tr> (host selector) inside the dashboard table -->
+<td>
+  @if (editing) {
+    <input
+      class="form-input inline-edit"
+      [(ngModel)]="editName"
+      (keydown)="onRenameKeydown($event)"
+      (blur)="confirmRename()"
+      (click)="$event.stopPropagation()"
+      autofocus
+    />
+  } @else {
+    <span class="name-cell">
+      {{ dataset.name }}
+      <button class="rename-btn" (click)="startRename($event)" title="Rename" aria-label="Rename dataset">&#9998;</button>
+    </span>
+  }
+</td>
+<td>{{ dataset.media_type || '-' }}</td>
+<td>{{ dataset.num_items ?? '-' }}</td>
+<td>{{ dataset.num_dupes ?? 0 }}</td>
+<td>{{ formatDate(dataset.created_at) }}</td>
+<td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
+<td>
+  @if (dataset.loaded) {
+    <span class="check" aria-label="Loaded">&#10003;</span>
+  } @else {
+    <button class="btn btn--secondary btn--xs" (click)="onLoad($event)">Load</button>
+  }
+</td>
+<td>
+  <button class="btn btn--danger btn--xs" (click)="onDelete($event)" aria-label="Delete dataset">&#10005;</button>
+</td>

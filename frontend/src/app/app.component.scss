@@ -36,6 +36,12 @@ header {
   }
 }
 
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+// Keep the 3-panel layout classes for future phases (4-6)
 .layout {
   display: grid;
   grid-template-columns: 300px 1fr 300px;

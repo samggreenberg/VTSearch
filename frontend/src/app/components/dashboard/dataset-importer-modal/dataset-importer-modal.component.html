@@ -1,0 +1,80 @@
+<vt-modal [title]="view === 'picker' ? 'Add Dataset' : selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
+  @if (view === 'picker') {
+    <div class="importer-picker">
+      @if (importers.length === 0) {
+        <p class="empty-state">Loading importers...</p>
+      }
+      @for (imp of importers; track imp.name) {
+        <button class="importer-card" (click)="selectImporter(imp)">
+          <span class="importer-name">{{ imp.label || imp.name }}</span>
+          @if (imp.description) {
+            <span class="importer-desc">{{ imp.description }}</span>
+          }
+        </button>
+      }
+    </div>
+  }
+
+  @if (view === 'form' && selectedImporter) {
+    <div class="importer-form">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+
+      @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
+        @for (field of selectedImporter.fields; track field.name) {
+          <div class="form-group">
+            <label class="form-label" [for]="'field-' + field.name">
+              {{ field.label || field.name }}
+              @if (field.required) {
+                <span class="required">*</span>
+              }
+            </label>
+
+            @if (field.type === 'file') {
+              <input
+                [id]="'field-' + field.name"
+                type="file"
+                class="form-input"
+                (change)="onFileSelected($event, field.name)"
+              />
+            } @else if (field.type === 'select') {
+              <select
+                [id]="'field-' + field.name"
+                class="form-select"
+                [(ngModel)]="formValues[field.name]"
+              >
+                @if (field.default === undefined) {
+                  <option value="">-- Select --</option>
+                }
+              </select>
+            } @else {
+              <input
+                [id]="'field-' + field.name"
+                type="text"
+                class="form-input"
+                [(ngModel)]="formValues[field.name]"
+                [placeholder]="field.label || field.name"
+              />
+            }
+          </div>
+        }
+      } @else {
+        <p class="info-text">This importer requires no additional configuration.</p>
+      }
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+
+      <div class="form-actions" modal-footer>
+        <button class="btn btn--secondary" (click)="close()">Cancel</button>
+        <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
+          @if (submitting) {
+            Importing...
+          } @else {
+            Import
+          }
+        </button>
+      </div>
+    </div>
+  }
+</vt-modal>

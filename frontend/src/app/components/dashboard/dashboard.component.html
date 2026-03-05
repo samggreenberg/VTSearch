@@ -1,0 +1,122 @@
+<div class="dashboard-view">
+  <!-- Dataset Section -->
+  <div class="dashboard-section">
+    <div class="dashboard-section-header">
+      <span class="dashboard-section-title">Datasets</span>
+      @if (loading) {
+        <div class="dashboard-progress">
+          <span class="progress-msg">{{ progressMessage }}</span>
+          <vt-progress-bar
+            [value]="progressValue"
+            [max]="progressTotal"
+            [indeterminate]="progressIndeterminate"
+          />
+        </div>
+      }
+      <div class="dashboard-section-actions">
+        <button class="btn btn--primary btn--sm" (click)="openImporterModal()">+</button>
+      </div>
+    </div>
+
+    @if (datasets.length === 0 && !loading) {
+      <p class="empty-state">No datasets yet. Click + to add one.</p>
+    } @else {
+      <div class="dashboard-grid">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th (click)="sortDatasets('name')" class="sortable">Name{{ datasetSortIndicator('name') }}</th>
+              <th (click)="sortDatasets('media_type')" class="sortable">Type{{ datasetSortIndicator('media_type') }}</th>
+              <th (click)="sortDatasets('num_items')" class="sortable">Items{{ datasetSortIndicator('num_items') }}</th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable">Dupes{{ datasetSortIndicator('num_dupes') }}</th>
+              <th (click)="sortDatasets('created_at')" class="sortable">Created{{ datasetSortIndicator('created_at') }}</th>
+              <th (click)="sortDatasets('origin')" class="sortable">Origin{{ datasetSortIndicator('origin') }}</th>
+              <th>Loaded</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (dataset of sortedDatasets; track dataset.id) {
+              <vt-dataset-card
+                [dataset]="dataset"
+                [selected]="isDatasetSelected(dataset.id)"
+                (rowClick)="toggleDatasetSelection(dataset.id, $event)"
+                (rename)="renameDataset(dataset, $event)"
+                (delete)="deleteDataset(dataset)"
+                (load)="loadDataset(dataset)"
+              />
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Model Section -->
+  <div class="dashboard-section">
+    <div class="dashboard-section-header">
+      <span class="dashboard-section-title">Models</span>
+      <div class="dashboard-section-actions">
+        <!-- Add model button — Phase 7 will implement the full picker -->
+      </div>
+    </div>
+
+    @if (models.length === 0) {
+      <p class="empty-state">No models yet.</p>
+    } @else {
+      <div class="dashboard-grid">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th (click)="sortModels('name')" class="sortable">Name{{ modelSortIndicator('name') }}</th>
+              <th (click)="sortModels('media_type')" class="sortable">Type{{ modelSortIndicator('media_type') }}</th>
+              <th (click)="sortModels('num_training')" class="sortable"># Training{{ modelSortIndicator('num_training') }}</th>
+              <th>Trainable</th>
+              <th (click)="sortModels('last_trained_at')" class="sortable">Last Trained{{ modelSortIndicator('last_trained_at') }}</th>
+              <th (click)="sortModels('created_at')" class="sortable">Created{{ modelSortIndicator('created_at') }}</th>
+              <th>Loaded</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (model of sortedModels; track model.id) {
+              <vt-model-card
+                [model]="model"
+                [selected]="isModelSelected(model.id)"
+                (rowClick)="toggleModelSelection(model.id, $event)"
+                (rename)="renameModel(model, $event)"
+                (delete)="deleteModel(model)"
+              />
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="dashboard-actions">
+    <button
+      class="btn btn--primary"
+      [disabled]="!labelEnabled"
+      [title]="labelHint"
+      (click)="onLabel()"
+    >
+      Label
+    </button>
+    <button
+      class="btn btn--primary"
+      [disabled]="!findEnabled"
+      (click)="onFind()"
+    >
+      Find
+    </button>
+  </div>
+</div>
+
+@if (importerModalOpen) {
+  <vt-dataset-importer-modal
+    (closed)="closeImporterModal()"
+    (importStarted)="onImportComplete()"
+  />
+}

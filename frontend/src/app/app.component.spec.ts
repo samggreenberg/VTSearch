@@ -29,12 +29,10 @@ describe('AppComponent', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('VTSearch');
   });
 
-  it('should render three panels', () => {
+  it('should render main content area with router outlet', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.panel-left')).toBeTruthy();
-    expect(compiled.querySelector('.panel-center')).toBeTruthy();
-    expect(compiled.querySelector('.panel-right')).toBeTruthy();
+    expect(compiled.querySelector('.main-content')).toBeTruthy();
   });
 });
