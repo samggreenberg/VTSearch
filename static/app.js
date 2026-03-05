@@ -3301,6 +3301,10 @@
         sortStatus.textContent = "";
         if (!loadedDetector) {
           openLoadSortModal();
+        } else {
+          // Detector already loaded — reselect central media for current select mode
+          const nextClip = findNextClip();
+          if (nextClip) selectMedia(nextClip.id);
         }
         return;
       }
@@ -3312,7 +3316,19 @@
       sortStatus.textContent = "";
 
       if (sortMode === "text") {
-        onTextSortInput();
+        // Bypass debounce: when switching sort modes, fetch immediately
+        // so the central media is reselected without delay.
+        clearTimeout(sortTimer);
+        const text = textSortInput.value.trim();
+        if (text) {
+          fetchTextSort(text);
+        } else {
+          sortOrder = null;
+          sortStatus.textContent = "";
+          renderMediaList();
+          const nextClip = findNextClip();
+          if (nextClip) selectMedia(nextClip.id);
+        }
       } else if (sortMode === "learned") {
         updateLearnedSortDesc();
         fetchLearnedSort(true);
