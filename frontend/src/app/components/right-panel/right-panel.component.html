@@ -5,10 +5,13 @@
     (renamed)="onDetectorRenamed($event)"
   />
 
-  <vt-label-sort
-    [mode]="sortMode"
-    (modeChange)="onSortModeChange($event)"
-  />
+  <div class="sort-row">
+    <vt-label-sort
+      [mode]="sortMode"
+      (modeChange)="onSortModeChange($event)"
+    />
+    <button class="panel-btn import-btn" (click)="onImportLabels()">Import Labels</button>
+  </div>
 
   <vt-label-list
     label="good"
@@ -31,4 +34,9 @@
     [showThumbnails]="showThumbnails"
     (mediaSelected)="onMediaSelected($event)"
   />
+
+  <div class="export-row">
+    <button class="panel-btn export-btn" (click)="onExportLabels()">Export Labels</button>
+    <button class="panel-btn export-btn" (click)="onExportDetector()">Export Detector</button>
+  </div>
 </aside>
