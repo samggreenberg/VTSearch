@@ -47,25 +47,33 @@
       </div>
     }
 
-    <div class="metadata-grid">
-      <div class="metadata-item">
-        <span class="metadata-label">Name</span>
-        <span class="metadata-value">{{ media.filename || 'Media #' + media.id }}</span>
-      </div>
-      <div class="metadata-item">
-        <span class="metadata-label">Media Type</span>
-        <span class="metadata-value">{{ mediaType }}</span>
-      </div>
-      @for (entry of customMetadata | keyvalue; track entry.key) {
-        <div class="metadata-item">
-          <span class="metadata-label">{{ entry.key }}</span>
-          <span class="metadata-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+    <div class="metadata-tray" [class.collapsed]="!showMetadata">
+      <button class="metadata-toggle" (click)="toggleMetadata()" [title]="showMetadata ? 'Hide metadata' : 'Show metadata'" [attr.aria-label]="showMetadata ? 'Hide metadata' : 'Show metadata'">
+        <span class="metadata-toggle-icon">{{ showMetadata ? '&#x25BC;' : '&#x25B2;' }}</span>
+        <span class="metadata-toggle-label">Metadata</span>
+      </button>
+      @if (showMetadata) {
+        <div class="metadata-grid">
+          <div class="metadata-item">
+            <span class="metadata-label">Name</span>
+            <span class="metadata-value">{{ media.filename || 'Media #' + media.id }}</span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">Media Type</span>
+            <span class="metadata-value">{{ mediaType }}</span>
+          </div>
+          @for (entry of customMetadata | keyvalue; track entry.key) {
+            <div class="metadata-item">
+              <span class="metadata-label">{{ entry.key }}</span>
+              <span class="metadata-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+            </div>
+          }
+          <div class="metadata-item">
+            <span class="metadata-label">MD5</span>
+            <span class="metadata-value metadata-md5">{{ media.md5 }}</span>
+          </div>
         </div>
       }
-      <div class="metadata-item">
-        <span class="metadata-label">MD5</span>
-        <span class="metadata-value metadata-md5">{{ media.md5 }}</span>
-      </div>
     </div>
 
     <vt-voting-overlay

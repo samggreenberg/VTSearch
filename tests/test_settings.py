@@ -169,6 +169,21 @@ class TestSettingsModule:
     def test_safe_thresholds_default(self):
         assert settings_mod.get_safe_thresholds() is False
 
+    def test_get_set_show_metadata(self, isolated_settings):
+        settings_mod.set_show_metadata(False)
+        assert settings_mod.get_show_metadata() is False
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["show_metadata"] is False
+
+    def test_show_metadata_default(self):
+        assert settings_mod.get_show_metadata() is True
+
+    def test_show_metadata_persists_across_reset(self, isolated_settings):
+        settings_mod.set_show_metadata(False)
+        settings_mod.reset()
+        assert settings_mod.get_show_metadata() is False
+
     def test_get_set_show_thumbnails_left(self, isolated_settings):
         settings_mod.set_show_thumbnails_left(True)
         assert settings_mod.get_show_thumbnails_left() is True
@@ -206,6 +221,7 @@ class TestSettingsModule:
         assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
+        assert defaults["show_metadata"] is True
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
         assert defaults["autoload_media_types"] == []
@@ -567,6 +583,21 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["safe_thresholds"] is False
 
+    def test_update_show_metadata(self, client):
+        res = client.put("/api/settings", json={"show_metadata": False})
+        assert res.status_code == 200
+        assert res.get_json()["show_metadata"] is False
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["show_metadata"] is False
+
+    def test_update_show_metadata_true(self, client):
+        client.put("/api/settings", json={"show_metadata": False})
+        res = client.put("/api/settings", json={"show_metadata": True})
+        assert res.status_code == 200
+        assert res.get_json()["show_metadata"] is True
+
     def test_update_show_thumbnails_left(self, client):
         res = client.put("/api/settings", json={"show_thumbnails_left": True})
         assert res.status_code == 200
@@ -601,6 +632,7 @@ class TestSettingsAPI:
         res = client.get("/api/settings")
         assert res.status_code == 200
         data = res.get_json()
+        assert "show_metadata" in data
         assert "show_thumbnails_left" in data
         assert "show_thumbnails_right" in data
 

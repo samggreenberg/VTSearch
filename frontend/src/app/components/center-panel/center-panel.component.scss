@@ -113,6 +113,43 @@
   border: 0;
 }
 
+// Metadata tray (collapsible wrapper)
+.metadata-tray {
+  flex-shrink: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.metadata-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.metadata-toggle-icon {
+  font-size: 0.6rem;
+  transition: transform 0.2s;
+}
+
+.metadata-toggle-label {
+  font-size: 0.7rem;
+}
+
 // Metadata grid
 .metadata-grid {
   display: grid;
@@ -120,7 +157,6 @@
   gap: 8px;
   width: 100%;
   padding: 2px 0;
-  flex-shrink: 0;
 }
 
 .metadata-item {

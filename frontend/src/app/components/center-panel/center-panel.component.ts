@@ -39,6 +39,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   isVoting = false;
   volume = 1;
   swipeAnimation = true;
+  showMetadata = true;
   swipeClass = '';
 
   private subs: Subscription[] = [];
@@ -115,6 +116,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     return String(value);
   }
 
+  toggleMetadata(): void {
+    this.showMetadata = !this.showMetadata;
+    this.settingsState.update({ show_metadata: this.showMetadata }).subscribe();
+  }
+
   castVote(vote: 'good' | 'bad'): void {
     if (!this.media || this.isVoting) return;
     this.isVoting = true;
@@ -147,6 +153,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         if (!settings) return;
         this.volume = settings.volume ?? 1;
         this.swipeAnimation = settings.swipe_animation !== false;
+        this.showMetadata = settings.show_metadata !== false;
       }),
     );
   }
