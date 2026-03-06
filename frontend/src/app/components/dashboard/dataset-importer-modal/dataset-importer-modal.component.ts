@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo } from '../../../models/api.models';
+import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo';
 
@@ -26,6 +26,10 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedFile: File | null = null;
   submitting = false;
   error = '';
+
+  // Clipper state
+  availableClippers: ClipperInfo[] = [];
+  selectedClipper = '';
 
   // Demo picker state
   demos: DemoDataset[] = [];
@@ -52,6 +56,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter = importer;
     this.formValues = {};
     this.error = '';
+    this.selectedClipper = '';
+    this.availableClippers = [];
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -62,7 +68,33 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
+    // Load clippers for the default media type
+    const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
+    if (mediaTypeField) {
+      this.loadClippers(this.formValues['media_type'] || mediaTypeField.default || '');
+    }
+
     this.view = 'form';
+  }
+
+  onMediaTypeChange(mediaType: string): void {
+    this.formValues['media_type'] = mediaType;
+    this.loadClippers(mediaType);
+  }
+
+  private loadClippers(mediaType: string): void {
+    if (!mediaType) {
+      this.availableClippers = [];
+      this.selectedClipper = '';
+      return;
+    }
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.availableClippers = clippers;
+        // Default to the first clipper (the default/null clipper)
+        this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
+      },
+    });
   }
 
   openDemoPicker(): void {
@@ -194,6 +226,12 @@ export class DatasetImporterModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
 
+    // Include clipper in form values if one is selected
+    const submitValues = { ...this.formValues };
+    if (this.selectedClipper) {
+      submitValues['clipper'] = this.selectedClipper;
+    }
+
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
@@ -208,7 +246,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
       });
     } else {
-      this.datasetsApi.runImporter(this.selectedImporter.name, this.formValues).subscribe({
+      this.datasetsApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
         next: () => {
           this.submitting = false;
           this.importStarted.emit();

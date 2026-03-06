@@ -47,6 +47,7 @@ import vtsearch.utils.paths as _paths
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.routes.datasets_loading import (  # noqa: F401
     STAGING_DIR,
+    _apply_clipper,
     _auto_register_dataset,
     _load_embedder_for_clips,
     _origin_to_str,
@@ -84,6 +85,37 @@ def embedders_list():
     from vtsearch.media import all_embedders_dict
 
     return jsonify({"embedders": all_embedders_dict()})
+
+
+# ---------------------------------------------------------------------------
+# Clipper chooser
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/clippers")
+def clippers_list():
+    """Return all clippers, optionally filtered by media type.
+
+    Query parameters:
+        media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only clippers whose
+            ``media_type`` matches are returned.
+    """
+    from vtsearch.media import all_clippers_dict, clippers_for_type, get_by_folder_name
+
+    media_type = request.args.get("media_type", "").strip()
+    if media_type:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(media_type)
+            media_type = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        clippers = [c.to_dict() for c in clippers_for_type(media_type)]
+    else:
+        clippers = all_clippers_dict()
+
+    return jsonify({"clippers": clippers})
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +437,14 @@ def import_dataset(importer_name: str):
     if converters_val:
         field_values["converters"] = converters_val
 
+    # Pass through the optional "clipper" key for post-import clipping.
+    if file_keys:
+        clipper_val = request.form.get("clipper", "")
+    else:
+        clipper_val = (request.get_json(force=True) or {}).get("clipper", "")
+    if clipper_val:
+        field_values["clipper"] = clipper_val
+
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
@@ -423,6 +463,7 @@ def load_demo_dataset_route():
 
     dataset_name = data.get("name")
     embedder_name = data.get("embedder", "")
+    clipper_name = data.get("clipper", "")
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
@@ -432,6 +473,7 @@ def load_demo_dataset_route():
         lambda: load_demo_dataset(dataset_name, medias, embedder_name=embedder_name),
         demo_origin,
         name=dataset_name,
+        clipper=clipper_name,
     )
 
     return jsonify({"ok": True, "message": "Loading started"})

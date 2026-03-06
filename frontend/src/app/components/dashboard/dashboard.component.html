@@ -31,6 +31,7 @@
               <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
               <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
               <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
+              <th (click)="sortDatasets('clipper')" class="sortable" title="MediaClipper used at creation (click to sort)">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span></th>
               <th title="Whether this dataset is currently loaded into memory">Loaded</th>
               <th title="Available operations for this dataset">Actions</th>
             </tr>

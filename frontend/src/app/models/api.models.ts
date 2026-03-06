@@ -303,6 +303,18 @@ export interface ProcessorImporterInfo {
   [key: string]: unknown;
 }
 
+// --- Clippers ---
+
+export interface ClipperInfo {
+  name: string;
+  media_type: string;
+  [key: string]: unknown;
+}
+
+export interface ClippersResponse {
+  clippers: ClipperInfo[];
+}
+
 // --- Converters ---
 
 export interface ConverterInfo {

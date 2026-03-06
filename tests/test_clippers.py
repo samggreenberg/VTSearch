@@ -427,3 +427,247 @@ class TestTextSentenceClipper:
         media = {"id": 1, "type": "paragraph"}
         result = TextSentenceClipper().clip(media)
         assert result == [media]
+
+
+# ---------------------------------------------------------------------------
+# DocumentDefaultClipper
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentDefaultClipper:
+    def test_returns_media_unchanged(self):
+        from vtsearch.media.document.clipper import DocumentDefaultClipper
+
+        media = {"id": 1, "type": "document", "media_bytes": b"fake-pdf"}
+        result = DocumentDefaultClipper().clip(media)
+        assert result == [media]
+
+    def test_identity(self):
+        from vtsearch.media.document.clipper import DocumentDefaultClipper
+
+        c = DocumentDefaultClipper()
+        assert c.name == "document_default"
+        assert c.media_type == "document"
+        assert isinstance(c, MediaClipper)
+
+
+# ---------------------------------------------------------------------------
+# Clipper Registry
+# ---------------------------------------------------------------------------
+
+
+class TestClipperRegistry:
+    def test_all_clippers_returns_list(self):
+        from vtsearch.media import all_clippers
+
+        clippers = all_clippers()
+        assert isinstance(clippers, list)
+        assert len(clippers) >= 9  # 5 defaults + 4 tiling/sentence
+
+    def test_all_clippers_dict_returns_dicts(self):
+        from vtsearch.media import all_clippers_dict
+
+        dicts = all_clippers_dict()
+        assert all(isinstance(d, dict) for d in dicts)
+        names = [d["name"] for d in dicts]
+        assert "sound_default" in names
+        assert "image_default" in names
+        assert "text_default" in names
+        assert "video_default" in names
+        assert "document_default" in names
+
+    def test_get_clipper(self):
+        from vtsearch.media import get_clipper
+
+        c = get_clipper("sound_default")
+        assert c.name == "sound_default"
+
+    def test_get_clipper_unknown_raises(self):
+        from vtsearch.media import get_clipper
+
+        with pytest.raises(KeyError):
+            get_clipper("nonexistent_clipper")
+
+    def test_clippers_for_type(self):
+        from vtsearch.media import clippers_for_type
+
+        audio_clippers = clippers_for_type("audio")
+        assert len(audio_clippers) >= 2
+        names = [c.name for c in audio_clippers]
+        assert "sound_default" in names
+        assert "sound_tiling_2.0s" in names
+
+    def test_clippers_for_type_image(self):
+        from vtsearch.media import clippers_for_type
+
+        image_clippers = clippers_for_type("image")
+        assert len(image_clippers) >= 2
+        names = [c.name for c in image_clippers]
+        assert "image_default" in names
+        assert "image_tiling" in names
+
+    def test_clippers_for_type_paragraph(self):
+        from vtsearch.media import clippers_for_type
+
+        text_clippers = clippers_for_type("paragraph")
+        names = [c.name for c in text_clippers]
+        assert "text_default" in names
+        assert "text_sentence" in names
+
+    def test_clippers_for_type_video(self):
+        from vtsearch.media import clippers_for_type
+
+        video_clippers = clippers_for_type("video")
+        names = [c.name for c in video_clippers]
+        assert "video_default" in names
+        assert "video_tiling_2.0s" in names
+
+    def test_clippers_for_type_document(self):
+        from vtsearch.media import clippers_for_type
+
+        doc_clippers = clippers_for_type("document")
+        assert len(doc_clippers) >= 1
+        names = [c.name for c in doc_clippers]
+        assert "document_default" in names
+
+    def test_every_media_type_has_default_clipper(self):
+        from vtsearch.media import all_types, clippers_for_type
+
+        for mt in all_types():
+            clippers = clippers_for_type(mt.type_id)
+            assert len(clippers) >= 1, f"No clippers for {mt.type_id}"
+            names = [c.name for c in clippers]
+            assert any("default" in n for n in names), (
+                f"No default clipper for {mt.type_id}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Clippers API endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestClippersApiEndpoint:
+    def test_list_all_clippers(self, client):
+        resp = client.get("/api/clippers")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "clippers" in data
+        names = [c["name"] for c in data["clippers"]]
+        assert "sound_default" in names
+        assert "document_default" in names
+
+    def test_filter_by_type_id(self, client):
+        resp = client.get("/api/clippers?media_type=audio")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        assert all(c["media_type"] == "audio" for c in clippers)
+        names = [c["name"] for c in clippers]
+        assert "sound_default" in names
+        assert "image_default" not in names
+
+    def test_filter_by_folder_name(self, client):
+        resp = client.get("/api/clippers?media_type=images")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        assert all(c["media_type"] == "image" for c in clippers)
+        names = [c["name"] for c in clippers]
+        assert "image_default" in names
+
+    def test_filter_by_document(self, client):
+        resp = client.get("/api/clippers?media_type=document")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        assert len(clippers) >= 1
+        assert all(c["media_type"] == "document" for c in clippers)
+
+
+# ---------------------------------------------------------------------------
+# Apply clipper helper
+# ---------------------------------------------------------------------------
+
+
+class TestApplyClipper:
+    def test_apply_clipper_noop_for_empty_name(self):
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips = {1: {"id": 1, "type": "audio", "origin": {"importer": "test", "params": {}}}}
+        _apply_clipper(clips, "")
+        assert len(clips) == 1
+
+    def test_apply_clipper_unknown_name_noop(self):
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips = {1: {"id": 1, "type": "audio", "origin": {"importer": "test", "params": {}}}}
+        _apply_clipper(clips, "nonexistent_clipper")
+        assert len(clips) == 1
+
+    def test_apply_default_clipper_passthrough(self):
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        media = {"id": 1, "type": "audio", "media_bytes": b"fake", "origin": {"importer": "test", "params": {}}}
+        clips = {1: media}
+        _apply_clipper(clips, "sound_default")
+        assert len(clips) == 1
+        assert clips[1]["origin"]["params"]["clipper"] == "sound_default"
+
+    def test_apply_clipper_annotates_origin(self):
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        media = {
+            "id": 1,
+            "type": "paragraph",
+            "media_string": "First sentence. Second sentence.",
+            "word_count": 4,
+            "character_count": 32,
+            "origin": {"importer": "folder", "params": {"path": "/data"}},
+        }
+        clips = {1: media}
+        _apply_clipper(clips, "text_sentence")
+        assert len(clips) == 2
+        # Check origins include clipper
+        for c in clips.values():
+            assert c["origin"]["params"]["clipper"] == "text_sentence"
+        # Check fresh IDs assigned
+        assert set(clips.keys()) == {1, 2}
+        # Check clip_index is set on clipped items
+        assert clips[1].get("clip_index") is not None or clips[2].get("clip_index") is not None
+
+
+# ---------------------------------------------------------------------------
+# Dataset registry clipper column
+# ---------------------------------------------------------------------------
+
+
+class TestDatasetRegistryClipperColumn:
+    def test_registry_includes_clipper(self, client):
+        from vtsearch.datasets.registry import register_dataset
+
+        register_dataset(
+            name="clip-ds",
+            media_type="audio",
+            num_items=10,
+            pkl_path="/tmp/clip.pkl",
+            clipper="sound_tiling_2.0s",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["clipper"] == "sound_tiling_2.0s"
+
+    def test_registry_clipper_defaults_to_empty(self, client):
+        from vtsearch.datasets.registry import register_dataset
+
+        register_dataset(
+            name="no-clip",
+            media_type="audio",
+            num_items=5,
+            pkl_path="/tmp/noclip.pkl",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["clipper"] == ""

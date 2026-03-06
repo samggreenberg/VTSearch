@@ -9,6 +9,8 @@ import {
   DemoListResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
+  ClipperInfo,
+  ClippersResponse,
   ConverterInfo,
   ConvertersResponse,
   OkResponse,
@@ -40,6 +42,16 @@ export class DatasetsApiService {
 
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
+  }
+
+  getClippers(mediaType?: string): Observable<ClipperInfo[]> {
+    const params: Record<string, string> = {};
+    if (mediaType) {
+      params['media_type'] = mediaType;
+    }
+    return this.http.get<ClippersResponse>('/api/clippers', { params }).pipe(
+      map((res) => res.clippers),
+    );
   }
 
   getConverters(target?: string): Observable<ConverterInfo[]> {
