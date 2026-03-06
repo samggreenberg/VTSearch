@@ -64,29 +64,11 @@
   max-width: 300px;
 }
 
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.fill-info {
-  font-size: 0.8rem;
-  color: var(--accent);
-}
-
 .copy-row {
   display: flex;
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.export-status {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
 }
 
 .export-actions {
