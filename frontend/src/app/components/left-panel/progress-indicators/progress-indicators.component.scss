@@ -40,6 +40,22 @@
     background: var(--bg-hover);
   }
 
+  &[data-status="red"] {
+    border-color: var(--status-red-border);
+
+    .indicator-dot {
+      background: var(--status-red-dot);
+    }
+
+    .indicator-label {
+      color: var(--status-red-label);
+    }
+
+    .indicator-subtext {
+      color: var(--status-red-sub);
+    }
+  }
+
   &[data-status="green"] {
     border-color: var(--status-green-border);
 

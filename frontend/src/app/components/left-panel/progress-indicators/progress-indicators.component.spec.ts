@@ -101,12 +101,12 @@ describe('ProgressIndicatorsComponent', () => {
     component.labelingStatus = {
       smart: { status: 'green' },
       stable: { status: 'yellow' },
-      span: { status: '' },
+      span: { status: 'red' },
     };
     fixture.detectChanges();
     const buttons = fixture.nativeElement.querySelectorAll('.labeling-indicator');
     expect(buttons[0].getAttribute('data-status')).toBe('green');
     expect(buttons[1].getAttribute('data-status')).toBe('yellow');
-    expect(buttons[2].getAttribute('data-status')).toBe('');
+    expect(buttons[2].getAttribute('data-status')).toBe('red');
   });
 });
