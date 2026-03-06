@@ -62,6 +62,9 @@
 <div class="main-content" role="main">
   <router-outlet />
 </div>
+@if (showDetectorExport) {
+  <vt-detector-export-modal (closed)="showDetectorExport = false" (exported)="showDetectorExport = false" />
+}
 @if (showSettings) {
   <vt-settings-modal (closed)="showSettings = false" />
 }

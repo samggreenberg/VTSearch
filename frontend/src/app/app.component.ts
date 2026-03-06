@@ -3,18 +3,20 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
+import { DetectorExportModalComponent } from './components/modals/detector-export-modal/detector-export-modal.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { VtDialogService } from './services/dialog.service';
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, DetectorExportModalComponent, SettingsModalComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
+  showDetectorExport = false;
   showSettings = false;
   isOnLabelView = false;
   labelsStatus = '';
@@ -96,7 +98,7 @@ export class AppComponent {
   onExportDetector(): void {
     if (!this.isOnLabelView) return;
     this.menuOpen = false;
-    this.dialog.alert('Detector export not yet available in the Angular frontend.', 'info');
+    this.showDetectorExport = true;
   }
 
   onExportLabels(): void {
