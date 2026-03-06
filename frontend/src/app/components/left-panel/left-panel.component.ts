@@ -59,14 +59,9 @@ export class LeftPanelComponent implements OnInit {
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
-  scrollInfo: { scrollTop: number; scrollHeight: number; clientHeight: number } | null = null;
 
   ngOnInit(): void {
     this.autopilotStart.emit();
-  }
-
-  onScrollUpdate(info: { scrollTop: number; scrollHeight: number; clientHeight: number }): void {
-    this.scrollInfo = info;
   }
 
   onStripeClick(index: number): void {

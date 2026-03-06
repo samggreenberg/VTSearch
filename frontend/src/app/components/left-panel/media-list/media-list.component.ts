@@ -22,8 +22,6 @@ export class MediaListComponent implements AfterViewChecked {
   @Input() showScores = true;
 
   @Output() mediaSelect = new EventEmitter<number>();
-  @Output() scrollUpdate = new EventEmitter<{ scrollTop: number; scrollHeight: number; clientHeight: number }>();
-
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
 
   private pendingScrollToSelected = false;
@@ -64,15 +62,6 @@ export class MediaListComponent implements AfterViewChecked {
   onMediaSelect(id: number): void {
     this.pendingScrollToSelected = true;
     this.mediaSelect.emit(id);
-  }
-
-  onScroll(event: Event): void {
-    const el = event.target as HTMLDivElement;
-    this.scrollUpdate.emit({
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-    });
   }
 
   ngAfterViewChecked(): void {

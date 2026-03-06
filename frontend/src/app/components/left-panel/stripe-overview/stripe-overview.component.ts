@@ -16,8 +16,6 @@ export class StripeOverviewComponent {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() totalCount = 0;
-  @Input() scrollInfo: { scrollTop: number; scrollHeight: number; clientHeight: number } | null = null;
-
   @Output() stripeClick = new EventEmitter<number>();
 
   onStripeClick(event: MouseEvent): void {
@@ -56,16 +54,6 @@ export class StripeOverviewComponent {
     }
 
     return result;
-  }
-
-  get viewportTop(): number {
-    if (!this.scrollInfo || this.scrollInfo.scrollHeight === 0) return 0;
-    return (this.scrollInfo.scrollTop / this.scrollInfo.scrollHeight) * 100;
-  }
-
-  get viewportHeight(): number {
-    if (!this.scrollInfo || this.scrollInfo.scrollHeight === 0) return 100;
-    return (this.scrollInfo.clientHeight / this.scrollInfo.scrollHeight) * 100;
   }
 
   get thresholdPosition(): number | null {

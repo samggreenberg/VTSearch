@@ -59,7 +59,6 @@
           [showThumbnails]="showThumbnails"
           [showScores]="false"
           (mediaSelect)="mediaSelect.emit($event)"
-          (scrollUpdate)="onScrollUpdate($event)"
         />
         <vt-stripe-overview
           [sortOrder]="sortOrder"
@@ -68,7 +67,6 @@
           [goodVotes]="goodVotes"
           [badVotes]="badVotes"
           [totalCount]="medias.length"
-          [scrollInfo]="scrollInfo"
           (stripeClick)="onStripeClick($event)"
         />
       </div>
