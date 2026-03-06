@@ -12,12 +12,13 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
 
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -29,6 +30,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   showThumbnails = true;
   leftWidth = 260;
   rightWidth = 300;
+  progressModalMetric: ProgressMetric | null = null;
 
   private readonly LEFT_MIN = 180;
   private readonly LEFT_MAX = 500;
@@ -295,8 +297,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Indicators ---
 
-  onIndicatorClick(_name: string): void {
-    // Will open progress modal in Phase 7
+  onIndicatorClick(name: string): void {
+    const metricMap: Record<string, ProgressMetric> = {
+      smart: 'smart',
+      stable: 'stable',
+      span: 'diverse',
+    };
+    const metric = metricMap[name];
+    if (metric) {
+      this.progressModalMetric = metric;
+    }
+  }
+
+  onProgressModalClosed(): void {
+    this.progressModalMetric = null;
   }
 
   // --- Autopilot ---

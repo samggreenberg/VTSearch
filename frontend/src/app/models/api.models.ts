@@ -354,6 +354,11 @@ export interface TrainAndScoreResponse {
   [key: string]: unknown;
 }
 
+export interface IndicatorScoreHistoryResponse {
+  metric: string;
+  history: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
+}
+
 export interface VotingIterationsResponse {
   progress: number;
   total: number;

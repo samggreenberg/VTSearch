@@ -22,6 +22,7 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
 })
 export class ProgressModalComponent implements OnInit, OnDestroy {
   @Input() metric: ProgressMetric = 'smart';
+  @Input() useCachedHistory = false;
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
@@ -29,6 +30,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   analyzing = true;
   analysisProgress = 0;
   chartData: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[] = [];
+  emptyHistory = false;
 
   private destroy$ = new Subject<void>();
 
@@ -40,21 +42,43 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   get title(): string {
     switch (this.metric) {
       case 'smart':
-        return 'Smart: Error Cost Analysis';
+        return 'Smart: Error Cost Over Time';
       case 'stable':
-        return 'Stable: Prediction Flip Analysis';
+        return 'Stable: Prediction Flips Over Time';
       case 'diverse':
-        return 'Diverse: Diversity Coverage';
+        return 'Diverse: Diversity Coverage Over Time';
     }
   }
 
   ngOnInit(): void {
-    this.runAnalysis();
+    if (this.useCachedHistory) {
+      this.loadCachedHistory();
+    } else {
+      this.runAnalysis();
+    }
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private loadCachedHistory(): void {
+    this.analyzing = true;
+    this.sortingApi.getIndicatorScoreHistory(this.metric).subscribe({
+      next: (res) => {
+        this.analyzing = false;
+        this.chartData = res.history || [];
+        this.emptyHistory = this.chartData.length === 0;
+        if (!this.emptyHistory) {
+          setTimeout(() => this.renderChart(), 50);
+        }
+      },
+      error: () => {
+        this.analyzing = false;
+        this.emptyHistory = true;
+      },
+    });
   }
 
   private runAnalysis(): void {

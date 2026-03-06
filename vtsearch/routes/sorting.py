@@ -14,7 +14,10 @@ import vtsearch.utils.paths as _paths
 from vtsearch.models import (
     analyze_labeling_progress,
     calculate_cross_calibration_threshold,
+    calculate_diversity_level_over_time,
+    calculate_error_cost_over_time,
     calculate_gmm_threshold,
+    calculate_prediction_stability_over_time,
     calculate_safe_threshold,
     compute_labeling_status,
     embed_text_query,
@@ -720,6 +723,36 @@ def labeling_status_indicator():
         span = tree.span_info() if tree is not None else None
         status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
         return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@sorting_bp.route("/api/indicator-score-history", methods=["GET"])
+def indicator_score_history():
+    """Return cached indicator score history for a given metric.
+
+    Query parameter ``metric`` must be one of ``smart``, ``stable``, or
+    ``diverse``.  Returns the cached per-step data without retraining
+    models — only data already computed by the labeling-status polling
+    is returned.
+    """
+    metric = request.args.get("metric", "").strip()
+    if metric not in ("smart", "stable", "diverse"):
+        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
+
+    clips = snapshot_medias()
+    inclusion = get_inclusion()
+
+    try:
+        if metric == "smart":
+            data = calculate_error_cost_over_time(clips, label_history, good_votes, bad_votes, inclusion)
+            return jsonify({"metric": "smart", "history": data})
+        elif metric == "stable":
+            data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
+            return jsonify({"metric": "stable", "history": data})
+        else:
+            data = calculate_diversity_level_over_time(clips, label_history)
+            return jsonify({"metric": "diverse", "history": data})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
