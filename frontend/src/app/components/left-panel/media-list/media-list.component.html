@@ -1,4 +1,4 @@
-<div class="media-list" role="listbox" aria-label="Media items" #listContainer (scroll)="onScroll($event)">
+<div class="media-list" role="listbox" aria-label="Media items" #listContainer>
   @for (item of orderedItems; track trackByMediaId($index, item)) {
     @if (item.showThreshold) {
       <div class="media-threshold-line" aria-label="Good/Bad threshold">
