@@ -131,7 +131,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         if (this.swipeAnimation && this.media) {
           this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
           setTimeout(() => {
-            this.swipeClass = '';
             this.mediaVoted.emit({ id: this.media!.id, vote });
             this.isVoting = false;
           }, 180);
