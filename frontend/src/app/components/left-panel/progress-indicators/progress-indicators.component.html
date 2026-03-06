@@ -1,0 +1,43 @@
+<div class="progress-check-bar">
+  @if (sortBusy) {
+    <div class="sort-overlay" aria-live="polite">
+      @if (sortStatus) {
+        <span class="sort-overlay-status">{{ sortStatus }}</span>
+      }
+      <vt-progress-bar [indeterminate]="true" />
+    </div>
+  } @else {
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="smartStatus"
+      (click)="onClick('smart')"
+      aria-label="Smart indicator"
+      [title]="smartSubtext ? 'Smart: ' + smartSubtext + '. Tracks model accuracy over labeling steps.' : 'Tracks model accuracy over labeling steps. Green when error cost has leveled off (model has converged). Yellow when still improving. Red when more votes are needed.'"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Smart</span>
+    </button>
+
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="stableStatus"
+      (click)="onClick('stable')"
+      aria-label="Stable indicator"
+      [title]="stableSubtext ? 'Stable: ' + stableSubtext + '. Tracks prediction stability.' : 'Tracks prediction stability. Green when predictions stop changing between labeling steps (model is confident). Yellow when predictions are still shifting. Red when more votes are needed.'"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Stable</span>
+    </button>
+
+    <button
+      class="labeling-indicator"
+      [attr.data-status]="spanStatus"
+      (click)="onClick('span')"
+      aria-label="Diverse indicator"
+      [title]="spanSubtext ? 'Diverse: ' + spanSubtext + '. Tracks dataset exploration coverage.' : 'Tracks how much of the dataset you have explored. Green when you have sampled from all major clusters. Yellow when some regions remain unexplored. Red when coverage data is unavailable.'"
+    >
+      <span class="indicator-dot"></span>
+      <span class="indicator-label">Diverse</span>
+    </button>
+  }
+</div>

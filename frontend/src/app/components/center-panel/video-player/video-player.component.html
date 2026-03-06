@@ -1,0 +1,10 @@
+<video
+  #videoEl
+  controls
+  loop
+  autoplay
+  [src]="videoSrc"
+  [attr.aria-label]="media.filename || 'Video media'"
+  class="video-element"
+  (loadedmetadata)="onLoadedMetadata()"
+></video>

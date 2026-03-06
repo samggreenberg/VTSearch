@@ -11,7 +11,6 @@ remain here.
 
 import gc
 import io
-import pickle
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -21,7 +20,7 @@ from flask import Blueprint, jsonify, request, send_file
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
-from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
     list_datasets as _reg_list_datasets,
@@ -40,8 +39,10 @@ from vtsearch.utils import (
     get_progress,
     good_votes,
     set_dataset_display_name,
+    snapshot_medias,
     update_progress,
 )
+import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.routes.datasets_loading import (  # noqa: F401
@@ -62,10 +63,6 @@ datasets_bp = Blueprint("datasets", __name__)
 # Register the UI sub-blueprint.
 datasets_bp.register_blueprint(datasets_ui_bp)
 
-# Names of importers that have dedicated, hand-crafted UI sections in the
-# frontend.  They are excluded from the generic /api/dataset/importers list
-# so the frontend doesn't render a duplicate panel for them.
-_BUILTIN_IMPORTER_NAMES = {"pickle", "combine_datasets"}
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +78,46 @@ def media_types_list():
     return jsonify({"media_types": all_types_dict()})
 
 
+@datasets_bp.route("/api/embedders")
+def embedders_list():
+    """Return all registered embedders with their metadata."""
+    from vtsearch.media import all_embedders_dict
+
+    return jsonify({"embedders": all_embedders_dict()})
+
+
+# ---------------------------------------------------------------------------
+# Converter chooser
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/converters")
+def converters_list():
+    """Return all converters, optionally filtered by target media type.
+
+    Query parameters:
+        target: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only converters whose
+            ``target_type`` matches are returned.
+    """
+    from vtsearch.converters import list_converters, list_converters_for_target
+    from vtsearch.media import get_by_folder_name
+
+    target = request.args.get("target", "").strip()
+    if target:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(target)
+            target = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        converters = list_converters_for_target(target)
+    else:
+        converters = list_converters()
+
+    return jsonify({"converters": [c.to_dict() for c in converters]})
+
+
 # ---------------------------------------------------------------------------
 # Status / progress
 # ---------------------------------------------------------------------------
@@ -89,13 +126,14 @@ def media_types_list():
 @datasets_bp.route("/api/dataset/status")
 def dataset_status():
     """Return the current dataset status."""
+    snap = snapshot_medias()
     media_type = None
-    if medias:
-        media_type = next(iter(medias.values())).get("type", "audio")
+    if snap:
+        media_type = next(iter(snap.values())).get("type", "audio")
     return jsonify(
         {
-            "loaded": len(medias) > 0,
-            "num_medias": len(medias),
+            "loaded": len(snap) > 0,
+            "num_medias": len(snap),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
             "num_dupes": get_dupe_count(),
@@ -116,8 +154,8 @@ def dataset_progress():
 
 @datasets_bp.route("/api/dataset/importers")
 def dataset_importers():
-    """List all registered importers (excluding those with dedicated UI)."""
-    extended = [imp.to_dict() for imp in list_importers() if imp.name not in _BUILTIN_IMPORTER_NAMES]
+    """List all registered importers (excluding those with non-form UI)."""
+    extended = [imp.to_dict() for imp in list_importers() if imp.ui_mode == "form"]
     return jsonify({"importers": extended})
 
 
@@ -159,6 +197,10 @@ def combine_datasets_route():
         return jsonify({"error": "Provide at least two dataset file paths."}), 400
 
     for p in dataset_paths:
+        try:
+            _paths.validate_server_filepath(str(p))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if not Path(p).exists():
             return jsonify({"error": f"File not found: {p}"}), 400
 
@@ -192,7 +234,7 @@ def stage_file():
     # Peek inside the pkl to get count and media type.
     try:
         with open(staging_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+            data = safe_pickle_load(f)
         if isinstance(data, dict) and "medias" in data:
             media_dict = data["medias"]
         elif isinstance(data, dict):
@@ -241,6 +283,14 @@ def stage_import(importer_name: str):
             if f.key not in body and f.required:
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
+
+    # Pass through the optional "converters" key.
+    if file_keys:
+        conv = request.form.get("converters", "")
+    else:
+        conv = (request.get_json(force=True) or {}).get("converters", "")
+    if conv:
+        field_values["converters"] = conv
 
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
@@ -305,7 +355,8 @@ def clear_staging():
     """Remove all files from the staging directory."""
     if STAGING_DIR.exists():
         for f in STAGING_DIR.iterdir():
-            f.unlink(missing_ok=True)
+            if f.is_file():
+                f.unlink(missing_ok=True)
     return jsonify({"ok": True})
 
 
@@ -345,6 +396,15 @@ def import_dataset(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
+    # Pass through the optional "converters" key for importers that support
+    # converter selection (e.g. folder, http_archive).
+    if file_keys:
+        converters_val = request.form.get("converters", "")
+    else:
+        converters_val = (request.get_json(force=True) or {}).get("converters", "")
+    if converters_val:
+        field_values["converters"] = converters_val
+
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
@@ -362,13 +422,14 @@ def load_demo_dataset_route():
         return data
 
     dataset_name = data.get("name")
+    embedder_name = data.get("embedder", "")
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
     demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
     _run_origin_load_in_background(
-        lambda: load_demo_dataset(dataset_name, medias),
+        lambda: load_demo_dataset(dataset_name, medias, embedder_name=embedder_name),
         demo_origin,
         name=dataset_name,
     )
@@ -414,6 +475,11 @@ def load_dataset_folder():
     if not folder_path:
         return jsonify({"error": "No folder path provided"}), 400
 
+    try:
+        _paths.validate_server_filepath(str(folder_path))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     folder = Path(folder_path)
     if not folder.exists() or not folder.is_dir():
         return jsonify({"error": "Invalid folder path"}), 400
@@ -431,11 +497,12 @@ def load_dataset_folder():
 @datasets_bp.route("/api/dataset/export")
 def export_dataset():
     """Export the current dataset to a pickle file."""
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No dataset loaded"}), 400
 
     try:
-        dataset_bytes = export_dataset_to_file(medias)
+        dataset_bytes = export_dataset_to_file(snap)
         return send_file(
             io.BytesIO(dataset_bytes),
             mimetype="application/octet-stream",
@@ -568,9 +635,16 @@ def load_dataset_from_source():
 
 
 def _load_from_origin(source: dict):
-    """Start loading a dataset from a raw origin dict (internal helper)."""
+    """Start loading a dataset from a raw origin dict (internal helper).
+
+    Special pseudo-origins (``"dupe_set"``, ``"demo"``) are handled inline.
+    All real importers are dispatched generically via
+    :meth:`~DatasetImporter.reload_from_origin`.
+    """
     importer_name = source.get("importer", "")
     params = source.get("params", {})
+
+    # --- pseudo-origins (not real importers) ---
 
     if importer_name == "dupe_set":
         members = source.get("members", [])
@@ -592,36 +666,26 @@ def _load_from_origin(source: dict):
         )
         return jsonify({"ok": True, "message": "Loading started"})
 
-    if importer_name == "pickle":
-        pkl_path = params.get("path", "")
-        if not pkl_path or not Path(pkl_path).is_file():
-            return jsonify({"error": f"Pickle file not found: {pkl_path}"}), 400
-        origin = {"importer": "pickle", "params": params}
+    # --- real importers: generic dispatch ---
 
-        def load_pkl():
-            update_progress("loading", "Loading dataset from file...", 0, 0)
-            load_dataset_from_pickle(Path(pkl_path), medias)
-
-        _run_origin_load_in_background(load_pkl, origin)
-        return jsonify({"ok": True, "message": "Loading started"})
-
-    if importer_name == "folder":
-        folder_path = params.get("path", "")
-        if not folder_path or not Path(folder_path).is_dir():
-            return jsonify({"error": f"Folder not found: {folder_path}"}), 400
-        importer = get_importer("folder")
-        if importer is None:
-            return jsonify({"error": "folder importer not available"}), 500
-        field_values = {"path": folder_path}
-        media_type = params.get("media_type", "")
-        if media_type:
-            field_values["media_type"] = media_type
-        _run_importer_in_background(importer, field_values)
-        return jsonify({"ok": True, "message": "Loading started"})
-
-    # Generic fallback: try the named importer with the stored params
     importer = get_importer(importer_name)
     if importer is None:
         return jsonify({"error": f"Unknown importer: {importer_name}"}), 400
-    _run_importer_in_background(importer, params)
+
+    if not importer.can_reload_from_origin(source):
+        return jsonify({"error": f"Cannot reload from {importer_name} origin (source not available)"}), 400
+
+    field_values = importer.reload_from_origin(source)
+    if field_values is None:
+        return jsonify({"error": f"Cannot reload from {importer_name} origin"}), 400
+
+    # Validate any server file paths in the field values
+    for key, val in field_values.items():
+        if isinstance(val, str) and ("/" in val or "\\" in val):
+            try:
+                _paths.validate_server_filepath(val)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+
+    _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})

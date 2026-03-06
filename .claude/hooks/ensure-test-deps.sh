@@ -46,6 +46,7 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu \
   soundfile \
   feedparser \
   yt-dlp \
+  dnspython \
   --ignore-installed blinker \
   -q
 

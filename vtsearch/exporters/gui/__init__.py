@@ -37,13 +37,38 @@ class DisplayLabelsetExporter(LabelsetExporter):
     display_name = "Display Results"
     description = "Display the results in the browser (GUI) or print to console (CLI)."
     icon = "🖥️"
+    hidden_from_picker = True
     fields = []  # no questions to ask
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        # If results come from /api/labels/export (LabelSet format), convert
+        # to the display format expected by displayAutodetectResults().
+        if "labels" in results and "results" not in results:
+            results = self._labelset_to_display(results)
+
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {
             "message": (f"Showing {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)."),
             "display_results": results,
+        }
+
+    @staticmethod
+    def _labelset_to_display(labelset: dict[str, Any]) -> dict[str, Any]:
+        """Convert a LabelSet dict to the autodetect-results display format."""
+        labels = labelset.get("labels", [])
+        good_hits = [e for e in labels if e.get("label") == "good"]
+        bad_hits = [e for e in labels if e.get("label") == "bad"]
+        total = len(good_hits) + len(bad_hits)
+        return {
+            "media_type": f"labels ({len(good_hits)} good, {len(bad_hits)} bad)",
+            "detectors_run": 0,
+            "results": {
+                "labels": {
+                    "detector_name": "Labels",
+                    "total_hits": total,
+                    "hits": good_hits + bad_hits,
+                },
+            },
         }
 
     def export_cli(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:

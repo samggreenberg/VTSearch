@@ -10,7 +10,7 @@ from uuid import uuid4
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
 from vtsearch.datasets.registry import (
-    SAVED_DATASETS_DIR,
+    get_saved_datasets_dir,
     register_dataset as _reg_register,
     set_loaded_id as _reg_set_loaded,
 )
@@ -21,6 +21,7 @@ from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
     medias,
+    snapshot_medias,
     update_progress,
 )
 
@@ -28,6 +29,27 @@ from vtsearch.utils import (
 def clear_dataset():
     """Clear the current dataset, votes, and all related state."""
     clear_all()
+
+
+def _get_embedder_for_clips():
+    """Return the embedder for the current dataset, or None."""
+    snap = snapshot_medias()
+    if not snap:
+        return None
+    first = next(iter(snap.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("type", "audio")
+
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
 
 
 def _load_embedder_for_clips() -> None:
@@ -45,20 +67,15 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
-    if not medias:
+    emb = _get_embedder_for_clips()
+    if emb is None:
+        update_progress("idle", "Ready")
         return
-    media_type = next(iter(medias.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-    except KeyError:
-        return
-    mt.load_models()
+    emb.load_models()
     # Warm up the text encoder so the first text sort is instant.
     update_progress("loading", "Warming up text encoder…", 0, 0)
     try:
-        mt.embed_text("warmup")
+        emb.embed_text("warmup")
     except Exception:
         pass
     update_progress("idle", "Ready")
@@ -79,20 +96,33 @@ def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
 
 
 def _origin_to_str(origin: dict | None) -> str:
-    """Convert an origin dict to a human-readable string."""
+    """Convert an origin dict to a human-readable string.
+
+    Delegates to the importer's :meth:`origin_display` when available,
+    falling back to a generic ``"<importer_name>:<first_param>"`` format.
+    """
     if not origin:
         return "unknown"
-    importer = origin.get("importer", "")
+    importer_name = origin.get("importer", "")
+    if not importer_name:
+        return "unknown"
+
+    # Special pseudo-origins that are not real importers
     params = origin.get("params", {})
-    if importer == "demo":
+    if importer_name == "demo":
         return f"demo:{params.get('name', '')}"
-    elif importer == "pickle":
-        return f"file:{params.get('filename', '')}"
-    elif importer == "folder":
-        return f"folder:{params.get('path', '')}"
-    elif importer:
-        return importer
-    return "unknown"
+
+    from vtsearch.datasets.importers import get_importer
+
+    importer = get_importer(importer_name)
+    if importer is not None:
+        return importer.origin_display(origin)
+
+    # Unknown importer — generic fallback
+    if params:
+        first_val = next(iter(params.values()))
+        return f"{importer_name}:{first_val}"
+    return importer_name
 
 
 def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: dict | None = None) -> None:
@@ -102,12 +132,13 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
     empty or if a registry entry with the same pkl path already exists (to
     avoid duplicating on reload).
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return
 
-    first = next(iter(medias.values()))
+    first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
-    num_items = len(medias)
+    num_items = len(snap)
 
     # Derive name from display-name override, origin, or fallback
     if not name:
@@ -116,10 +147,11 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
             name = name.split(":", 1)[1] or name
 
     # Save to a pkl file in saved_datasets/
-    SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    pkl_path = str(SAVED_DATASETS_DIR / f"ds_{uuid4().hex}.pkl")
+    ds_dir = get_saved_datasets_dir()
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     try:
-        data_bytes = export_dataset_to_file(medias)
+        data_bytes = export_dataset_to_file(snap)
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:

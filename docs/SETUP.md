@@ -44,9 +44,54 @@ brew install git
 
 ## Getting the code
 
+We recommend cloning over SSH so you don't have to enter your password on every push/pull.
+
+### Setting up an SSH key
+
+1. **Generate a key** (skip this if you already have one at `~/.ssh/id_ed25519`):
+
+   ```bash
+   ssh-keygen -t ed25519 -C "your_email@example.com"
+   ```
+
+   Press Enter to accept the default file location, then choose a passphrase (or leave it empty).
+
+2. **Start the SSH agent and add your key**:
+
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+   ```
+
+3. **Copy the public key** to your clipboard:
+
+   Linux:
+
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+
+   macOS:
+
+   ```bash
+   pbcopy < ~/.ssh/id_ed25519.pub
+   ```
+
+4. **Add the key to GitHub**: Go to [github.com/settings/ssh/new](https://github.com/settings/ssh/new), paste the public key, give it a title, and click **Add SSH key**.
+
+5. **Verify the connection**:
+
+   ```bash
+   ssh -T git@github.com
+   ```
+
+   You should see a message like *"Hi username! You've successfully authenticated…"*.
+
+### Clone the repository
+
 ```bash
-git clone https://github.com/samggreenberg/vtsearch.git
-cd vtsearch
+git clone git@github.com:samggreenberg/VTSearch.git
+cd VTSearch
 ```
 
 ## Setting up a virtual environment
@@ -101,6 +146,50 @@ This installs Flask, NumPy, PyTorch, and other ML / media processing dependencie
 
 ```bash
 pip install -r requirements-dev.txt
+```
+
+## Building the frontend (optional)
+
+The Angular frontend is pre-built and committed to `static/`, so you can skip this step if you're only working on the backend. If you need to modify the frontend, you'll need **Node.js 18+** and **npm**.
+
+Check if they're installed:
+
+```bash
+node --version
+npm --version
+```
+
+If not installed:
+
+Ubuntu / Debian:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+macOS (with Homebrew):
+
+```bash
+brew install node
+```
+
+Then install dependencies and build:
+
+```bash
+cd frontend
+npm install
+npm run build:prod
+cd ..
+```
+
+This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build — it installs the Angular CLI and other tools locally.
+
+For development with live reload (proxies API calls to Flask at localhost:5000):
+
+```bash
+cd frontend
+npm start
 ```
 
 ## Running the app

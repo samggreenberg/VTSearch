@@ -1,0 +1,42 @@
+<div class="autopilot-panel">
+  <div class="autopilot-active">
+    <div class="autopilot-steps">
+      @for (step of steps; track step.phase) {
+        <div
+          class="ap-step"
+          [class.done]="step.state === 'done'"
+          [class.active]="step.state === 'active'"
+          [class.future]="step.state === 'future'"
+        >
+          <div class="ap-step-marker">
+            @if (step.state === 'done') {
+              <span class="ap-check" aria-label="Complete">&#10003;</span>
+            } @else if (step.state === 'active') {
+              <span class="ap-dot active-dot" aria-label="Current step"></span>
+            } @else {
+              <span class="ap-dot" aria-label="Upcoming step"></span>
+            }
+          </div>
+          <div class="ap-step-content">
+            <span class="ap-step-label" [title]="step.helpText">
+              {{ step.label }}
+            </span>
+            @if (step.detail || step.statusIcons.length) {
+              <span class="ap-step-detail">
+                {{ step.detail }}
+                @for (icon of step.statusIcons; track icon.ariaLabel) {
+                  <span
+                    class="ap-status-icon"
+                    [attr.data-color]="icon.color"
+                    [attr.aria-label]="icon.ariaLabel"
+                    role="img"
+                  ></span>
+                }
+              </span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>

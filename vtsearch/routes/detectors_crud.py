@@ -16,7 +16,6 @@ from vtsearch.utils import (
     get_autorun_detectors,
     get_autorun_extractors,
     get_autorun_localizers,
-    medias,
     remove_autorun_detector,
     remove_autorun_extractor,
     remove_autorun_localizer,
@@ -24,11 +23,20 @@ from vtsearch.utils import (
     rename_autorun_extractor,
     rename_autorun_localizer,
     set_autorun_detector_autodetect,
+    snapshot_medias,
 )
 
 detectors_crud_bp = Blueprint("detectors_crud", __name__)
 
-#: Default directory for server-side detector files.
+
+def get_detectors_dir() -> Path:
+    """Return the configured detectors directory from settings."""
+    from vtsearch.settings import get_detectors_dir as _get
+
+    return _get()
+
+
+#: Backward-compat alias — prefer :func:`get_detectors_dir` for live value.
 SERVER_DETECTOR_DIR = DATA_DIR / "detectors"
 
 
@@ -58,11 +66,18 @@ def add_autorun_detector_route():
     name = data.get("name", "").strip()
     media_type = data.get("media_type", "").strip()
     weights = data.get("weights")
-    threshold = data.get("threshold", 0.5)
+    raw_threshold = data.get("threshold", 0.5)
+    try:
+        threshold = float(raw_threshold)
+    except (TypeError, ValueError):
+        return jsonify({"error": "threshold must be a number"}), 400
     autodetect = data.get("autodetect", False)
 
     examples = data.get("examples")
-    num_labels = int(data.get("num_labels", 0))
+    try:
+        num_labels = int(data.get("num_labels", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "num_labels must be a number"}), 400
 
     if not name:
         return jsonify({"error": "name is required"}), 400
@@ -99,7 +114,7 @@ def add_autorun_detector_route():
                 model_data = {
                     "name": name,
                     "text_query": text_query,
-                    "media_type": media_type or "any",
+                    "media_type": media_type,
                     "examples": examples or [],
                     "created_at": _time.time(),
                     "labelset": {"labels": []},
@@ -216,8 +231,9 @@ def export_autorun_detector_server_route(name):
     if not safe_name:
         return jsonify({"error": "name contains no valid characters"}), 400
 
-    SERVER_DETECTOR_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    det_dir = get_detectors_dir()
+    det_dir.mkdir(parents=True, exist_ok=True)
+    filepath = det_dir / f"{safe_name}.json"
 
     if filepath.exists() and not overwrite:
         return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
@@ -295,8 +311,9 @@ def import_detector_pkl():
         # Prefer media_type stored in the file; fall back to current medias, then "audio"
         media_type = detector_data.get("media_type", "")
         if not media_type:
-            if medias:
-                media_type = next(iter(medias.values())).get("type", "audio")
+            snap = snapshot_medias()
+            if snap:
+                media_type = next(iter(snap.values())).get("type", "audio")
             else:
                 media_type = "audio"
 
@@ -309,12 +326,13 @@ def import_detector_pkl():
 
 @detectors_crud_bp.route("/api/detector/server-files", methods=["GET"])
 def list_server_detector_files():
-    """List detector JSON files saved on the server in data/detectors/."""
-    if not SERVER_DETECTOR_DIR.is_dir():
+    """List detector JSON files saved on the server."""
+    det_dir = get_detectors_dir()
+    if not det_dir.is_dir():
         return jsonify({"files": []})
 
     files = []
-    for p in sorted(SERVER_DETECTOR_DIR.glob("*.json")):
+    for p in sorted(det_dir.glob("*.json")):
         files.append(
             {
                 "name": p.stem,
@@ -332,12 +350,13 @@ def get_server_detector_file(name: str):
     if not safe_name:
         return jsonify({"error": "Invalid name"}), 400
 
-    filepath = SERVER_DETECTOR_DIR / f"{safe_name}.json"
+    det_dir = get_detectors_dir()
+    filepath = det_dir / f"{safe_name}.json"
     if not filepath.is_file():
         return jsonify({"error": "Detector file not found"}), 404
 
     try:
-        filepath.resolve().relative_to(SERVER_DETECTOR_DIR.resolve())
+        filepath.resolve().relative_to(det_dir.resolve())
     except ValueError:
         return jsonify({"error": "Invalid name"}), 400
 

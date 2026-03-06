@@ -6,12 +6,13 @@ import io
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
-    medias,
+    get_media,
+    snapshot_medias,
     toggle_vote,
 )
 
@@ -58,29 +59,36 @@ def list_medias() -> Response:
     """Return metadata for all loaded medias as a JSON array.
 
     Excludes heavyweight fields (``embedding``, ``media_bytes``,
-    ``media_string``) from the response. Only includes the
-    ``frequency`` field when it is present (synthetic medias only).
+    ``media_string``) from the response.
+
+    Each item contains the required fields ``id``, ``type``, ``filename``,
+    ``md5``, and a ``custom_metadata`` dict of display-worthy key/value
+    pairs contributed by the media type and/or importer.
 
     Returns:
-        A JSON array of media metadata dicts, each containing: ``id``, ``type``,
-        ``duration``, ``file_size``, ``filename``, ``category``, ``md5``, and
-        optionally ``frequency``, ``width``, ``height``, ``word_count``.
+        A JSON array of media metadata dicts.
     """
+    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
     result: list[dict[str, Any]] = []
-    for c in medias.values():
+    for c in snapshot_medias().values():
+        media_type_id = c.get("type", "audio")
         media_data: dict[str, Any] = {
             "id": c["id"],
-            "type": c.get("type", "audio"),
-            "duration": c["duration"],
-            "file_size": c["file_size"],
+            "type": media_type_id,
             "filename": c.get("filename", f"media_{c['id']}.wav"),
-            "category": c.get("category", "unknown"),
             "md5": c["md5"],
         }
-        # Only include optional fields when present
-        for key in ("frequency", "width", "height", "word_count"):
-            if key in c:
-                media_data[key] = c[key]
+        # Build custom_metadata from media type + any importer-supplied fields
+        try:
+            mt = get_media_type(media_type_id)
+            custom: dict[str, Any] = mt.display_metadata(c)
+        except KeyError:
+            custom = {}
+        importer_custom = c.get("custom_metadata")
+        if importer_custom:
+            custom.update(importer_custom)
+        media_data["custom_metadata"] = custom
         result.append(media_data)
     return jsonify(result)
 
@@ -96,7 +104,7 @@ def media_audio(media_id: int) -> tuple[Response, int] | Response:
         A ``audio/wav`` file response on success (HTTP 200), or a JSON error
         response with HTTP 404 if the media does not exist.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     media_bytes = _resolve_bytes(c)
@@ -124,7 +132,7 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
         (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
         error if the media exists but is not of type ``"video"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "video":
@@ -168,7 +176,7 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
         (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
         error if the media exists but is not of type ``"image"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "image":
@@ -211,7 +219,7 @@ def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
         error if the media does not exist, or a JSON 400 error if the media
         exists but is not of type ``"paragraph"``.
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
     if c.get("type") != "paragraph":
@@ -247,7 +255,7 @@ def media_generic(media_id: int) -> tuple[Response, int] | Response:
         or a JSON error response for HTTP 404 (media not found) or HTTP 400
         (unrecognised media type).
     """
-    c = medias.get(media_id)
+    c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
 
@@ -287,7 +295,7 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
         - HTTP 400 – request body is missing, malformed, or ``vote`` is not
           ``"good"`` or ``"bad"``.
     """
-    if media_id not in medias:
+    if get_media(media_id) is None:
         return jsonify({"error": "not found"}), 404
 
     data = get_json_or_400()
@@ -299,5 +307,9 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
         return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
 
     toggle_vote(media_id, vote)
+
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
 
     return jsonify({"ok": True})

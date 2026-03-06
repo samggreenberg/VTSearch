@@ -39,7 +39,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.pickle.load", side_effect=MemoryError):
+        with mock.patch("vtsearch.datasets.loader.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -126,7 +126,11 @@ class TestFolderMemoryError:
         mock_mt = mock.MagicMock()
         mock_mt.file_extensions = ["*.wav"]
         mock_mt.type_id = "audio"
-        mock_mt._model = True
+
+        mock_emb = mock.MagicMock()
+        mock_emb.name = "clap"
+        mock_emb.media_type_id = "audio"
+        mock_emb._model = True
 
         call_count = 0
 
@@ -137,10 +141,13 @@ class TestFolderMemoryError:
                 raise MemoryError("simulated OOM")
             return np.zeros(10)
 
-        mock_mt.embed_media.side_effect = embed_then_oom
+        mock_emb.embed_media.side_effect = embed_then_oom
         mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mock_mt):
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mock_mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[mock_emb]),
+        ):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
                     tmp_path, "sounds", target, on_progress=mock_progress,

@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.stripe-overview {
+  width: 24px;
+  height: 100%;
+  position: relative;
+  background: var(--bg-subtle);
+  border-left: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.stripe-container {
+  position: absolute;
+  inset: 0;
+}
+
+.stripe-dot {
+  position: absolute;
+  height: 2px;
+  border-radius: 1px;
+
+  &.good {
+    background: var(--color-good);
+    left: 50%;
+    right: 2px;
+  }
+
+  &.bad {
+    background: var(--color-bad);
+    left: 2px;
+    right: 50%;
+  }
+
+  &.selected {
+    background: #ffffff;
+    height: 3px;
+    left: 4px;
+    right: 4px;
+    z-index: 1;
+  }
+}
+
+.stripe-threshold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.6;
+}

@@ -85,9 +85,14 @@ class TestListMedias:
         data = resp.get_json()
         for media in data:
             assert "id" in media
-            assert "frequency" in media
-            assert "duration" in media
-            assert "file_size" in media
+            assert "md5" in media
+            assert "filename" in media
+            assert "custom_metadata" in media
+            # Type-specific fields appear in custom_metadata
+            cm = media["custom_metadata"]
+            assert "Frequency" in cm
+            assert "Duration" in cm
+            assert "File Size" in cm
 
     def test_does_not_expose_media_bytes(self, client):
         resp = client.get("/api/medias")

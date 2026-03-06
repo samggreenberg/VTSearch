@@ -42,8 +42,9 @@ class CombineDatasetsImporter(DatasetImporter):
 
     name = "combine_datasets"
     display_name = "Combine Existing Datasets"
-    description = "Merge multiple .pkl datasets into one, skipping duplicates."
+    description = "Merge multiple saved datasets into one, automatically removing duplicates"
     icon = "\U0001f500"  # twisted rightwards arrows
+    ui_mode = "custom"
     fields = [
         ImporterField(
             key="datasets",

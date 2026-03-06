@@ -45,13 +45,22 @@ _DEFAULTS: dict[str, Any] = {
     "calibrate_count": 2,
     "calibration_fraction": 0.5,
     "swipe_animation": True,
+    "show_metadata": True,
     "show_thumbnails_left": False,
     "show_thumbnails_right": True,
     "autoload_media_types": [],
+    "autoload_media_embedders": [],
     "autorun_processors": [],
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
+    "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
+    "detectors_dir": str(DATA_DIR / "detectors"),
+    "trainable_models_dir": str(DATA_DIR / "trainable_models"),
 }
+
+#: Keys excluded from the "defaults" endpoint (infrastructure settings that
+#: should not be reset by the Default button).
+_EXCLUDE_FROM_DEFAULTS = {"autorun_processors", "saved_datasets_dir", "detectors_dir", "trainable_models_dir"}
 
 # In-memory cache — loaded once, written on every mutation.
 _settings: dict[str, Any] | None = None
@@ -103,8 +112,8 @@ def _ensure_loaded() -> dict[str, Any]:
 
 
 def get_defaults() -> dict[str, Any]:
-    """Return a copy of the default settings (excluding autorun_processors)."""
-    return {k: v for k, v in _DEFAULTS.items() if k != "autorun_processors"}
+    """Return a copy of the default settings (excluding infrastructure keys)."""
+    return {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
 
 
 def get_all() -> dict[str, Any]:
@@ -180,6 +189,7 @@ _SETTING_SPECS: list[tuple] = [
     ("calibrate_count", int, _clamp(int, 1, 100)),
     ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
     ("swipe_animation", bool, None),
+    ("show_metadata", bool, None),
     ("show_thumbnails_left", bool, None),
     ("show_thumbnails_right", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
@@ -194,22 +204,34 @@ for _key, _cast, _coerce in _SETTING_SPECS:
 del _key, _cast, _coerce, _g, _s
 
 
-VALID_MEDIA_TYPES = ("audio", "document", "image", "paragraph", "video")
+def _valid_media_types() -> tuple[str, ...]:
+    """Return valid media type IDs from the media registry."""
+    from vtsearch.media import all_type_ids
+
+    return tuple(all_type_ids())
 
 
 def get_autoload_media_types() -> list[str]:
-    """Return the list of autoload media type IDs (empty list if none set)."""
+    """Return the list of autoload media type IDs (empty list if none set).
+
+    .. deprecated:: Use :func:`get_autoload_media_embedders` instead.
+    """
+    valid = _valid_media_types()
     with _settings_lock:
         raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
         if isinstance(raw, list):
-            return [v for v in raw if v in VALID_MEDIA_TYPES]
+            return [v for v in raw if v in valid]
         return []
 
 
 def set_autoload_media_types(value: list[str]) -> None:
-    """Set and persist the full list of autoload media types."""
+    """Set and persist the full list of autoload media types.
+
+    .. deprecated:: Use :func:`set_autoload_media_embedders` instead.
+    """
+    valid = _valid_media_types()
     for v in value:
-        if v not in VALID_MEDIA_TYPES:
+        if v not in valid:
             raise ValueError(f"Invalid media type: {v!r}")
     with _settings_lock:
         s = _ensure_loaded()
@@ -218,8 +240,11 @@ def set_autoload_media_types(value: list[str]) -> None:
 
 
 def toggle_autoload_media_type(type_id: str) -> list[str]:
-    """Toggle a single media type's autoload status.  Returns the updated list."""
-    if type_id not in VALID_MEDIA_TYPES:
+    """Toggle a single media type's autoload status.  Returns the updated list.
+
+    .. deprecated:: Use :func:`toggle_autoload_media_embedder` instead.
+    """
+    if type_id not in _valid_media_types():
         raise ValueError(f"Invalid media type: {type_id!r}")
     with _settings_lock:
         current = get_autoload_media_types()
@@ -228,6 +253,50 @@ def toggle_autoload_media_type(type_id: str) -> list[str]:
         else:
             current.append(type_id)
         set_autoload_media_types(current)
+        return current
+
+
+def _valid_embedder_names() -> tuple[str, ...]:
+    """Return the names of all registered embedders (lazy import to avoid circular deps)."""
+    from vtsearch.media import all_embedders
+
+    return tuple(e.name for e in all_embedders())
+
+
+def get_autoload_media_embedders() -> list[str]:
+    """Return the list of autoload embedder names (empty list if none set)."""
+    with _settings_lock:
+        raw = _ensure_loaded().get("autoload_media_embedders", _DEFAULTS["autoload_media_embedders"])
+        if isinstance(raw, list):
+            valid = _valid_embedder_names()
+            return [v for v in raw if v in valid]
+        return []
+
+
+def set_autoload_media_embedders(value: list[str]) -> None:
+    """Set and persist the full list of autoload embedder names."""
+    valid = _valid_embedder_names()
+    for v in value:
+        if v not in valid:
+            raise ValueError(f"Invalid embedder: {v!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autoload_media_embedders"] = list(dict.fromkeys(value))
+        _save(s)
+
+
+def toggle_autoload_media_embedder(embedder_name: str) -> list[str]:
+    """Toggle a single embedder's autoload status.  Returns the updated list."""
+    valid = _valid_embedder_names()
+    if embedder_name not in valid:
+        raise ValueError(f"Invalid embedder: {embedder_name!r}")
+    with _settings_lock:
+        current = get_autoload_media_embedders()
+        if embedder_name in current:
+            current.remove(embedder_name)
+        else:
+            current.append(embedder_name)
+        set_autoload_media_embedders(current)
         return current
 
 
@@ -343,6 +412,56 @@ def ensure_autorun_processors_imported() -> list[str]:
             logger.warning("Autorun processor '%s': import failed: %s", name, exc)
 
     return imported
+
+
+# -------------------------------------------------------------------
+# Directory path settings
+# -------------------------------------------------------------------
+
+
+def _get_dir(key: str) -> Path:
+    """Return a directory path setting as a :class:`~pathlib.Path`."""
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    return Path(raw)
+
+
+def _set_dir(key: str, value: str | Path) -> None:
+    """Persist a directory path setting."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = str(value)
+        _save(s)
+
+
+def get_saved_datasets_dir() -> Path:
+    """Return the configured saved-datasets directory."""
+    return _get_dir("saved_datasets_dir")
+
+
+def set_saved_datasets_dir(value: str | Path) -> None:
+    """Set the saved-datasets directory."""
+    _set_dir("saved_datasets_dir", value)
+
+
+def get_detectors_dir() -> Path:
+    """Return the configured detectors directory."""
+    return _get_dir("detectors_dir")
+
+
+def set_detectors_dir(value: str | Path) -> None:
+    """Set the detectors directory."""
+    _set_dir("detectors_dir", value)
+
+
+def get_trainable_models_dir() -> Path:
+    """Return the configured trainable-models directory."""
+    return _get_dir("trainable_models_dir")
+
+
+def set_trainable_models_dir(value: str | Path) -> None:
+    """Set the trainable-models directory."""
+    _set_dir("trainable_models_dir", value)
 
 
 def set_settings_path(path: str | Path) -> None:

@@ -5,24 +5,26 @@ import shutil
 
 import pytest
 
-from vtsearch.routes.trainable_models import TRAINABLE_MODELS_DIR
+from vtsearch.settings import get_trainable_models_dir
 
 
 @pytest.fixture(autouse=True)
 def clean_trainable_models_dir():
     """Remove the trainable models directory before and after each test."""
-    if TRAINABLE_MODELS_DIR.is_dir():
-        shutil.rmtree(TRAINABLE_MODELS_DIR)
+    tm_dir = get_trainable_models_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
     yield
-    if TRAINABLE_MODELS_DIR.is_dir():
-        shutil.rmtree(TRAINABLE_MODELS_DIR)
+    tm_dir = get_trainable_models_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
 
 
 class TestCreateTrainableModel:
     def test_create_success(self, client):
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "sounds of dogs barking"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "sounds of dogs barking"},
         )
         assert res.status_code == 201
         data = res.get_json()
@@ -42,28 +44,44 @@ class TestCreateTrainableModel:
     def test_create_missing_text_query(self, client):
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Test"},
+            json={"name": "Test", "media_type": "audio"},
         )
         assert res.status_code == 400
         assert "text_query" in res.get_json()["error"]
 
+    def test_create_missing_media_type(self, client):
+        res = client.post(
+            "/api/trainable-models",
+            json={"name": "Test", "text_query": "sounds"},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
+    def test_create_rejects_any_media_type(self, client):
+        res = client.post(
+            "/api/trainable-models",
+            json={"name": "Test", "media_type": "any", "text_query": "sounds"},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
     def test_create_duplicate(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "dogs"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs"},
         )
         res = client.post(
             "/api/trainable-models",
-            json={"name": "Dog Barks", "text_query": "dogs again"},
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs again"},
         )
         assert res.status_code == 409
 
     def test_file_created_on_disk(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Test Model", "text_query": "test"},
+            json={"name": "Test Model", "media_type": "audio", "text_query": "test"},
         )
-        files = list(TRAINABLE_MODELS_DIR.glob("*.json"))
+        files = list(get_trainable_models_dir().glob("*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text())
         assert data["name"] == "Test Model"
@@ -81,11 +99,11 @@ class TestListTrainableModels:
     def test_list_after_create(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Model A", "text_query": "a"},
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
             "/api/trainable-models",
-            json={"name": "Model B", "text_query": "b"},
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
         res = client.get("/api/trainable-models")
         data = res.get_json()
@@ -98,7 +116,7 @@ class TestGetTrainableModel:
     def test_get_existing(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "My Model", "text_query": "test query"},
+            json={"name": "My Model", "media_type": "audio", "text_query": "test query"},
         )
         res = client.get("/api/trainable-models/My%20Model")
         assert res.status_code == 200
@@ -116,7 +134,7 @@ class TestDeleteTrainableModel:
     def test_delete_existing(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "To Delete", "text_query": "test"},
+            json={"name": "To Delete", "media_type": "audio", "text_query": "test"},
         )
         res = client.delete("/api/trainable-models/To%20Delete")
         assert res.status_code == 200
@@ -135,7 +153,7 @@ class TestRenameTrainableModel:
     def test_rename_success(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Old Name", "text_query": "test"},
+            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
             "/api/trainable-models/Old%20Name/rename",
@@ -165,7 +183,7 @@ class TestRenameTrainableModel:
     def test_rename_missing_new_name(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Test", "text_query": "test"},
+            json={"name": "Test", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
             "/api/trainable-models/Test/rename",
@@ -180,7 +198,7 @@ class TestRenameTrainableModel:
         # Create a trainable model and register it in the model registry
         client.post(
             "/api/trainable-models",
-            json={"name": "Original", "text_query": "test"},
+            json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
             "/api/models/registry",
@@ -211,11 +229,11 @@ class TestRenameTrainableModel:
     def test_rename_conflict(self, client):
         client.post(
             "/api/trainable-models",
-            json={"name": "Model A", "text_query": "a"},
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
             "/api/trainable-models",
-            json={"name": "Model B", "text_query": "b"},
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
         res = client.put(
             "/api/trainable-models/Model%20A/rename",
@@ -229,7 +247,7 @@ class TestSaveLabels:
         """Save labels when there are no votes — should produce empty labelset."""
         client.post(
             "/api/trainable-models",
-            json={"name": "Labeler", "text_query": "test"},
+            json={"name": "Labeler", "media_type": "audio", "text_query": "test"},
         )
         res = client.post("/api/trainable-models/Labeler/labels")
         assert res.status_code == 200
@@ -257,7 +275,7 @@ class TestSaveLabels:
 
         client.post(
             "/api/trainable-models",
-            json={"name": "Voted Model", "text_query": "test"},
+            json={"name": "Voted Model", "media_type": "audio", "text_query": "test"},
         )
         res = client.post("/api/trainable-models/Voted%20Model/labels")
         assert res.status_code == 200
@@ -306,7 +324,7 @@ class TestSaveLabels:
         }
         try:
             client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
-            client.post("/api/trainable-models", json={"name": "DupeTest", "text_query": "test"})
+            client.post("/api/trainable-models", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
 
             res = client.post("/api/trainable-models/DupeTest/labels")
             assert res.status_code == 200
@@ -337,8 +355,8 @@ class TestLabelVoteIsolation:
             pytest.skip("Need at least 4 medias")
 
         # Create two trainable models
-        client.post("/api/trainable-models", json={"name": "Model A", "text_query": "a"})
-        client.post("/api/trainable-models", json={"name": "Model B", "text_query": "b"})
+        client.post("/api/trainable-models", json={"name": "Model A", "media_type": "audio", "text_query": "a"})
+        client.post("/api/trainable-models", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
 
         # Simulate labeling with Model A: vote on ids[0] and ids[1]
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
@@ -367,7 +385,7 @@ class TestLabelVoteIsolation:
             pytest.skip("Need at least 4 medias")
 
         # Create model and label 2 items
-        client.post("/api/trainable-models", json={"name": "Target", "text_query": "t"})
+        client.post("/api/trainable-models", json={"name": "Target", "media_type": "audio", "text_query": "t"})
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
         client.post("/api/trainable-models/Target/labels")
@@ -387,3 +405,155 @@ class TestLabelVoteIsolation:
         assert len(good_votes) + len(bad_votes) == 2
         assert ids[2] not in good_votes, "Stale vote should be gone after clear+import"
         assert ids[3] not in bad_votes, "Stale vote should be gone after clear+import"
+
+
+class TestLoadModelEndpoint:
+    """Tests for POST /api/models/registry/load."""
+
+    def test_load_model(self, client):
+        from vtsearch.models.registry import get_loaded_id
+
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "M", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.status_code == 200
+        assert get_loaded_id() == model_id
+
+    def test_unload_model(self, client):
+        from vtsearch.models.registry import get_loaded_id, set_loaded_id
+
+        set_loaded_id("fake")
+        res = client.post("/api/models/registry/load", json={"model_id": None})
+        assert res.status_code == 200
+        assert get_loaded_id() is None
+
+    def test_load_nonexistent(self, client):
+        res = client.post("/api/models/registry/load", json={"model_id": "nope"})
+        assert res.status_code == 404
+
+
+class TestVoteSyncsToLoadedModel:
+    """Voting while a trainable model is loaded should auto-update the model's labelset."""
+
+    def test_vote_updates_model_labels(self, client):
+        """Casting a vote with a loaded model should persist labels and update registry stats."""
+        from vtsearch.models.registry import get_model
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Create and register a trainable model
+        client.post(
+            "/api/trainable-models",
+            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "AutoSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        # Load the model
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        # Cast a vote
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Check that the model's labelset was updated
+        model_data = client.get("/api/trainable-models/AutoSync").get_json()
+        labels = model_data["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["label"] == "good"
+
+        # Check that the registry entry was updated
+        entry = get_model(model_id)
+        assert entry["num_training"] == 1
+        assert entry.get("last_trained_at") is not None
+
+    def test_vote_toggle_off_updates_model(self, client):
+        """Toggling a vote off should update the model labelset to reflect removal."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "ToggleSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        first_id = next(iter(medias))
+        # Vote good
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        # Toggle off (vote good again)
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_no_sync_without_loaded_model(self, client):
+        """Voting with no loaded model should not create/update any model files."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "NoSync", "media_type": "audio", "text_query": "test"},
+        )
+
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Model should still have empty labelset
+        model_data = client.get("/api/trainable-models/NoSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_label_import_syncs_to_loaded_model(self, client):
+        """Importing labels with a loaded model should persist to the model."""
+        from vtsearch.models.registry import get_model
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "ImportSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        # Get an MD5 from the first media
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        md5 = media.get("md5", "")
+
+        # Import a label
+        client.post("/api/labels/import", json={"labels": [{"md5": md5, "label": "good"}]})
+
+        # Model should have the imported label
+        model_data = client.get("/api/trainable-models/ImportSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        entry = get_model(model_id)
+        assert entry["num_training"] == 1

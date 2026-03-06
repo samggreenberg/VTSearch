@@ -1,0 +1,96 @@
+.results-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.results-table-wrapper {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+
+  th,
+  td {
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+  }
+}
+
+.col-secondary {
+  color: var(--text-secondary);
+}
+
+.col-muted {
+  color: var(--text-muted);
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.export-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.export-sides {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+  }
+}
+
+.export-row {
+  max-width: 300px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.fill-info {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.copy-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.export-status {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.export-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

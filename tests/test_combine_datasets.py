@@ -133,10 +133,12 @@ class TestCombineDatasetsMetadata:
 
 
 class TestCombineDatasetsBuiltinExclusion:
-    def test_combine_datasets_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_combine_datasets_has_custom_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "combine_datasets" in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("combine_datasets")
+        assert imp is not None
+        assert imp.ui_mode == "custom"
 
     def test_combine_datasets_not_in_extended_list(self, client):
         resp = client.get("/api/dataset/importers")
@@ -405,6 +407,14 @@ class TestCombineEndpoint:
         data = resp.get_json()
         assert data["ok"] is True
 
+    def test_path_traversal_rejected(self, client):
+        """Paths outside the allowed directory must be rejected."""
+        resp = client.post(
+            "/api/dataset/combine",
+            json={"datasets": ["/etc/passwd", "/etc/shadow"]},
+        )
+        assert resp.status_code == 400
+
 
 # ---------------------------------------------------------------------------
 # Staging endpoints
@@ -424,8 +434,7 @@ class TestStageFileEndpoint:
         buf = BytesIO()
         data = {
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()}
-                for cid, m in ds.items()
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
         pickle.dump(data, buf)
@@ -483,8 +492,7 @@ class TestStageImportEndpoint:
         buf = BytesIO()
         data = {
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()}
-                for cid, m in ds.items()
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
         pickle.dump(data, buf)
@@ -550,6 +558,6 @@ class TestProgressStagingResult:
         progress = get_progress()
         assert progress["staging_result"] == staging
 
-        # Clean up
-        update_progress("idle", "", 0, 0)
+        # Clean up — explicitly clear staging_result (update has merge semantics)
+        update_progress("idle", "", 0, 0, staging_result=None)
         assert get_progress()["staging_result"] is None

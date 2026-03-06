@@ -270,6 +270,35 @@ class TestDisplayLabelsetExporter:
         assert "No items predicted as Good" in captured.out
         assert "message" in result
 
+    def test_export_converts_labelset_to_display_format(self):
+        """When results come from /api/labels/export (LabelSet format),
+        the GUI exporter should convert them to the display format."""
+        from vtsearch.exporters import get_exporter
+
+        labelset_data = {
+            "labels": [
+                {"md5": "aaa", "label": "good", "origin_name": "file1.wav", "filename": "file1.wav"},
+                {"md5": "bbb", "label": "bad", "origin_name": "file2.wav", "filename": "file2.wav"},
+                {"md5": "ccc", "label": "good", "origin_name": "file3.wav", "filename": "file3.wav"},
+            ]
+        }
+        exp = get_exporter("gui")
+        result = exp.export(labelset_data, {})
+        assert "display_results" in result
+        dr = result["display_results"]
+        # Should have the autodetect-results structure
+        assert "results" in dr
+        assert "media_type" in dr
+        assert "detectors_run" in dr
+        # All 3 labels should appear as hits
+        hits = dr["results"]["labels"]["hits"]
+        assert len(hits) == 3
+        # Good labels come first
+        assert hits[0]["label"] == "good"
+        assert hits[1]["label"] == "good"
+        assert hits[2]["label"] == "bad"
+        assert "3" in result["message"]
+
 
 # ---------------------------------------------------------------------------
 # Server JSON file exporter
@@ -343,67 +372,22 @@ class TestEmailLabelsetExporter:
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
         assert "to" in keys
-        assert "from_email" in keys
-        assert "smtp_password" in keys
-        assert "smtp_host" in keys
-        assert "smtp_port" in keys
 
-    def test_password_field_type_is_password(self):
+    def test_only_to_field_required(self):
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
-        pwd_field = next(f for f in exp.fields if f.key == "smtp_password")
-        assert pwd_field.field_type == "password"
+        keys = {f.key for f in exp.fields}
+        assert keys == {"to"}
 
     def test_export_raises_on_missing_to(self):
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
-            exp.export(
-                SAMPLE_RESULTS,
-                {
-                    "to": "",
-                    "from_email": "me@example.com",
-                    "smtp_password": "secret",
-                    "smtp_host": "smtp.example.com",
-                    "smtp_port": "587",
-                },
-            )
+            exp.export(SAMPLE_RESULTS, {"to": ""})
 
-    def test_export_raises_on_missing_from(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("email_smtp")
-        with pytest.raises(ValueError, match="Sender"):
-            exp.export(
-                SAMPLE_RESULTS,
-                {
-                    "to": "you@example.com",
-                    "from_email": "",
-                    "smtp_password": "secret",
-                    "smtp_host": "smtp.example.com",
-                    "smtp_port": "587",
-                },
-            )
-
-    def test_export_raises_on_missing_password(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("email_smtp")
-        with pytest.raises(ValueError, match="password"):
-            exp.export(
-                SAMPLE_RESULTS,
-                {
-                    "to": "you@example.com",
-                    "from_email": "me@example.com",
-                    "smtp_password": "",
-                    "smtp_host": "smtp.example.com",
-                    "smtp_port": "587",
-                },
-            )
-
-    def test_export_calls_smtp(self):
+    def test_export_calls_smtp_via_mx(self):
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
@@ -413,24 +397,21 @@ class TestEmailLabelsetExporter:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
-            result = exp.export(
-                SAMPLE_RESULTS,
-                {
-                    "to": "you@example.com",
-                    "from_email": "me@example.com",
-                    "smtp_password": "secret",
-                    "smtp_host": "smtp.example.com",
-                    "smtp_port": "587",
-                },
-            )
+        with (
+            patch("vtsearch.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            result = exp.export(SAMPLE_RESULTS, {"to": "you@example.com"})
 
-        mock_smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=30)
-        mock_server.starttls.assert_called_once()
-        mock_server.login.assert_called_once_with("me@example.com", "secret")
+        mock_smtp_cls.assert_called_once_with("mx.example.com", 25, timeout=30)
         mock_server.sendmail.assert_called_once()
         assert "message" in result
         assert "you@example.com" in result["message"]
+
+    def test_from_address_is_vtsearch(self):
+        from vtsearch.exporters.email_smtp import FROM_ADDRESS
+
+        assert FROM_ADDRESS == "VTSearch@fake.ai"
 
     def test_plain_text_builder(self):
         from vtsearch.exporters.email_smtp import _build_plain_text
@@ -449,20 +430,6 @@ class TestEmailLabelsetExporter:
         assert "dog_bark" in html
         assert "cat_meow" in html
         assert "bark1.wav" in html
-
-    def test_default_smtp_host_in_field(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("email_smtp")
-        host_field = next(f for f in exp.fields if f.key == "smtp_host")
-        assert host_field.default == "smtp.gmail.com"
-
-    def test_default_smtp_port_in_field(self):
-        from vtsearch.exporters import get_exporter
-
-        exp = get_exporter("email_smtp")
-        port_field = next(f for f in exp.fields if f.key == "smtp_port")
-        assert port_field.default == "587"
 
 
 # ---------------------------------------------------------------------------
@@ -579,24 +546,21 @@ class TestExportEndpoint:
         assert "missing_fields" in data
         assert "filepath" in data["missing_fields"]
 
-    def test_email_exporter_sends_via_smtp(self, client):
+    def test_email_exporter_sends_via_mx(self, client):
         mock_server = MagicMock()
         mock_smtp_cls = MagicMock()
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls):
+        with (
+            patch("vtsearch.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
             res = client.post(
                 "/api/exporters/export",
                 json={
                     "exporter_name": "email_smtp",
-                    "field_values": {
-                        "to": "you@example.com",
-                        "from_email": "me@example.com",
-                        "smtp_password": "secret",
-                        "smtp_host": "smtp.example.com",
-                        "smtp_port": "587",
-                    },
+                    "field_values": {"to": "you@example.com"},
                     "results": SAMPLE_RESULTS,
                 },
             )
@@ -633,4 +597,29 @@ class TestExportEndpoint:
             content_type="text/plain",
         )
         # exporter_name will be empty → 400
+        assert res.status_code == 400
+
+    def test_path_traversal_absolute_rejected(self, client):
+        """Absolute paths outside the allowed directory must be rejected."""
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": "/etc/passwd"},
+                "results": SAMPLE_RESULTS,
+            },
+        )
+        assert res.status_code == 400
+        assert "outside" in res.get_json()["error"].lower() or "must be within" in res.get_json()["error"].lower()
+
+    def test_path_traversal_relative_rejected(self, client):
+        """Relative paths that escape the base directory must be rejected."""
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {"filepath": "../../../etc/shadow"},
+                "results": SAMPLE_RESULTS,
+            },
+        )
         assert res.status_code == 400

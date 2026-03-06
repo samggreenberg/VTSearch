@@ -24,6 +24,19 @@ class MediaConverter(ABC):
     embeddings, and hashing.
     """
 
+    #: Human-readable label shown in the converter chooser UI.
+    #: Subclasses may override; the default is derived from the source
+    #: and target type IDs.
+    display_name: str = ""
+
+    #: Short description of what this converter does.
+    converter_description: str = ""
+
+    @property
+    def name(self) -> str:
+        """Unique identifier, e.g. ``'video2image'``."""
+        return f"{self.source_type}2{self.target_type}"
+
     @property
     @abstractmethod
     def source_type(self) -> str:
@@ -48,3 +61,13 @@ class MediaConverter(ABC):
         Returns an empty list if the conversion fails or produces no
         output (e.g. an empty document).
         """
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise converter metadata for API endpoints."""
+        return {
+            "name": self.name,
+            "source_type": self.source_type,
+            "target_type": self.target_type,
+            "display_name": self.display_name or f"{self.source_type.title()} \u2192 {self.target_type.title()}",
+            "description": self.converter_description,
+        }

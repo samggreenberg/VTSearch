@@ -99,6 +99,9 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "calibrate_count must be a number"}), 400
 
+    if "show_metadata" in body:
+        settings.set_show_metadata(bool(body["show_metadata"]))
+
     if "show_thumbnails_left" in body:
         settings.set_show_thumbnails_left(bool(body["show_thumbnails_left"]))
 
@@ -131,6 +134,27 @@ def update_settings():
             settings.set_autoload_media_types(val)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+
+    if "autoload_media_embedders" in body:
+        val = body["autoload_media_embedders"]
+        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+            return jsonify({"error": "autoload_media_embedders must be a list of strings"}), 400
+        try:
+            settings.set_autoload_media_embedders(val)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    # Directory path settings
+    for dir_key, setter in (
+        ("saved_datasets_dir", settings.set_saved_datasets_dir),
+        ("detectors_dir", settings.set_detectors_dir),
+        ("trainable_models_dir", settings.set_trainable_models_dir),
+    ):
+        if dir_key in body:
+            val = body[dir_key]
+            if not isinstance(val, str) or not val.strip():
+                return jsonify({"error": f"{dir_key} must be a non-empty string"}), 400
+            setter(val.strip())
 
     return jsonify(settings.get_all())
 

@@ -103,64 +103,68 @@ class TestMakeConsoleProgress:
 class TestPreloadConsoleOutput:
     """Integration-style tests for console output during preload_autoload_media_types."""
 
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
     @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.get")
-    def test_prints_preloading_banner_and_progress(self, mock_media_get, mock_favs, capsys):
+    @patch("vtsearch.media.embedders_for_type")
+    def test_prints_preloading_banner_and_progress(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
         """preload_autoload_media_types should print the banner and forward progress to console."""
-        mock_mt = MagicMock()
-        mock_mt.name = "Audio"
-        mock_mt._on_progress = lambda *a, **kw: None
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb.media_type_id = "audio"
+        mock_emb._on_progress = lambda *a, **kw: None
 
         def fake_load_models():
             # Simulate what a real load_models does
-            mock_mt._on_progress("loading", "Loading CLAP model weights...", 0, 0)
-            mock_mt._on_progress("loading", "model.safetensors", 50, 100)
-            mock_mt._on_progress("loading", "model.safetensors", 100, 100)
-            mock_mt._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 3)
-            mock_mt._on_progress("loading", "Warming up audio pipeline: preprocessing...", 2, 3)
-            mock_mt._on_progress("loading", "Warming up audio pipeline: running model...", 3, 3)
+            mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
+            mock_emb._on_progress("loading", "model.safetensors", 50, 100)
+            mock_emb._on_progress("loading", "model.safetensors", 100, 100)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 3)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: preprocessing...", 2, 3)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 3, 3)
 
-        mock_mt.load_models = fake_load_models
-        mock_media_get.return_value = mock_mt
+        mock_emb.load_models = fake_load_models
+        mock_embedders_for_type.return_value = [mock_emb]
 
         result = preload_autoload_media_types()
 
         captured = capsys.readouterr()
-        assert result == ["audio"]
-        assert "Preloading Audio embedder" in captured.out
+        assert result == ["clap"]
+        assert "Preloading clap embedder" in captured.out
         assert "Loading CLAP model weights..." in captured.out
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
     @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.get")
-    def test_restores_original_callback_after_load(self, mock_media_get, mock_favs):
+    @patch("vtsearch.media.embedders_for_type")
+    def test_restores_original_callback_after_load(self, mock_embedders_for_type, mock_favs, mock_emb_favs):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
-        mock_mt = MagicMock()
-        mock_mt.name = "Audio"
-        mock_mt._on_progress = original_cb
-        mock_mt.load_models = MagicMock()
-        mock_media_get.return_value = mock_mt
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb._on_progress = original_cb
+        mock_emb.load_models = MagicMock()
+        mock_embedders_for_type.return_value = [mock_emb]
 
         preload_autoload_media_types()
 
-        assert mock_mt._on_progress is original_cb
+        assert mock_emb._on_progress is original_cb
 
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
     @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.get")
-    def test_restores_callback_on_exception(self, mock_media_get, mock_favs, capsys):
+    @patch("vtsearch.media.embedders_for_type")
+    def test_restores_callback_on_exception(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
-        mock_mt = MagicMock()
-        mock_mt.name = "Audio"
-        mock_mt._on_progress = original_cb
-        mock_mt.load_models.side_effect = RuntimeError("boom")
-        mock_media_get.return_value = mock_mt
+        mock_emb = MagicMock()
+        mock_emb.name = "clap"
+        mock_emb._on_progress = original_cb
+        mock_emb.load_models.side_effect = RuntimeError("boom")
+        mock_embedders_for_type.return_value = [mock_emb]
 
         result = preload_autoload_media_types()
 
-        assert mock_mt._on_progress is original_cb
+        assert mock_emb._on_progress is original_cb
         assert result == []  # failed, so not in preloaded list
         captured = capsys.readouterr()
         assert "Warning" in captured.out

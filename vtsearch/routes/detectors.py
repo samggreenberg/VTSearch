@@ -10,6 +10,7 @@ from flask import Blueprint
 
 from vtsearch.routes.detectors_crud import (  # noqa: F401
     SERVER_DETECTOR_DIR,
+    get_detectors_dir,
     _EXTRACTOR_FACTORIES,
     _LOCALIZER_FACTORIES,
     _build_extractor,

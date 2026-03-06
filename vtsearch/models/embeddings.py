@@ -1,7 +1,7 @@
-"""Embedding generation — delegates to the media type registry.
+"""Embedding generation — delegates to the embedder registry.
 
-The actual embedding logic now lives inside each
-:class:`~vtsearch.media.base.MediaType` implementation.  This module keeps
+The actual embedding logic lives inside each
+:class:`~vtsearch.media.base.MediaEmbedder` implementation.  This module keeps
 its original public API as thin wrappers so that existing callers
 (``datasets/loader.py``, ``routes/sorting.py``, etc.) continue to work
 without modification.
@@ -13,72 +13,57 @@ from typing import Optional
 import numpy as np
 
 
+def _get_embedder_for_media_type(media_type: str):
+    """Return the first registered embedder for *media_type*, or None."""
+    from vtsearch.media import embedders_for_type
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 def embed_audio_file(audio_path: Path) -> Optional[np.ndarray]:
-    """Generate a CLAP audio embedding for *audio_path*.
-
-    Delegates to :class:`~vtsearch.media.audio.media_type.AudioMediaType`.
-    """
-    from vtsearch.media import get as media_get
-
-    return media_get("audio").embed_media(audio_path)
+    """Generate a CLAP audio embedding for *audio_path*."""
+    emb = _get_embedder_for_media_type("audio")
+    return emb.embed_media(audio_path) if emb else None
 
 
 def embed_video_file(video_path: Path) -> Optional[np.ndarray]:
-    """Generate an X-CLIP video embedding for *video_path*.
-
-    Delegates to :class:`~vtsearch.media.video.media_type.VideoMediaType`.
-    """
-    from vtsearch.media import get as media_get
-
-    return media_get("video").embed_media(video_path)
+    """Generate an X-CLIP video embedding for *video_path*."""
+    emb = _get_embedder_for_media_type("video")
+    return emb.embed_media(video_path) if emb else None
 
 
 def embed_image_file(image_path: Path) -> Optional[np.ndarray]:
-    """Generate a CLIP image embedding for *image_path*.
-
-    Delegates to :class:`~vtsearch.media.image.media_type.ImageMediaType`.
-    """
-    from vtsearch.media import get as media_get
-
-    return media_get("image").embed_media(image_path)
+    """Generate a CLIP image embedding for *image_path*."""
+    emb = _get_embedder_for_media_type("image")
+    return emb.embed_media(image_path) if emb else None
 
 
 def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
-    """Generate an E5-base-v2 embedding for *text_path*.
+    """Generate an E5-base-v2 embedding for *text_path*."""
+    emb = _get_embedder_for_media_type("paragraph")
+    return emb.embed_media(text_path) if emb else None
 
-    Delegates to :class:`~vtsearch.media.text.media_type.TextMediaType`.
+
+def embed_text_query(text: str, media_type: str, enrich: bool = False, embedder_name: str = "") -> Optional[np.ndarray]:
+    """Embed *text* in the vector space of the given *media_type* (or specific *embedder_name*).
+
+    When *embedder_name* is provided, uses that specific embedder.  Otherwise
+    falls back to the first registered embedder for the media type.
     """
-    from vtsearch.media import get as media_get
+    if embedder_name:
+        from vtsearch.media import get_embedder
 
-    return media_get("paragraph").embed_media(text_path)
+        try:
+            emb = get_embedder(embedder_name)
+        except KeyError:
+            return None
+    else:
+        emb = _get_embedder_for_media_type(media_type)
 
-
-def embed_text_query(text: str, media_type: str, enrich: bool = False) -> Optional[np.ndarray]:
-    """Embed *text* in the vector space of the given *media_type*.
-
-    Delegates to the registered :class:`~vtsearch.media.base.MediaType`'s
-    :meth:`~vtsearch.media.base.MediaType.embed_text` method (or
-    :meth:`~vtsearch.media.base.MediaType.embed_text_enriched` when
-    *enrich* is ``True``), so the resulting vector can be compared against
-    media embeddings via cosine similarity.
-
-    Args:
-        text: The natural-language search query to embed.
-        media_type: Internal type identifier, e.g. ``"audio"``, ``"video"``,
-            ``"image"``, or ``"paragraph"``.
-        enrich: If ``True``, use the average over description-wrapper
-            embeddings instead of the plain text embedding.
-
-    Returns:
-        A 1-D ``numpy.ndarray`` embedding, or ``None`` if the media type is
-        not registered or the model is not loaded.
-    """
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-        if enrich:
-            return mt.embed_text_enriched(text)
-        return mt.embed_text(text)
-    except KeyError:
+    if emb is None:
         return None
+
+    if enrich:
+        return emb.embed_text_enriched(text)
+    return emb.embed_text(text)

@@ -18,10 +18,43 @@ from vtsearch.converters.document2text import Document2TextMediaConverter
 from vtsearch.converters.video2audio import Video2AudioMediaConverter
 from vtsearch.converters.video2image import Video2ImageMediaConverter
 
+# ---------------------------------------------------------------------------
+# Converter registry
+# ---------------------------------------------------------------------------
+
+_ALL_CONVERTERS: list[MediaConverter] = [
+    Document2ImageMediaConverter(),
+    Document2TextMediaConverter(),
+    Video2AudioMediaConverter(),
+    Video2ImageMediaConverter(),
+]
+
+
+def list_converters() -> list[MediaConverter]:
+    """Return all registered converters."""
+    return list(_ALL_CONVERTERS)
+
+
+def get_converter(name: str) -> MediaConverter | None:
+    """Return the converter with *name*, or ``None``."""
+    for c in _ALL_CONVERTERS:
+        if c.name == name:
+            return c
+    return None
+
+
+def list_converters_for_target(target_type: str) -> list[MediaConverter]:
+    """Return converters that produce *target_type* (a ``type_id``)."""
+    return [c for c in _ALL_CONVERTERS if c.target_type == target_type]
+
+
 __all__ = [
     "MediaConverter",
     "Document2ImageMediaConverter",
     "Document2TextMediaConverter",
     "Video2AudioMediaConverter",
     "Video2ImageMediaConverter",
+    "list_converters",
+    "get_converter",
+    "list_converters_for_target",
 ]

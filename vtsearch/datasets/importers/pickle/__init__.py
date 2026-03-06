@@ -6,6 +6,7 @@ the core requirements.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -29,8 +30,10 @@ class PickleDatasetImporter(DatasetImporter):
     """
 
     name = "pickle"
-    display_name = "Pickle File"
-    description = "Load a previously exported .pkl dataset file."
+    display_name = "Upload Saved Dataset"
+    description = "Load a .pkl dataset file that was previously exported from VTSearch"
+    icon = "\U0001f4e4"
+    ui_mode = "file_upload"
     fields = [
         ImporterField(
             key="file",
@@ -45,10 +48,14 @@ class PickleDatasetImporter(DatasetImporter):
         file_obj = field_values["file"]  # werkzeug FileStorage
         progress = _get_progress()
         progress("loading", "Loading dataset from file...", 0, 0)
-        temp_path = DATA_DIR / "temp_upload.pkl"
         DATA_DIR.mkdir(exist_ok=True)
-        file_obj.save(temp_path)
+        fd, tmp_name = tempfile.mkstemp(suffix=".pkl", dir=DATA_DIR)
+        temp_path = Path(tmp_name)
         try:
+            import os
+
+            os.close(fd)
+            file_obj.save(temp_path)
             load_dataset_from_pickle(temp_path, medias, thin=thin)
         finally:
             temp_path.unlink(missing_ok=True)
@@ -73,6 +80,23 @@ class PickleDatasetImporter(DatasetImporter):
         if not file_path.exists():
             raise FileNotFoundError(f"Dataset file not found: {file_path}")
         yield from load_dataset_from_pickle_chunked(file_path, chunk_size, thin=thin)
+
+    def origin_display(self, origin: dict[str, Any]) -> str:
+        params = origin.get("params", {})
+        filename = params.get("filename", params.get("path", ""))
+        return f"file:{filename}" if filename else "pickle"
+
+    def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
+        params = origin.get("params", {})
+        pkl_path = params.get("path", "")
+        return bool(pkl_path) and Path(pkl_path).is_file()
+
+    def reload_from_origin(self, origin: dict[str, Any]) -> dict[str, Any] | None:
+        params = origin.get("params", {})
+        pkl_path = params.get("path", "")
+        if not pkl_path or not Path(pkl_path).is_file():
+            return None
+        return {"file": pkl_path}
 
 
 IMPORTER = PickleDatasetImporter()

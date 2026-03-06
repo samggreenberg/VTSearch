@@ -254,6 +254,35 @@ class TestConcurrentApplyLabel:
                 assert i in bad_votes
 
 
+class TestConcurrentSetInclusion:
+    """Verify that concurrent set_inclusion keeps in-memory and on-disk state in sync."""
+
+    def test_concurrent_set_inclusion_memory_disk_sync(self, isolated_settings):
+        """After concurrent writes, in-memory inclusion must equal the persisted value."""
+        num_threads = 20
+        iterations = 30
+        errors = []
+
+        def worker(value):
+            try:
+                for _ in range(iterations):
+                    _state.set_inclusion(value)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker, args=(i % 5,)) for i in range(num_threads)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
+        assert not errors
+        # The critical invariant: in-memory value must match the on-disk value.
+        in_memory = _state.get_inclusion()
+        on_disk = _settings_mod.get_inclusion()
+        assert in_memory == on_disk
+
+
 class TestSettingsLock:
     """Verify that _settings_lock exists and is an RLock."""
 
@@ -363,3 +392,47 @@ class TestConcurrentProgressCache:
             th.join()
 
         assert not errors
+
+
+class TestPluginRegistryLock:
+    """Verify that PluginRegistry._ensure_discovered is thread-safe."""
+
+    def test_registry_has_lock(self):
+        from vtsearch.utils.registry import PluginRegistry
+
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        assert isinstance(reg._lock, type(threading.Lock()))
+
+    def test_concurrent_first_access_discovers_once(self):
+        """Concurrent .list() calls should trigger _discover exactly once."""
+        from unittest.mock import patch
+        from vtsearch.utils.registry import PluginRegistry
+
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        call_count = 0
+        original_discover = reg._discover
+
+        def counting_discover():
+            nonlocal call_count
+            call_count += 1
+            original_discover()
+
+        barrier = threading.Barrier(10)
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait()
+                reg.list()
+            except Exception as e:
+                errors.append(e)
+
+        with patch.object(reg, "_discover", side_effect=counting_discover):
+            threads = [threading.Thread(target=worker) for _ in range(10)]
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join()
+
+        assert not errors
+        assert call_count == 1, f"_discover called {call_count} times, expected 1"

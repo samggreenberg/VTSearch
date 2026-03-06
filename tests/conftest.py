@@ -25,6 +25,7 @@ _TEST_GROUPS = {
         "test_api_contracts",
         "test_error_recovery",
         "test_dashboard",
+        "test_path_validation",
     ],
     "sorting": [
         "test_sorting",
@@ -44,6 +45,7 @@ _TEST_GROUPS = {
         "test_thin_loading",
         "test_chunked_loading",
         "test_memory_errors",
+        "test_pickle_safety",
     ],
     "io": [
         "test_exporters",
@@ -106,6 +108,7 @@ def pytest_collection_modifyitems(items, config):
         if group:
             item.add_marker(getattr(pytest.mark, group))
 
+
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
 # for the tiny MLP to converge on the small test dataset).
 config.TRAIN_EPOCHS = 30
@@ -143,7 +146,10 @@ def _fake_embed_audio(path):
 
 def _fake_embed_text(text):
     """Deterministic fake text embedding derived from the query string."""
-    rng = np.random.RandomState(hash(text) % 2**31)
+    import hashlib as _hl
+
+    seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
+    rng = np.random.RandomState(seed)
     return rng.randn(_EMBEDDING_DIM).astype(np.float32)
 
 
@@ -186,12 +192,38 @@ app_module.init_medias()
 # other routes that call embed_text don't trigger CLAP loading either.
 _patch_embed_audio.stop()
 
-# Grab the audio media-type singleton so the per-test fixture can patch
-# embed_text and load_models on it, preventing CLAP from loading during
-# /api/sort and similar calls.
-from vtsearch.media import get as _media_get
+# Grab the audio media-type singleton and the audio embedder so the per-test
+# fixture can patch embed_text/embed_media/load_models on both, preventing
+# CLAP from loading during /api/sort and similar calls.
+from vtsearch.media import get as _media_get, embedders_for_type as _embedders_for_type
 
 _audio_mt = _media_get("audio")
+_audio_emb = _embedders_for_type("audio")[0]
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_tmp_paths(monkeypatch):
+    """Allow tests to use system temp dirs with server file-path validation.
+
+    In production, ``validate_server_filepath`` restricts paths to
+    ``Path.cwd()``.  During tests, temp files live in the system temp
+    directory, so we widen the check to also accept that tree.
+    """
+    import tempfile
+    from pathlib import Path
+
+    import vtsearch.utils.paths as paths_mod
+
+    _original = paths_mod.validate_server_filepath
+
+    def _permissive(filepath_str, base_dir=None):
+        try:
+            return _original(filepath_str, base_dir)
+        except ValueError:
+            # Also allow the system temp directory (where pytest tmp_path lives).
+            return _original(filepath_str, Path(tempfile.gettempdir()))
+
+    monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
 
 
 @pytest.fixture(autouse=True)
@@ -208,6 +240,9 @@ def _stub_embedding_models():
         patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
         patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
         patch.object(_audio_mt, "load_models"),
+        patch.object(_audio_emb, "embed_media", side_effect=_fake_embed_audio),
+        patch.object(_audio_emb, "embed_text", side_effect=_fake_embed_text),
+        patch.object(_audio_emb, "load_models"),
     ):
         yield
 
@@ -264,8 +299,13 @@ def isolated_settings(tmp_path, monkeypatch):
     from vtsearch.models import registry as model_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
-    monkeypatch.setattr(ds_reg_mod, "SAVED_DATASETS_DIR", tmp_path / "saved_datasets")
     monkeypatch.setattr(model_reg_mod, "REGISTRY_PATH", tmp_path / "model_registry.json")
+
+    # Redirect storage directories to temp paths via settings
+    settings_mod.set_saved_datasets_dir(str(tmp_path / "saved_datasets"))
+    settings_mod.set_detectors_dir(str(tmp_path / "detectors"))
+    settings_mod.set_trainable_models_dir(str(tmp_path / "trainable_models"))
+
     ds_reg_mod.reset_for_tests()
     model_reg_mod.reset_for_tests()
 
@@ -312,8 +352,7 @@ def pytest_sessionfinish(session, exitstatus):
         print("=" * 60, flush=True)
         if failed or errors:
             print(
-                f"TESTS FAILED: {failed} failed, {errors} errors, "
-                f"{passed} passed, {skipped} skipped (total: {total})",
+                f"TESTS FAILED: {failed} failed, {errors} errors, {passed} passed, {skipped} skipped (total: {total})",
                 flush=True,
             )
         else:

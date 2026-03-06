@@ -1,0 +1,59 @@
+// LAYOUT INTENT: The voting overlay must not shrink — it stays pinned at the
+// bottom of the center panel. Do NOT remove flex-shrink: 0 from :host.
+:host {
+  flex-shrink: 0;
+}
+
+.vote-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 2px 0;
+  flex-shrink: 0;
+}
+
+button {
+  padding: 8px 24px;
+  border: 2px solid;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-good {
+  color: var(--color-good);
+  border-color: var(--color-good);
+
+  &:hover:not(:disabled) {
+    font-weight: 700;
+  }
+
+  &.voted,
+  &.vote-flash {
+    background: var(--color-good);
+    color: #fff;
+  }
+}
+
+.btn-bad {
+  color: var(--color-bad);
+  border-color: var(--color-bad);
+
+  &:hover:not(:disabled) {
+    font-weight: 700;
+  }
+
+  &.voted,
+  &.vote-flash {
+    background: var(--color-bad);
+    color: #fff;
+  }
+}

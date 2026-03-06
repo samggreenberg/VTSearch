@@ -1,6 +1,7 @@
 """Blueprint for sorting and voting routes."""
 
 import json
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -9,15 +10,17 @@ from flask import Blueprint, jsonify, request
 from vtsearch.routes.helpers import get_json_or_400
 
 from vtsearch.config import DATA_DIR
+import vtsearch.utils.paths as _paths
 from vtsearch.models import (
     analyze_labeling_progress,
     calculate_cross_calibration_threshold,
+    calculate_diversity_level_over_time,
+    calculate_error_cost_over_time,
     calculate_gmm_threshold,
+    calculate_prediction_stability_over_time,
     calculate_safe_threshold,
     compute_labeling_status,
-    embed_audio_file,
     embed_text_query,
-    get_clap_model,
     train_and_score,
     train_model,
 )
@@ -28,13 +31,13 @@ from vtsearch.utils import (
     bad_votes,
     build_media_hit,
     build_media_lookup,
-    medias,
     diversity_tree_next_sample,
     get_calibrate_count,
     get_calibration_fraction,
     get_diversity_tree,
     get_inclusion,
     get_learned_scores,
+    get_media,
     get_safe_thresholds,
     get_sort_progress,
     get_textsort_suggestions,
@@ -44,6 +47,7 @@ from vtsearch.utils import (
     resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
+    snapshot_medias,
     update_learned_scores,
     update_sort_progress,
 )
@@ -64,8 +68,9 @@ def _cosine_sort(query_vec):
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
     *threshold* is the GMM-based boundary (rounded to 4 decimals).
     """
-    all_ids = list(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+    snap = snapshot_medias()
+    all_ids = list(snap.keys())
+    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     query_norm = np.linalg.norm(query_vec)
     emb_norms = np.linalg.norm(all_embs, axis=1)
     norm_products = emb_norms * query_norm
@@ -79,29 +84,53 @@ def _cosine_sort(query_vec):
     return results, round(threshold, 4)
 
 
+_embedder_load_lock = threading.Lock()
+
+
+def _get_embedder_for_loaded_data():
+    """Return the appropriate embedder for the currently loaded dataset."""
+    snap = snapshot_medias()
+    if not snap:
+        return None
+    first = next(iter(snap.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("type", "audio")
+
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 def _load_embedder_with_progress(media_type, total_steps):
-    """Load the embedding model for *media_type*, forwarding progress to the sort progress bar.
+    """Load the embedding model, forwarding progress to the sort progress bar.
 
-    If the model is already loaded this is a no-op.
+    If the model is already loaded this is a no-op.  A lock serialises
+    concurrent callers so that only one request touches ``_on_progress``
+    at a time, preventing the save/restore from trampling another
+    request's callback.
     """
-    from vtsearch.media import get as media_get
-
-    try:
-        mt = media_get(media_type)
-        needs_loading = getattr(mt, "_model", None) is None
-    except KeyError:
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
         return
 
-    if not needs_loading:
-        return
+    with _embedder_load_lock:
+        if getattr(emb, "_model", None) is not None:
+            return
 
-    update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
-    original_cb = mt._on_progress
-    mt._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
-    try:
-        mt.load_models()
-    finally:
-        mt._on_progress = original_cb
+        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+        original_cb = emb._on_progress
+        emb._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+        try:
+            emb.load_models()
+        finally:
+            emb._on_progress = original_cb
 
 
 @sorting_bp.route("/api/sort", methods=["POST"])
@@ -117,12 +146,15 @@ def sort_clips():
         update_sort_progress("idle")
         return jsonify({"error": "text is required"}), 400
 
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         update_sort_progress("idle")
         return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = next(iter(medias.values())).get("type", "audio")
-    total_steps = 1 + len(medias) + 1
+    first = next(iter(snap.values()))
+    media_type = first.get("type", "audio")
+    embedder_name = first.get("embedder", "")
+    total_steps = 1 + len(snap) + 1
 
     _load_embedder_with_progress(media_type, total_steps)
     update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
@@ -130,7 +162,7 @@ def sort_clips():
     from vtsearch import settings
 
     enrich = settings.get_enrich_descriptions()
-    text_vec = embed_text_query(text, media_type, enrich=enrich)
+    text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
     if text_vec is None:
         update_sort_progress("idle")
         return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
@@ -147,7 +179,7 @@ def learned_sort():
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
     results, threshold = train_and_score(
-        medias,
+        snapshot_medias(),
         good_votes,
         bad_votes,
         get_inclusion(),
@@ -166,8 +198,8 @@ def get_votes():
     learned_scores = get_learned_scores()
     return jsonify(
         {
-            "good": list(good_votes),  # Maintains insertion order (dict keys)
-            "bad": list(bad_votes),  # Maintains insertion order (dict keys)
+            "good": sorted(good_votes),
+            "bad": sorted(bad_votes),
             "click_times": {str(k): v for k, v in click_times.items()},
             "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
         }
@@ -222,7 +254,7 @@ def export_labels():
 
     goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
     bads = {} if goods_only else bad_votes
-    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bads)
+    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bads)
     result: dict = labelset.to_dict()
     return jsonify(result)
 
@@ -238,7 +270,7 @@ def import_labels():
     if not isinstance(labels, list):
         return jsonify({"error": "labels must be a list"}), 400
 
-    origin_lookup, md5_lookup = build_media_lookup(medias)
+    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
 
     applied = 0
     skipped = 0
@@ -255,6 +287,10 @@ def import_labels():
         for cid in cids:
             apply_label(cid, label)
         applied += 1
+
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
 
     return jsonify({"applied": applied, "skipped": skipped})
 
@@ -310,7 +346,7 @@ def fill_labels_from_sort():
             continue
         if cid in good_votes or cid in bad_votes:
             continue
-        if cid not in medias:
+        if get_media(cid) is None:
             continue
         if score >= thresh:
             good_candidates.append({"id": cid, "score": float(score)})
@@ -337,17 +373,18 @@ def fill_labels_from_sort():
         apply_label_with_click_time(entry["id"], "bad")
 
     # Build a results dict compatible with exporters
+    snap = snapshot_medias()
     good_hits = [
-        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="good")
+        build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good")
         for e in good_candidates
     ]
     bad_hits = [
-        build_media_hit(e["id"], medias.get(e["id"], {}), e["score"], label="bad")
+        build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="bad")
         for e in bad_candidates
     ]
 
     media_type = "unknown"
-    for media in medias.values():
+    for media in snap.values():
         media_type = media.get("type", "unknown")
         break
 
@@ -364,6 +401,10 @@ def fill_labels_from_sort():
             },
         },
     }
+
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
 
     return jsonify({
         "good_applied": len(good_candidates),
@@ -422,17 +463,17 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     """Embed a media file and sort all loaded medias by cosine similarity.
 
     Returns ``(results_list, threshold)`` on success or raises on error.
-    The file at *file_path* is embedded using the media type of the currently
+    The file at *file_path* is embedded using the embedder of the currently
     loaded dataset.
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         raise ValueError("No medias loaded")
 
-    media_type = next(iter(medias.values())).get("type", "audio")
-    from vtsearch.media import get as media_get
-
-    mt = media_get(media_type)
-    example_embedding = mt.embed_media(file_path)
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
+        raise ValueError("No embedder available for loaded dataset")
+    example_embedding = emb.embed_media(file_path)
 
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
@@ -450,7 +491,7 @@ def example_sort():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    if not medias:
+    if not snapshot_medias():
         return jsonify({"error": "No medias loaded"}), 400
 
     try:
@@ -527,7 +568,7 @@ def example_sort_server():
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 def label_file_sort():
-    """Train MLP on external audio files from a label file, then sort all medias."""
+    """Train MLP on external media files from a label file, then sort all medias."""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -535,9 +576,13 @@ def label_file_sort():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    clap_model, clap_processor = get_clap_model()
-    if clap_model is None or clap_processor is None:
-        return jsonify({"error": "CLAP model not loaded"}), 500
+    if not snapshot_medias():
+        return jsonify({"error": "No medias loaded"}), 400
+
+    # Determine embedder from loaded dataset
+    emb = _get_embedder_for_loaded_data()
+    if emb is None:
+        return jsonify({"error": "No embedder available for loaded dataset"}), 400
 
     try:
         # Parse the label file
@@ -552,7 +597,7 @@ def label_file_sort():
         if not labels:
             return jsonify({"error": "No labels found in file"}), 400
 
-        # Load and embed each labeled audio file
+        # Load and embed each labeled media file
         X_list = []
         y_list = []
         loaded_count = 0
@@ -564,19 +609,25 @@ def label_file_sort():
                 skipped_count += 1
                 continue
 
-            # Try to get audio file path
-            audio_path = entry.get("path") or entry.get("file") or entry.get("filename")
-            if not audio_path:
+            # Try to get media file path
+            media_path = entry.get("path") or entry.get("file") or entry.get("filename")
+            if not media_path:
                 skipped_count += 1
                 continue
 
-            audio_path = Path(audio_path)
-            if not audio_path.exists():
+            media_path = Path(media_path)
+            # Ensure the path doesn't escape the data directory
+            try:
+                _paths.validate_server_filepath(str(media_path))
+            except ValueError:
+                skipped_count += 1
+                continue
+            if not media_path.exists():
                 skipped_count += 1
                 continue
 
-            # Embed the audio file
-            embedding = embed_audio_file(audio_path)
+            # Embed the media file using the dataset's embedder
+            embedding = emb.embed_media(media_path)
             if embedding is None:
                 skipped_count += 1
                 continue
@@ -624,8 +675,9 @@ def label_file_sort():
         model = train_model(X, y, input_dim, get_inclusion())
 
         # Score every media in the dataset
-        all_ids = sorted(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        snap = snapshot_medias()
+        all_ids = sorted(snap.keys())
+        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
@@ -661,7 +713,7 @@ def labeling_progress():
         return jsonify({"error": "no label history available"}), 400
 
     try:
-        analysis = analyze_labeling_progress(medias, label_history, good_votes, bad_votes, get_inclusion())
+        analysis = analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
         return jsonify(analysis)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -677,8 +729,38 @@ def labeling_status_indicator():
     try:
         tree = get_diversity_tree()
         span = tree.span_info() if tree is not None else None
-        status = compute_labeling_status(medias, label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
+        status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
         return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@sorting_bp.route("/api/indicator-score-history", methods=["GET"])
+def indicator_score_history():
+    """Return cached indicator score history for a given metric.
+
+    Query parameter ``metric`` must be one of ``smart``, ``stable``, or
+    ``diverse``.  Returns the cached per-step data without retraining
+    models — only data already computed by the labeling-status polling
+    is returned.
+    """
+    metric = request.args.get("metric", "").strip()
+    if metric not in ("smart", "stable", "diverse"):
+        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
+
+    clips = snapshot_medias()
+    inclusion = get_inclusion()
+
+    try:
+        if metric == "smart":
+            data = calculate_error_cost_over_time(clips, label_history, good_votes, bad_votes, inclusion)
+            return jsonify({"metric": "smart", "history": data})
+        elif metric == "stable":
+            data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
+            return jsonify({"metric": "stable", "history": data})
+        else:
+            data = calculate_diversity_level_over_time(clips, label_history)
+            return jsonify({"metric": "diverse", "history": data})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

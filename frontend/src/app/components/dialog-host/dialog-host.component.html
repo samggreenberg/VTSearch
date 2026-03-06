@@ -1,0 +1,23 @@
+<vt-modal [open]="dialog.dialogOpen" [title]="dialog.getIcon() + ' ' + dialog.dialogTitle" [showCloseButton]="false" (closed)="onClosed()">
+  <p>{{ dialog.dialogMessage }}</p>
+  @if (dialog.dialogShowInput) {
+    <input
+      class="form-input"
+      [(ngModel)]="dialog.dialogInputValue"
+      (keydown.enter)="onButtonClick('__input__')"
+      autofocus
+    />
+  }
+  <div modal-footer>
+    @for (btn of dialog.dialogButtons; track btn.label) {
+      <button
+        class="btn"
+        [class.btn--primary]="btn.primary"
+        [class.btn--secondary]="!btn.primary"
+        (click)="onButtonClick(btn.value)"
+      >
+        {{ btn.label }}
+      </button>
+    }
+  </div>
+</vt-modal>

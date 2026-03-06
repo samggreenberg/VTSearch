@@ -1,10 +1,16 @@
 """Tests for label sorting features: click-time tracking, learned-sort scores,
-and the enriched /api/votes response."""
+the enriched /api/votes response, and label-file-sort model selection."""
+
+import io
+import json
+from unittest.mock import patch
+
+import numpy as np
 
 import app as app_module
 import vtsearch.utils.state as _state
 import vtsearch.utils.state_core as _core
-from vtsearch.utils import vote_click_times, last_learned_scores
+from vtsearch.utils import medias, vote_click_times, last_learned_scores
 
 
 class TestClickTimeTracking:
@@ -119,3 +125,85 @@ class TestClearVotesResetsState:
         _state.last_learned_scores[1] = 0.9
         _state.clear_votes()
         assert len(last_learned_scores) == 0
+
+
+class TestLabelFileSortModelSelection:
+    """Verify that /api/label-file-sort uses the correct model for the current media type."""
+
+    def _make_label_file(self, paths_and_labels):
+        """Create a JSON label file in memory."""
+        labels = [{"path": str(p), "label": lbl} for p, lbl in paths_and_labels]
+        content = json.dumps({"labels": labels})
+        buf = io.BytesIO(content.encode("utf-8"))
+        buf.name = "labels.json"
+        return buf
+
+    def test_no_file_returns_400(self, client):
+        resp = client.post("/api/label-file-sort")
+        assert resp.status_code == 400
+
+    def test_no_medias_returns_400(self, client):
+        saved = dict(medias)
+        medias.clear()
+        try:
+            buf = self._make_label_file([])
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 400
+        finally:
+            medias.update(saved)
+
+    def test_uses_current_media_type_embedder(self, client, tmp_path):
+        """The endpoint should call embed_media on the embedder matching the loaded dataset,
+        not hardcode embed_audio_file / CLAP."""
+        # Determine the current media type from loaded test medias
+        media_type = next(iter(medias.values())).get("type", "audio")
+        embedding_dim = next(iter(medias.values()))["embedding"].shape[0]
+
+        # Create fake media files on disk
+        good_file = tmp_path / "good.bin"
+        bad_file = tmp_path / "bad.bin"
+        good_file.write_bytes(b"\x00" * 100)
+        bad_file.write_bytes(b"\x00" * 100)
+
+        fake_emb = np.random.default_rng(42).standard_normal(embedding_dim).astype(np.float32)
+
+        from vtsearch.media import embedders_for_type
+
+        emb = embedders_for_type(media_type)[0]
+
+        with patch.object(emb, "embed_media", return_value=fake_emb) as mock_embed:
+            buf = self._make_label_file([(good_file, "good"), (bad_file, "bad")])
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "results" in data
+            assert data["loaded"] == 2
+            # Verify embed_media was called on the embedder
+            assert mock_embed.call_count == 2
+
+    def test_invalid_label_file_returns_400(self, client):
+        buf = io.BytesIO(b"not json")
+        resp = client.post(
+            "/api/label-file-sort",
+            data={"file": (buf, "labels.json")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "invalid" in resp.get_json()["error"].lower()
+
+    def test_empty_labels_returns_400(self, client):
+        buf = io.BytesIO(json.dumps({"labels": []}).encode())
+        resp = client.post(
+            "/api/label-file-sort",
+            data={"file": (buf, "labels.json")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400

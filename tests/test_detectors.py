@@ -541,16 +541,12 @@ class TestServerDetectorExport:
     """Tests for the ServerFileProcessorExporter endpoints."""
 
     @pytest.fixture(autouse=True)
-    def _setup_server_dir(self, tmp_path, monkeypatch):
-        """Point SERVER_DETECTOR_DIR at a temp directory for each test."""
-        from vtsearch.routes import detectors as det_module
-        from vtsearch.routes import detectors_crud as crud_module
-        from vtsearch.routes import detectors_training as train_module
+    def _setup_server_dir(self, tmp_path):
+        """Point detectors_dir at a temp directory for each test."""
+        from vtsearch import settings
 
         det_dir = tmp_path / "detectors"
-        monkeypatch.setattr(det_module, "SERVER_DETECTOR_DIR", det_dir)
-        monkeypatch.setattr(crud_module, "SERVER_DETECTOR_DIR", det_dir)
-        monkeypatch.setattr(train_module, "SERVER_DETECTOR_DIR", det_dir)
+        settings.set_detectors_dir(str(det_dir))
         self._det_dir = det_dir
         yield
 

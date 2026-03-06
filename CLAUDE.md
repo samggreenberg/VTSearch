@@ -1,6 +1,6 @@
 # VTSearch
 
-Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + vanilla JS + PyTorch.
+Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + Angular + PyTorch.
 
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh`
@@ -16,6 +16,9 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
 - **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
+- **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
+- **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
+- **Frontend tests**: `cd frontend && ng test --watch=false`
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 
@@ -24,7 +27,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors, autopilot_top_greens, autopilot_hard_reds); auto-saves to `data/settings.json`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_metadata, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors, autopilot_top_greens, autopilot_hard_reds); auto-saves to `data/settings.json`
 - `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
@@ -35,8 +38,9 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
-- `static/` — Frontend (index.html, app.js, dialogs.js, charts.js, results.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, FEATURE_IDEAS.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
+- `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`
+- `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
+- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
@@ -69,7 +73,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_eval_visualize.py` — Evaluation visualisation chart generation
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
-  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_thumbnails_left, show_thumbnails_right, autopilot_top_greens, autopilot_hard_reds, autorun processors)
+  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_metadata, show_thumbnails_left, show_thumbnails_right, autopilot_top_greens, autopilot_hard_reds, autorun processors)
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
   - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
   - `test_integration.py` — End-to-end user workflow simulations: chained API calls, state interactions, response format consistency
@@ -82,7 +86,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
   - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
-  - `test_frontend.py` — Frontend serving: SPA entry point, static files, favicon variants, logo, content types
+  - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
   - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
@@ -175,7 +179,7 @@ All mutable global state is reset automatically before each test via two autouse
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `autorun_extractors`, `autorun_localizers`, `_dataset_display_name`, `_diversity_tree` are module-level dicts/lists; all protected by `_state_lock` (RLock)
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors, autopilot_top_greens, autopilot_hard_reds
+- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_metadata, show_thumbnails_left, show_thumbnails_right, autoload_media_types, autorun_processors, autopilot_top_greens, autopilot_hard_reds
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)

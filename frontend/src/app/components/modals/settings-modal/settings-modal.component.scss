@@ -1,0 +1,40 @@
+:host {
+  ::ng-deep .modal-content {
+    width: 720px;
+  }
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.settings-section {
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  h4 {
+    margin: 0.75rem 0 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

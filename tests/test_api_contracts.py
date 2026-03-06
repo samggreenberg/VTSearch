@@ -33,9 +33,15 @@ class TestMediasContract:
     def test_each_media_has_required_fields(self):
         resp = self.client.get("/api/medias")
         data = resp.get_json()
-        required = {"id", "type", "duration", "file_size", "filename", "category", "md5"}
+        required = {"id", "type", "filename", "md5", "custom_metadata"}
         for item in data:
             assert required.issubset(item.keys()), f"Missing keys: {required - item.keys()}"
+
+    def test_custom_metadata_is_dict(self):
+        resp = self.client.get("/api/medias")
+        data = resp.get_json()
+        for item in data:
+            assert isinstance(item["custom_metadata"], dict)
 
     def test_id_is_integer(self):
         resp = self.client.get("/api/medias")
@@ -43,12 +49,13 @@ class TestMediasContract:
         for item in data:
             assert isinstance(item["id"], int)
 
-    def test_file_size_is_positive_integer(self):
+    def test_file_size_in_custom_metadata(self):
         resp = self.client.get("/api/medias")
         data = resp.get_json()
         for item in data:
-            assert isinstance(item["file_size"], int)
-            assert item["file_size"] > 0
+            assert "File Size" in item["custom_metadata"]
+            assert isinstance(item["custom_metadata"]["File Size"], int)
+            assert item["custom_metadata"]["File Size"] > 0
 
     def test_md5_is_32_char_hex_string(self):
         resp = self.client.get("/api/medias")
@@ -558,8 +565,13 @@ class TestLabelingStatusContract:
         resp = self.client.get("/api/labeling-status")
         assert resp.status_code == 200
         data = resp.get_json()
-        # Should have status indicators or at minimum no error
-        assert "error" not in data or "good_count" in data
+        assert "error" not in data
+        assert "good_count" in data
+        assert "bad_count" in data
+        assert "total_count" in data
+        for key in ("smart", "stable", "span"):
+            assert key in data
+            assert "status" in data[key]
 
 
 class TestFillFromSortContract:

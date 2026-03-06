@@ -1,0 +1,85 @@
+<div class="left-panel">
+  <div class="left-tabs" role="tablist" aria-label="Panel mode">
+    <button
+      class="left-tab"
+      role="tab"
+      [class.active]="activeTab === 'manual'"
+      [attr.aria-selected]="activeTab === 'manual'"
+      (click)="setTab('manual')"
+    >Manual</button>
+    <button
+      class="left-tab"
+      role="tab"
+      [class.active]="activeTab === 'autopilot'"
+      [attr.aria-selected]="activeTab === 'autopilot'"
+      (click)="setTab('autopilot')"
+      title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
+    >Autopilot</button>
+  </div>
+
+  @if (activeTab === 'manual') {
+    <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
+      <vt-sort-bar
+        [sortMode]="sortMode"
+        [loadSortLabel]="loadSortLabel"
+        [initialTextQuery]="textQuery"
+        [hasGoodVotes]="goodVotes.size > 0"
+        [hasBadVotes]="badVotes.size > 0"
+        (sortModeChange)="sortModeChange.emit($event)"
+        (textSort)="textSort.emit($event)"
+        (learnedSort)="learnedSort.emit()"
+        (loadSort)="loadSort.emit()"
+      />
+
+      <vt-select-mode
+        [selectMode]="selectMode"
+        (selectModeChange)="selectModeChange.emit($event)"
+      />
+
+      <vt-inclusion-slider
+        [value]="inclusion"
+        (valueChange)="inclusionChange.emit($event)"
+      />
+
+      <vt-progress-indicators
+        [labelingStatus]="labelingStatus"
+        [sortBusy]="sortBusy"
+        [sortStatus]="sortStatus"
+        (indicatorClick)="indicatorClick.emit($event)"
+      />
+
+      <div class="media-list-container">
+        <vt-media-list
+          [medias]="medias"
+          [sortOrder]="sortOrder"
+          [threshold]="threshold"
+          [selectedId]="selectedId"
+          [goodVotes]="goodVotes"
+          [badVotes]="badVotes"
+          [showThumbnails]="showThumbnails"
+          [showScores]="false"
+          (mediaSelect)="mediaSelect.emit($event)"
+        />
+        <vt-stripe-overview
+          [sortOrder]="sortOrder"
+          [threshold]="threshold"
+          [selectedId]="selectedId"
+          [goodVotes]="goodVotes"
+          [badVotes]="badVotes"
+          [totalCount]="medias.length"
+          (stripeClick)="onStripeClick($event)"
+        />
+      </div>
+    </div>
+  } @else {
+    <div class="tab-panel-autopilot" role="tabpanel" aria-label="Autopilot mode">
+      <vt-autopilot-panel
+        [goodVotes]="goodVotes"
+        [badVotes]="badVotes"
+        [labelingStatus]="labelingStatus"
+        (started)="autopilotStart.emit()"
+        (stopped)="autopilotStop.emit()"
+      />
+    </div>
+  }
+</div>

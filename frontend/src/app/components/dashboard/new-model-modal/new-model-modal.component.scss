@@ -1,0 +1,25 @@
+.new-model-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.required {
+  color: var(--color-bad);
+}
+
+.info-text {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.error-text {
+  color: var(--color-bad);
+  font-size: 0.85rem;
+}

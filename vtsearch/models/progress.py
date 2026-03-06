@@ -303,7 +303,7 @@ def _eval_cached_models(
     eval_embs: list[np.ndarray] = []
     eval_labels: list[float] = []
     for cid, lbl in current_labels.items():
-        if cid in clips_dict:
+        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
             eval_embs.append(clips_dict[cid]["embedding"])
             eval_labels.append(lbl)
 

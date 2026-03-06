@@ -7,11 +7,12 @@ from flask import Blueprint, jsonify, request
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS
+from vtsearch.routes.datasets_loading import _origin_to_str
 from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
-    medias,
     set_dataset_display_name,
+    snapshot_medias,
 )
 
 datasets_ui_bp = Blueprint("datasets_ui", __name__)
@@ -116,29 +117,20 @@ def dashboard_dataset_info():
     Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
     ``origin`` extracted from the first media that has origin info.
     """
-    if not medias:
+    snap = snapshot_medias()
+    if not snap:
         return jsonify({"error": "No dataset loaded"}), 404
 
-    first = next(iter(medias.values()))
+    first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
-    num_medias = len(medias)
+    num_medias = len(snap)
 
     # Determine origin from the first media that has one
     origin = None
-    for m in medias.values():
+    for m in snap.values():
         o = m.get("origin")
         if o:
-            importer = o.get("importer", "")
-            params = o.get("params", {})
-            # Build a human-readable origin string
-            if importer == "demo":
-                origin = f"demo:{params.get('name', '')}"
-            elif importer == "pickle":
-                origin = f"file:{params.get('filename', '')}"
-            elif importer == "folder":
-                origin = f"folder:{params.get('path', '')}"
-            elif importer:
-                origin = importer
+            origin = _origin_to_str(o)
             break
 
     # Use display name override if set, otherwise derive from origin
@@ -152,7 +144,7 @@ def dashboard_dataset_info():
 
     # Build a source dict that can be used to reload the dataset later
     source = None
-    for m in medias.values():
+    for m in snap.values():
         o = m.get("origin")
         if isinstance(o, dict):
             source = o

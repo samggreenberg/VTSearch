@@ -1,0 +1,146 @@
+<div class="dashboard-view">
+  <!-- Dataset Section -->
+  <div class="dashboard-section">
+    <div class="dashboard-section-header">
+      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching">Datasets</span>
+      @if (loading) {
+        <div class="dashboard-progress">
+          <span class="progress-msg">{{ progressMessage }}</span>
+          <vt-progress-bar
+            [value]="progressValue"
+            [max]="progressTotal"
+            [indeterminate]="progressIndeterminate"
+          />
+        </div>
+      }
+      <div class="dashboard-section-actions">
+        <button class="btn btn--primary btn--sm" (click)="openImporterModal()" title="Import a new dataset">+</button>
+      </div>
+    </div>
+
+    @if (datasets.length === 0 && !loading) {
+      <p class="empty-state">No datasets yet. Click + to add one.</p>
+    } @else {
+      <div class="dashboard-grid">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
+              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
+              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
+              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
+              <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
+              <th title="Whether this dataset is currently loaded into memory">Loaded</th>
+              <th title="Available operations for this dataset">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (dataset of sortedDatasets; track dataset.id) {
+              <vt-dataset-card
+                [dataset]="dataset"
+                [selected]="isDatasetSelected(dataset.id)"
+                (rowClick)="toggleDatasetSelection(dataset.id, $event)"
+                (rename)="renameDataset(dataset, $event)"
+                (delete)="deleteDataset(dataset)"
+              />
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Model Section -->
+  <div class="dashboard-section">
+    <div class="dashboard-section-header">
+      <span class="dashboard-section-title" title="Trained models for scoring and finding media">Models</span>
+      <div class="dashboard-section-actions">
+        <button class="btn btn--primary btn--sm" (click)="openNewModelModal()" title="Create a new model">+</button>
+      </div>
+    </div>
+
+    @if (models.length === 0) {
+      <p class="empty-state">No models yet. Click + to add one.</p>
+    } @else {
+      <div class="dashboard-grid">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
+              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
+              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
+              <th title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
+              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
+              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
+              <th title="Available operations for this model">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (model of sortedModels; track model.id) {
+              <vt-model-card
+                [model]="model"
+                [selected]="isModelSelected(model.id)"
+                (rowClick)="toggleModelSelection(model.id, $event)"
+                (rename)="renameModel(model, $event)"
+                (delete)="deleteModel(model)"
+              />
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Action Buttons — STABLE POSITIONING (read before changing!)
+       Label/Find buttons must stay in the EXACT same position whether their hint is
+       visible or not, and regardless of hint text length. Three rules enforce this:
+
+       1. Each .action-btn-group has a FIXED WIDTH in SCSS — do NOT remove it.
+          Without it, different hint text lengths shift buttons horizontally.
+       2. Hints use [style.visibility] (NOT *ngIf or display:none) — do NOT change.
+          visibility:hidden still reserves vertical space; display:none does not.
+       3. .btn-disabled-reason has a fixed height in SCSS — do NOT remove it.
+          Without it, showing/hiding text causes vertical reflow.
+
+       If you change any of these three things, the buttons WILL jump around. -->
+  <div class="dashboard-actions">
+    <div class="action-btn-group">
+      <button
+        class="btn btn--primary"
+        [disabled]="!labelEnabled"
+        [title]="labelHint"
+        (click)="onLabel()"
+      >
+        Label
+      </button>
+      <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
+    </div>
+    <div class="action-btn-group">
+      <button
+        class="btn btn--primary"
+        [disabled]="!findEnabled"
+        [title]="findHint"
+        (click)="onFind()"
+      >
+        Find
+      </button>
+      <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
+    </div>
+  </div>
+</div>
+
+@if (importerModalOpen) {
+  <vt-dataset-importer-modal
+    (closed)="closeImporterModal()"
+    (importStarted)="onImportComplete()"
+    (demoSelected)="onDemoSelected($event)"
+  />
+}
+
+@if (newModelModalOpen) {
+  <vt-new-model-modal
+    (closed)="closeNewModelModal()"
+    (created)="onModelCreated()"
+  />
+}

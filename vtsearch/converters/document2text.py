@@ -24,6 +24,9 @@ class Document2TextMediaConverter(MediaConverter):
     all pages/slides, or an empty list if no text could be extracted.
     """
 
+    display_name = "Document \u2192 Text"
+    converter_description = "Extract embedded text from documents"
+
     @property
     def source_type(self) -> str:
         return "document"

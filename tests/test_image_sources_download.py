@@ -342,18 +342,19 @@ class TestLoadOxfordFlowersMetadata:
 class TestLoadDemoSourceOxfordFlowers:
     """ImageMediaType.load_demo_source with source='oxford_flowers_102'."""
 
-    def _make_image_media_type(self):
-        from vtsearch.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "clip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
 
     def test_oxford_flowers_populates_clips(self, tmp_path):
         """load_demo_source with source='oxford_flowers_102' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         # Create stub image files.
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -364,8 +365,8 @@ class TestLoadDemoSourceOxfordFlowers:
             "image_00002.jpg": {"category": "sunflower", "path": tmp_path / "img2.jpg"},
         }
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -379,6 +380,7 @@ class TestLoadDemoSourceOxfordFlowers:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2
@@ -389,6 +391,7 @@ class TestLoadDemoSourceOxfordFlowers:
         """slice_start/slice_end limits images per category."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         fake_metadata = {}
         for i in range(10):
@@ -396,8 +399,8 @@ class TestLoadDemoSourceOxfordFlowers:
             p.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
             fake_metadata[f"image_{i + 1:05d}.jpg"] = {"category": "rose", "path": p}
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -411,6 +414,7 @@ class TestLoadDemoSourceOxfordFlowers:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 3
@@ -419,18 +423,19 @@ class TestLoadDemoSourceOxfordFlowers:
 class TestLoadDemoSourceFood101:
     """ImageMediaType.load_demo_source with source='food101'."""
 
-    def _make_image_media_type(self):
-        from vtsearch.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "clip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
 
     def test_food101_populates_clips(self, tmp_path):
         """load_demo_source with source='food101' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -440,8 +445,8 @@ class TestLoadDemoSourceFood101:
             "sushi/1.jpg": {"category": "sushi", "path": tmp_path / "img2.jpg"},
         }
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -455,6 +460,7 @@ class TestLoadDemoSourceFood101:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2
@@ -465,18 +471,19 @@ class TestLoadDemoSourceFood101:
 class TestLoadDemoSourceEurosat:
     """ImageMediaType.load_demo_source with source='eurosat'."""
 
-    def _make_image_media_type(self):
-        from vtsearch.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "clip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
 
     def test_eurosat_populates_clips(self, tmp_path):
         """load_demo_source with source='eurosat' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
         from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -486,8 +493,8 @@ class TestLoadDemoSourceEurosat:
             "Residential/Residential_00001.jpg": {"category": "Residential", "path": tmp_path / "img2.jpg"},
         }
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with (
@@ -501,6 +508,7 @@ class TestLoadDemoSourceEurosat:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 2
@@ -511,17 +519,18 @@ class TestLoadDemoSourceEurosat:
 class TestLoadDemoSourceStanfordDogs:
     """ImageMediaType.load_demo_source with source='stanford_dogs'."""
 
-    def _make_image_media_type(self):
-        from vtsearch.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "clip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
 
     def test_stanford_dogs_populates_clips(self, tmp_path):
         """load_demo_source with source='stanford_dogs' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         # Create folder structure: Images/n02085620-Chihuahua/img.jpg
         images_dir = tmp_path / "Images"
@@ -530,8 +539,8 @@ class TestLoadDemoSourceStanfordDogs:
         for i in range(3):
             (breed_dir / f"n02085620_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_stanford_dogs", return_value=images_dir):
@@ -542,6 +551,7 @@ class TestLoadDemoSourceStanfordDogs:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 3
@@ -551,6 +561,7 @@ class TestLoadDemoSourceStanfordDogs:
     def test_stanford_dogs_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per breed."""
         from vtsearch.datasets import downloader as dl_module
+        from vtsearch.media.image.media_type import ImageMediaType
 
         images_dir = tmp_path / "Images"
         breed_dir = images_dir / "n02085620-Chihuahua"
@@ -558,8 +569,8 @@ class TestLoadDemoSourceStanfordDogs:
         for i in range(10):
             (breed_dir / f"n02085620_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
 
-        mt = self._make_image_media_type()
-        mt.embed_media = MagicMock(return_value=np.zeros(768))
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_stanford_dogs", return_value=images_dir):
@@ -570,6 +581,7 @@ class TestLoadDemoSourceStanfordDogs:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=mock_emb,
             )
 
         assert len(clips) == 3

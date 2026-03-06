@@ -16,7 +16,6 @@ to know first.
 7. [Deployment checklist](#deployment-checklist)
 8. [Common workflows](#common-workflows)
 9. [Known constraints and trade-offs](#known-constraints-and-trade-offs)
-10. [Feature ideas and future direction](#feature-ideas-and-future-direction)
 
 ---
 
@@ -31,7 +30,7 @@ strategies:
 - **Learned sorting** — trains a small MLP neural network on user votes to
   predict good/bad labels.
 
-Built with Flask + vanilla JavaScript + PyTorch. Single-user, no auth,
+Built with Flask + Angular + PyTorch. Single-user, no auth,
 runs locally or in Docker.
 
 ---
@@ -48,7 +47,6 @@ runs locally or in Docker.
 | [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
-| [FEATURE_IDEAS.md](FEATURE_IDEAS.md) | 132 brainstormed feature ideas |
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
 
@@ -167,15 +165,17 @@ argument parsing. Key startup sequence:
 | Dataset loading and downloading | `vtsearch/datasets/` |
 | Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/` |
 | Constants and model IDs | `vtsearch/config.py` |
-| Frontend | `static/index.html`, `static/app.js`, `static/dialogs.js`, `static/charts.js`, `static/results.js`, `static/styles.css` |
+| Frontend | `static/index.html`, `static/main.js`, `static/polyfills.js`, `static/styles.css` (Angular build output) |
 | Tests | `tests/` (see test list in CLAUDE.md) |
 
 ### Architectural boundaries
 
 - **Media types, models, exporters, and importers do NOT import Flask.**
   They are standalone and can be used in scripts or notebooks.
-- **Only `vtsearch/routes/` imports global state.** All ML and dataset
-  functions accept state as parameters.
+- **`vtsearch/routes/` is the primary consumer of global state.** ML
+  and dataset functions generally accept state as parameters, though
+  some modules import specific helpers (e.g. `update_progress`,
+  `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory with its own
   `requirements.txt`.
 
@@ -321,19 +321,3 @@ The `numpy<2` pin avoids breaking changes in numpy 2.x that affect
 PyTorch and other dependencies. Upgrading requires testing across the full
 dependency chain.
 
----
-
-## Feature ideas and future direction
-
-See [FEATURE_IDEAS.md](FEATURE_IDEAS.md) for a brainstorm of 132 potential
-features spanning sorting, active learning, UI/UX, datasets, export,
-evaluation, media types, infrastructure, and accessibility. Highlights
-include:
-
-- Multi-query and negative-query text sorting
-- Uncertainty sampling and active learning
-- Grid view, keyboard shortcuts, and responsive layout
-- S3 / cloud storage importers
-- ONNX / TorchScript model export
-- Distributed computation and job queues
-- Internationalization and accessibility improvements

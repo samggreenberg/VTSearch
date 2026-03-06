@@ -368,8 +368,8 @@ def _plot_iterations_metric(
     fig, ax = plt.subplots(figsize=(9, 5))
     palette = plt.cm.tab10.colors  # type: ignore[attr-defined]
 
-    groups = df.groupby(["dataset", "category"])
-    for idx, ((ds, cat), group) in enumerate(groups):
+    grouped = list(df.groupby(["dataset", "category"]))
+    for idx, ((ds, cat), group) in enumerate(grouped):
         colour = palette[idx % len(palette)]
         agg = group.groupby("t")[metric].agg(["mean", "std"]).reset_index()
         t = agg["t"].values
@@ -383,8 +383,7 @@ def _plot_iterations_metric(
     ax.set_xlabel("Voting Iteration (t)")
     ax.set_ylabel(ylabel)
     ax.set_title(f"Voting Iterations: {ylabel}")
-    n_groups = len(list(groups))
-    if n_groups <= 15:
+    if len(grouped) <= 15:
         ax.legend(fontsize=7, loc="best")
 
     fig.tight_layout()

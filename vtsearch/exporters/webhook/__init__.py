@@ -10,6 +10,7 @@ from typing import Any
 import requests
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+from vtsearch.utils.url_validation import validate_url
 
 
 class WebhookLabelsetExporter(LabelsetExporter):
@@ -45,6 +46,7 @@ class WebhookLabelsetExporter(LabelsetExporter):
         url = field_values.get("url", "").strip()
         if not url:
             raise ValueError("A webhook URL is required.")
+        validate_url(url)
 
         headers: dict[str, str] = {"Content-Type": "application/json"}
         auth_header = field_values.get("auth_header", "").strip()

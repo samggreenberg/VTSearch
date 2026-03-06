@@ -449,6 +449,22 @@ class TestLabelImportEndpoint:
         assert set(app_module.good_votes) == {1, 2, 3}
         assert set(app_module.bad_votes) == {4, 5}
 
+    def test_path_traversal_absolute_rejected(self, client):
+        """Absolute paths outside the allowed directory must be rejected."""
+        res = client.post(
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": "/etc/passwd"},
+        )
+        assert res.status_code == 400
+
+    def test_path_traversal_relative_rejected(self, client):
+        """Relative paths that escape the base directory must be rejected."""
+        res = client.post(
+            "/api/label-importers/import/server_csv_file",
+            json={"filepath": "../../../etc/shadow"},
+        )
+        assert res.status_code == 400
+
 
 # ---------------------------------------------------------------------------
 # resolve_media_ids: union matching (origin+name AND md5)

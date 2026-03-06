@@ -1,0 +1,16 @@
+<div
+  #imageWrap
+  class="image-wrap"
+  [style.cursor]="wrapCursor"
+  (wheel)="onWheel($event)"
+  (mousedown)="onMouseDown($event)"
+>
+  <img
+    #imageEl
+    [src]="imageSrc"
+    [alt]="media.filename || 'Image media'"
+    class="image-element"
+    [style.transform]="imageTransform"
+    draggable="false"
+  />
+</div>

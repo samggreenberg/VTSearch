@@ -1,0 +1,58 @@
+import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { LabelingStatusResponse } from '../../../models/api.models';
+
+@Component({
+  selector: 'vt-progress-indicators',
+  standalone: true,
+  imports: [CommonModule, ProgressBarComponent],
+  templateUrl: './progress-indicators.component.html',
+  styleUrl: './progress-indicators.component.scss',
+})
+export class ProgressIndicatorsComponent {
+  @Input() labelingStatus: LabelingStatusResponse | null = null;
+  @Input() sortBusy = false;
+  @Input() sortStatus = '';
+
+  @Output() indicatorClick = new EventEmitter<string>();
+
+  get smartStatus(): string {
+    return (this.labelingStatus?.smart?.status as string) || '';
+  }
+
+  get stableStatus(): string {
+    return (this.labelingStatus?.stable?.status as string) || '';
+  }
+
+  get spanStatus(): string {
+    return (this.labelingStatus?.span?.status as string) || '';
+  }
+
+  get smartSubtext(): string {
+    if (!this.labelingStatus?.smart) return '';
+    const s = this.labelingStatus.smart;
+    if (s['cost'] != null) return `Cost: ${(s['cost'] as number).toFixed(3)}`;
+    return '';
+  }
+
+  get stableSubtext(): string {
+    if (!this.labelingStatus?.stable) return '';
+    const s = this.labelingStatus.stable;
+    if (s['flips'] != null) return `Flips: ${s['flips']}`;
+    return '';
+  }
+
+  get spanSubtext(): string {
+    if (!this.labelingStatus?.span) return '';
+    const s = this.labelingStatus.span;
+    if (s['diversity_level'] != null && s['max_level'] != null) {
+      return `${(s['diversity_level'] as number).toFixed(1)}/${s['max_level']}`;
+    }
+    return '';
+  }
+
+  onClick(name: string): void {
+    this.indicatorClick.emit(name);
+  }
+}

@@ -1,10 +1,10 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python) and vanilla JavaScript.
+A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
-## Setup
+## Setup and running tests
 
-See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, and installing dependencies.
+See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
 
 ## Running the app
 
@@ -34,10 +34,6 @@ See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
 You can also load your own data from pickle files or folders via the same menu.
 
-## Running the tests
-
-See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including the default fast CPU mode and additional modes for full CPU, GPU, and all tests.
-
 ## Project structure
 
 ```
@@ -58,7 +54,7 @@ See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including 
 │   ├── processors/importers/       # Processor importer plugins
 │   ├── audio/                      # Audio generation utility
 │   └── utils/                      # Global state (medias, votes) & progress helpers
-├── static/                         # Frontend (HTML, JS, CSS, assets)
+├── static/                         # Angular build output (HTML, JS, CSS, assets)
 ├── tests/                          # Test suite (pytest)
 ├── docs/                           # Extended documentation
 │   ├── HANDOFF.md                  # Project handoff & orientation guide
@@ -70,7 +66,6 @@ See [docs/SETUP.md](docs/SETUP.md) for instructions on running tests, including 
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
-│   ├── FEATURE_IDEAS.md            # Brainstorm of potential features
 │   ├── demos.md                    # Demo dataset listing
 │   └── old_io.md                   # Retired IO module reference implementations
 └── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)

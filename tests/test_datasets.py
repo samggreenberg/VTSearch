@@ -30,13 +30,14 @@ class TestDatasetEndpoints:
         assert "demos" in data or isinstance(data, dict)
 
     def test_clear_dataset(self, client):
-        resp = client.post("/api/dataset/clear")
-        assert resp.status_code == 200
-        # After clearing, medias should be empty
-        assert len(app_module.medias) == 0
-
-        # Re-initialize for other tests
-        app_module.init_medias()
+        saved = dict(app_module.medias)
+        try:
+            resp = client.post("/api/dataset/clear")
+            assert resp.status_code == 200
+            # After clearing, medias should be empty
+            assert len(app_module.medias) == 0
+        finally:
+            app_module.medias.update(saved)
 
 
 class TestStartupState:
@@ -243,7 +244,7 @@ class TestImporterMetadata:
         assert resp.status_code == 200
         data = resp.get_json()
         names = [imp["display_name"] for imp in data["importers"]]
-        assert "Generate from HTTP Archive" in names
+        assert "Import from URL" in names
 
     def test_http_archive_icon_is_globe(self, client):
         resp = client.get("/api/dataset/importers")
@@ -283,7 +284,7 @@ class TestImporterMetadata:
         # Description must not mention specific media-type names
         desc = folder_imp["description"]
         assert "sounds/videos" not in desc
-        assert "media files from a folder" in desc.lower()
+        assert "media files" in desc.lower()
 
     def test_all_importers_have_icon_field(self, client):
         resp = client.get("/api/dataset/importers")
@@ -315,22 +316,22 @@ class TestLoadEmbedderForClips:
         """embed_text('warmup') is called to prime the text encoder branch."""
         from unittest.mock import patch
 
-        from vtsearch.media import get as media_get
+        from vtsearch.media import embedders_for_type
         from vtsearch.routes.datasets import _load_embedder_for_clips
 
-        mt = media_get("audio")
-        with patch.object(mt, "embed_text", wraps=mt.embed_text) as mock_embed:
+        emb = embedders_for_type("audio")[0]
+        with patch.object(emb, "embed_text", wraps=emb.embed_text) as mock_embed:
             _load_embedder_for_clips()
             mock_embed.assert_called_once_with("warmup")
 
     def test_text_encoder_produces_valid_embedding_after_load(self):
         """After _load_embedder_for_clips, embed_text returns a real vector."""
-        from vtsearch.media import get as media_get
+        from vtsearch.media import embedders_for_type
         from vtsearch.routes.datasets import _load_embedder_for_clips
 
         _load_embedder_for_clips()
-        mt = media_get("audio")
-        vec = mt.embed_text("a high-pitched beep")
+        emb = embedders_for_type("audio")[0]
+        vec = emb.embed_text("a high-pitched beep")
         assert vec is not None
         assert len(vec.shape) == 1
         assert vec.shape[0] > 0
@@ -609,10 +610,11 @@ class TestLoadProgressRaceCondition:
         try:
             # First, export current medias to a pkl for registration
             from vtsearch.datasets.loader import export_dataset_to_file
-            from vtsearch.datasets.registry import SAVED_DATASETS_DIR
+            from vtsearch.settings import get_saved_datasets_dir
 
-            SAVED_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-            pkl_path = str(SAVED_DATASETS_DIR / "test_race.pkl")
+            ds_dir = get_saved_datasets_dir()
+            ds_dir.mkdir(parents=True, exist_ok=True)
+            pkl_path = str(ds_dir / "test_race.pkl")
             from pathlib import Path
 
             Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))

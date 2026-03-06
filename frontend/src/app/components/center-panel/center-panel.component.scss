@@ -1,0 +1,184 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+// LAYOUT INTENT: When media is selected, the layout is a flex column:
+//   1. Media viewer (flex: 1, grows to fill all remaining space)
+//   2. Metadata grid (flex-shrink: 0, hugs the voting buttons)
+//   3. Voting buttons (flex-shrink: 0, pinned to bottom)
+// Do NOT add justify-content: center here — it adds wasted space above/below
+// the media. The .empty state is the only case that needs centering.
+.center-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  overflow: hidden;
+
+  &.empty {
+    justify-content: center;
+    color: var(--text-placeholder);
+    font-size: 1rem;
+  }
+}
+
+.placeholder-text {
+  margin: 0;
+}
+
+// Swipe animation wrapper
+.media-swipe-wrapper {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes swipe-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes swipe-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-120%); opacity: 0; }
+}
+
+.swipe-right {
+  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.swipe-left {
+  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+// Image view controls (outside swipe wrapper so they stay fixed during swipe)
+.image-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.ivc-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 1rem;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.ivc-zoom-slider {
+  width: 100px;
+}
+
+.ivc-zoom-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  min-width: 3em;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// Metadata tray (collapsible wrapper)
+.metadata-tray {
+  flex-shrink: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.metadata-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.metadata-toggle-icon {
+  font-size: 0.6rem;
+  transition: transform 0.2s;
+}
+
+.metadata-toggle-label {
+  font-size: 0.7rem;
+}
+
+// Metadata grid
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metadata-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metadata-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.metadata-md5 {
+  font-family: monospace;
+  font-size: 0.75rem;
+}

@@ -4,19 +4,29 @@ Supports .zip, .tar, .tar.gz, .tar.bz2, .tar.xz archives.
 RAR support requires the optional ``rarfile`` package.
 
 Requires only ``requests``, which is already a core dependency.
+
+Converter support
+-----------------
+When the ``converters`` field value is set (a comma-separated list of
+converter names), the importer also scans the extracted archive for source
+files matching each converter's input type, converts them to the target
+media type, and appends them to the dataset.
 """
 
 from __future__ import annotations
 
+import shutil
 import tarfile
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
+from uuid import uuid4
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder
+from vtsearch.utils.url_validation import validate_url
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -49,6 +59,9 @@ def _extract_archive(
                     i,
                     total,
                 )
+                target = (extract_dir / member).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
                 zf.extract(member, extract_dir)
 
     elif tarfile.is_tarfile(archive_path):
@@ -81,6 +94,9 @@ def _extract_archive(
                     i,
                     total,
                 )
+                target = (extract_dir / member).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
                 rf.extract(member, extract_dir)
 
     else:
@@ -90,21 +106,57 @@ def _extract_archive(
         )
 
 
+def _run_selected_converters(
+    folder: Path,
+    media_type: str,
+    field_values: dict,
+    medias: dict,
+    thin: bool = False,
+) -> None:
+    """Run any user-selected converters from *field_values*."""
+    converters_str = field_values.get("converters", "")
+    if not converters_str:
+        return
+    converter_names = [c.strip() for c in converters_str.split(",") if c.strip()]
+    if not converter_names:
+        return
+
+    from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
+
+    base_origin = {"importer": "http_archive", "params": {
+        "url": field_values.get("url", ""),
+        "media_type": media_type,
+    }}
+    run_converters_on_folder(
+        folder_path=folder,
+        converter_names=converter_names,
+        target_media_type=media_type,
+        medias=medias,
+        thin=thin,
+        base_origin=base_origin,
+    )
+
+
 class HttpArchiveDatasetImporter(DatasetImporter):
     """Download a publicly-accessible archive and load its media files.
 
     The archive is streamed to a temporary file in ``DATA_DIR``, extracted
-    to ``DATA_DIR/http_archive_extract/``, then scanned with the standard
+    to a unique ``DATA_DIR/http_archive_extract_<id>/`` directory, then
+    scanned with the standard
     :func:`~vtsearch.datasets.loader.load_dataset_from_folder` pipeline.
-    Both temporary paths are cleaned up after a successful run.
+    Both temporary paths are cleaned up after the run completes.
 
     Supported archive formats: ``.zip``, ``.tar``, ``.tar.gz``,
     ``.tar.bz2``, ``.tar.xz``, ``.rar`` (requires ``rarfile`` package).
+
+    When converters are selected (via the ``converters`` field value), files
+    matching each converter's source type are also scanned, converted, and
+    added to the dataset.
     """
 
     name = "http_archive"
-    display_name = "Generate from HTTP Archive"
-    description = "Download a .zip, .tar, or .rar archive from a URL and load the media files inside."
+    display_name = "Import from URL"
+    description = "Download an archive (.zip, .tar, .rar) from a web URL and embed the media files inside"
     icon = "\U0001f310"
     fields = [
         ImporterField(
@@ -118,13 +170,22 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files contained in the archive.",
-            options=["sounds", "videos", "images", "paragraphs"],
             default="sounds",
         ),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        from vtsearch.media import all_folder_names
+
+        for f in self.fields:
+            if f.key == "media_type":
+                f.options = all_folder_names()
+                break
+
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
+        validate_url(url)
         media_type = field_values.get("media_type", "sounds")
 
         DATA_DIR.mkdir(exist_ok=True)
@@ -134,8 +195,9 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         # Derive a local filename from the URL so we preserve the extension
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
+        run_id = uuid4().hex[:12]
         archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
-        extract_dir = DATA_DIR / "http_archive_extract"
+        extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
         download_file_with_progress(url, archive_path, on_progress=progress)
@@ -145,7 +207,15 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
-        load_dataset_from_folder(extract_dir, media_type, medias, on_progress=progress, thin=thin)
+        emb_name = field_values.get("embedder", "")
+        try:
+            load_dataset_from_folder(
+                extract_dir, media_type, medias, on_progress=progress, thin=thin, embedder_name=emb_name,
+            )
+            # Run any user-selected converters on the extracted folder.
+            _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         url = field_values.get("url", "")
@@ -158,16 +228,23 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         return True
 
     def _download_and_extract(self, field_values: dict[str, Any]) -> Path:
-        """Download and extract the archive, returning the extraction dir."""
+        """Download and extract the archive, returning the extraction dir.
+
+        Each call creates a unique extraction directory so concurrent imports
+        do not interfere with each other.  Callers are responsible for cleaning
+        up the returned directory when they are done with it.
+        """
         url = field_values["url"]
+        validate_url(url)
 
         DATA_DIR.mkdir(exist_ok=True)
         progress = _default_progress()
 
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
+        run_id = uuid4().hex[:12]
         archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
-        extract_dir = DATA_DIR / "http_archive_extract"
+        extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
         download_file_with_progress(url, archive_path, on_progress=progress)
@@ -186,7 +263,20 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         extract_dir = self._download_and_extract(field_values)
         media_type = field_values.get("media_type", "sounds")
-        yield from load_dataset_from_folder_chunked(extract_dir, media_type, chunk_size, thin=thin)
+        emb_name = field_values.get("embedder", "")
+        try:
+            yield from load_dataset_from_folder_chunked(
+                extract_dir, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+            )
+            # Run converters on the extracted folder and yield as a chunk.
+            converters_str = field_values.get("converters", "")
+            if converters_str:
+                converter_chunk: dict[int, dict[str, Any]] = {}
+                _run_selected_converters(extract_dir, media_type, field_values, converter_chunk, thin=thin)
+                if converter_chunk:
+                    yield converter_chunk
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_chunked_cli(
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
@@ -195,6 +285,20 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
+
+    def build_cli_args(self, field_values: dict[str, Any]) -> str:
+        base = super().build_cli_args(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            base += f" --converters {converters}"
+        return base
+
+    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        origin = super().build_origin(field_values)
+        converters = field_values.get("converters", "")
+        if converters:
+            origin["params"]["converters"] = converters
+        return origin
 
 
 IMPORTER = HttpArchiveDatasetImporter()

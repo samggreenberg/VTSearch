@@ -1,0 +1,8 @@
+<vt-modal title="Running Auto-Detect" [open]="true" (closed)="close()">
+  <div class="autodetect-progress">
+    <p aria-live="polite">{{ statusText }}</p>
+    <vt-progress-bar [value]="progress" [max]="100"></vt-progress-bar>
+    <p class="progress-pct">{{ progress }}%</p>
+    <button class="btn btn--secondary" (click)="onCancel()">Cancel</button>
+  </div>
+</vt-modal>

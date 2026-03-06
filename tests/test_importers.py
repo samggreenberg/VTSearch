@@ -229,7 +229,7 @@ class TestHttpArchiveImporterMetadata:
         assert self._get_importer().name == "http_archive"
 
     def test_display_name(self):
-        assert self._get_importer().display_name == "Generate from HTTP Archive"
+        assert self._get_importer().display_name == "Import from URL"
 
     def test_icon_is_globe(self):
         assert self._get_importer().icon == "🌐"
@@ -244,7 +244,7 @@ class TestHttpArchiveImporterMetadata:
         d = self._get_importer().to_dict()
         assert d["icon"] == "🌐"
         assert d["name"] == "http_archive"
-        assert d["display_name"] == "Generate from HTTP Archive"
+        assert d["display_name"] == "Import from URL"
 
     def test_fields_include_url_and_media_type(self):
         fields = {f.key: f for f in self._get_importer().fields}
@@ -283,7 +283,7 @@ class TestFolderImporterMetadata:
 
     def test_description_says_media_files_from_a_folder(self):
         desc = self._get_importer().description.lower()
-        assert "media files from a folder" in desc
+        assert "media files" in desc
 
     def test_description_does_not_list_specific_media_types(self):
         desc = self._get_importer().description
@@ -309,15 +309,19 @@ class TestFolderImporterMetadata:
 
 
 class TestBuiltinImporterNames:
-    def test_folder_not_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_folder_has_form_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "folder" not in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("folder")
+        assert imp is not None
+        assert imp.ui_mode == "form"
 
-    def test_pickle_still_in_builtin_names(self):
-        from vtsearch.routes.datasets import _BUILTIN_IMPORTER_NAMES
+    def test_pickle_has_file_upload_ui_mode(self):
+        from vtsearch.datasets.importers import get_importer
 
-        assert "pickle" in _BUILTIN_IMPORTER_NAMES
+        imp = get_importer("pickle")
+        assert imp is not None
+        assert imp.ui_mode == "file_upload"
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +438,7 @@ class TestLoadDatasetContentVectors:
         path.write_bytes(_make_wav_bytes())
 
     def _make_fake_media_type(self, embed_return):
-        """Return a mock media-type object for testing.
+        """Return a mock media-type object and mock embedder for testing.
 
         ``embed_return`` is the value returned by ``embed_media()``.
         """
@@ -445,12 +449,26 @@ class TestLoadDatasetContentVectors:
         mt.file_extensions = ["*.wav"]
         mt.embed_media.return_value = embed_return
         mt.load_media_data.return_value = {"duration": 1.0}
+        # Also set up a mock embedder since load_dataset_from_folder uses the embedder registry
+        mt._mock_embedder = mock.MagicMock()
+        mt._mock_embedder.name = "clap"
+        mt._mock_embedder.media_type_id = "audio"
+        mt._mock_embedder._model = True
+        mt._mock_embedder.embed_media.return_value = embed_return
         return mt
+
+    def _patch_media_registry(self, mt):
+        """Context manager that patches both get_by_folder_name and embedders_for_type."""
+        import unittest.mock as mock
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        return stack
 
     def test_uses_content_vector_when_provided(self, tmp_path):
         """A file whose name is in content_vectors should use that vector."""
-        import unittest.mock as mock
-
         import numpy as np
 
         from vtsearch.datasets.loader import load_dataset_from_folder
@@ -466,19 +484,17 @@ class TestLoadDatasetContentVectors:
         def _noop(*a):
             None
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt):
             load_dataset_from_folder(
                 tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
-        mt.embed_media.assert_not_called()
+        mt._mock_embedder.embed_media.assert_not_called()
 
     def test_embeds_normally_when_not_in_content_vectors(self, tmp_path):
         """A file NOT in content_vectors falls back to embed_media()."""
-        import unittest.mock as mock
-
         import numpy as np
 
         from vtsearch.datasets.loader import load_dataset_from_folder
@@ -494,17 +510,15 @@ class TestLoadDatasetContentVectors:
         def _noop(*a):
             None
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt):
             load_dataset_from_folder(tmp_path, "sounds", medias, content_vectors={}, on_progress=_noop)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
-        mt.embed_media.assert_called_once()
+        mt._mock_embedder.embed_media.assert_called_once()
 
     def test_mixed_content_vectors_and_embedding(self, tmp_path):
         """Only files in content_vectors skip embed_media; others are embedded."""
-        import unittest.mock as mock
-
         import numpy as np
 
         from vtsearch.datasets.loader import load_dataset_from_folder
@@ -523,7 +537,7 @@ class TestLoadDatasetContentVectors:
         def _noop(*a):
             None
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt):
             load_dataset_from_folder(
                 tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
@@ -536,8 +550,6 @@ class TestLoadDatasetContentVectors:
 
     def test_no_content_vectors_param_embeds_all(self, tmp_path):
         """When content_vectors is None (default), all files are embedded."""
-        import unittest.mock as mock
-
         import numpy as np
 
         from vtsearch.datasets.loader import load_dataset_from_folder
@@ -553,12 +565,12 @@ class TestLoadDatasetContentVectors:
         def _noop(*a):
             None
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with self._patch_media_registry(mt):
             load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=_noop)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
-        mt.embed_media.assert_called_once()
+        mt._mock_embedder.embed_media.assert_called_once()
 
     def test_content_vector_file_skips_none_embed_check(self, tmp_path):
         """A file with a content vector is included even if embed_media would return None."""
@@ -870,3 +882,175 @@ class TestLoadDatasetRelativePaths:
         media = chunks[0][1]
         assert media["filename"] == "sub/chunk.wav"
         assert media["origin_name"] == "sub/chunk.wav"
+
+
+# ---------------------------------------------------------------------------
+# HTTP Archive importer – unique extract directories
+# ---------------------------------------------------------------------------
+
+
+class TestHttpArchiveExtractDirIsolation:
+    """Concurrent HTTP archive imports must use separate extract directories."""
+
+    def test_run_uses_unique_extract_dir(self, tmp_path):
+        """Each run() call should create a uniquely-named extract directory."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+        dirs_used = []
+
+        real_load = None
+
+        def capture_load(extract_dir, *args, **kwargs):
+            dirs_used.append(str(extract_dir))
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.validate_url",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                side_effect=capture_load,
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        assert len(dirs_used) == 2
+        # The two extract dirs must be different
+        assert dirs_used[0] != dirs_used[1]
+
+    def test_old_shared_dir_name_not_used(self, tmp_path):
+        """The old fixed name 'http_archive_extract' must no longer appear."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.validate_url",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        # The old shared directory should not exist
+        assert not (tmp_path / "http_archive_extract").exists()
+
+    def test_extract_dir_cleaned_up_after_run(self, tmp_path):
+        """The unique extract directory should be removed after run() completes."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.validate_url",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        # No http_archive_extract_* dirs should remain
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+    def test_extract_dir_cleaned_up_on_error(self, tmp_path):
+        """The extract directory should still be cleaned up if loading fails."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.validate_url",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                side_effect=RuntimeError("boom"),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="boom"):
+                imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+    def test_chunked_extract_dir_cleaned_up(self, tmp_path):
+        """run_chunked() should clean up its extract directory after iteration."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        imp = HttpArchiveDatasetImporter()
+
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.validate_url",
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip._extract_archive",
+            ),
+            mock.patch(
+                "vtsearch.datasets.loader.load_dataset_from_folder_chunked",
+                return_value=iter([{1: {"test": True}}]),
+            ),
+            mock.patch(
+                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+            ),
+        ):
+            chunks = list(imp.run_chunked({"url": "http://example.com/a.zip", "media_type": "sounds"}, 10))
+
+        assert len(chunks) == 1
+        remaining = list(tmp_path.glob("http_archive_extract_*"))
+        assert remaining == []
+
+
+def _write_zip_to(archive_path, tmp_path):
+    """Helper: write a minimal .zip so _extract_archive succeeds."""
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("dummy.wav", _make_wav_bytes())

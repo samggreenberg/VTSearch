@@ -1,0 +1,86 @@
+<div class="center-panel" [class.empty]="!media">
+  @if (!media) {
+    <p class="placeholder-text">Select a media item to view</p>
+  } @else {
+    <div class="media-swipe-wrapper" [class]="swipeClass">
+      @switch (mediaType) {
+        @case ('audio') {
+          <vt-audio-player [media]="media" [volume]="volume"></vt-audio-player>
+        }
+        @case ('image') {
+          <vt-image-viewer [media]="media"></vt-image-viewer>
+        }
+        @case ('video') {
+          <vt-video-player [media]="media" [volume]="volume"></vt-video-player>
+        }
+        @case ('paragraph') {
+          <vt-text-viewer [media]="media"></vt-text-viewer>
+        }
+        @case ('document') {
+          <vt-document-viewer [media]="media"></vt-document-viewer>
+        }
+        @default {
+          <vt-document-viewer [media]="media"></vt-document-viewer>
+        }
+      }
+    </div>
+
+    @if (mediaType === 'image' && imageViewer) {
+      <div class="image-view-controls">
+        <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left" aria-label="Rotate image left">&#x21BA;</button>
+        <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right" aria-label="Rotate image right">&#x21BB;</button>
+        <label for="ivc-zoom" class="sr-only">Zoom</label>
+        <input
+          type="range"
+          id="ivc-zoom"
+          class="ivc-zoom-slider"
+          [min]="imageViewer.minZoom"
+          [max]="imageViewer.maxZoom"
+          [step]="imageViewer.zoomStep"
+          [value]="imageViewer.zoom"
+          (input)="imageViewer.onZoomInput($event)"
+          title="Zoom"
+          aria-label="Zoom level"
+        />
+        <span class="ivc-zoom-label">{{ imageViewer.zoomLabel }}</span>
+        <button class="ivc-btn" (click)="imageViewer.resetView()" title="Reset view" aria-label="Reset image view">Reset</button>
+      </div>
+    }
+
+    <div class="metadata-tray" [class.collapsed]="!showMetadata">
+      <button class="metadata-toggle" (click)="toggleMetadata()" [title]="showMetadata ? 'Hide metadata' : 'Show metadata'" [attr.aria-label]="showMetadata ? 'Hide metadata' : 'Show metadata'">
+        <span class="metadata-toggle-icon">{{ showMetadata ? '&#x25BC;' : '&#x25B2;' }}</span>
+        <span class="metadata-toggle-label">Metadata</span>
+      </button>
+      @if (showMetadata) {
+        <div class="metadata-grid">
+          <div class="metadata-item">
+            <span class="metadata-label">Name</span>
+            <span class="metadata-value">{{ media.filename || 'Media #' + media.id }}</span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">Media Type</span>
+            <span class="metadata-value">{{ mediaType }}</span>
+          </div>
+          @for (entry of customMetadata | keyvalue; track entry.key) {
+            <div class="metadata-item">
+              <span class="metadata-label">{{ entry.key }}</span>
+              <span class="metadata-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+            </div>
+          }
+          <div class="metadata-item">
+            <span class="metadata-label">MD5</span>
+            <span class="metadata-value metadata-md5">{{ media.md5 }}</span>
+          </div>
+        </div>
+      }
+    </div>
+
+    <vt-voting-overlay
+      [isGood]="isGood"
+      [isBad]="isBad"
+      [disabled]="isVoting"
+      (voted)="castVote($event)"
+    ></vt-voting-overlay>
+  }
+</div>

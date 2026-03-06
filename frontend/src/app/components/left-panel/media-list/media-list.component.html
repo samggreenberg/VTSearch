@@ -1,0 +1,21 @@
+<div class="media-list" role="listbox" aria-label="Media items" #listContainer>
+  @for (item of orderedItems; track trackByMediaId($index, item)) {
+    @if (item.showThreshold) {
+      <div class="media-threshold-line" aria-label="Good/Bad threshold">
+        <span class="threshold-label">threshold</span>
+      </div>
+    }
+    <vt-media-item
+      [media]="item.media"
+      [active]="selectedId === item.media.id"
+      [voteLabel]="getVoteLabel(item.media.id)"
+      [score]="item.score"
+      [showThumbnail]="showThumbnails"
+      (select)="onMediaSelect($event)"
+    />
+  }
+
+  @if (medias.length === 0) {
+    <div class="empty-list">No media loaded</div>
+  }
+</div>

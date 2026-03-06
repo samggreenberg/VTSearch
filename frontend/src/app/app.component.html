@@ -1,0 +1,68 @@
+<header>
+  <nav class="burger-menu" aria-label="Main menu">
+    <button
+      class="burger-btn"
+      aria-label="Menu"
+      [attr.aria-expanded]="menuOpen"
+      aria-haspopup="true"
+      (click)="toggleMenu($event)"
+    >
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </button>
+    <div
+      class="burger-dropdown"
+      [class.show]="menuOpen"
+      role="menu"
+      aria-label="Main menu"
+      (keydown)="onMenuKeydown($event)"
+    >
+      <div
+        class="burger-item"
+        [class.disabled]="!isOnLabelView"
+        role="menuitem"
+        tabindex="-1"
+        (click)="onDashboard()"
+      >Dashboard</div>
+      <div
+        class="burger-item"
+        [class.disabled]="!isOnLabelView"
+        role="menuitem"
+        tabindex="-1"
+        (click)="onImportLabels()"
+      >Import Labels</div>
+      <div class="burger-status" aria-live="polite">{{ labelsStatus }}</div>
+      <div
+        class="burger-item"
+        [class.disabled]="!isOnLabelView"
+        role="menuitem"
+        tabindex="-1"
+        (click)="onExportDetector()"
+      >Export Detector</div>
+      <div class="burger-status" aria-live="polite">{{ detectorStatus }}</div>
+      <div
+        class="burger-item"
+        [class.disabled]="!isOnLabelView"
+        role="menuitem"
+        tabindex="-1"
+        (click)="onExportLabels()"
+      >Export Labels</div>
+      <div
+        class="burger-item"
+        role="menuitem"
+        tabindex="-1"
+        (click)="onSettings()"
+      >Settings</div>
+    </div>
+  </nav>
+  <h1>VTSearch</h1>
+  <img src="logo.png" alt="VTSearch logo" class="header-logo">
+</header>
+<div class="main-content" role="main">
+  <router-outlet />
+</div>
+@if (showSettings) {
+  <vt-settings-modal (closed)="showSettings = false" />
+}
+<vt-dialog-host />

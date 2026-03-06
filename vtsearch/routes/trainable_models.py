@@ -38,6 +38,15 @@ from vtsearch.config import DATA_DIR
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
 
+
+def get_trainable_models_dir() -> Path:
+    """Return the configured trainable-models directory from settings."""
+    from vtsearch.settings import get_trainable_models_dir as _get
+
+    return _get()
+
+
+#: Backward-compat alias — prefer :func:`get_trainable_models_dir` for live value.
 TRAINABLE_MODELS_DIR = DATA_DIR / "trainable_models"
 
 
@@ -47,7 +56,7 @@ def _slug(name: str) -> str:
 
 
 def _model_path(name: str) -> Path:
-    return TRAINABLE_MODELS_DIR / f"{_slug(name)}.json"
+    return get_trainable_models_dir() / f"{_slug(name)}.json"
 
 
 def _read_model(path: Path) -> dict | None:
@@ -58,16 +67,51 @@ def _read_model(path: Path) -> dict | None:
 
 
 def _write_model(path: Path, data: dict) -> None:
-    TRAINABLE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    get_trainable_models_dir().mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def sync_labels_to_loaded_model() -> None:
+    """Persist the current votes into the loaded model's labelset (if any).
+
+    Called automatically after each vote so the dashboard's "# Training"
+    and "Last Trained" columns stay up to date without an explicit save.
+    """
+    from vtsearch.models.registry import get_loaded_id, get_model, update_model
+
+    loaded_id = get_loaded_id()
+    if not loaded_id:
+        return
+
+    entry = get_model(loaded_id)
+    if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
+        return
+
+    tm_name = entry["trainable_model_name"]
+    path = _model_path(tm_name)
+    data = _read_model(path)
+    if data is None:
+        return
+
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
+    data["labelset"] = labelset.to_dict()
+    _write_model(path, data)
+
+    import time as _time
+
+    update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
-    if not TRAINABLE_MODELS_DIR.is_dir():
+    tm_dir = get_trainable_models_dir()
+    if not tm_dir.is_dir():
         return []
     models = []
-    for p in sorted(TRAINABLE_MODELS_DIR.iterdir()):
+    for p in sorted(tm_dir.iterdir()):
         if p.suffix != ".json":
             continue
         data = _read_model(p)
@@ -77,7 +121,7 @@ def _list_all() -> list[dict]:
         models.append({
             "name": data["name"],
             "text_query": data.get("text_query", ""),
-            "media_type": data.get("media_type", "any"),
+            "media_type": data.get("media_type", ""),
             "examples": data.get("examples", []),
             "num_labels": len(labels),
             "created_at": data.get("created_at", 0),
@@ -119,6 +163,8 @@ def create_trainable_model():
         return jsonify({"error": "name is required"}), 400
     if not text_query and not examples:
         return jsonify({"error": "text_query or examples is required"}), 400
+    if not media_type or media_type == "any":
+        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
     path = _model_path(name)
     if path.exists():
@@ -132,7 +178,7 @@ def create_trainable_model():
     model_data = {
         "name": name,
         "text_query": text_query,
-        "media_type": media_type or "any",
+        "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
         "labelset": {"labels": []},
@@ -143,7 +189,7 @@ def create_trainable_model():
         "success": True,
         "name": name,
         "text_query": text_query,
-        "media_type": media_type or "any",
+        "media_type": media_type,
         "examples": examples or [],
         "num_labels": 0,
     }), 201
@@ -273,9 +319,9 @@ def save_trainable_model_labels(name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, medias
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
-    labelset = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes, expand_dupes=False)
+    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
     data["labelset"] = labelset.to_dict()
     _write_model(path, data)
 
@@ -343,6 +389,8 @@ def register_model_route():
 
     if not name:
         return jsonify({"error": "name is required"}), 400
+    if not media_type or media_type == "any":
+        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
     # If trainable, also create the trainable model file if needed
     if trainable and not trainable_model_name:
@@ -355,7 +403,7 @@ def register_model_route():
             model_data = {
                 "name": name,
                 "text_query": text_query,
-                "media_type": media_type or "any",
+                "media_type": media_type,
                 "examples": examples,
                 "created_at": time.time(),
                 "labelset": {"labels": []},
@@ -364,13 +412,37 @@ def register_model_route():
 
     entry = register_model(
         name=name,
-        media_type=media_type or "any",
+        media_type=media_type,
         trainable=trainable,
         text_query=text_query,
         detector_name=detector_name,
         trainable_model_name=trainable_model_name,
     )
     return jsonify({"ok": True, "model": entry}), 201
+
+
+@trainable_models_bp.route("/api/models/registry/load", methods=["POST"])
+def load_model_route():
+    """Set the currently loaded model by ID.
+
+    Expects JSON::
+
+        {"model_id": "abc123"}
+
+    Pass ``model_id: null`` to unload.
+    """
+    from vtsearch.models.registry import get_model, set_loaded_id
+
+    data = request.get_json(force=True, silent=True) or {}
+    model_id = data.get("model_id")
+
+    if model_id is not None:
+        entry = get_model(model_id)
+        if entry is None:
+            return jsonify({"error": "Model not found"}), 404
+
+    set_loaded_id(model_id)
+    return jsonify({"ok": True})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

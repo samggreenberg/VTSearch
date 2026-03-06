@@ -165,8 +165,9 @@ def train_model(
     (positive) or fewer (positive) items.
 
     A local ``torch.Generator`` seeded with *seed* is used for model-weight
-    initialisation, so the same inputs always produce the same trained model
-    without mutating PyTorch's global RNG (thread-safe).
+    initialisation, and ``torch.random.fork_rng`` isolates the global RNG
+    (used by ``nn.Dropout``) so concurrent calls don't overwrite each
+    other's seed (thread-safe and deterministic).
 
     Args:
         X_train: Float tensor of shape ``(N, input_dim)`` containing training embeddings.
@@ -199,9 +200,9 @@ def train_model(
     if hidden_dim is None:
         hidden_dim = _auto_hidden_dim(n_train)
 
-    # Seed both a local Generator (for weight init) and the global RNG
-    # (for nn.Dropout during training) so results are reproducible.
-    torch.manual_seed(seed)
+    # Use a local Generator for weight init and fork_rng for nn.Dropout
+    # so that concurrent training calls don't overwrite each other's
+    # global seed (thread-safe and deterministic).
     g = torch.Generator()
     g.manual_seed(seed)
 
@@ -233,8 +234,11 @@ def train_model(
     weights = torch.where(y_train == 1, weight_true, weight_false).squeeze()
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
+    # Fork the global RNG so the Dropout seed is isolated per call —
+    # concurrent training invocations each get their own RNG state.
     model.train()
-    with torch.enable_grad():
+    with torch.random.fork_rng(), torch.enable_grad():
+        torch.manual_seed(seed)
         for _ in range(TRAIN_EPOCHS):
             optimizer.zero_grad()
             logits = model(X_train)
@@ -539,7 +543,7 @@ def train_and_score(
         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
     if safe_thresholds:
-        n_labels = len(good_votes) + len(bad_votes)
+        n_labels = len(X_list)
         threshold = calculate_safe_threshold(threshold, scores, n_labels)
 
     # Sort by raw scores (full precision) so that tiny differences still

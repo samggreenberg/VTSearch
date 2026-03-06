@@ -1,16 +1,18 @@
-"""Media type registry.
+"""Media type and embedder registries.
 
-All built-in media types are registered at the bottom of this module.
-Third-party or project-specific types can be added by calling
-:func:`register` after importing this module::
+All built-in media types and embedders are registered at the bottom of this
+module.  Third-party or project-specific types can be added by calling
+:func:`register` / :func:`register_embedder` after importing this module::
 
-    from vtsearch.media import register
+    from vtsearch.media import register, register_embedder
     from mypackage.media_type import SourceCodeMediaType
+    from mypackage.embedder import SourceCodeEmbedder
 
     register(SourceCodeMediaType())
+    register_embedder(SourceCodeEmbedder())
 
-The new type will then be picked up automatically by model initialisation,
-dataset loading, HTTP routing, and the demo-dataset listing.
+The new type/embedder will then be picked up automatically by model
+initialisation, dataset loading, HTTP routing, and the demo-dataset listing.
 """
 
 from __future__ import annotations
@@ -21,11 +23,16 @@ from vtsearch.media.base import (
     Extractor,
     Localizer,
     MediaClipper,
+    MediaEmbedder,
     MediaResponse,
     MediaType,
     Processor,
     ProgressCallback,
 )
+
+# ------------------------------------------------------------------
+# Media type registry
+# ------------------------------------------------------------------
 
 _registry: dict[str, "MediaType"] = {}
 
@@ -77,6 +84,25 @@ def get_by_extension(ext: str) -> "MediaType | None":
     return None
 
 
+def all_folder_names() -> list[str]:
+    """Return the :attr:`~MediaType.folder_import_name` of every registered type.
+
+    Used by dataset importers to populate their media-type selection fields
+    dynamically, so adding a new media type to the registry is all that's
+    needed — no importer code changes required.
+    """
+    return [mt.folder_import_name for mt in _registry.values()]
+
+
+def all_type_ids() -> list[str]:
+    """Return the :attr:`~MediaType.type_id` of every registered type.
+
+    Used by settings validation so the set of valid media types stays in
+    sync with the registry automatically.
+    """
+    return list(_registry.keys())
+
+
 def all_types_dict() -> list[dict]:
     """Return a list of JSON-serialisable dicts describing all registered types.
 
@@ -115,10 +141,45 @@ def all_demo_datasets() -> dict:
 
 
 # ------------------------------------------------------------------
+# Embedder registry
+# ------------------------------------------------------------------
+
+_embedder_registry: dict[str, "MediaEmbedder"] = {}
+
+
+def register_embedder(embedder: "MediaEmbedder") -> None:
+    """Add *embedder* to the registry, keyed by :attr:`~MediaEmbedder.name`."""
+    _embedder_registry[embedder.name] = embedder
+
+
+def get_embedder(name: str) -> "MediaEmbedder":
+    """Return the :class:`MediaEmbedder` registered under *name*.
+
+    Raises :class:`KeyError` if *name* is not registered.
+    """
+    if name not in _embedder_registry:
+        raise KeyError(f"Unknown embedder: {name!r}")
+    return _embedder_registry[name]
+
+
+def embedders_for_type(type_id: str) -> list["MediaEmbedder"]:
+    """Return all embedders registered for a given media type."""
+    return [e for e in _embedder_registry.values() if e.media_type_id == type_id]
+
+
+def all_embedders() -> list["MediaEmbedder"]:
+    """Return all registered :class:`MediaEmbedder` instances."""
+    return list(_embedder_registry.values())
+
+
+def all_embedders_dict() -> list[dict]:
+    """Return a list of JSON-serialisable dicts describing all registered embedders."""
+    return [e.to_dict() for e in _embedder_registry.values()]
+
+
+# ------------------------------------------------------------------
 # Register all built-in media types
 # ------------------------------------------------------------------
-# To add a new media type, import its class here and call register().
-# The four imports below are the complete list of built-in types.
 
 from vtsearch.media.audio.media_type import AudioMediaType  # noqa: E402
 from vtsearch.media.document.media_type import DocumentMediaType  # noqa: E402
@@ -132,21 +193,36 @@ register(ImageMediaType())
 register(TextMediaType())
 register(DocumentMediaType())
 
+# ------------------------------------------------------------------
+# Register all built-in embedders
+# ------------------------------------------------------------------
+
+from vtsearch.media.audio.embedder import AudioClapEmbedder  # noqa: E402
+from vtsearch.media.image.embedder import ImageClipEmbedder  # noqa: E402
+from vtsearch.media.text.embedder import TextE5Embedder  # noqa: E402
+from vtsearch.media.video.embedder import VideoXClipEmbedder  # noqa: E402
+
+register_embedder(AudioClapEmbedder())
+register_embedder(ImageClipEmbedder())
+register_embedder(TextE5Embedder())
+register_embedder(VideoXClipEmbedder())
+
 
 def set_progress_callback(callback: "ProgressCallback") -> None:
-    """Set the progress callback on all registered media types.
+    """Set the progress callback on all registered media types and embedders.
 
-    Call this once at application startup to wire media types into whatever
-    progress reporting mechanism the host application uses.  When not called,
-    media types use a silent no-op callback and can run without any
-    framework dependencies.
+    Call this once at application startup to wire media types and embedders
+    into whatever progress reporting mechanism the host application uses.
     """
     for mt in _registry.values():
         mt._on_progress = callback
+    for emb in _embedder_registry.values():
+        emb._on_progress = callback
 
 
 __all__ = [
     "MediaType",
+    "MediaEmbedder",
     "MediaClipper",
     "MediaResponse",
     "DemoDataset",
@@ -156,11 +232,18 @@ __all__ = [
     "Extractor",
     "ProgressCallback",
     "register",
+    "register_embedder",
     "get",
+    "get_embedder",
     "get_by_folder_name",
     "get_by_extension",
     "all_types",
+    "all_folder_names",
+    "all_type_ids",
     "all_types_dict",
     "all_demo_datasets",
+    "all_embedders",
+    "all_embedders_dict",
+    "embedders_for_type",
     "set_progress_callback",
 ]

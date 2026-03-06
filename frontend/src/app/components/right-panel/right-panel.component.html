@@ -1,0 +1,34 @@
+<aside class="panel-right" aria-label="Labels">
+  <vt-detector-context-bar
+    [visible]="!!trainMode"
+    [detectorName]="trainMode?.model?.name ?? ''"
+    (renamed)="onDetectorRenamed($event)"
+  />
+
+  <vt-label-sort
+    [mode]="sortMode"
+    (modeChange)="onSortModeChange($event)"
+  />
+
+  <vt-label-list
+    label="good"
+    [ids]="goodIds"
+    [medias]="medias"
+    [clickTimes]="clickTimes"
+    [learnedScores]="learnedScores"
+    [sortMode]="sortMode"
+    [showThumbnails]="showThumbnails"
+    (mediaSelected)="onMediaSelected($event)"
+  />
+
+  <vt-label-list
+    label="bad"
+    [ids]="badIds"
+    [medias]="medias"
+    [clickTimes]="clickTimes"
+    [learnedScores]="learnedScores"
+    [sortMode]="sortMode"
+    [showThumbnails]="showThumbnails"
+    (mediaSelected)="onMediaSelected($event)"
+  />
+</aside>
