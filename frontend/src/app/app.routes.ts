@@ -1,9 +1,19 @@
 import { Routes } from '@angular/router';
-import { DashboardComponent } from './components/dashboard/dashboard.component';
-import { LabelViewComponent } from './components/label-view/label-view.component';
 
 export const routes: Routes = [
-  { path: 'dashboard', component: DashboardComponent },
-  { path: 'label', component: LabelViewComponent },
+  {
+    path: 'dashboard',
+    loadComponent: () =>
+      import('./components/dashboard/dashboard.component').then(
+        (m) => m.DashboardComponent,
+      ),
+  },
+  {
+    path: 'label',
+    loadComponent: () =>
+      import('./components/label-view/label-view.component').then(
+        (m) => m.LabelViewComponent,
+      ),
+  },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
 ];

@@ -114,11 +114,15 @@ class TestDashboardHtmlPresent:
 
     def test_dashboard_view_in_bundle(self, client):
         """The Angular bundle should contain dashboard view references."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "dashboard" in text
-        assert "Datasets" in text
-        assert "Models" in text
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "dashboard" in combined
+        assert "Datasets" in combined
+        assert "Models" in combined
 
     def test_dashboard_route_defined(self, client):
         """The /dashboard route should serve the Angular SPA."""
@@ -403,17 +407,25 @@ class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
 
     def test_dataset_grid_has_new_column_headers(self, client):
-        """main.js should include the dataset column headers."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "Created" in text
-        assert "Origin" in text
-        assert "Dupes" in text
-        assert "Loaded" in text
+        """Bundle JS should include the dataset column headers."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "Created" in combined
+        assert "Origin" in combined
+        assert "Dupes" in combined
+        assert "Loaded" in combined
 
     def test_model_grid_has_new_column_headers(self, client):
-        """main.js should include the model column headers."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "Autorun" in text
-        assert "Trainable" in text
+        """Bundle JS should include the model column headers."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "Autorun" in combined
+        assert "Trainable" in combined

@@ -240,10 +240,16 @@ class TestFrontendContentIntegrity:
         # Angular bundles contain component class names and framework references
         assert "Component" in text
 
-    def test_main_js_contains_api_references(self):
-        resp = self.client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "/api/" in text
+    def test_bundle_contains_api_references(self):
+        """API references may live in main.js or lazy-loaded chunks."""
+        import glob as globmod
+
+        js_files = globmod.glob("static/*.js")
+        combined = ""
+        for path in js_files:
+            resp = self.client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "/api/" in combined
 
     def test_styles_has_theme_variables(self):
         resp = self.client.get("/static/styles.css")
