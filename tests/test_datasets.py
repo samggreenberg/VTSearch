@@ -244,7 +244,7 @@ class TestImporterMetadata:
         assert resp.status_code == 200
         data = resp.get_json()
         names = [imp["display_name"] for imp in data["importers"]]
-        assert "Generate from HTTP Archive" in names
+        assert "Import from URL" in names
 
     def test_http_archive_icon_is_globe(self, client):
         resp = client.get("/api/dataset/importers")
@@ -284,7 +284,7 @@ class TestImporterMetadata:
         # Description must not mention specific media-type names
         desc = folder_imp["description"]
         assert "sounds/videos" not in desc
-        assert "media files from a folder" in desc.lower()
+        assert "media files" in desc.lower()
 
     def test_all_importers_have_icon_field(self, client):
         resp = client.get("/api/dataset/importers")
