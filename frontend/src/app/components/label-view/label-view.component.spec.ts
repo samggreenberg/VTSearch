@@ -143,6 +143,42 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId).toBe(1);
   });
 
+  it('should reselect media when switching select mode to top', () => {
+    flushInitialRequests();
+
+    // Set up sort order so autoSelectNext has something to work with
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
+      0.5,
+    );
+
+    // Mark id 2 as voted so the top unlabeled is id 1... wait, need to set votes
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [2], bad: [], click_times: {}, learned_scores: {} });
+
+    // Switch to top mode
+    component.onSelectModeChange('top');
+    expect(component.sortState.selectMode).toBe('top');
+    // Should auto-select id 1 (first unlabeled in sort order)
+    expect(component.mediaState.selectedId).toBe(1);
+  });
+
+  it('should reselect media when switching select mode to hard', () => {
+    flushInitialRequests();
+
+    // Set up sort order with threshold
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.4 }],
+      0.5,
+    );
+
+    // Switch to hard mode
+    component.onSelectModeChange('hard');
+    expect(component.sortState.selectMode).toBe('hard');
+    // id 1 (score 0.4) is closer to threshold 0.5 than id 2 (score 0.9)
+    expect(component.mediaState.selectedId).toBe(1);
+  });
+
   it('should handle inclusion change', fakeAsync(() => {
     flushInitialRequests();
     component.onInclusionChange(5);

@@ -240,9 +240,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSelectModeChange(mode: SelectMode): void {
     this.sortState.setSelectMode(mode);
-    if (mode === 'new') {
-      this.fetchDiversityNext();
-    }
+    this.autoSelectNext();
   }
 
   private fetchDiversityNext(): void {
