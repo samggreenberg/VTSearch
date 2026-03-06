@@ -27,29 +27,6 @@
       >Dashboard</div>
       <div
         class="burger-item"
-        [class.disabled]="!isOnLabelView"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onImportLabels()"
-      >Import Labels</div>
-      <div class="burger-status" aria-live="polite">{{ labelsStatus }}</div>
-      <div
-        class="burger-item"
-        [class.disabled]="!isOnLabelView"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onExportDetector()"
-      >Export Detector</div>
-      <div class="burger-status" aria-live="polite">{{ detectorStatus }}</div>
-      <div
-        class="burger-item"
-        [class.disabled]="!isOnLabelView"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onExportLabels()"
-      >Export Labels</div>
-      <div
-        class="burger-item"
         role="menuitem"
         tabindex="-1"
         (click)="onSettings()"
@@ -62,9 +39,6 @@
 <div class="main-content" role="main">
   <router-outlet />
 </div>
-@if (showDetectorExport) {
-  <vt-detector-export-modal (closed)="showDetectorExport = false" (exported)="showDetectorExport = false" />
-}
 @if (showSettings) {
   <vt-settings-modal (closed)="showSettings = false" />
 }

@@ -3,28 +3,21 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
-import { DetectorExportModalComponent } from './components/modals/detector-export-modal/detector-export-modal.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
-import { VtDialogService } from './services/dialog.service';
-
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, DetectorExportModalComponent, SettingsModalComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
-  showDetectorExport = false;
   showSettings = false;
   isOnLabelView = false;
-  labelsStatus = '';
-  detectorStatus = '';
 
   constructor(
     private router: Router,
-    private dialog: VtDialogService,
   ) {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -89,23 +82,6 @@ export class AppComponent {
     this.router.navigate(['/dashboard']);
   }
 
-  onImportLabels(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.dialog.alert('Label import not yet available in the Angular frontend.', 'info');
-  }
-
-  onExportDetector(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.showDetectorExport = true;
-  }
-
-  onExportLabels(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.dialog.alert('Label export not yet available in the Angular frontend.', 'info');
-  }
 
   onSettings(): void {
     this.menuOpen = false;
