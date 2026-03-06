@@ -374,9 +374,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
     if (!dataset) return;
 
-    if (dataset.loaded) {
+    const modelId = [...this.selectedModelIds][0] || null;
+
+    const navigateToLabel = (): void => {
       this.storeSelectedModelTextQuery();
-      this.router.navigate(['/label']);
+      // Tell the backend which model is loaded so votes auto-sync
+      this.modelsApi.loadModel(modelId).subscribe({
+        next: () => this.router.navigate(['/label']),
+        error: () => this.router.navigate(['/label']),
+      });
+    };
+
+    if (dataset.loaded) {
+      navigateToLabel();
       return;
     }
 
@@ -386,9 +396,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
-        this.storeSelectedModelTextQuery();
         this.startProgressPolling(() => {
-          this.router.navigate(['/label']);
+          navigateToLabel();
         });
       },
       error: () => {
