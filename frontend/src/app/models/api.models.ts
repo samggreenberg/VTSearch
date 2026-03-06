@@ -5,11 +5,9 @@
 export interface MediaItem {
   id: number;
   type: string;
-  duration: number;
-  file_size: number;
   filename: string;
-  category: string;
   md5: string;
+  custom_metadata: Record<string, unknown>;
   origin_name?: string;
   description?: string;
 }
@@ -325,12 +323,19 @@ export interface OkResponse {
 
 // --- Server Files ---
 
+export interface ServerFileEntry {
+  name: string;
+  filename?: string;
+  path?: string;
+  size_bytes?: number;
+}
+
 export interface ServerMediaFilesResponse {
-  files: string[];
+  files: ServerFileEntry[];
 }
 
 export interface DetectorServerFilesResponse {
-  files: string[];
+  files: ServerFileEntry[];
 }
 
 // --- Eval / Progress Charts ---

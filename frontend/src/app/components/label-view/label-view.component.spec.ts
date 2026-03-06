@@ -32,8 +32,8 @@ describe('LabelViewComponent', () => {
     fixture.detectChanges();
     // Flush /api/medias
     httpMock.expectOne('/api/medias').flush([
-      { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
-      { id: 2, type: 'audio', duration: 3, file_size: 512, filename: 'b.wav', category: '', md5: 'b2' },
+      { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
+      { id: 2, type: 'audio', filename: 'b.wav', md5: 'b2', custom_metadata: {} },
     ]);
     // Flush /api/votes (label-view + right-panel both poll)
     httpMock.match('/api/votes').forEach(req =>
@@ -264,7 +264,7 @@ describe('LabelViewComponent', () => {
     // Now trigger init which loads medias
     fixture.detectChanges();
     httpMock.expectOne('/api/medias').flush([
-      { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
+      { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
     ]);
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),

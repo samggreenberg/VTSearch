@@ -9,11 +9,9 @@ describe('ImageViewerComponent', () => {
   const mockMedia: MediaItem = {
     id: 2,
     type: 'image',
-    duration: 0,
-    file_size: 2048,
     filename: 'test.png',
-    category: 'test',
     md5: 'def456',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {

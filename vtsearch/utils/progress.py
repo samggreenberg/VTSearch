@@ -77,6 +77,9 @@ dataset_progress = ProgressTracker(extra_fields={"error": None, "staging_result"
 #: Sort-specific progress (used by text-sort operations).
 sort_progress = ProgressTracker()
 
+#: Eval progress (used by train-and-score / voting-iterations analysis).
+eval_progress = ProgressTracker()
+
 
 # ---------------------------------------------------------------------------
 # Backward-compatible free-function API
@@ -126,3 +129,18 @@ def update_sort_progress(
 def get_sort_progress() -> dict[str, Any]:
     """Return a snapshot of the current sort progress data."""
     return sort_progress.get()
+
+
+def update_eval_progress(
+    status: str,
+    message: str = "",
+    current: int = 0,
+    total: int = 0,
+) -> None:
+    """Update the eval progress tracker in a thread-safe manner."""
+    eval_progress.update(status, message, current, total)
+
+
+def get_eval_progress() -> dict[str, Any]:
+    """Return a snapshot of the current eval progress data."""
+    return eval_progress.get()

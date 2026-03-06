@@ -24,7 +24,7 @@ export class TrainableModelsApiService {
   }
 
   rename(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/trainable-models/${name}/rename`, { name: newName });
+    return this.http.put(`/api/trainable-models/${name}/rename`, { new_name: newName });
   }
 
   setExamples(name: string, examples: unknown[]): Observable<unknown> {
