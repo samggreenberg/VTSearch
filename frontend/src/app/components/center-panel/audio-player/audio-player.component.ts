@@ -19,6 +19,7 @@ import { MediaItem } from '../../../models/api.models';
 export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit {
   @Input() media!: MediaItem;
   @Input() volume = 1;
+  @Input() swipeClass = '';
 
   @ViewChild('waveformCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('audioEl') audioRef!: ElementRef<HTMLAudioElement>;
