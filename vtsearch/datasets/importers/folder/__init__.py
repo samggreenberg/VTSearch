@@ -277,5 +277,22 @@ class FolderDatasetImporter(DatasetImporter):
         folder_path = params.get("path", "")
         return bool(folder_path) and Path(folder_path).is_dir()
 
+    def resolve_file(
+        self,
+        origin: dict[str, Any],
+        origin_name: str = "",
+        filename: str = "",
+    ) -> Path | None:
+        folder = origin.get("params", {}).get("path", "")
+        if not folder:
+            return None
+        folder_path = Path(folder)
+        for name in [origin_name, filename]:
+            if name:
+                candidate = folder_path / name
+                if candidate.is_file():
+                    return candidate
+        return None
+
 
 IMPORTER = FolderDatasetImporter()
