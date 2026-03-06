@@ -21,24 +21,26 @@
 
 .stripe-dot {
   position: absolute;
-  left: 2px;
-  right: 2px;
   height: 2px;
   border-radius: 1px;
 
   &.good {
     background: var(--color-good);
+    left: 50%;
+    right: 2px;
   }
 
   &.bad {
     background: var(--color-bad);
+    left: 2px;
+    right: 50%;
   }
 
   &.selected {
-    background: var(--accent);
+    background: #ffffff;
     height: 3px;
-    left: 0;
-    right: 0;
+    left: 4px;
+    right: 4px;
     z-index: 1;
   }
 }
