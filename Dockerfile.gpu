@@ -34,11 +34,13 @@ COPY vtsearch/datasets/importers/pickle/requirements.txt  vtsearch/datasets/impo
 COPY vtsearch/datasets/importers/folder/requirements.txt  vtsearch/datasets/importers/folder/requirements.txt
 COPY vtsearch/datasets/importers/http_zip/requirements.txt vtsearch/datasets/importers/http_zip/requirements.txt
 COPY vtsearch/exporters/gui/requirements.txt  vtsearch/exporters/gui/requirements.txt
-COPY vtsearch/exporters/file/requirements.txt vtsearch/exporters/file/requirements.txt
 COPY vtsearch/exporters/email_smtp/requirements.txt vtsearch/exporters/email_smtp/requirements.txt
+COPY vtsearch/exporters/webhook/requirements.txt vtsearch/exporters/webhook/requirements.txt
+COPY vtsearch/datasets/importers/combine_datasets/requirements.txt vtsearch/datasets/importers/combine_datasets/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
-    pip install --no-cache-dir -r requirements-gpu.txt
+    pip install --no-cache-dir -r requirements-gpu.txt && \
+    pip install --no-cache-dir -r requirements-exporters.txt
 
 # ---------- application layer ----------
 COPY . .
