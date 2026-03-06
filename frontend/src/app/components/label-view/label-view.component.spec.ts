@@ -295,6 +295,44 @@ describe('LabelViewComponent', () => {
     httpMock.expectNone('/api/sort');
   });
 
+  it('should trigger learned sort when autopilot transitions from bad to hard', fakeAsync(() => {
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    const sortState = TestBed.inject(SortStateService);
+
+    // Set up votes so learned sort will fire
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+
+    // Activate autopilot → good phase
+    autopilot.activate();
+    fixture.detectChanges();
+
+    // Transition good → bad
+    autopilot.checkPhaseTransition(3, 0);
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('bad');
+
+    // Transition bad → hard: should trigger learned sort
+    autopilot.checkPhaseTransition(3, 4);
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('hard');
+    expect(sortState.selectMode).toBe('hard');
+    expect(sortState.sortMode).toBe('learned');
+    expect(sortState.sortBusy).toBeTrue();
+
+    // Flush the learned sort request
+    const req = httpMock.expectOne('/api/learned-sort');
+    req.flush({
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
+
+    expect(sortState.sortBusy).toBeFalse();
+    expect(sortState.threshold).toBe(0.5);
+  }));
+
   it('should clear stale autopilot state from previous session on init', () => {
     const autopilot = TestBed.inject(AutopilotStateService);
     // Simulate leftover state from a previous detector session
