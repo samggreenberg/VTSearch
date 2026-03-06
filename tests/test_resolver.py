@@ -164,6 +164,55 @@ class TestResolveNoneOrigin:
         origin = {"importer": "unknown_thing", "params": {}}
         assert resolve_file_from_origin(origin) is None
 
+    def test_unknown_importer_with_path_fallback(self, tmp_path):
+        """Unregistered origins with a path param still resolve via fallback."""
+        f = tmp_path / "doc.pdf"
+        f.write_bytes(b"%PDF")
+        origin = {"importer": "some_future_type", "params": {"path": str(f)}}
+        assert resolve_file_from_origin(origin) == f
+
+
+class TestDynamicImporterDispatch:
+    """Verify that resolve_file_from_origin dispatches through the importer
+    registry, so adding a new DatasetImporter automatically extends resolution."""
+
+    def test_custom_importer_resolve_file_is_called(self, tmp_path):
+        """A custom importer registered at runtime has its resolve_file called."""
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+
+        marker_file = tmp_path / "custom_media.wav"
+        marker_file.write_bytes(b"custom_audio")
+
+        class CustomImporter(DatasetImporter):
+            name = "test_custom"
+            display_name = "Test Custom"
+            description = "A test importer"
+            fields = [ImporterField(key="path", label="Path", field_type="text")]
+
+            def resolve_file(self, origin, origin_name="", filename="", **kw):
+                p = origin.get("params", {}).get("path", "")
+                if p:
+                    for n in [origin_name, filename]:
+                        if n:
+                            candidate = Path(p) / n
+                            if candidate.is_file():
+                                return candidate
+                return None
+
+        custom = CustomImporter()
+
+        # Temporarily register it in the importer registry
+        from vtsearch.datasets.importers import _registry
+
+        _registry._ensure_discovered()
+        _registry._items[custom.name] = custom
+        try:
+            origin = {"importer": "test_custom", "params": {"path": str(tmp_path)}}
+            result = resolve_file_from_origin(origin, origin_name="custom_media.wav")
+            assert result == marker_file
+        finally:
+            _registry._items.pop(custom.name, None)
+
 
 class TestResolveLabelEmbeddings:
     def test_resolves_folder_labels(self, tmp_path):

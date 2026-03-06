@@ -7,6 +7,17 @@ embeddings for training.  This module handles that resolution:
 1. Given a label entry's origin info, resolve to an actual file on disk.
 2. Embed the file using the appropriate embedder for the media type.
 3. Return resolved embeddings with availability stats.
+
+File resolution is **not** hardcoded to specific importers.  Instead,
+:func:`resolve_file_from_origin` looks up the importer by name from the
+auto-discovered registry and calls its
+:meth:`~vtsearch.datasets.importers.base.DatasetImporter.resolve_file` method.
+Adding a new ``DatasetImporter`` with a ``resolve_file`` override automatically
+extends the resolution capability — no changes to this module required.
+
+Two synthetic origin types (``dupe_set`` and ``converter``) are handled inline
+because they are not importers in the registry — they delegate to real
+importers.
 """
 
 from __future__ import annotations
@@ -47,216 +58,52 @@ def resolve_file_from_origin(
 ) -> Path | None:
     """Resolve a media file from its origin information.
 
-    Follows the origin trail to find the actual file on disk:
+    Looks up the importer named in ``origin["importer"]`` from the
+    auto-discovered importer registry and calls its ``resolve_file()``
+    method.  Two synthetic origin types are handled inline:
 
-    - ``folder``: ``origin.params.path / origin_name``
-    - ``pdf``: ``origin.params.path`` (the PDF file itself)
-    - ``http_archive``: re-downloads and extracts if needed
-    - ``demo``: checks demo cache directory
-    - ``converter``: resolves parent origin, finds source file
-    - ``dupe_set``: tries each member until one resolves
+    - ``dupe_set``: tries each member until one resolves.
+    - ``converter``: reconstructs the parent origin and delegates.
 
     Returns the file path if found, or ``None``.
     """
     if origin is None:
         return None
 
-    importer = origin.get("importer", "")
-    params = origin.get("params", {})
+    importer_name = origin.get("importer", "")
 
-    if importer == "folder":
-        return _resolve_folder(params, origin_name, filename)
+    # -- Synthetic origins that delegate to real importers --
 
-    if importer == "pdf":
-        return _resolve_pdf(params)
+    if importer_name == "dupe_set":
+        return _resolve_dupe_set(origin)
 
-    if importer == "http_archive":
-        return _resolve_http_archive(params, origin_name, filename)
+    if importer_name == "converter":
+        return _resolve_converter(origin.get("params", {}))
 
-    if importer == "demo":
-        return _resolve_demo(params, origin_name, filename)
+    # -- Registry-based dispatch --
 
-    if importer == "converter":
-        return _resolve_converter(params, origin_name, filename)
+    from vtsearch.datasets.importers import get_importer
 
-    if importer == "dupe_set":
-        return _resolve_dupe_set(origin, origin_name, filename)
+    importer = get_importer(importer_name)
+    if importer is not None:
+        result = importer.resolve_file(origin, origin_name, filename)
+        if result is not None:
+            return result
 
-    return None
-
-
-def _resolve_folder(
-    params: dict[str, str], origin_name: str, filename: str
-) -> Path | None:
-    folder = params.get("path", "")
-    if not folder:
-        return None
-    folder_path = Path(folder)
-    for name in [origin_name, filename]:
-        if name:
-            candidate = folder_path / name
-            if candidate.is_file():
-                return candidate
-    return None
-
-
-def _resolve_pdf(params: dict[str, str]) -> Path | None:
-    path = params.get("path", "")
+    # -- Generic fallback for unregistered origins with a path param --
+    # Handles synthetic origins like "pdf" that store a direct file path.
+    path = origin.get("params", {}).get("path", "")
     if path:
         p = Path(path)
         if p.is_file():
             return p
-    return None
-
-
-def _resolve_http_archive(
-    params: dict[str, str], origin_name: str, filename: str
-) -> Path | None:
-    """Resolve a file from an http_archive origin.
-
-    Checks if the archive has already been downloaded to the data directory.
-    If found, extracts and searches for the file.  If not found, downloads
-    the archive first.
-    """
-    url = params.get("url", "")
-    if not url:
-        return None
-
-    from vtsearch.config import DATA_DIR
-
-    url_filename = url.rsplit("/", 1)[-1].split("?")[0]
-    download_path = DATA_DIR / f"http_archive_download_{url_filename}"
-    extract_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
-
-    # If already extracted, search there
-    if extract_dir.is_dir():
-        found = _search_dir_for_file(extract_dir, origin_name, filename)
-        if found:
-            return found
-
-    # If archive downloaded but not extracted (or extraction didn't find file)
-    if download_path.is_file() and not extract_dir.is_dir():
-        try:
-            from vtsearch.datasets.importers.http_zip import _extract_archive
-
-            extract_dir.mkdir(parents=True, exist_ok=True)
-            _extract_archive(download_path, extract_dir)
-            found = _search_dir_for_file(extract_dir, origin_name, filename)
-            if found:
-                return found
-        except Exception:
-            log.warning("Failed to extract %s", download_path, exc_info=True)
-
-    # Download the archive if not present
-    if not download_path.is_file():
-        try:
-            log.info("Downloading %s for label resolution...", url)
-            _download_url(url, download_path)
-            if download_path.is_file():
-                from vtsearch.datasets.importers.http_zip import _extract_archive
-
-                extract_dir.mkdir(parents=True, exist_ok=True)
-                _extract_archive(download_path, extract_dir)
-                found = _search_dir_for_file(extract_dir, origin_name, filename)
-                if found:
-                    return found
-        except Exception:
-            log.warning("Failed to download %s for label resolution", url, exc_info=True)
 
     return None
 
 
-def _resolve_demo(
-    params: dict[str, str], origin_name: str, filename: str
-) -> Path | None:
-    """Resolve a file from a demo dataset origin.
-
-    Demo datasets may store files on disk (audio, video, document types keep
-    files in a type-specific directory).  Text and image demos often store
-    data in-memory only, so resolution may fail for those.
-    """
-    demo_name = params.get("name", "")
-    if not demo_name:
-        return None
-
-    from vtsearch.datasets.config import DEMO_DATASETS
-
-    demo_info = DEMO_DATASETS.get(demo_name)
-    if demo_info is None:
-        return None
-
-    media_type = demo_info.get("media_type", "")
-    source = demo_info.get("source", "")
-
-    # For demo datasets that download to a known directory,
-    # check common locations.  Audio demos (ESC-50, GTZAN, etc.)
-    # download to DATA_DIR / <source_folder>.
-    from vtsearch.config import DATA_DIR
-
-    # Try DATA_DIR-based paths (common for extracted archives)
-    for name in [origin_name, filename]:
-        if not name:
-            continue
-        # Direct path under data/
-        candidate = DATA_DIR / name
-        if candidate.is_file():
-            return candidate
-
-    # For audio/video/document types that use external directories,
-    # check the embeddings pkl for the stored dir_key path.
-    # But we can't open pkls per the design — instead check known
-    # download locations.
-    if source:
-        # Many demo sources download to DATA_DIR / <extracted_folder>
-        # Try to find the file by searching DATA_DIR recursively
-        # (bounded to avoid scanning huge trees)
-        for name in [origin_name, filename]:
-            if not name:
-                continue
-            basename = Path(name).name
-            for candidate_dir in DATA_DIR.iterdir():
-                if not candidate_dir.is_dir():
-                    continue
-                candidate = candidate_dir / name
-                if candidate.is_file():
-                    return candidate
-                # One level of rglob
-                matches = list(candidate_dir.rglob(basename))
-                if matches:
-                    return matches[0]
-
-    return None
-
-
-def _resolve_converter(
-    params: dict[str, str], origin_name: str, filename: str
-) -> Path | None:
-    """Resolve a file from a converter origin.
-
-    Converter origins track a parent importer and a source file within it.
-    """
-    source_file = params.get("source_file", "")
-    parent_importer = params.get("parent_importer", "")
-    parent_path = params.get("parent_path", "")
-    parent_url = params.get("parent_url", "")
-
-    # Try resolving via parent
-    if parent_importer == "folder" and parent_path and source_file:
-        candidate = Path(parent_path) / source_file
-        if candidate.is_file():
-            return candidate
-
-    if parent_importer == "http_archive" and parent_url:
-        return _resolve_http_archive({"url": parent_url}, source_file, "")
-
-    return None
-
-
-def _resolve_dupe_set(
-    origin: dict[str, Any], origin_name: str, filename: str
-) -> Path | None:
-    members = origin.get("members", [])
-    for m in members:
+def _resolve_dupe_set(origin: dict[str, Any]) -> Path | None:
+    """Try each member of a dupe_set until one resolves."""
+    for m in origin.get("members", []):
         result = resolve_file_from_origin(
             m.get("origin"),
             m.get("origin_name", ""),
@@ -267,29 +114,22 @@ def _resolve_dupe_set(
     return None
 
 
-def _search_dir_for_file(
-    directory: Path, origin_name: str, filename: str
-) -> Path | None:
-    """Search a directory for a file matching origin_name or filename."""
-    for name in [origin_name, filename]:
-        if not name:
-            continue
-        candidate = directory / name
-        if candidate.is_file():
-            return candidate
-        # Search recursively by basename
-        matches = list(directory.rglob(Path(name).name))
-        if matches:
-            return matches[0]
-    return None
+def _resolve_converter(params: dict[str, str]) -> Path | None:
+    """Resolve a converter origin by rebuilding its parent origin."""
+    source_file = params.get("source_file", "")
+    parent_importer = params.get("parent_importer", "")
+    if not source_file or not parent_importer:
+        return None
 
+    # Reconstruct a parent origin dict from the converter's stored params
+    parent_params: dict[str, str] = {}
+    if params.get("parent_path"):
+        parent_params["path"] = params["parent_path"]
+    if params.get("parent_url"):
+        parent_params["url"] = params["parent_url"]
 
-def _download_url(url: str, dest: Path) -> None:
-    """Download a URL to a local file."""
-    import urllib.request
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, str(dest))  # noqa: S310
+    parent_origin = {"importer": parent_importer, "params": parent_params}
+    return resolve_file_from_origin(parent_origin, origin_name=source_file)
 
 
 def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
