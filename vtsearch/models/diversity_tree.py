@@ -284,7 +284,9 @@ class DiversityTree:
             return {
                 "level": level,
                 "fractional_level": round(frac, 4),
+                "diversity_level": round(frac, 4),
                 "depth": d,
+                "max_level": d,
                 "next_level_seen": 0,
                 "next_level_total": 0,
             }
@@ -295,7 +297,9 @@ class DiversityTree:
         return {
             "level": level,
             "fractional_level": round(frac, 4),
+            "diversity_level": round(frac, 4),
             "depth": d,
+            "max_level": d,
             "next_level_seen": seen_count,
             "next_level_total": len(nodes_at_next),
         }
