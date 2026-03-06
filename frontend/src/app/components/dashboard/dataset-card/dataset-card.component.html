@@ -35,6 +35,7 @@
   }
   {{ capitalizeType(dataset.media_type) }}
 </td>
+<td>{{ dataset.embedder || '-' }}</td>
 <td>{{ dataset.num_items ?? '-' }}</td>
 <td>{{ dataset.num_dupes ?? 0 }}</td>
 <td>{{ formatDate(dataset.created_at) }}</td>

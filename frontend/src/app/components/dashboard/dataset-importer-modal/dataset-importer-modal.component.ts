@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo } from '../../../models/api.models';
+import { ImporterInfo, DemoDataset, MediaTypeInfo, EmbedderInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo';
 
@@ -27,6 +27,10 @@ export class DatasetImporterModalComponent implements OnInit {
   submitting = false;
   error = '';
 
+  // Embedder state
+  allEmbedders: EmbedderInfo[] = [];
+  availableEmbedders: EmbedderInfo[] = [];
+
   // Demo picker state
   demos: DemoDataset[] = [];
   mediaTypes: MediaTypeInfo[] = [];
@@ -35,6 +39,7 @@ export class DatasetImporterModalComponent implements OnInit {
   demoSortKey = 'num_files';
   demoSortAsc = true;
   demoLoading = false;
+  demoEmbedder = '';
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -44,6 +49,16 @@ export class DatasetImporterModalComponent implements OnInit {
         this.importers = (res.importers || []).filter(
           (imp) => !imp.hidden_from_picker
         );
+      },
+    });
+    this.datasetsApi.getEmbedders().subscribe({
+      next: (res) => {
+        this.allEmbedders = res.embedders || [];
+      },
+    });
+    this.datasetsApi.getMediaTypes().subscribe({
+      next: (res) => {
+        this.mediaTypes = res.media_types || [];
       },
     });
   }
@@ -62,7 +77,42 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
+    // If the importer has a media_type field, initialize embedder choices
+    this.updateAvailableEmbedders();
+
     this.view = 'form';
+  }
+
+  /** Whether the selected importer should show an embedder dropdown. */
+  get showEmbedderField(): boolean {
+    if (!this.selectedImporter?.fields) return false;
+    return this.selectedImporter.fields.some((f) => f.key === 'media_type');
+  }
+
+  /** Resolve the type_id from a folder_import_name (e.g. "sounds" -> "audio"). */
+  private folderNameToTypeId(folderName: string): string {
+    const mt = this.mediaTypes.find((m) => m.folder_import_name === folderName);
+    return mt ? mt.type_id : folderName;
+  }
+
+  /** Called when media_type changes to refresh the embedder dropdown. */
+  onMediaTypeChange(): void {
+    this.updateAvailableEmbedders();
+  }
+
+  private updateAvailableEmbedders(): void {
+    const folderName = this.formValues['media_type'] || '';
+    const typeId = this.folderNameToTypeId(folderName);
+    this.availableEmbedders = this.allEmbedders.filter((e) => e.media_type_id === typeId);
+    // Auto-select first embedder if current selection is invalid
+    if (this.availableEmbedders.length > 0) {
+      const current = this.formValues['embedder'] || '';
+      if (!this.availableEmbedders.some((e) => e.name === current)) {
+        this.formValues['embedder'] = this.availableEmbedders[0].name;
+      }
+    } else {
+      this.formValues['embedder'] = '';
+    }
   }
 
   openDemoPicker(): void {
@@ -109,6 +159,8 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.demoTabs.length > 0 && !this.activeTab) {
       this.activeTab = this.demoTabs[0];
+      const embedders = this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
+      this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';
     }
   }
 
@@ -170,9 +222,23 @@ export class DatasetImporterModalComponent implements OnInit {
     return 'Needs Download';
   }
 
+  /** Embedders available for the currently active demo tab's media type. */
+  get demoEmbeddersForTab(): EmbedderInfo[] {
+    return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
+  }
+
   selectDemo(demo: DemoDataset): void {
+    // Attach the selected embedder to the demo object so the parent can use it
+    (demo as any).embedder = this.demoEmbedder || '';
     this.demoSelected.emit(demo);
     this.closed.emit();
+  }
+
+  selectDemoTabWithEmbedder(tab: string): void {
+    this.selectDemoTab(tab);
+    // Reset embedder selection for the new tab
+    const embedders = this.allEmbedders.filter((e) => e.media_type_id === tab);
+    this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';
   }
 
   back(): void {

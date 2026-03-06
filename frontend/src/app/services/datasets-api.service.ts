@@ -9,6 +9,7 @@ import {
   MediaTypesResponse,
   DatasetRegistryResponse,
   ConverterInfo,
+  EmbeddersResponse,
   OkResponse,
 } from '../models/api.models';
 
@@ -56,8 +57,16 @@ export class DatasetsApiService {
     return this.http.post(`/api/dataset/import/${importerName}`, params);
   }
 
-  loadDemo(name: string): Observable<unknown> {
-    return this.http.post('/api/dataset/load-demo', { name });
+  getEmbedders(): Observable<EmbeddersResponse> {
+    return this.http.get<EmbeddersResponse>('/api/embedders');
+  }
+
+  loadDemo(name: string, embedder?: string): Observable<unknown> {
+    const body: Record<string, string> = { name };
+    if (embedder) {
+      body['embedder'] = embedder;
+    }
+    return this.http.post('/api/dataset/load-demo', body);
   }
 
   loadFile(file: File): Observable<unknown> {
