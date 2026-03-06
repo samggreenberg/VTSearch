@@ -248,6 +248,7 @@ export interface AppSettings {
   calibrate_count?: number;
   calibration_fraction?: number;
   swipe_animation?: boolean;
+  show_metadata?: boolean;
   show_thumbnails_left?: boolean;
   show_thumbnails_right?: boolean;
   autoload_media_types?: string[];
