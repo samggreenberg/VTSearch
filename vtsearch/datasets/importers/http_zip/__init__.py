@@ -155,8 +155,8 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     """
 
     name = "http_archive"
-    display_name = "Generate from HTTP Archive"
-    description = "Download a .zip, .tar, or .rar archive from a URL and load the media files inside."
+    display_name = "Import from URL"
+    description = "Download an archive (.zip, .tar, .rar) from a web URL and embed the media files inside"
     icon = "\U0001f310"
     fields = [
         ImporterField(

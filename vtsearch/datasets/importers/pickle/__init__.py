@@ -30,8 +30,9 @@ class PickleDatasetImporter(DatasetImporter):
     """
 
     name = "pickle"
-    display_name = "Pickle File"
-    description = "Load a previously exported .pkl dataset file."
+    display_name = "Upload Saved Dataset"
+    description = "Load a .pkl dataset file that was previously exported from VTSearch"
+    icon = "\U0001f4e4"
     ui_mode = "file_upload"
     fields = [
         ImporterField(

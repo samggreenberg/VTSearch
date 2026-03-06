@@ -157,8 +157,8 @@ class FolderDatasetImporter(DatasetImporter):
     """
 
     name = "folder"
-    display_name = "Generate from Folder"
-    description = "Import media files from a folder."
+    display_name = "Import from Local Folder"
+    description = "Scan a directory on this machine for media files and embed them into a new dataset"
     icon = "\U0001f4c2"
     fields = [
         ImporterField(
