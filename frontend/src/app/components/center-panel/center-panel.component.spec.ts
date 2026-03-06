@@ -124,6 +124,37 @@ describe('CenterPanelComponent', () => {
     expect(component.voteState.badVotes.has(3)).toBeTrue();
   });
 
+  it('should apply swipe-hidden class when media changes to prevent flash', () => {
+    component.media = mockMedia;
+    fixture.detectChanges();
+    // Simulate swipe ending
+    component.swipeClass = 'swipe-right';
+
+    // Change to new media (triggers ngOnChanges)
+    component.media = { ...mockMedia, id: 2, filename: 'next.wav' };
+    component.ngOnChanges({
+      media: { currentValue: component.media, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+    });
+
+    expect(component.swipeClass).toBe('swipe-hidden');
+  });
+
+  it('should clear swipe-hidden after animation frame', (done) => {
+    component.media = mockMedia;
+    fixture.detectChanges();
+
+    component.media = { ...mockMedia, id: 2, filename: 'next.wav' };
+    component.ngOnChanges({
+      media: { currentValue: component.media, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+    });
+
+    expect(component.swipeClass).toBe('swipe-hidden');
+    requestAnimationFrame(() => {
+      expect(component.swipeClass).toBe('');
+      done();
+    });
+  });
+
   it('should format metadata values', () => {
     expect(component.formatMetadataValue('File Size', 2048)).toBe('2.0 KB');
     expect(component.formatMetadataValue('Duration', 3.5)).toBe('3.5s');
