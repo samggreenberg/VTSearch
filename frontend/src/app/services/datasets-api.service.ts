@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   DatasetStatus,
   DatasetProgress,
@@ -9,6 +10,7 @@ import {
   MediaTypesResponse,
   DatasetRegistryResponse,
   ConverterInfo,
+  ConvertersResponse,
   OkResponse,
 } from '../models/api.models';
 
@@ -45,11 +47,13 @@ export class DatasetsApiService {
     if (target) {
       params['target'] = target;
     }
-    return this.http.get<ConverterInfo[]>('/api/converters', { params });
+    return this.http.get<ConvertersResponse>('/api/converters', { params }).pipe(
+      map((res) => res.converters),
+    );
   }
 
-  getAvailableFiles(): Observable<{ files: string[] }> {
-    return this.http.get<{ files: string[] }>('/api/dataset/available-files');
+  getAvailableFiles(): Observable<{ files: { name: string; path: string; size_mb: number }[] }> {
+    return this.http.get<{ files: { name: string; path: string; size_mb: number }[] }>('/api/dataset/available-files');
   }
 
   runImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {

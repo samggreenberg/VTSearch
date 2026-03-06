@@ -309,6 +309,10 @@ export interface ConverterInfo {
   [key: string]: unknown;
 }
 
+export interface ConvertersResponse {
+  converters: ConverterInfo[];
+}
+
 // --- Error ---
 
 export interface ApiError {
