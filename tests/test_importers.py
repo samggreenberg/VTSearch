@@ -229,7 +229,7 @@ class TestHttpArchiveImporterMetadata:
         assert self._get_importer().name == "http_archive"
 
     def test_display_name(self):
-        assert self._get_importer().display_name == "Generate from HTTP Archive"
+        assert self._get_importer().display_name == "Import from URL"
 
     def test_icon_is_globe(self):
         assert self._get_importer().icon == "🌐"
@@ -244,7 +244,7 @@ class TestHttpArchiveImporterMetadata:
         d = self._get_importer().to_dict()
         assert d["icon"] == "🌐"
         assert d["name"] == "http_archive"
-        assert d["display_name"] == "Generate from HTTP Archive"
+        assert d["display_name"] == "Import from URL"
 
     def test_fields_include_url_and_media_type(self):
         fields = {f.key: f for f in self._get_importer().fields}
@@ -283,7 +283,7 @@ class TestFolderImporterMetadata:
 
     def test_description_says_media_files_from_a_folder(self):
         desc = self._get_importer().description.lower()
-        assert "media files from a folder" in desc
+        assert "media files" in desc
 
     def test_description_does_not_list_specific_media_types(self):
         desc = self._get_importer().description

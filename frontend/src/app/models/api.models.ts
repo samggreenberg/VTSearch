@@ -144,9 +144,11 @@ export interface DatasetProgress {
 
 export interface ImporterInfo {
   name: string;
-  label?: string;
+  display_name?: string;
   description?: string;
+  icon?: string;
   fields?: ImporterField[];
+  ui_mode?: string;
   [key: string]: unknown;
 }
 

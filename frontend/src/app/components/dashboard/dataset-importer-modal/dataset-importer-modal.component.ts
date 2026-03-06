@@ -41,7 +41,9 @@ export class DatasetImporterModalComponent implements OnInit {
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
-        this.importers = res.importers || [];
+        this.importers = (res.importers || []).filter(
+          (imp) => !imp.hidden_from_picker
+        );
       },
     });
   }
