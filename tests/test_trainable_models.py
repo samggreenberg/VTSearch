@@ -405,3 +405,155 @@ class TestLabelVoteIsolation:
         assert len(good_votes) + len(bad_votes) == 2
         assert ids[2] not in good_votes, "Stale vote should be gone after clear+import"
         assert ids[3] not in bad_votes, "Stale vote should be gone after clear+import"
+
+
+class TestLoadModelEndpoint:
+    """Tests for POST /api/models/registry/load."""
+
+    def test_load_model(self, client):
+        from vtsearch.models.registry import get_loaded_id
+
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "M", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.status_code == 200
+        assert get_loaded_id() == model_id
+
+    def test_unload_model(self, client):
+        from vtsearch.models.registry import get_loaded_id, set_loaded_id
+
+        set_loaded_id("fake")
+        res = client.post("/api/models/registry/load", json={"model_id": None})
+        assert res.status_code == 200
+        assert get_loaded_id() is None
+
+    def test_load_nonexistent(self, client):
+        res = client.post("/api/models/registry/load", json={"model_id": "nope"})
+        assert res.status_code == 404
+
+
+class TestVoteSyncsToLoadedModel:
+    """Voting while a trainable model is loaded should auto-update the model's labelset."""
+
+    def test_vote_updates_model_labels(self, client):
+        """Casting a vote with a loaded model should persist labels and update registry stats."""
+        from vtsearch.models.registry import get_model
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Create and register a trainable model
+        client.post(
+            "/api/trainable-models",
+            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "AutoSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        # Load the model
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        # Cast a vote
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Check that the model's labelset was updated
+        model_data = client.get("/api/trainable-models/AutoSync").get_json()
+        labels = model_data["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["label"] == "good"
+
+        # Check that the registry entry was updated
+        entry = get_model(model_id)
+        assert entry["num_training"] == 1
+        assert entry.get("last_trained_at") is not None
+
+    def test_vote_toggle_off_updates_model(self, client):
+        """Toggling a vote off should update the model labelset to reflect removal."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "ToggleSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        first_id = next(iter(medias))
+        # Vote good
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        # Toggle off (vote good again)
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_no_sync_without_loaded_model(self, client):
+        """Voting with no loaded model should not create/update any model files."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "NoSync", "media_type": "audio", "text_query": "test"},
+        )
+
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Model should still have empty labelset
+        model_data = client.get("/api/trainable-models/NoSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_label_import_syncs_to_loaded_model(self, client):
+        """Importing labels with a loaded model should persist to the model."""
+        from vtsearch.models.registry import get_model
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "ImportSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": model_id})
+
+        # Get an MD5 from the first media
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        md5 = media.get("md5", "")
+
+        # Import a label
+        client.post("/api/labels/import", json={"labels": [{"md5": md5, "label": "good"}]})
+
+        # Model should have the imported label
+        model_data = client.get("/api/trainable-models/ImportSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        entry = get_model(model_id)
+        assert entry["num_training"] == 1

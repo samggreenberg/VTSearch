@@ -71,6 +71,40 @@ def _write_model(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def sync_labels_to_loaded_model() -> None:
+    """Persist the current votes into the loaded model's labelset (if any).
+
+    Called automatically after each vote so the dashboard's "# Training"
+    and "Last Trained" columns stay up to date without an explicit save.
+    """
+    from vtsearch.models.registry import get_loaded_id, get_model, update_model
+
+    loaded_id = get_loaded_id()
+    if not loaded_id:
+        return
+
+    entry = get_model(loaded_id)
+    if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
+        return
+
+    tm_name = entry["trainable_model_name"]
+    path = _model_path(tm_name)
+    data = _read_model(path)
+    if data is None:
+        return
+
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
+    data["labelset"] = labelset.to_dict()
+    _write_model(path, data)
+
+    import time as _time
+
+    update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
+
+
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
     tm_dir = get_trainable_models_dir()
@@ -385,6 +419,30 @@ def register_model_route():
         trainable_model_name=trainable_model_name,
     )
     return jsonify({"ok": True, "model": entry}), 201
+
+
+@trainable_models_bp.route("/api/models/registry/load", methods=["POST"])
+def load_model_route():
+    """Set the currently loaded model by ID.
+
+    Expects JSON::
+
+        {"model_id": "abc123"}
+
+    Pass ``model_id: null`` to unload.
+    """
+    from vtsearch.models.registry import get_model, set_loaded_id
+
+    data = request.get_json(force=True, silent=True) or {}
+    model_id = data.get("model_id")
+
+    if model_id is not None:
+        entry = get_model(model_id)
+        if entry is None:
+            return jsonify({"error": "Model not found"}), 404
+
+    set_loaded_id(model_id)
+    return jsonify({"ok": True})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

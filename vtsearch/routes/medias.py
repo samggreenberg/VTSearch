@@ -308,4 +308,8 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
 
     toggle_vote(media_id, vote)
 
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
+
     return jsonify({"ok": True})

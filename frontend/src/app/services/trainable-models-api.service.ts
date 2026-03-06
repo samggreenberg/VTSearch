@@ -52,4 +52,8 @@ export class TrainableModelsApiService {
   renameInRegistry(modelId: string, newName: string): Observable<unknown> {
     return this.http.put(`/api/models/registry/${modelId}/rename`, { name: newName });
   }
+
+  loadModel(modelId: string | null): Observable<unknown> {
+    return this.http.post('/api/models/registry/load', { model_id: modelId });
+  }
 }

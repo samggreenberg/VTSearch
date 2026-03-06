@@ -331,6 +331,12 @@ describe('DashboardComponent', () => {
       const routerSpy = spyOn(component['router'], 'navigate');
       component.onLabel();
 
+      // Flush the loadModel call
+      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      expect(loadModelReq.request.method).toBe('POST');
+      expect(loadModelReq.request.body).toEqual({ model_id: 'm1' });
+      loadModelReq.flush({ ok: true });
+
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
       expect(component.loading).toBeFalse();
     });
@@ -343,6 +349,9 @@ describe('DashboardComponent', () => {
       const session = TestBed.inject(LabelSessionService);
       spyOn(component['router'], 'navigate');
       component.onLabel();
+
+      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      loadModelReq.flush({ ok: true });
 
       expect(session.textQuery).toBe('dog barking');
     });
@@ -367,6 +376,10 @@ describe('DashboardComponent', () => {
       // Progress polling returns idle -> should navigate
       const progressReq = httpMock.expectOne('/api/dataset/progress');
       progressReq.flush({ status: 'idle' });
+
+      // Flush the loadModel call triggered after progress completes
+      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      loadModelReq.flush({ ok: true });
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
 

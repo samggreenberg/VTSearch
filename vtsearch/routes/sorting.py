@@ -288,6 +288,10 @@ def import_labels():
             apply_label(cid, label)
         applied += 1
 
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
+
     return jsonify({"applied": applied, "skipped": skipped})
 
 
@@ -397,6 +401,10 @@ def fill_labels_from_sort():
             },
         },
     }
+
+    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+    sync_labels_to_loaded_model()
 
     return jsonify({
         "good_applied": len(good_candidates),
