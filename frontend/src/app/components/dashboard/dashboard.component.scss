@@ -150,19 +150,29 @@
   }
 }
 
+// DESIGN CONSTRAINT — STABLE BUTTON POSITIONING
+// The Label/Find buttons must NOT move when their hint text appears, disappears,
+// or changes length. Three things work together to achieve this:
+//
+// 1. Each .action-btn-group has a fixed width so horizontal position never shifts
+//    when hint text changes length (the parent uses justify-content: center).
+// 2. The .btn-disabled-reason span uses visibility (NOT display/ngIf) toggling in
+//    the template, so hidden hints still reserve vertical space.
+// 3. The span has a fixed single-line height, white-space: nowrap, and overflow:
+//    hidden to prevent multi-line reflow.
+//
+// Do NOT:
+//  - Remove the fixed width on .action-btn-group (causes horizontal shifting)
+//  - Switch to display:none or *ngIf for hints (causes vertical jumping)
+//  - Remove height/white-space/overflow on .btn-disabled-reason (causes reflow)
 .action-btn-group {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  width: 220px;
 }
 
-// DESIGN CONSTRAINT: The Label/Find buttons must NOT move when their hint text
-// appears or disappears. This class uses visibility (not display) toggling in the
-// template, plus a fixed single-line height here, so the hint area always reserves
-// exactly the same space regardless of whether the hint is shown or hidden.
-// Do NOT remove white-space/overflow/height constraints or switch to display:none —
-// that will cause the buttons to jump around.
 .btn-disabled-reason {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -172,5 +182,5 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
+  max-width: 100%;
 }
