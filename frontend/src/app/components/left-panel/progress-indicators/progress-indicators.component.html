@@ -12,13 +12,10 @@
       [attr.data-status]="smartStatus"
       (click)="onClick('smart')"
       aria-label="Smart indicator"
-      title="Tracks model accuracy over labeling steps. Green when error cost has leveled off (model has converged). Yellow when still improving. Red when more votes are needed."
+      [title]="smartSubtext ? 'Smart: ' + smartSubtext + '. Tracks model accuracy over labeling steps.' : 'Tracks model accuracy over labeling steps. Green when error cost has leveled off (model has converged). Yellow when still improving. Red when more votes are needed.'"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Smart</span>
-      @if (smartSubtext) {
-        <span class="indicator-subtext">{{ smartSubtext }}</span>
-      }
     </button>
 
     <button
@@ -26,13 +23,10 @@
       [attr.data-status]="stableStatus"
       (click)="onClick('stable')"
       aria-label="Stable indicator"
-      title="Tracks prediction stability. Green when predictions stop changing between labeling steps (model is confident). Yellow when predictions are still shifting. Red when more votes are needed."
+      [title]="stableSubtext ? 'Stable: ' + stableSubtext + '. Tracks prediction stability.' : 'Tracks prediction stability. Green when predictions stop changing between labeling steps (model is confident). Yellow when predictions are still shifting. Red when more votes are needed.'"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Stable</span>
-      @if (stableSubtext) {
-        <span class="indicator-subtext">{{ stableSubtext }}</span>
-      }
     </button>
 
     <button
@@ -40,13 +34,10 @@
       [attr.data-status]="spanStatus"
       (click)="onClick('span')"
       aria-label="Diverse indicator"
-      title="Tracks how much of the dataset you have explored. Green when you have sampled from all major clusters. Yellow when some regions remain unexplored. Red when coverage data is unavailable."
+      [title]="spanSubtext ? 'Diverse: ' + spanSubtext + '. Tracks dataset exploration coverage.' : 'Tracks how much of the dataset you have explored. Green when you have sampled from all major clusters. Yellow when some regions remain unexplored. Red when coverage data is unavailable.'"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Diverse</span>
-      @if (spanSubtext) {
-        <span class="indicator-subtext">{{ spanSubtext }}</span>
-      }
     </button>
   }
 </div>

@@ -1,7 +1,6 @@
 .progress-check-bar {
   display: flex;
   gap: 4px;
-  min-height: 48px;
   align-items: stretch;
 }
 
@@ -11,8 +10,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 4px 6px;
+  gap: 4px;
+  padding: 3px 6px;
   border: 1px solid var(--indicator-border);
   border-radius: 4px;
   background: var(--bg-panel);
@@ -26,10 +25,11 @@
 .labeling-indicator {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 6px;
   border: 1px solid var(--indicator-border);
   border-radius: 4px;
   background: var(--bg-panel);
@@ -50,10 +50,6 @@
     .indicator-label {
       color: var(--status-red-label);
     }
-
-    .indicator-subtext {
-      color: var(--status-red-sub);
-    }
   }
 
   &[data-status="green"] {
@@ -65,10 +61,6 @@
 
     .indicator-label {
       color: var(--status-green-label);
-    }
-
-    .indicator-subtext {
-      color: var(--status-green-sub);
     }
   }
 
@@ -82,27 +74,20 @@
     .indicator-label {
       color: var(--status-yellow-label);
     }
-
-    .indicator-subtext {
-      color: var(--status-yellow-sub);
-    }
   }
 }
 
 .indicator-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--indicator-dot);
+  flex-shrink: 0;
 }
 
 .indicator-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
   font-weight: 500;
-}
-
-.indicator-subtext {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  line-height: 1;
 }
