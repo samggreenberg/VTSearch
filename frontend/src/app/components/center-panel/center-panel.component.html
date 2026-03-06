@@ -2,10 +2,10 @@
   @if (!media) {
     <p class="placeholder-text">Select a media item to view</p>
   } @else {
-    <div class="media-swipe-wrapper" [class]="swipeClass">
+    <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass">
       @switch (mediaType) {
         @case ('audio') {
-          <vt-audio-player [media]="media" [volume]="volume"></vt-audio-player>
+          <vt-audio-player [media]="media" [volume]="volume" [swipeClass]="swipeClass"></vt-audio-player>
         }
         @case ('image') {
           <vt-image-viewer [media]="media"></vt-image-viewer>

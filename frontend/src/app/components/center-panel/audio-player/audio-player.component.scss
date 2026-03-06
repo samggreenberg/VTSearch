@@ -6,6 +6,34 @@
   gap: 10px;
 }
 
+.waveform-swipe-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+@keyframes swipe-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes swipe-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-120%); opacity: 0; }
+}
+
+.swipe-right {
+  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.swipe-left {
+  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.swipe-hidden {
+  opacity: 0;
+}
+
 .waveform-canvas {
   width: 100%;
   border: 1px solid var(--border);
