@@ -71,14 +71,6 @@
       </div>
     }
 
-    <label class="checkbox-row">
-      <input type="checkbox" [(ngModel)]="fillFromSort" (ngModelChange)="onFillToggle()" />
-      Fill from Sort
-    </label>
-    @if (fillInfo) {
-      <p class="fill-info">{{ fillInfo }}</p>
-    }
-
     <div class="copy-row">
       <select class="form-select" [(ngModel)]="copyColumn">
         <option value="origin+name">Origin + Name</option>
@@ -97,12 +89,7 @@
     </div>
   </div>
 
-  @if (exportStatus) {
-    <p class="export-status" [style.color]="exportStatusColor">{{ exportStatus }}</p>
-  }
-
   <div class="export-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Close</button>
-    <button class="btn btn--primary" (click)="runExport()">Run Export</button>
   </div>
 </vt-modal>

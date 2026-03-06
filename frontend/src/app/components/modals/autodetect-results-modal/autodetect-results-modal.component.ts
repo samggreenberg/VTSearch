@@ -3,8 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
-import { SortingApiService } from '../../../services/sorting-api.service';
-import { VtDialogService } from '../../../services/dialog.service';
 import {
   AutoDetectHit,
   AutoDetectResultsData,
@@ -21,31 +19,18 @@ import {
 })
 export class AutoDetectResultsModalComponent implements OnInit {
   @Input() data: AutoDetectResultsData = { results: {} };
-  @Input() sortOrder: { id: number; score: number }[] = [];
-  @Input() threshold: number | null = null;
-  @Input() goodVoteIds: Set<number> = new Set();
-  @Input() badVoteIds: Set<number> = new Set();
   @Output() closed = new EventEmitter<void>();
-  @Output() votesRefreshed = new EventEmitter<void>();
 
   exportSides: 'good' | 'bad' | 'both' = 'good';
   exporters: ExporterInfo[] = [];
   selectedExporter = '';
   exporterFields: ImporterField[] = [];
   exportFieldValues: Record<string, string> = {};
-  exportStatus = '';
-  exportStatusColor = '';
-  fillFromSort = false;
-  fillInfo = '';
   copyColumn = 'origin+name';
   copySeparator = 'newline';
   copyButtonText = 'Copy To Clipboard';
 
-  constructor(
-    private exportersApi: ExportersApiService,
-    private sortingApi: SortingApiService,
-    private dialog: VtDialogService,
-  ) {}
+  constructor(private exportersApi: ExportersApiService) {}
 
   ngOnInit(): void {
     this.exportersApi.getExporters().subscribe({
@@ -127,39 +112,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
     }
   }
 
-  onSidesChange(): void {
-    this.updateFillInfo();
-  }
-
-  onFillToggle(): void {
-    this.updateFillInfo();
-  }
-
-  private updateFillInfo(): void {
-    if (!this.fillFromSort) {
-      this.fillInfo = '';
-      return;
-    }
-    if (!this.sortOrder.length || this.threshold === null) {
-      this.fillInfo = 'No sort results available. Run a sort first.';
-      return;
-    }
-    let goodCount = 0;
-    let badCount = 0;
-    for (const entry of this.sortOrder) {
-      if (this.goodVoteIds.has(entry.id) || this.badVoteIds.has(entry.id)) continue;
-      if (entry.score >= this.threshold!) goodCount++;
-      else badCount++;
-    }
-    if (this.exportSides === 'good') {
-      this.fillInfo = `${goodCount} unlabeled element${goodCount !== 1 ? 's' : ''} above threshold will be labeled Good.`;
-    } else if (this.exportSides === 'bad') {
-      this.fillInfo = `${badCount} unlabeled element${badCount !== 1 ? 's' : ''} below threshold will be labeled Bad.`;
-    } else {
-      const total = goodCount + badCount;
-      this.fillInfo = `${goodCount} Good + ${badCount} Bad unlabeled element${total !== 1 ? 's' : ''} will be labeled.`;
-    }
-  }
+  onSidesChange(): void {}
 
   async copyToClipboard(): Promise<void> {
     const hits = this.displayHits;
@@ -199,124 +152,6 @@ export class AutoDetectResultsModalComponent implements OnInit {
       this.copyButtonText = 'Copy failed';
     }
     setTimeout(() => (this.copyButtonText = 'Copy To Clipboard'), 2000);
-  }
-
-  async runExport(): Promise<void> {
-    if (!this.selectedExporter) {
-      this.setStatus('Select an exporter.', 'var(--text-muted)');
-      return;
-    }
-
-    if (this.fillFromSort) {
-      await this.runFillFromSortExport();
-    } else {
-      await this.runStandardExport();
-    }
-  }
-
-  private async runFillFromSortExport(): Promise<void> {
-    if (!this.sortOrder.length || this.threshold === null) {
-      await this.dialog.alert('No sort results available. Run a sort first.', 'warning');
-      return;
-    }
-
-    // Dry run
-    this.sortingApi
-      .fillFromSort({
-        sort_results: this.sortOrder,
-        threshold: this.threshold!,
-        sides: this.exportSides,
-        confirm: false,
-      })
-      .subscribe({
-        next: async (counts: any) => {
-          const total = (counts.good_count || 0) + (counts.bad_count || 0);
-          if (total === 0) {
-            await this.dialog.alert('No unlabeled elements to fill.', 'info');
-            return;
-          }
-
-          let desc: string;
-          if (this.exportSides === 'good') desc = `${counts.good_count} Good label${counts.good_count !== 1 ? 's' : ''}`;
-          else if (this.exportSides === 'bad') desc = `${counts.bad_count} Bad label${counts.bad_count !== 1 ? 's' : ''}`;
-          else desc = `${counts.good_count} Good + ${counts.bad_count} Bad labels`;
-
-          const confirmed = await this.dialog.confirm(`This will add ${desc} to the LabelSet and export. Continue?`);
-          if (!confirmed) return;
-
-          this.setStatus('Filling labels...', 'var(--text-muted)');
-          this.sortingApi
-            .fillFromSort({
-              sort_results: this.sortOrder,
-              threshold: this.threshold!,
-              sides: this.exportSides,
-              confirm: true,
-            })
-            .subscribe({
-              next: (fillData: any) => {
-                this.exportWithResults(fillData.results);
-                this.votesRefreshed.emit();
-              },
-              error: () => this.setStatus('Failed to fill labels.', 'var(--color-bad)'),
-            });
-        },
-        error: () => this.setStatus('Failed to compute fill counts.', 'var(--color-bad)'),
-      });
-  }
-
-  private async runStandardExport(): Promise<void> {
-    const filteredResults = this.buildFilteredResults();
-    this.exportWithResults(filteredResults);
-  }
-
-  private exportWithResults(results: unknown): void {
-    this.setStatus('Exporting...', 'var(--text-muted)');
-    this.exportersApi
-      .runExport({
-        exporter_name: this.selectedExporter,
-        field_values: this.exportFieldValues,
-        results,
-      })
-      .subscribe({
-        next: (res: any) => {
-          if (res.success) {
-            this.setStatus(res.message || 'Export complete.', 'var(--color-good)');
-          } else {
-            this.setStatus(res.error || 'Export failed.', 'var(--color-bad)');
-          }
-        },
-        error: (err) => {
-          this.setStatus(err.error?.error || 'Export error.', 'var(--color-bad)');
-        },
-      });
-  }
-
-  private buildFilteredResults(): unknown {
-    const filtered: Record<string, unknown> = {};
-    for (const [detName, detResult] of Object.entries(this.data.results || {})) {
-      const entry: Record<string, unknown> = { ...detResult };
-      if (this.exportSides === 'good') {
-        entry['hits'] = detResult.hits || [];
-        delete entry['negative_hits'];
-      } else if (this.exportSides === 'bad') {
-        entry['hits'] = detResult.negative_hits || [];
-        entry['total_hits'] = (entry['hits'] as unknown[]).length;
-        delete entry['negative_hits'];
-      } else {
-        const good = (detResult.hits || []).map((h) => ({ ...h, label: 'good' }));
-        const bad = (detResult.negative_hits || []).map((h) => ({ ...h, label: 'bad' }));
-        entry['hits'] = [...good, ...bad];
-        entry['total_hits'] = (entry['hits'] as unknown[]).length;
-        delete entry['negative_hits'];
-      }
-      filtered[detName] = entry;
-    }
-    return { ...this.data, results: filtered };
-  }
-
-  private setStatus(msg: string, color: string): void {
-    this.exportStatus = msg;
-    this.exportStatusColor = color;
   }
 
   close(): void {
