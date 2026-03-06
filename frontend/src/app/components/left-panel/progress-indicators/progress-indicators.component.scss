@@ -2,6 +2,8 @@
   display: flex;
   gap: 4px;
   align-items: stretch;
+  /* Fixed height prevents layout jitter when switching between indicators and progress bar */
+  height: 26px;
 }
 
 .sort-overlay {
@@ -15,6 +17,7 @@
   border: 1px solid var(--indicator-border);
   border-radius: 4px;
   background: var(--bg-panel);
+  min-width: 0;
 
   vt-progress-bar {
     flex: 1;
