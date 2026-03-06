@@ -40,3 +40,7 @@
     <button class="panel-btn export-btn" (click)="onExportDetector()">Export Detector</button>
   </div>
 </aside>
+
+@if (showDetectorExport) {
+  <vt-detector-export-modal (closed)="showDetectorExport = false" (exported)="showDetectorExport = false" />
+}

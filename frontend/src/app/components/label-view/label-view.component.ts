@@ -188,6 +188,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSortModeChange(mode: SortMode): void {
     this.sortState.setSortMode(mode);
+    this.autoSelectNext();
   }
 
   onTextSort(text: string): void {
@@ -211,7 +212,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  onLearnedSort(): void {
+  onLearnedSort(autoSelect = true): void {
     if (this.voteState.goodVotes.size === 0 || this.voteState.badVotes.size === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training...');
@@ -223,7 +224,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         );
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
-        this.autoSelectNext();
+        if (autoSelect) {
+          this.autoSelectNext();
+        }
       },
       error: () => {
         this.sortState.setSortBusy(false);
@@ -265,17 +268,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onInclusionChange(value: number): void {
     this.sortState.setInclusion(value);
     this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
+    this.autoSelectNext();
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
-      this.scheduleLearnedSort();
+      this.scheduleLearnedSort(false);
     }
   }
 
-  private scheduleLearnedSort(): void {
+  private scheduleLearnedSort(autoSelect = true): void {
     if (this.learnedSortPending) return;
     this.learnedSortPending = true;
     setTimeout(() => {
       this.learnedSortPending = false;
-      this.onLearnedSort();
+      this.onLearnedSort(autoSelect);
     }, 300);
   }
 
@@ -289,7 +293,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     this.autoSelectNext();
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
-      this.scheduleLearnedSort();
+      this.scheduleLearnedSort(false);
     }
   }
 
