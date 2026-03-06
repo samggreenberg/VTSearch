@@ -42,7 +42,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.importers = (res.importers || []).filter(
-          (imp) => !imp.hidden_from_picker
+          (imp) => !imp['hidden_from_picker']
         );
       },
     });
