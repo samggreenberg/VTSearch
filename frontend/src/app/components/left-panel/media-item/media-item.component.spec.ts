@@ -9,11 +9,9 @@ describe('MediaItemComponent', () => {
   const mockMedia: MediaItem = {
     id: 1,
     type: 'audio',
-    duration: 5.0,
-    file_size: 1024,
     filename: 'test.wav',
-    category: 'music',
     md5: 'abc123',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {

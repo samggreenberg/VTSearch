@@ -9,11 +9,9 @@ describe('DocumentViewerComponent', () => {
   const mockMedia: MediaItem = {
     id: 5,
     type: 'document',
-    duration: 0,
-    file_size: 8192,
     filename: 'test.pdf',
-    category: 'test',
     md5: 'mno345',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {

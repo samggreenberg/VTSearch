@@ -22,7 +22,7 @@ describe('MediasApiService', () => {
   });
 
   it('getMedias should GET /api/medias', () => {
-    const mock = [{ id: 1, type: 'audio', duration: 5, file_size: 1000, filename: 'a.wav', category: '', md5: 'abc' }];
+    const mock = [{ id: 1, type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} }];
     service.getMedias().subscribe(data => expect(data).toEqual(mock));
     const req = httpMock.expectOne('/api/medias');
     expect(req.request.method).toBe('GET');

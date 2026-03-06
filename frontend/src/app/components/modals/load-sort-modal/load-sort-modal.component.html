@@ -13,8 +13,8 @@
         @if (serverDetectors.length > 0) {
           <h4>Server Detectors</h4>
           <div class="file-list">
-            @for (det of serverDetectors; track det) {
-              <button class="file-item" (click)="loadServerDetector(det)">{{ det }}</button>
+            @for (det of serverDetectors; track det.name) {
+              <button class="file-item" (click)="loadServerDetector(det.name)">{{ det.name }}</button>
             }
           </div>
         }
@@ -30,8 +30,8 @@
         @if (serverMediaFiles.length > 0) {
           <h4>Server Example Media</h4>
           <div class="file-list">
-            @for (file of serverMediaFiles; track file) {
-              <button class="file-item" (click)="loadServerMedia(file)">{{ file }}</button>
+            @for (file of serverMediaFiles; track file.name) {
+              <button class="file-item" (click)="loadServerMedia(file.filename || file.name)">{{ file.filename || file.name }}</button>
             }
           </div>
         }

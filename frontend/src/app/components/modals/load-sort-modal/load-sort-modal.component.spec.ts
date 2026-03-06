@@ -25,8 +25,12 @@ describe('LoadSortModalComponent', () => {
 
   function flushInit(): void {
     fixture.detectChanges();
-    httpMock.expectOne('/api/detector/server-files').flush({ files: ['det1.json', 'det2.json'] });
-    httpMock.expectOne('/api/server-media-files').flush({ files: ['example.wav', 'sample.wav'] });
+    httpMock.expectOne('/api/detector/server-files').flush({
+      files: [{ name: 'det1', path: '/data/det1.json', size_bytes: 100 }, { name: 'det2', path: '/data/det2.json', size_bytes: 200 }],
+    });
+    httpMock.expectOne('/api/server-media-files').flush({
+      files: [{ name: 'example', filename: 'example.wav', path: '/data/example.wav', size_bytes: 1000 }, { name: 'sample', filename: 'sample.wav', path: '/data/sample.wav', size_bytes: 2000 }],
+    });
   }
 
   it('should create', () => {
@@ -36,8 +40,10 @@ describe('LoadSortModalComponent', () => {
 
   it('should load server files on init', () => {
     flushInit();
-    expect(component.serverDetectors).toEqual(['det1.json', 'det2.json']);
-    expect(component.serverMediaFiles).toEqual(['example.wav', 'sample.wav']);
+    expect(component.serverDetectors.length).toBe(2);
+    expect(component.serverDetectors[0].name).toBe('det1');
+    expect(component.serverMediaFiles.length).toBe(2);
+    expect(component.serverMediaFiles[0].filename).toBe('example.wav');
     expect(component.loading).toBeFalse();
   });
 

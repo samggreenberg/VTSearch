@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
+import { ServerFileEntry } from '../../../models/api.models';
 
 @Component({
   selector: 'vt-load-sort-modal',
@@ -16,8 +17,8 @@ export class LoadSortModalComponent implements OnInit {
   @Output() detectorLoaded = new EventEmitter<unknown>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
-  serverDetectors: string[] = [];
-  serverMediaFiles: string[] = [];
+  serverDetectors: ServerFileEntry[] = [];
+  serverMediaFiles: ServerFileEntry[] = [];
   loading = true;
   status = '';
   error = '';
