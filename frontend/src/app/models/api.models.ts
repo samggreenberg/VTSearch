@@ -251,6 +251,7 @@ export interface AppSettings {
   show_thumbnails_left?: boolean;
   show_thumbnails_right?: boolean;
   autoload_media_types?: string[];
+  autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;

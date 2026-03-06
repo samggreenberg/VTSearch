@@ -61,15 +61,15 @@ export class SettingsModalComponent implements OnInit {
   }
 
   isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
-    return (this.settings.autoload_media_types || []).includes(embedder.name);
+    return (this.settings.autoload_media_embedders || []).includes(embedder.name);
   }
 
   toggleEmbedder(embedder: EmbedderInfo): void {
-    const current = this.settings.autoload_media_types || [];
+    const current = this.settings.autoload_media_embedders || [];
     if (current.includes(embedder.name)) {
-      this.settings.autoload_media_types = current.filter((e) => e !== embedder.name);
+      this.settings.autoload_media_embedders = current.filter((e) => e !== embedder.name);
     } else {
-      this.settings.autoload_media_types = [...current, embedder.name];
+      this.settings.autoload_media_embedders = [...current, embedder.name];
     }
     this.save();
   }
