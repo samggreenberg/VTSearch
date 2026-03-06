@@ -53,7 +53,13 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media']) {
-      this.swipeClass = '';
+      // Keep the wrapper hidden while Angular renders the new media content.
+      // Without this, clearing swipeClass instantly snaps opacity back to 1,
+      // which can flash the OLD image for one frame before the new one paints.
+      this.swipeClass = 'swipe-hidden';
+      requestAnimationFrame(() => {
+        this.swipeClass = '';
+      });
     }
   }
 

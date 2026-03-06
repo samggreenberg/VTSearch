@@ -59,6 +59,10 @@
   animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
+.swipe-hidden {
+  opacity: 0;
+}
+
 // Image view controls (outside swipe wrapper so they stay fixed during swipe)
 .image-view-controls {
   display: flex;
