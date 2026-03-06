@@ -905,6 +905,7 @@ def load_dataset_from_pickle(
                 media_data: dict[str, Any] = {
                     "id": media_id,
                     "type": media_type,
+                    "embedder": media_info.get("embedder", ""),
                     "duration": media_info.get("duration", 0),
                     "file_size": media_info.get("file_size", 0),
                     "md5": media_info.get("md5", ""),
@@ -981,6 +982,7 @@ def load_dataset_from_pickle(
                 media_data = {
                     "id": media_id,
                     "type": media_type,
+                    "embedder": media_info.get("embedder", ""),
                     "duration": media_info.get("duration", 0),
                     "file_size": media_info.get("file_size", len(media_bytes)),
                     "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
@@ -1372,6 +1374,7 @@ def export_dataset_to_file(
                 "duration": media["duration"],
                 "file_size": media["file_size"],
                 "md5": media["md5"],
+                "embedder": media.get("embedder", ""),
                 "embedding": media["embedding"].tolist()
                 if isinstance(media["embedding"], np.ndarray)
                 else media["embedding"],

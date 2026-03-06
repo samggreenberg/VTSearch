@@ -206,7 +206,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
     this.progressIndeterminate = true;
-    this.datasetsApi.loadDemo(demo.name).subscribe({
+    this.datasetsApi.loadDemo(demo.name, demo.embedder || '').subscribe({
       next: () => {
         this.startProgressPolling();
       },

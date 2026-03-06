@@ -189,6 +189,7 @@ export interface MediaTypeInfo {
   name: string;
   icon?: string;
   tab_title?: string;
+  folder_import_name?: string;
 }
 
 export interface MediaTypesResponse {

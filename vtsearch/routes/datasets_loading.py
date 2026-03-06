@@ -138,6 +138,7 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
 
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
+    embedder = first.get("embedder", "")
     num_items = len(snap)
 
     # Derive name from display-name override, origin, or fallback
@@ -165,6 +166,7 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
         pkl_path=pkl_path,
         origin=origin_str,
         source=source,
+        embedder=embedder,
     )
     _reg_set_loaded(entry["id"])
 

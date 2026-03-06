@@ -33,10 +33,21 @@
             <button
               class="demo-tab"
               [class.active]="activeTab === tab"
-              (click)="selectDemoTab(tab)"
+              (click)="selectDemoTabWithEmbedder(tab)"
             >{{ getTabLabel(tab) }}</button>
           }
         </div>
+
+        @if (demoEmbeddersForTab.length > 0) {
+          <div class="form-group demo-embedder-row">
+            <label class="form-label" for="demo-embedder">Embedder</label>
+            <select id="demo-embedder" class="form-select" [(ngModel)]="demoEmbedder">
+              @for (emb of demoEmbeddersForTab; track emb.name) {
+                <option [value]="emb.name">{{ emb.name }}</option>
+              }
+            </select>
+          </div>
+        }
 
         <div class="demo-content-area">
           <table class="demo-table">
@@ -102,6 +113,7 @@
                 [id]="'field-' + field.key"
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
+                (ngModelChange)="field.key === 'media_type' ? onMediaTypeChange() : null"
               >
                 @for (opt of field.options || []; track opt) {
                   <option [value]="opt">{{ opt }}</option>
@@ -120,6 +132,21 @@
         }
       } @else {
         <p class="info-text">This importer requires no additional configuration.</p>
+      }
+
+      @if (showEmbedderField && availableEmbedders.length > 0) {
+        <div class="form-group">
+          <label class="form-label" for="field-embedder">Embedder</label>
+          <select
+            id="field-embedder"
+            class="form-select"
+            [(ngModel)]="formValues['embedder']"
+          >
+            @for (emb of availableEmbedders; track emb.name) {
+              <option [value]="emb.name">{{ emb.name }}</option>
+            }
+          </select>
+        </div>
       }
 
       @if (error) {
