@@ -711,13 +711,23 @@ def multi_find():
                         bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
                         X_list = good_embs + bad_embs
                         y_list = [1.0] * len(good_embs) + [0.0] * len(bad_embs)
+                    else:
+                        # Labels didn't match this dataset — resolve from
+                        # original sources (cross-dataset scenario).
+                        from vtsearch.models.resolver import resolve_label_embeddings
 
-                        from vtsearch.models import calculate_cross_calibration_threshold, train_model
+                        media_type = tm_data.get("media_type", "audio")
+                        resolved = resolve_label_embeddings(labels, media_type)
+                        if resolved.has_good_and_bad:
+                            X_list = resolved.embeddings
+                            y_list = resolved.labels
+                        else:
+                            X_list = []
+                            y_list = []
 
+                    if X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list):
                         input_dim = X_list[0].shape[0]
                         threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, get_inclusion())
-
-                        import torch
 
                         X_train = torch.tensor(np.array(X_list), dtype=torch.float32)
                         y_train = torch.tensor([[v] for v in y_list], dtype=torch.float32)
@@ -733,7 +743,7 @@ def multi_find():
                                 "score": round(score, 4),
                             }
                     else:
-                        # Not enough labels matched this dataset
+                        # Not enough labels resolved
                         for cid in all_ids:
                             media_results[cid]["model_verdicts"][mc["name"]] = {
                                 "verdict": "N/A",
