@@ -7,6 +7,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
+import { AutopilotStateService } from '../../services/autopilot-state.service';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -292,5 +293,24 @@ describe('LabelViewComponent', () => {
 
     component.onAutopilotStart();
     httpMock.expectNone('/api/sort');
+  });
+
+  it('should clear stale autopilot state from previous session on init', () => {
+    const autopilot = TestBed.inject(AutopilotStateService);
+    // Simulate leftover state from a previous detector session
+    autopilot.activate();
+    autopilot.checkPhaseTransition(3, 0); // advance to 'bad'
+    expect(autopilot.state.phase).toBe('bad');
+
+    // Creating a new label-view should clear stale state
+    const freshFixture = TestBed.createComponent(LabelViewComponent);
+    freshFixture.detectChanges();
+
+    // After init, autopilot should be in 'good' phase (cleared then re-activated
+    // by the child autopilot panel), NOT stuck in 'bad' from the old session
+    expect(autopilot.state.phase).toBe('good');
+
+    freshFixture.componentInstance.ngOnDestroy();
+    httpMock.match(() => true);
   });
 });
