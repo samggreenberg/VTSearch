@@ -402,7 +402,7 @@ export interface AutoDetectDetectorResult {
 
 export interface AutoDetectResultsData {
   media_type?: string;
-  detectors_run?: string;
+  detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
   // Find mode fields
   models?: string[];
