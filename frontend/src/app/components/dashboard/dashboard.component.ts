@@ -346,15 +346,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return true;
   }
 
+  private findMediaTypesMatch(): boolean {
+    const selectedDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    const types = new Set([
+      ...selectedDatasets.map((d) => d.media_type),
+      ...selectedModels.map((m) => m.media_type),
+    ]);
+    return types.size === 1;
+  }
+
   get findEnabled(): boolean {
     if (this.selectedDatasetIds.size < 1 || this.selectedModelIds.size < 1) return false;
-    return true;
+    return this.findMediaTypesMatch();
   }
 
   get findHint(): string {
     if (this.selectedDatasetIds.size === 0 && this.selectedModelIds.size === 0) return 'Select a dataset and a model';
     if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
     if (this.selectedModelIds.size === 0) return 'Select a model';
+    if (!this.findMediaTypesMatch()) return 'Media type mismatch';
     return 'Score selected datasets with selected models';
   }
 
