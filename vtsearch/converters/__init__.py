@@ -48,6 +48,11 @@ def list_converters_for_target(target_type: str) -> list[MediaConverter]:
     return [c for c in _ALL_CONVERTERS if c.target_type == target_type]
 
 
+def list_converters_for_source(source_type: str) -> list[MediaConverter]:
+    """Return converters that consume *source_type* (a ``type_id``)."""
+    return [c for c in _ALL_CONVERTERS if c.source_type == source_type]
+
+
 __all__ = [
     "MediaConverter",
     "Document2ImageMediaConverter",
@@ -57,4 +62,5 @@ __all__ = [
     "list_converters",
     "get_converter",
     "list_converters_for_target",
+    "list_converters_for_source",
 ]

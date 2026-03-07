@@ -1229,6 +1229,7 @@ def load_demo_dataset(
     e5_model: Any = None,
     on_progress: Optional[ProgressCallback] = None,
     embedder_name: str = "",
+    converter_name: str = "",
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -1240,6 +1241,11 @@ def load_demo_dataset(
     :meth:`~vtsearch.media.base.MediaType.load_demo_source` method that
     handles downloading, embedding, and populating clips for its demo sources.
     This function simply orchestrates pickle caching around that delegation.
+
+    When *converter_name* is given (e.g. ``"video2image"``), the demo data is
+    loaded using its original media type, then each media is converted via the
+    named converter.  The resulting dataset contains the *target* type and
+    is cached under a separate pickle key.
 
     Progress throughout the operation is reported via :func:`update_progress`.
 
@@ -1254,6 +1260,9 @@ def load_demo_dataset(
         embedder_name: Optional name of a registered embedder to use.
             When empty, the first registered embedder for the media type
             is used.
+        converter_name: Optional name of a converter (e.g. ``"video2image"``).
+            When given, the demo is loaded in its native type and then
+            converted.
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -1268,8 +1277,11 @@ def load_demo_dataset(
     dataset_info = DEMO_DATASETS[dataset_name]
     media_type_id = dataset_info.get("media_type", "audio")
 
+    # When a converter is specified, use a separate pickle cache key.
+    cache_key = f"{dataset_name}__{converter_name}" if converter_name else dataset_name
+
     # Check if already embedded
-    pkl_file = EMBEDDINGS_DIR / f"{dataset_name}.pkl"
+    pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
     if pkl_file.exists():
         on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
         load_dataset_from_pickle(pkl_file, medias)
@@ -1316,13 +1328,28 @@ def load_demo_dataset(
     )
 
     # Stamp the demo origin on all medias (fresh dict per media to avoid shared-reference mutation bugs)
+    demo_origin_params: dict[str, str] = {"name": dataset_name}
+    if converter_name:
+        demo_origin_params["converter"] = converter_name
     for media in medias.values():
-        media["origin"] = {"importer": "demo", "params": {"name": dataset_name}}
+        media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
+
+    # --- Apply converter if requested ---
+    if converter_name:
+        _apply_converter_to_demo(
+            converter_name=converter_name,
+            dataset_name=dataset_name,
+            medias=medias,
+            embedder_name=embedder_name,
+            on_progress=on_progress,
+        )
 
     # Build the pickle cache payload
     # For types with external media dirs (audio, video), exclude media_bytes
     # from the pickle and store the dir path so reloading can find the files.
-    if external_dir is not None:
+    # When a converter was applied, external_dir is no longer relevant (the
+    # converted medias carry their own bytes/strings).
+    if external_dir is not None and not converter_name:
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
@@ -1345,6 +1372,129 @@ def load_demo_dataset(
         pickle.dump(pkl_data, f)
 
     on_progress("idle", f"Loaded {dataset_name} dataset")
+
+
+def _apply_converter_to_demo(
+    converter_name: str,
+    dataset_name: str,
+    medias: dict[int, dict[str, Any]],
+    embedder_name: str = "",
+    on_progress: Optional[ProgressCallback] = None,
+) -> None:
+    """Convert all medias in-place using the named converter.
+
+    After conversion, *medias* contains the converted outputs (target type)
+    instead of the original source-type medias.  Each converted media's
+    origin records the demo dataset and the converter used.
+    """
+    from vtsearch.converters import get_converter
+    from vtsearch.converters.runner import _compute_md5, _embed_converted_output
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    converter = get_converter(converter_name)
+    if converter is None:
+        raise ValueError(f"Unknown converter: {converter_name}")
+
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    # Resolve embedder for the *target* type.
+    target_emb = None
+    if embedder_name:
+        try:
+            target_emb = get_embedder(embedder_name)
+        except KeyError:
+            pass
+    if target_emb is None:
+        avail = embedders_for_type(converter.target_type)
+        if avail:
+            target_emb = avail[0]
+    if target_emb is not None and getattr(target_emb, "_model", None) is None:
+        target_emb.load_models()
+
+    # Convert each original media and collect the outputs.
+    source_items = list(medias.items())
+    converted: dict[int, dict[str, Any]] = {}
+    new_id = 1
+
+    on_progress(
+        "converting",
+        f"Converting {len(source_items)} items via {converter.display_name or converter.name}...",
+        0,
+        len(source_items),
+    )
+
+    for idx, (_, src) in enumerate(source_items):
+        on_progress(
+            "converting",
+            f"Converting {src.get('filename', '')} via {converter.display_name or converter.name}...",
+            idx + 1,
+            len(source_items),
+        )
+
+        try:
+            outputs = converter.convert(src)
+        except Exception:
+            continue
+        if not outputs:
+            continue
+
+        origin = {
+            "importer": "converter",
+            "params": {
+                "converter": converter_name,
+                "source_file": src.get("filename", ""),
+                "parent_importer": "demo",
+                "parent_demo": dataset_name,
+            },
+        }
+
+        for output in outputs:
+            output_filename = output.get("filename", f"converted_{new_id}")
+            source_name = src.get("filename", str(src.get("id", "")))
+            origin_name = f"{source_name}\u2192{output_filename}"
+
+            embedding = _embed_converted_output(target_emb, output)
+            if embedding is None:
+                continue
+
+            md5 = _compute_md5(output)
+
+            media_data: dict[str, Any] = {
+                "id": new_id,
+                "type": converter.target_type,
+                "embedder": target_emb.name if target_emb else "",
+                "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
+                "md5": md5,
+                "embedding": embedding,
+                "filename": origin_name,
+                "category": src.get("category", "custom"),
+                "origin": origin,
+                "origin_name": origin_name,
+                "media_bytes": None,
+                "media_string": None,
+                "media_path": src.get("media_path", ""),
+                "duration": output.get("duration", 0),
+            }
+
+            if "media_bytes" in output:
+                media_data["media_bytes"] = output["media_bytes"]
+            if "media_string" in output:
+                media_data["media_string"] = output["media_string"]
+            if "width" in output:
+                media_data["width"] = output["width"]
+            if "height" in output:
+                media_data["height"] = output["height"]
+            if "word_count" in output:
+                media_data["word_count"] = output["word_count"]
+            if "character_count" in output:
+                media_data["character_count"] = output["character_count"]
+
+            converted[new_id] = media_data
+            new_id += 1
+
+    medias.clear()
+    medias.update(converted)
 
 
 def export_dataset_to_file(

@@ -516,3 +516,227 @@ class TestFolderImporterDocumentsOption:
         importer = FolderDatasetImporter()
         media_type_field = next(f for f in importer.fields if f.key == "media_type")
         assert "documents" in media_type_field.options
+
+
+# ===========================================================================
+# Converter registry: list_converters_for_source
+# ===========================================================================
+
+
+class TestConverterRegistrySourceFilter:
+    def test_list_converters_for_source_video(self):
+        from vtsearch.converters import list_converters_for_source
+
+        results = list_converters_for_source("video")
+        names = [c.name for c in results]
+        assert "video2image" in names
+        assert "video2audio" in names
+        assert "document2image" not in names
+
+    def test_list_converters_for_source_document(self):
+        from vtsearch.converters import list_converters_for_source
+
+        results = list_converters_for_source("document")
+        names = [c.name for c in results]
+        assert "document2image" in names
+        assert "document2paragraph" in names
+        assert "video2image" not in names
+
+    def test_list_converters_for_source_nonexistent(self):
+        from vtsearch.converters import list_converters_for_source
+
+        results = list_converters_for_source("nonexistent_type")
+        assert results == []
+
+
+# ===========================================================================
+# /api/converters endpoint — source filter
+# ===========================================================================
+
+
+class TestConvertersAPISourceFilter:
+    def test_converters_no_filter(self, client):
+        resp = client.get("/api/converters")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "converters" in data
+        assert len(data["converters"]) >= 4
+
+    def test_converters_filter_by_target(self, client):
+        resp = client.get("/api/converters?target=image")
+        data = resp.get_json()
+        names = [c["name"] for c in data["converters"]]
+        assert "document2image" in names
+        assert "video2image" in names
+        assert "document2text" not in names
+
+    def test_converters_filter_by_source(self, client):
+        resp = client.get("/api/converters?source=video")
+        data = resp.get_json()
+        names = [c["name"] for c in data["converters"]]
+        assert "video2image" in names
+        assert "video2audio" in names
+        assert "document2image" not in names
+
+    def test_converters_filter_by_source_folder_name(self, client):
+        resp = client.get("/api/converters?source=videos")
+        data = resp.get_json()
+        names = [c["name"] for c in data["converters"]]
+        assert "video2image" in names
+
+    def test_converters_filter_by_source_no_results(self, client):
+        resp = client.get("/api/converters?source=paragraph")
+        data = resp.get_json()
+        assert data["converters"] == []
+
+
+# ===========================================================================
+# Demo list includes available converters
+# ===========================================================================
+
+
+class TestDemoListConverters:
+    def test_demo_list_includes_converters(self, client):
+        resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        demos = data["datasets"]
+        assert len(demos) > 0
+        for demo in demos:
+            assert "available_converters" in demo
+            assert isinstance(demo["available_converters"], list)
+
+    def test_demo_list_video_demo_has_video_converters(self, client):
+        """Video demos should list video2image and video2audio converters."""
+        resp = client.get("/api/dataset/demo-list")
+        demos = resp.get_json()["datasets"]
+        video_demos = [d for d in demos if d["media_type"] == "video"]
+        if not video_demos:
+            pytest.skip("No video demo datasets registered")
+        demo = video_demos[0]
+        conv_names = [c["name"] for c in demo["available_converters"]]
+        assert "video2image" in conv_names
+        assert "video2audio" in conv_names
+
+    def test_demo_list_audio_demo_has_no_source_converters(self, client):
+        """Audio demos should have no source converters (no audio→X converters exist)."""
+        resp = client.get("/api/dataset/demo-list")
+        demos = resp.get_json()["datasets"]
+        audio_demos = [d for d in demos if d["media_type"] == "audio"]
+        if not audio_demos:
+            pytest.skip("No audio demo datasets registered")
+        demo = audio_demos[0]
+        assert demo["available_converters"] == []
+
+
+# ===========================================================================
+# Importer to_dict includes available_converters_by_media_type
+# ===========================================================================
+
+
+class TestImporterConverterMetadata:
+    def test_folder_importer_to_dict_has_converters(self):
+        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+
+        importer = FolderDatasetImporter()
+        d = importer.to_dict()
+        assert "available_converters_by_media_type" in d
+        by_mt = d["available_converters_by_media_type"]
+        assert isinstance(by_mt, dict)
+        # image type should have document2image and video2image
+        if "image" in by_mt:
+            names = [c["name"] for c in by_mt["image"]]
+            assert "document2image" in names
+            assert "video2image" in names
+
+    def test_http_archive_importer_to_dict_has_converters(self):
+        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+
+        importer = HttpArchiveDatasetImporter()
+        d = importer.to_dict()
+        assert "available_converters_by_media_type" in d
+        by_mt = d["available_converters_by_media_type"]
+        # audio type should have video2audio
+        if "audio" in by_mt:
+            names = [c["name"] for c in by_mt["audio"]]
+            assert "video2audio" in names
+
+    def test_importers_endpoint_includes_converters(self, client):
+        resp = client.get("/api/dataset/importers")
+        assert resp.status_code == 200
+        importers = resp.get_json()["importers"]
+        folder_imp = next((i for i in importers if i["name"] == "folder"), None)
+        if folder_imp:
+            assert "available_converters_by_media_type" in folder_imp
+
+
+# ===========================================================================
+# Demo dataset loading with converter
+# ===========================================================================
+
+
+class TestLoadDemoWithConverter:
+    def test_load_demo_endpoint_accepts_converter(self, client):
+        """The load-demo endpoint should accept a converter parameter."""
+        resp = client.post(
+            "/api/dataset/load-demo",
+            json={"name": "nonexistent_demo", "converter": "video2image"},
+        )
+        # Should fail with "Invalid dataset name", not with a parameter error
+        assert resp.status_code == 400
+        assert "Invalid dataset" in resp.get_json()["error"]
+
+    def test_apply_converter_to_demo_unknown_converter(self):
+        """_apply_converter_to_demo should raise for unknown converters."""
+        from vtsearch.datasets.loader import _apply_converter_to_demo
+
+        with pytest.raises(ValueError, match="Unknown converter"):
+            _apply_converter_to_demo(
+                converter_name="nonexistent_converter",
+                dataset_name="test",
+                medias={},
+            )
+
+    def test_apply_converter_to_demo_empty_medias(self):
+        """_apply_converter_to_demo with empty medias should produce empty output."""
+        from vtsearch.datasets.loader import _apply_converter_to_demo
+
+        medias: dict = {}
+        _apply_converter_to_demo(
+            converter_name="document2image",
+            dataset_name="test",
+            medias=medias,
+        )
+        assert medias == {}
+
+    def test_apply_converter_to_demo_converts_documents(self):
+        """_apply_converter_to_demo should convert document medias to images."""
+        from vtsearch.datasets.loader import _apply_converter_to_demo
+
+        pdf_bytes = _make_minimal_pdf("Convert me")
+        medias = {
+            1: {
+                "id": 1,
+                "type": "document",
+                "filename": "test.pdf",
+                "media_bytes": pdf_bytes,
+                "media_path": "",
+                "category": "test_cat",
+            }
+        }
+        _apply_converter_to_demo(
+            converter_name="document2image",
+            dataset_name="test_demo",
+            medias=medias,
+        )
+        # Should have converted the document to image(s)
+        assert len(medias) >= 1
+        for m in medias.values():
+            assert m["type"] == "image"
+            assert m["origin"]["importer"] == "converter"
+            assert m["origin"]["params"]["converter"] == "document2image"
+            assert m["origin"]["params"]["parent_importer"] == "demo"
+            assert m["origin"]["params"]["parent_demo"] == "test_demo"
+            assert "test.pdf" in m["origin"]["params"]["source_file"]
+            # Category should be preserved from source
+            assert m["category"] == "test_cat"
