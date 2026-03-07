@@ -1,14 +1,21 @@
 # Plan: New MediaEmbedders
 
+> **Status (March 2026):** Three embedders from this plan have been implemented:
+> `ImageSiglipEmbedder`, `TextBGEEmbedder`, and `AudioClapMusicEmbedder`.
+> The remaining proposals are still open for future work.
+
 ## Current State
 
-We have 4 embedders, one per non-document media type:
+We now have 7 embedders across the non-document media types (4 defaults + 3 alternatives):
 
 | Embedder | Model | Media Type | Dim | Library |
 |---|---|---|---|---|
 | `AudioClapEmbedder` | `laion/clap-htsat-unfused` | audio | 512 | transformers |
+| `AudioClapMusicEmbedder` | `laion/larger_clap_music_and_speech` | audio | 512 | transformers | **IMPLEMENTED** |
 | `ImageClipEmbedder` | `openai/clip-vit-base-patch32` | image | 768 | transformers |
+| `ImageSiglipEmbedder` | `google/siglip-base-patch16-224` | image | 768 | transformers | **IMPLEMENTED** |
 | `TextE5Embedder` | `intfloat/e5-base-v2` | paragraph | 768 | sentence-transformers |
+| `TextBGEEmbedder` | `BAAI/bge-base-en-v1.5` | paragraph | 768 | sentence-transformers | **IMPLEMENTED** |
 | `VideoXClipEmbedder` | `microsoft/xclip-base-patch32` | video | 768 | transformers |
 
 The architecture already supports multiple embedders per media type (registry keyed by `name`, `embedders_for_type()` returns a list). Adding new embedders requires:
@@ -23,7 +30,7 @@ The architecture already supports multiple embedders per media type (registry ke
 
 ### Image
 
-#### 1. `ImageSiglipEmbedder` (Priority: HIGH)
+#### 1. `ImageSiglipEmbedder` (Priority: HIGH) — IMPLEMENTED
 - **Model**: `google/siglip-base-patch16-224` (ViT-B-16-SigLIP)
 - **Dimension**: 768
 - **Library**: transformers (`SiglipModel`, `SiglipProcessor`)
@@ -48,7 +55,7 @@ The architecture already supports multiple embedders per media type (registry ke
 
 ### Audio
 
-#### 4. `AudioClapMusicEmbedder` (Priority: MEDIUM)
+#### 4. `AudioClapMusicEmbedder` (Priority: MEDIUM) — IMPLEMENTED
 - **Model**: `laion/larger_clap_music_and_speech`
 - **Dimension**: 512
 - **Library**: transformers (`ClapModel`, `ClapProcessor`)
@@ -65,7 +72,7 @@ The architecture already supports multiple embedders per media type (registry ke
 
 ### Text
 
-#### 6. `TextBGEEmbedder` (Priority: MEDIUM)
+#### 6. `TextBGEEmbedder` (Priority: MEDIUM) — IMPLEMENTED
 - **Model**: `BAAI/bge-base-en-v1.5`
 - **Dimension**: 768
 - **Library**: sentence-transformers (`SentenceTransformer`)
@@ -107,9 +114,9 @@ The architecture already supports multiple embedders per media type (registry ke
 
 ## Implementation Order (Recommended)
 
-1. **`ImageSiglipEmbedder`** — Highest value, straightforward, no new dependencies
-2. **`TextBGEEmbedder`** — Easy win, same sentence-transformers pattern as E5
-3. **`AudioClapMusicEmbedder`** — Nearly identical to existing CLAP, immediate value for music datasets
+1. ~~**`ImageSiglipEmbedder`** — Highest value, straightforward, no new dependencies~~ **DONE**
+2. ~~**`TextBGEEmbedder`** — Easy win, same sentence-transformers pattern as E5~~ **DONE**
+3. ~~**`AudioClapMusicEmbedder`** — Nearly identical to existing CLAP, immediate value for music datasets~~ **DONE**
 4. **`ImageDINOv2Embedder`** — Interesting vision-only alternative, good for visual similarity
 5. Everything else as needed
 

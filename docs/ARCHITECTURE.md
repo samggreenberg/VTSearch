@@ -25,7 +25,8 @@ semantically sorting collections of audio, images, text, video, or
 documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), CLIP (images), X-CLIP
-  (video), E5-base-v2 (text) for embedding-based similarity search.
+  (video), E5-base-v2 (text) for embedding-based similarity search,
+  with alternative embedders available (CLAP Music, SigLIP, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -51,15 +52,18 @@ VTSearch/
 │   │   ├── __init__.py             Three registries: register/register_embedder/register_clipper
 │   │   ├── audio/media_type.py     Audio media type (WAV serving, folder import)
 │   │   ├── audio/embedder.py       AudioClapEmbedder (LAION CLAP, 512-d)
+│   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
 │   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
-│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 512-d)
+│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
+│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
 │   │   ├── text/media_type.py      Text/paragraph media type (JSON serving)
 │   │   ├── text/embedder.py        TextE5Embedder (E5-base-v2, 768-d)
+│   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
 │   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
 │   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
-│   │   ├── video/embedder.py       VideoXClipEmbedder (X-CLIP, 512-d)
+│   │   ├── video/embedder.py       VideoXClipEmbedder (X-CLIP, 768-d)
 │   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
 │   │   ├── document/media_type.py  Document handling (no embedder; convert first)
 │   │   └── document/clipper.py     DocumentDefaultClipper
@@ -396,9 +400,9 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_thumbnails_left`, `show_thumbnails_right`,
-`autopilot_top_greens`, `autopilot_hard_reds`,
-autorun processor recipes) live
+`swipe_animation`, `show_metadata`, `show_thumbnails_left`,
+`show_thumbnails_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
+`autoload_media_types`, autorun processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).

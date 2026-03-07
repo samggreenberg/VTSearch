@@ -42,12 +42,23 @@ settings).
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
-| CLAP | Audio | `laion/clap-htsat-unfused` | ~1.1 GB |
-| CLIP | Image | `openai/clip-vit-base-patch32` | ~350 MB |
-| X-CLIP | Video | `microsoft/xclip-base-patch32` | ~1.2 GB |
-| E5 | Text | `intfloat/e5-base-v2` | ~440 MB |
+| CLAP | Audio (default) | `laion/clap-htsat-unfused` | ~1.1 GB |
+| CLIP | Image (default) | `openai/clip-vit-base-patch32` | ~350 MB |
+| X-CLIP | Video (default) | `microsoft/xclip-base-patch32` | ~1.2 GB |
+| E5 | Text (default) | `intfloat/e5-base-v2` | ~440 MB |
 
-**Total: ~3.1 GB** for all four models.
+**Total: ~3.1 GB** for the four default models.
+
+#### Alternative embedders
+
+Three additional embedder models are available as alternatives to the defaults.
+These are only downloaded if explicitly selected:
+
+| Model | Media type | HuggingFace ID | Approx. size |
+|-------|-----------|----------------|-------------|
+| CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
+| SigLIP | Image | `google/siglip-base-patch16-224` | ~400 MB |
+| BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
 
 All model downloads use `token=False` — no HuggingFace account or API
 token is required.
