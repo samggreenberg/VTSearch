@@ -107,11 +107,6 @@ def _origin_to_str(origin: dict | None) -> str:
     if not importer_name:
         return "unknown"
 
-    # Special pseudo-origins that are not real importers
-    params = origin.get("params", {})
-    if importer_name == "demo":
-        return f"demo:{params.get('name', '')}"
-
     from vtsearch.datasets.importers import get_importer
 
     importer = get_importer(importer_name)
@@ -119,6 +114,7 @@ def _origin_to_str(origin: dict | None) -> str:
         return importer.origin_display(origin)
 
     # Unknown importer — generic fallback
+    params = origin.get("params", {})
     if params:
         first_val = next(iter(params.values()))
         return f"{importer_name}:{first_val}"

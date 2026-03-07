@@ -19,7 +19,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
-from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
+from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
@@ -345,54 +345,19 @@ def stage_demo(name: str):
     if name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
+    importer = get_importer("demo")
+    if importer is None:
+        return jsonify({"error": "demo importer not available"}), 500
+
     body = request.get_json(force=True, silent=True) or {}
     converter_name = body.get("converter", "")
 
-    def stage_task():
-        try:
-            temp_medias: dict = {}
-            load_demo_dataset(name, temp_medias, converter_name=converter_name)
+    field_values: dict = {"name": name}
+    if converter_name:
+        field_values["converter"] = converter_name
 
-            if not temp_medias:
-                update_progress("idle", "", 0, 0, "Demo produced no medias.")
-                return
-
-            first = next(iter(temp_medias.values()))
-            media_type = first.get("type", "audio")
-            count = len(temp_medias)
-            label = DEMO_DATASETS[name].get("label", name)
-
-            data_bytes = export_dataset_to_file(temp_medias)
-            del temp_medias
-            gc.collect()
-
-            STAGING_DIR.mkdir(parents=True, exist_ok=True)
-            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
-            staging_path.write_bytes(data_bytes)
-            del data_bytes
-            gc.collect()
-
-            update_progress(
-                "idle",
-                f"Staged: {label} ({count} medias)",
-                100,
-                100,
-                staging_result={"path": str(staging_path), "name": label, "count": count, "media_type": media_type},
-            )
-        except MemoryError:
-            gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
-
-    thread = threading.Thread(target=stage_task, daemon=True)
-    thread.start()
+    label = DEMO_DATASETS[name].get("label", name)
+    _stage_importer_in_background(importer, field_values, label=label)
     return jsonify({"ok": True, "message": "Staging demo dataset..."})
 
 
@@ -489,19 +454,19 @@ def load_demo_dataset_route():
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
-    demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
+    importer = get_importer("demo")
+    if importer is None:
+        return jsonify({"error": "demo importer not available"}), 500
+
+    field_values: dict = {"name": dataset_name}
+    if embedder_name:
+        field_values["embedder"] = embedder_name
     if converter_name:
-        demo_origin["params"]["converter"] = converter_name
+        field_values["converter"] = converter_name
+    if clipper_name:
+        field_values["clipper"] = clipper_name
 
-    _run_origin_load_in_background(
-        lambda: load_demo_dataset(
-            dataset_name, medias, embedder_name=embedder_name, converter_name=converter_name,
-        ),
-        demo_origin,
-        name=dataset_name,
-        clipper=clipper_name,
-    )
-
+    _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
 
@@ -705,12 +670,11 @@ def load_dataset_from_source():
 def _load_from_origin(source: dict):
     """Start loading a dataset from a raw origin dict (internal helper).
 
-    Special pseudo-origins (``"dupe_set"``, ``"demo"``) are handled inline.
-    All real importers are dispatched generically via
+    Special pseudo-origins (``"dupe_set"``) are handled inline.
+    All real importers (including ``"demo"``) are dispatched generically via
     :meth:`~DatasetImporter.reload_from_origin`.
     """
     importer_name = source.get("importer", "")
-    params = source.get("params", {})
 
     # --- pseudo-origins (not real importers) ---
 
@@ -721,21 +685,6 @@ def _load_from_origin(source: dict):
             if isinstance(member_origin, dict):
                 return _load_from_origin(member_origin)
         return jsonify({"error": "Cannot reload from dupe_set origin"}), 400
-
-    if importer_name == "demo":
-        demo_name = params.get("name", "")
-        converter_name = params.get("converter", "")
-        if demo_name not in DEMO_DATASETS:
-            return jsonify({"error": f"Unknown demo dataset: {demo_name}"}), 400
-        origin = {"importer": "demo", "params": {"name": demo_name}}
-        if converter_name:
-            origin["params"]["converter"] = converter_name
-        _run_origin_load_in_background(
-            lambda: load_demo_dataset(demo_name, medias, converter_name=converter_name),
-            origin,
-            name=demo_name,
-        )
-        return jsonify({"ok": True, "message": "Loading started"})
 
     # --- real importers: generic dispatch ---
 
