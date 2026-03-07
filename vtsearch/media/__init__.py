@@ -235,13 +235,19 @@ register(DocumentMediaType())
 # ------------------------------------------------------------------
 
 from vtsearch.media.audio.embedder import AudioClapEmbedder  # noqa: E402
+from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder  # noqa: E402
 from vtsearch.media.image.embedder import ImageClipEmbedder  # noqa: E402
+from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder  # noqa: E402
 from vtsearch.media.text.embedder import TextE5Embedder  # noqa: E402
+from vtsearch.media.text.embedder_bge import TextBGEEmbedder  # noqa: E402
 from vtsearch.media.video.embedder import VideoXClipEmbedder  # noqa: E402
 
 register_embedder(AudioClapEmbedder())
+register_embedder(AudioClapMusicEmbedder())
 register_embedder(ImageClipEmbedder())
+register_embedder(ImageSiglipEmbedder())
 register_embedder(TextE5Embedder())
+register_embedder(TextBGEEmbedder())
 register_embedder(VideoXClipEmbedder())
 
 # ------------------------------------------------------------------
