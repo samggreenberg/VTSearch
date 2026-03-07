@@ -15,7 +15,7 @@
     </span>
   }
 </td>
-<td class="type-cell">
+<td class="type-cell text-center">
   @switch (dataset.media_type) {
     @case ('audio') {
       <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -35,20 +35,20 @@
   }
   {{ capitalizeType(dataset.media_type) }}
 </td>
-<td>{{ dataset.num_items ?? '-' }}</td>
-<td>{{ dataset.num_dupes ?? 0 }}</td>
-<td>{{ formatDate(dataset.created_at) }}</td>
+<td class="text-center">{{ dataset.num_items ?? '-' }}</td>
+<td class="text-center">{{ dataset.num_dupes ?? 0 }}</td>
+<td class="text-center">{{ formatDate(dataset.created_at) }}</td>
 <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
-<td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
-<td class="embedder-cell">{{ dataset.embedder || '-' }}</td>
-<td>
+<td class="clipper-cell text-center">{{ dataset.clipper || '-' }}</td>
+<td class="embedder-cell text-center">{{ dataset.embedder || '-' }}</td>
+<td class="text-center">
   @if (dataset.loaded) {
     <span class="check" aria-label="Loaded">&#10003;</span>
   } @else {
     <span class="dim">-</span>
   }
 </td>
-<td class="actions-cell">
+<td class="actions-cell text-center">
   <button class="edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>

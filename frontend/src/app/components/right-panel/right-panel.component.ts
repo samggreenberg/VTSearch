@@ -11,6 +11,7 @@ import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.compo
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -25,6 +26,7 @@ export interface TrainModeContext {
     LabelListComponent,
     DetectorContextBarComponent,
     DetectorExportModalComponent,
+    LabelExporterModalComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -40,6 +42,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   showThumbnails = true;
+  showLabelExport = false;
   showDetectorExport = false;
 
   private destroy$ = new Subject<void>();
@@ -76,7 +79,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   }
 
   onExportLabels(): void {
-    this.dialog.alert('Label export not yet available in the Angular frontend.', 'info');
+    this.showLabelExport = true;
   }
 
   onExportDetector(): void {
