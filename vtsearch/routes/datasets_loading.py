@@ -125,7 +125,48 @@ def _origin_to_str(origin: dict | None) -> str:
     return importer_name
 
 
-def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: dict | None = None) -> None:
+def _apply_clipper(clips_dict: dict, clipper_name: str) -> None:
+    """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
+
+    Each media is run through the clipper's ``clip()`` method.  The resulting
+    clips are assigned fresh sequential IDs and their origins are annotated
+    with the clipper name and clip index.
+    """
+    if not clipper_name:
+        return
+    from vtsearch.media import get_clipper
+
+    try:
+        clipper = get_clipper(clipper_name)
+    except KeyError:
+        return
+
+    all_clipped: list[dict] = []
+    for media in list(clips_dict.values()):
+        clipped = clipper.clip(media)
+        for idx, clip in enumerate(clipped):
+            # Annotate origin with clipper info
+            orig = clip.get("origin")
+            if isinstance(orig, dict):
+                clip["origin"] = dict(orig)
+                clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
+                clip["origin"]["params"]["clipper"] = clipper_name
+                if len(clipped) > 1:
+                    clip["origin"]["params"]["clip_index"] = str(idx)
+            all_clipped.append(clip)
+
+    clips_dict.clear()
+    for new_id, clip in enumerate(all_clipped, 1):
+        clip["id"] = new_id
+        clips_dict[new_id] = clip
+
+
+def _auto_register_dataset(
+    name: str = "",
+    origin_str: str = "unknown",
+    source: dict | None = None,
+    clipper: str = "",
+) -> None:
     """Save the current medias as a pkl and register in the dataset registry.
 
     Called at the end of every successful dataset load.  Skips if medias is
@@ -165,16 +206,17 @@ def _auto_register_dataset(name: str = "", origin_str: str = "unknown", source: 
         pkl_path=pkl_path,
         origin=origin_str,
         source=source,
+        clipper=clipper,
     )
     _reg_set_loaded(entry["id"])
 
 
-def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> None:
+def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "", clipper: str = "") -> None:
     """Run a dataset load in a background thread with standard error handling.
 
     *load_fn* is called after ``clear_dataset()`` / ``gc.collect()`` and should
-    populate ``medias``.  Everything after (origin tagging, dedup, diversity
-    tree, registry, embedder warm-up) is handled automatically.
+    populate ``medias``.  Everything after (origin tagging, clipping, dedup,
+    diversity tree, registry, embedder warm-up) is handled automatically.
 
     Parameters
     ----------
@@ -185,6 +227,9 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
     name:
         Display name for the dataset registry.  Falls back to
         ``_origin_to_str(origin)`` when empty.
+    clipper:
+        Name of the clipper to apply after loading.  Empty string means
+        no clipping.
     """
 
     # Set progress to "loading" synchronously so the frontend never sees a
@@ -203,6 +248,8 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
             # renders before the new entry exists in the registry.
             update_progress("loading", "Finalizing…")
             _set_clip_origins(medias, origin)
+            if clipper:
+                _apply_clipper(medias, clipper)
             collapse_duplicates(medias)
             build_diversity_tree()
             origin_str = _origin_to_str(origin)
@@ -210,6 +257,7 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
                 name=name,
                 origin_str=origin_str,
                 source=origin,
+                clipper=clipper,
             )
             _load_embedder_for_clips()
         except MemoryError:
@@ -235,10 +283,12 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "") -> 
 def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
     origin = importer.build_origin(field_values)
+    clipper_name = field_values.pop("clipper", "")
     _run_origin_load_in_background(
         lambda: importer.run(field_values, medias),
         origin,
         name=importer.display_name,
+        clipper=clipper_name,
     )
 
 
