@@ -539,7 +539,7 @@ class TestConverterRegistrySourceFilter:
         results = list_converters_for_source("document")
         names = [c.name for c in results]
         assert "document2image" in names
-        assert "document2text" in names
+        assert "document2paragraph" in names
         assert "video2image" not in names
 
     def test_list_converters_for_source_nonexistent(self):
