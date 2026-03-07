@@ -10,7 +10,10 @@
     [src]="imageSrc"
     [alt]="media.filename || 'Image media'"
     class="image-element"
+    [class.image-loading]="!imageReady"
     [style.transform]="imageTransform"
+    (load)="onImageLoad()"
+    (error)="onImageError()"
     draggable="false"
   />
 </div>

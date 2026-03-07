@@ -22,6 +22,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   @ViewChild('imageEl') imageRef!: ElementRef<HTMLImageElement>;
 
   imageSrc = '';
+  imageReady = false;
   zoom = 1;
   rotation = 0;
   zoomLabel = '1\u00d7';
@@ -42,9 +43,18 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
+      this.imageReady = false;
       this.imageSrc = `/api/medias/${this.media.id}/image`;
       this.resetView();
     }
+  }
+
+  onImageLoad(): void {
+    this.imageReady = true;
+  }
+
+  onImageError(): void {
+    this.imageReady = true;
   }
 
   ngOnDestroy(): void {
