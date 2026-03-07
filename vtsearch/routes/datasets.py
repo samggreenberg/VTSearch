@@ -125,25 +125,36 @@ def clippers_list():
 
 @datasets_bp.route("/api/converters")
 def converters_list():
-    """Return all converters, optionally filtered by target media type.
+    """Return all converters, optionally filtered by source or target media type.
 
     Query parameters:
         target: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
             (e.g. ``"images"``).  When provided, only converters whose
             ``target_type`` matches are returned.
+        source: A ``type_id`` (e.g. ``"video"``) or ``folder_import_name``
+            (e.g. ``"videos"``).  When provided, only converters whose
+            ``source_type`` matches are returned.
     """
-    from vtsearch.converters import list_converters, list_converters_for_target
+    from vtsearch.converters import list_converters, list_converters_for_source, list_converters_for_target
     from vtsearch.media import get_by_folder_name
 
     target = request.args.get("target", "").strip()
+    source = request.args.get("source", "").strip()
+
     if target:
-        # Accept both type_id ("image") and folder_import_name ("images").
         try:
             mt = get_by_folder_name(target)
             target = mt.type_id
         except KeyError:
-            pass  # assume it is already a type_id
+            pass
         converters = list_converters_for_target(target)
+    elif source:
+        try:
+            mt = get_by_folder_name(source)
+            source = mt.type_id
+        except KeyError:
+            pass
+        converters = list_converters_for_source(source)
     else:
         converters = list_converters()
 
@@ -334,10 +345,13 @@ def stage_demo(name: str):
     if name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
+    body = request.get_json(force=True, silent=True) or {}
+    converter_name = body.get("converter", "")
+
     def stage_task():
         try:
             temp_medias: dict = {}
-            load_demo_dataset(name, temp_medias)
+            load_demo_dataset(name, temp_medias, converter_name=converter_name)
 
             if not temp_medias:
                 update_progress("idle", "", 0, 0, "Demo produced no medias.")
@@ -456,7 +470,13 @@ def import_dataset(importer_name: str):
 
 @datasets_bp.route("/api/dataset/load-demo", methods=["POST"])
 def load_demo_dataset_route():
-    """Load a demo dataset in a background thread."""
+    """Load a demo dataset in a background thread.
+
+    When a ``converter`` is specified, the demo data is loaded using its
+    original media type, then converted to the converter's target type.
+    The resulting dataset has the *target* type, not the demo's original
+    type.
+    """
     data = get_json_or_400()
     if not isinstance(data, dict):
         return data
@@ -464,13 +484,19 @@ def load_demo_dataset_route():
     dataset_name = data.get("name")
     embedder_name = data.get("embedder", "")
     clipper_name = data.get("clipper", "")
+    converter_name = data.get("converter", "")
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
     demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
+    if converter_name:
+        demo_origin["params"]["converter"] = converter_name
+
     _run_origin_load_in_background(
-        lambda: load_demo_dataset(dataset_name, medias, embedder_name=embedder_name),
+        lambda: load_demo_dataset(
+            dataset_name, medias, embedder_name=embedder_name, converter_name=converter_name,
+        ),
         demo_origin,
         name=dataset_name,
         clipper=clipper_name,
@@ -698,11 +724,14 @@ def _load_from_origin(source: dict):
 
     if importer_name == "demo":
         demo_name = params.get("name", "")
+        converter_name = params.get("converter", "")
         if demo_name not in DEMO_DATASETS:
             return jsonify({"error": f"Unknown demo dataset: {demo_name}"}), 400
         origin = {"importer": "demo", "params": {"name": demo_name}}
+        if converter_name:
+            origin["params"]["converter"] = converter_name
         _run_origin_load_in_background(
-            lambda: load_demo_dataset(demo_name, medias),
+            lambda: load_demo_dataset(demo_name, medias, converter_name=converter_name),
             origin,
             name=demo_name,
         )

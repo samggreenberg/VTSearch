@@ -39,6 +39,7 @@ def demo_dataset_list():
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
     # Only include demo datasets whose media type is currently registered.
+    from vtsearch.converters import list_converters_for_source
     from vtsearch.media import get as media_get
 
     demos = []
@@ -89,6 +90,9 @@ def demo_dataset_list():
             # Use the download_size_mb from DemoDataset metadata
             download_size_mb = dataset_info.get("download_size_mb", 0)
 
+        # Converters that consume this demo's media type (M→N converters).
+        available_converters = [c.to_dict() for c in list_converters_for_source(media_type)]
+
         demos.append(
             {
                 "name": name,
@@ -100,6 +104,7 @@ def demo_dataset_list():
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
                 "num_categories": num_categories,
+                "available_converters": available_converters,
             }
         )
     return jsonify({"datasets": demos})
