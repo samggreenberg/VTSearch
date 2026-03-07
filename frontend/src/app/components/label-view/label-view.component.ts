@@ -81,7 +81,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
         if (curr.phase === 'good') this.sortState.setSelectMode('top');
-        else if (curr.phase === 'bad') this.sortState.setSelectMode('bottom');
+        else if (curr.phase === 'bad') this.sortState.setSelectMode('hard');
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
           this.sortState.setSortMode('learned');
@@ -344,19 +344,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onAutopilotStop(): void {
     const phase = this.autopilotStateService.state.phase;
 
-    // Map autopilot phase to a valid Manual select mode.
-    // 'bottom' has no radio button in Manual UI, so map to 'top'.
-    if (phase === 'good' || phase === 'bad') {
+    // Map autopilot phase to the same Sort + Select that autopilot was using.
+    if (phase === 'good') {
+      this.sortState.setSortMode('text');
       this.sortState.setSelectMode('top');
+    } else if (phase === 'bad') {
+      this.sortState.setSortMode('text');
+      this.sortState.setSelectMode('hard');
     } else if (phase === 'hard') {
+      this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('hard');
     } else if (phase === 'new' || phase === 'done') {
+      this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('new');
     }
-
-    // Keep sort mode as 'text' (what autopilot uses) so the sort bar
-    // shows the current text query and results carry over.
-    this.sortState.setSortMode('text');
   }
 
   // --- Helpers ---
