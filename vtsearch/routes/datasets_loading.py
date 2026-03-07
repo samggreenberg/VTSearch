@@ -162,6 +162,7 @@ def _auto_register_dataset(
     origin_str: str = "unknown",
     source: dict | None = None,
     clipper: str = "",
+    embedder: str = "",
 ) -> None:
     """Save the current medias as a pkl and register in the dataset registry.
 
@@ -176,6 +177,10 @@ def _auto_register_dataset(
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
     num_items = len(snap)
+
+    # Derive embedder from medias if not explicitly provided
+    if not embedder:
+        embedder = first.get("embedder", "")
 
     # Derive name from display-name override, origin, or fallback
     if not name:
@@ -203,11 +208,14 @@ def _auto_register_dataset(
         origin=origin_str,
         source=source,
         clipper=clipper,
+        embedder=embedder,
     )
     _reg_set_loaded(entry["id"])
 
 
-def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "", clipper: str = "") -> None:
+def _run_origin_load_in_background(
+    load_fn, origin: dict, *, name: str = "", clipper: str = "", embedder: str = "",
+) -> None:
     """Run a dataset load in a background thread with standard error handling.
 
     *load_fn* is called after ``clear_dataset()`` / ``gc.collect()`` and should
@@ -226,6 +234,9 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "", cli
     clipper:
         Name of the clipper to apply after loading.  Empty string means
         no clipping.
+    embedder:
+        Name of the embedder used.  When empty, derived from the medias
+        at registration time.
     """
 
     # Set progress to "loading" synchronously so the frontend never sees a
@@ -254,6 +265,7 @@ def _run_origin_load_in_background(load_fn, origin: dict, *, name: str = "", cli
                 origin_str=origin_str,
                 source=origin,
                 clipper=clipper,
+                embedder=embedder,
             )
             _load_embedder_for_clips()
         except MemoryError:
@@ -280,11 +292,13 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "")
+    embedder_name = field_values.get("embedder", "")
     _run_origin_load_in_background(
         lambda: importer.run(field_values, medias),
         origin,
         name=importer.display_name,
         clipper=clipper_name,
+        embedder=embedder_name,
     )
 
 

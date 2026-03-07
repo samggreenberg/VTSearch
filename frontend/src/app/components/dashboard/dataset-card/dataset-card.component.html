@@ -40,6 +40,7 @@
 <td class="text-center">{{ formatDate(dataset.created_at) }}</td>
 <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
 <td class="clipper-cell text-center">{{ dataset.clipper || '-' }}</td>
+<td class="embedder-cell text-center">{{ dataset.embedder || '-' }}</td>
 <td class="text-center">
   @if (dataset.loaded) {
     <span class="check" aria-label="Loaded">&#10003;</span>

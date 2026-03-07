@@ -133,6 +133,21 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
+      @if (availableEmbedders.length > 1) {
+        <div class="form-group">
+          <label class="form-label" for="field-embedder">Embedder</label>
+          <select
+            id="field-embedder"
+            class="form-select"
+            [(ngModel)]="selectedEmbedder"
+          >
+            @for (embedder of availableEmbedders; track embedder.name) {
+              <option [value]="embedder.name">{{ embedder.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
       @if (availableClippers.length > 1) {
         <div class="form-group">
           <label class="form-label" for="field-clipper">Clipper</label>

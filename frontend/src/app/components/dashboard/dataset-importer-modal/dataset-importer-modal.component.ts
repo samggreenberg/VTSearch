@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo } from '../../../models/api.models';
+import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, EmbedderInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo';
 
@@ -30,6 +30,10 @@ export class DatasetImporterModalComponent implements OnInit {
   // Clipper state
   availableClippers: ClipperInfo[] = [];
   selectedClipper = '';
+
+  // Embedder state
+  availableEmbedders: EmbedderInfo[] = [];
+  selectedEmbedder = '';
 
   // Demo picker state
   demos: DemoDataset[] = [];
@@ -58,6 +62,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.error = '';
     this.selectedClipper = '';
     this.availableClippers = [];
+    this.selectedEmbedder = '';
+    this.availableEmbedders = [];
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -68,10 +74,12 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    // Load clippers for the default media type
+    // Load clippers and embedders for the default media type
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
     if (mediaTypeField) {
-      this.loadClippers(this.formValues['media_type'] || mediaTypeField.default || '');
+      const defaultType = this.formValues['media_type'] || mediaTypeField.default || '';
+      this.loadClippers(defaultType);
+      this.loadEmbedders(defaultType);
     }
 
     this.view = 'form';
@@ -80,6 +88,7 @@ export class DatasetImporterModalComponent implements OnInit {
   onMediaTypeChange(mediaType: string): void {
     this.formValues['media_type'] = mediaType;
     this.loadClippers(mediaType);
+    this.loadEmbedders(mediaType);
   }
 
   private loadClippers(mediaType: string): void {
@@ -93,6 +102,21 @@ export class DatasetImporterModalComponent implements OnInit {
         this.availableClippers = clippers;
         // Default to the first clipper (the default/null clipper)
         this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
+      },
+    });
+  }
+
+  private loadEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.availableEmbedders = [];
+      this.selectedEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.availableEmbedders = embedders;
+        // Default to the first embedder
+        this.selectedEmbedder = embedders.length > 0 ? embedders[0].name : '';
       },
     });
   }
@@ -226,10 +250,13 @@ export class DatasetImporterModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
 
-    // Include clipper in form values if one is selected
+    // Include clipper and embedder in form values if selected
     const submitValues = { ...this.formValues };
     if (this.selectedClipper) {
       submitValues['clipper'] = this.selectedClipper;
+    }
+    if (this.selectedEmbedder) {
+      submitValues['embedder'] = this.selectedEmbedder;
     }
 
     // If there's a file field, use loadFile; otherwise runImporter

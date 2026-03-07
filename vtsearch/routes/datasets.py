@@ -81,10 +81,28 @@ def media_types_list():
 
 @datasets_bp.route("/api/embedders")
 def embedders_list():
-    """Return all registered embedders with their metadata."""
-    from vtsearch.media import all_embedders_dict
+    """Return all registered embedders, optionally filtered by media type.
 
-    return jsonify({"embedders": all_embedders_dict()})
+    Query parameters:
+        media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only embedders whose
+            ``media_type_id`` matches are returned.
+    """
+    from vtsearch.media import all_embedders_dict, embedders_for_type, get_by_folder_name
+
+    media_type = request.args.get("media_type", "").strip()
+    if media_type:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(media_type)
+            media_type = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        embedders = [e.to_dict() for e in embedders_for_type(media_type)]
+    else:
+        embedders = all_embedders_dict()
+
+    return jsonify({"embedders": embedders})
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +442,14 @@ def import_dataset(importer_name: str):
     if clipper_val:
         field_values["clipper"] = clipper_val
 
+    # Pass through the optional "embedder" key for embedder selection.
+    if file_keys:
+        embedder_val = request.form.get("embedder", "")
+    else:
+        embedder_val = (request.get_json(force=True) or {}).get("embedder", "")
+    if embedder_val:
+        field_values["embedder"] = embedder_val
+
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
@@ -459,12 +485,12 @@ def load_demo_dataset_route():
         return jsonify({"error": "demo importer not available"}), 500
 
     field_values: dict = {"name": dataset_name}
-    if embedder_name:
-        field_values["embedder"] = embedder_name
     if converter_name:
         field_values["converter"] = converter_name
     if clipper_name:
         field_values["clipper"] = clipper_name
+    if embedder_name:
+        field_values["embedder"] = embedder_name
 
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
@@ -570,6 +596,7 @@ def list_registered_datasets():
             entry["num_dupes"] = get_dupe_count()
         else:
             entry.setdefault("num_dupes", 0)
+        entry.setdefault("embedder", "")
     return jsonify({"datasets": entries})
 
 

@@ -32,6 +32,7 @@
               <th (click)="sortDatasets('created_at')" class="sortable text-center" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
               <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
               <th (click)="sortDatasets('clipper')" class="sortable text-center" title="MediaClipper used at creation (click to sort)">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span></th>
+              <th (click)="sortDatasets('embedder')" class="sortable text-center" title="MediaEmbedder used for embedding (click to sort)">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span></th>
               <th class="text-center" title="Whether this dataset is currently loaded into memory">Loaded</th>
               <th class="text-center" title="Available operations for this dataset">Actions</th>
             </tr>
