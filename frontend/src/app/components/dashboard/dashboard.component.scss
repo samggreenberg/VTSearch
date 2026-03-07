@@ -79,6 +79,10 @@
     text-align: left;
     border-bottom: 1px solid var(--border-subtle);
     white-space: nowrap;
+
+    &.text-center {
+      text-align: center;
+    }
   }
 
   th {
