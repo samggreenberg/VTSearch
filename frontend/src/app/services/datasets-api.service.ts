@@ -13,6 +13,8 @@ import {
   ClippersResponse,
   ConverterInfo,
   ConvertersResponse,
+  EmbedderInfo,
+  EmbeddersResponse,
   OkResponse,
 } from '../models/api.models';
 
@@ -54,6 +56,16 @@ export class DatasetsApiService {
     );
   }
 
+  getEmbedders(mediaType?: string): Observable<EmbedderInfo[]> {
+    const params: Record<string, string> = {};
+    if (mediaType) {
+      params['media_type'] = mediaType;
+    }
+    return this.http.get<EmbeddersResponse>('/api/embedders', { params }).pipe(
+      map((res) => res.embedders),
+    );
+  }
+
   getConverters(target?: string): Observable<ConverterInfo[]> {
     const params: Record<string, string> = {};
     if (target) {
@@ -72,8 +84,8 @@ export class DatasetsApiService {
     return this.http.post(`/api/dataset/import/${importerName}`, params);
   }
 
-  loadDemo(name: string): Observable<unknown> {
-    return this.http.post('/api/dataset/load-demo', { name });
+  loadDemo(name: string, params?: Record<string, string>): Observable<unknown> {
+    return this.http.post('/api/dataset/load-demo', { name, ...params });
   }
 
   loadFile(file: File): Observable<unknown> {
