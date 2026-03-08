@@ -93,15 +93,15 @@ both the learned-sort training and the label export.
 
 Five media types are supported:
 
-| Media type | Embedding model | Model ID |
-|-----------|----------------|----------|
-| Audio | CLAP | `laion/clap-htsat-unfused` |
-| Image | CLIP | `openai/clip-vit-base-patch32` |
-| Video | X-CLIP | `microsoft/xclip-base-patch32` |
-| Text | E5 | `intfloat/e5-base-v2` |
-| Document | None (convert first) | N/A — use converters to transform to image/text |
+| Media type | Default embedder | Model ID | Alternatives |
+|-----------|-----------------|----------|-------------|
+| Audio | CLAP | `laion/clap-htsat-unfused` | CLAP Music (`laion/larger_clap_music_and_speech`) |
+| Image | CLIP | `openai/clip-vit-base-patch32` | SigLIP (`google/siglip-base-patch16-224`) |
+| Video | X-CLIP | `microsoft/xclip-base-patch32` | — |
+| Text | E5 | `intfloat/e5-base-v2` | BGE (`BAAI/bge-base-en-v1.5`) |
+| Document | None (convert first) | N/A — use converters to transform to image/text | — |
 
-Models are loaded lazily on first use. Total download size: ~3.1 GB.
+Models are loaded lazily on first use. Default models total ~3.1 GB.
 
 ### Converters
 
