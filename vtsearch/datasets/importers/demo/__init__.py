@@ -70,6 +70,15 @@ class DemoDatasetImporter(DatasetImporter):
                 f.options = list(DEMO_DATASETS.keys())
                 break
 
+    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        dataset_name = field_values.get("name", "")
+        entry = DEMO_DATASETS.get(dataset_name)
+        if entry:
+            return entry.get("label", self.display_name)
+        return self.display_name
+
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         dataset_name = field_values.get("name", "")
         if not dataset_name:

@@ -129,6 +129,14 @@ class PluginBase:
     #: a dedicated code path (e.g. the GUI exporter).
     hidden_from_picker: bool = False
 
+    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+        """Return a human-readable name for a dataset loaded with *field_values*.
+
+        The default returns :attr:`display_name`.  Subclasses (e.g. the demo
+        importer) can override this to return a dataset-specific label.
+        """
+        return self.display_name
+
     # -- CLI support --------------------------------------------------------
 
     def add_cli_arguments(self, parser: argparse.ArgumentParser) -> None:

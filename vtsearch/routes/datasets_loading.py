@@ -296,7 +296,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     _run_origin_load_in_background(
         lambda: importer.run(field_values, medias),
         origin,
-        name=importer.display_name,
+        name=importer.resolve_display_name(field_values),
         clipper=clipper_name,
         embedder=embedder_name,
     )
@@ -330,7 +330,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             first = next(iter(temp_medias.values()))
             media_type = first.get("type", "audio")
             count = len(temp_medias)
-            name = label or importer.display_name
+            name = label or importer.resolve_display_name(field_values)
 
             data_bytes = export_dataset_to_file(temp_medias)
             del temp_medias
