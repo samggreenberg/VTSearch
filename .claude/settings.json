@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$TOOL_INPUT\" | grep -q 'pytest'; then bash $CLAUDE_PROJECT_DIR/.claude/hooks/ensure-test-deps.sh; fi"
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE 'pytest|ng test|ng serve|npm run|npm test'; then bash $CLAUDE_PROJECT_DIR/.claude/hooks/ensure-test-deps.sh; fi"
           }
         ]
       }
