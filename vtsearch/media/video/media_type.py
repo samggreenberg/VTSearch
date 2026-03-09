@@ -11,6 +11,7 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
+    intercept_tqdm_progress,
 )
 
 
@@ -170,7 +171,8 @@ class VideoMediaType(MediaType):
 
         if getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading video embedding model…", 0, 0)
-            embedder.load_models()
+            with intercept_tqdm_progress(on_progress):
+                embedder.load_models()
 
         clip_id = 1
         total = len(video_files)

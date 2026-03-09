@@ -26,6 +26,33 @@ from vtsearch.utils import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Step-aware progress wrapper
+# ---------------------------------------------------------------------------
+
+# Maps the status strings emitted by inner functions to step numbers.
+# "downloading" covers both download and extraction.
+# "loading" covers model loading and pickle loading.
+# "embedding" covers per-file embedding.
+_STATUS_TO_STEP = {
+    "downloading": 1,
+    "loading": 2,
+    "embedding": 3,
+}
+_TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
+
+
+def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+    """Thin wrapper around :func:`update_progress` that injects step info.
+
+    Translates the ``status`` value emitted by inner functions (downloader,
+    media-type ``load_demo_source``, etc.) into a step number so the
+    frontend can display "Step 1/4", "Step 2/4", etc.
+    """
+    step = _STATUS_TO_STEP.get(status)
+    update_progress(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+
+
 def clear_dataset():
     """Clear the current dataset, votes, and all related state."""
     clear_all()
@@ -67,18 +94,29 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
+    from vtsearch.media.base import intercept_tqdm_progress
+
     emb = _get_embedder_for_clips()
     if emb is None:
-        update_progress("idle", "Ready")
+        update_progress("idle", "Ready", step=None, total_steps=None)
         return
-    emb.load_models()
+
+    def _model_load_progress(status, message, current, total):
+        update_progress(status, message, current, total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+
+    with intercept_tqdm_progress(_model_load_progress):
+        emb.load_models()
+
     # Warm up the text encoder so the first text sort is instant.
-    update_progress("loading", "Warming up text encoder…", 0, 0)
+    update_progress(
+        "loading", "Warming up text encoder…", 0, 0,
+        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+    )
     try:
         emb.embed_text("warmup")
     except Exception:
         pass
-    update_progress("idle", "Ready")
+    update_progress("idle", "Ready", step=None, total_steps=None)
 
 
 def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
@@ -241,7 +279,7 @@ def _run_origin_load_in_background(
 
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Preparing dataset...")
+    update_progress("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     def task():
         try:
@@ -253,7 +291,10 @@ def _run_origin_load_in_background(
             # The frontend must not see "idle" until registration and
             # embedder warm-up are complete, otherwise the dashboard grid
             # renders before the new entry exists in the registry.
-            update_progress("loading", "Finalizing…")
+            update_progress(
+                "loading", "Finalizing…",
+                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+            )
             _set_clip_origins(medias, origin)
             if clipper:
                 _apply_clipper(medias, clipper)
@@ -277,13 +318,15 @@ def _run_origin_load_in_background(
                 0,
                 0,
                 "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                step=None,
+                total_steps=None,
             )
         except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
+            update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0)
+    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     threading.Thread(target=task, daemon=True).start()
 
@@ -293,8 +336,27 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "")
     embedder_name = field_values.get("embedder", "")
+
+    def _load():
+        # Inject step-aware progress into the importer's on_progress default
+        # by temporarily patching the module-level _default_progress resolver
+        # used by loader.py and downloader.py.
+        import vtsearch.datasets.loader as _loader_mod
+        import vtsearch.datasets.downloader as _dl_mod
+
+        orig_loader_dp = _loader_mod._default_progress
+        orig_dl_dp = _dl_mod._default_progress
+
+        _loader_mod._default_progress = lambda: _stepped_progress
+        _dl_mod._default_progress = lambda: _stepped_progress
+        try:
+            importer.run(field_values, medias)
+        finally:
+            _loader_mod._default_progress = orig_loader_dp
+            _dl_mod._default_progress = orig_dl_dp
+
     _run_origin_load_in_background(
-        lambda: importer.run(field_values, medias),
+        _load,
         origin,
         name=importer.display_name,
         clipper=clipper_name,

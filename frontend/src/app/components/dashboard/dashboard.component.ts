@@ -254,12 +254,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (progress: any) => {
-          if (progress.progress != null && progress.total != null) {
+          if (progress.current != null && progress.total != null && progress.total > 0) {
             this.progressIndeterminate = false;
-            this.progressValue = progress.progress;
+            this.progressValue = progress.current;
             this.progressTotal = progress.total;
+          } else {
+            this.progressIndeterminate = true;
           }
-          this.datasetState.setProgressMessage(progress.message || 'Loading...');
+
+          // Build message with step info when available
+          let msg = progress.message || 'Loading...';
+          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
+            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
+          }
+          this.datasetState.setProgressMessage(msg);
 
           if (progress.status === 'idle' || progress.status === 'error') {
             this.datasetState.setLoading(false);

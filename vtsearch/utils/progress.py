@@ -72,7 +72,9 @@ class ProgressTracker:
 # ---------------------------------------------------------------------------
 
 #: Dataset / import progress (used by dataset loading, downloading, embedding).
-dataset_progress = ProgressTracker(extra_fields={"error": None, "staging_result": None})
+dataset_progress = ProgressTracker(
+    extra_fields={"error": None, "staging_result": None, "step": None, "total_steps": None}
+)
 
 #: Sort-specific progress (used by text-sort operations).
 sort_progress = ProgressTracker()
@@ -93,6 +95,8 @@ def update_progress(
     total: int = 0,
     error: Any = _UNSET,
     staging_result: Any = _UNSET,
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
 ) -> None:
     """Update the global dataset progress tracker.
 
@@ -108,6 +112,10 @@ def update_progress(
         kwargs["error"] = error
     if staging_result is not _UNSET:
         kwargs["staging_result"] = staging_result
+    if step is not _UNSET:
+        kwargs["step"] = step
+    if total_steps is not _UNSET:
+        kwargs["total_steps"] = total_steps
     dataset_progress.update(status, message, current, total, **kwargs)
 
 

@@ -146,13 +146,28 @@ def _download_and_extract(
     suffix = archive_name.lower()
     if suffix.endswith((".tar.gz", ".tgz")):
         with tarfile.open(archive_path, "r:gz") as tar_ref:
-            tar_ref.extractall(extract_to, filter="data")
+            members = tar_ref.getmembers()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
+                tar_ref.extract(member, extract_to, filter="data")
     elif suffix.endswith(".tar"):
         with tarfile.open(archive_path, "r:") as tar_ref:
-            tar_ref.extractall(extract_to, filter="data")
+            members = tar_ref.getmembers()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
+                tar_ref.extract(member, extract_to, filter="data")
     elif suffix.endswith(".zip"):
         with zipfile.ZipFile(archive_path, "r") as zip_ref:
-            zip_ref.extractall(extract_to)
+            members = zip_ref.namelist()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
+                zip_ref.extract(member, extract_to)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")
 
