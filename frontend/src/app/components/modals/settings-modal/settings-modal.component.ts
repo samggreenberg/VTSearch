@@ -34,7 +34,9 @@ export class SettingsModalComponent implements OnInit {
     }).subscribe({
       next: (res) => {
         this.settings = res.settings;
-        this.embedders = res.embedders.embedders || [];
+        this.embedders = (res.embedders.embedders || []).sort(
+          (a, b) => a.media_type_id.localeCompare(b.media_type_id) || a.name.localeCompare(b.name),
+        );
         this.loading = false;
       },
       error: () => {

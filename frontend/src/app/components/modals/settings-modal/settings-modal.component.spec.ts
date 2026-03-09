@@ -106,6 +106,29 @@ describe('SettingsModalComponent', () => {
     expect(component.settings.theme).toBe('light');
   });
 
+  it('should sort embedders by media_type_id then name', () => {
+    fixture.detectChanges();
+    const settingsReq = httpMock.expectOne('/api/settings');
+    const embeddersReq = httpMock.expectOne('/api/embedders');
+    settingsReq.flush(mockSettings);
+    embeddersReq.flush({
+      embedders: [
+        { name: 'zebra', media_type_id: 'image' },
+        { name: 'alpha', media_type_id: 'text' },
+        { name: 'beta', media_type_id: 'audio' },
+        { name: 'alpha', media_type_id: 'audio' },
+        { name: 'clip', media_type_id: 'image' },
+      ],
+    });
+    expect(component.embedders.map((e) => `${e.media_type_id}:${e.name}`)).toEqual([
+      'audio:alpha',
+      'audio:beta',
+      'image:clip',
+      'image:zebra',
+      'text:alpha',
+    ]);
+  });
+
   it('should emit closed on close', () => {
     flushInit();
     spyOn(component.closed, 'emit');
