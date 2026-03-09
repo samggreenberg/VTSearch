@@ -356,9 +356,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return types.size === 1;
   }
 
+  private hasUntrainedModel(): boolean {
+    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    return selectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+  }
+
   get findEnabled(): boolean {
     if (this.selectedDatasetIds.size < 1 || this.selectedModelIds.size < 1) return false;
-    return this.findMediaTypesMatch();
+    if (!this.findMediaTypesMatch()) return false;
+    if (this.hasUntrainedModel()) return false;
+    return true;
   }
 
   get findHint(): string {
@@ -366,6 +373,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
     if (this.selectedModelIds.size === 0) return 'Select a model';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
+    if (this.hasUntrainedModel()) return 'Selected model has no training labels';
     return 'Score selected datasets with selected models';
   }
 
