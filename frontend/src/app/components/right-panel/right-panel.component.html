@@ -41,6 +41,10 @@
   </div>
 </aside>
 
+@if (showLabelImport) {
+  <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="showLabelImport = false" />
+}
+
 @if (showLabelExport) {
   <vt-label-exporter-modal (closed)="showLabelExport = false" (exportComplete)="showLabelExport = false" />
 }
