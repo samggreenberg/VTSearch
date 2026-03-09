@@ -377,3 +377,71 @@ class TestStableIndicatorThresholds:
         result = _compute_stable_status(good=5, bad=5, total=10)
         # Only 4 real entries (indices 1, 2, 6, 7) → yellow
         assert result["status"] == "yellow", "Gap entries (None) should be excluded, leaving only 4 real entries"
+
+
+class TestStabilitySkipsUnchangedModel:
+    """Stability should not be recorded when the training data hasn't changed."""
+
+    def test_unchanged_training_data_skips_stability(self, client):
+        """When good/bad IDs don't change between steps, stability should be None."""
+        from vtsearch.models.progress import clear_progress_cache
+
+        clear_progress_cache()
+
+        # Build a minimal clips_dict with embeddings
+        import numpy as np
+
+        clips = {}
+        for i in range(10):
+            clips[i] = {"embedding": np.random.randn(8).astype(np.float32)}
+
+        # Label history: vote good on 0, bad on 1, then vote good on 0 AGAIN
+        # The third event doesn't change the training data (0 is already good).
+        history = [
+            (0, "good", 1.0),
+            (1, "bad", 2.0),
+            (0, "good", 3.0),  # no-op: 0 is already good
+        ]
+
+        _ensure_cache(clips, history, inclusion_value=0)
+
+        assert len(_cached_steps) == 3
+        # Steps 0 and 1 change the training data — they should attempt training.
+        # Step 2 has the same good/bad IDs as step 1 — stability should be None.
+        assert _cached_steps[2]["stability"] is None, (
+            "Stability should not be recorded when training data didn't change"
+        )
+
+    def test_changed_training_data_records_stability(self, client):
+        """When good/bad IDs DO change, stability should be computed (once a prior model exists)."""
+        from vtsearch.models.progress import clear_progress_cache
+
+        clear_progress_cache()
+
+        import numpy as np
+
+        clips = {}
+        for i in range(20):
+            clips[i] = {"embedding": np.random.randn(8).astype(np.float32)}
+
+        # Each step changes the training data
+        history = [
+            (0, "good", 1.0),
+            (1, "bad", 2.0),   # first model (both polarities)
+            (2, "good", 3.0),  # new model
+            (3, "bad", 4.0),   # new model
+            (4, "good", 5.0),  # new model
+        ]
+
+        _ensure_cache(clips, history, inclusion_value=0)
+
+        assert len(_cached_steps) == 5
+        # Step 0: only good votes, no model → stability None
+        assert _cached_steps[0]["stability"] is None
+        # Step 1: first model, no prior predictions → stability None
+        assert _cached_steps[1]["stability"] is None
+        # Steps 2-4: new model each time, prior predictions exist → stability recorded
+        for i in [2, 3, 4]:
+            assert _cached_steps[i]["stability"] is not None, (
+                f"Step {i} changed training data and should have stability"
+            )
