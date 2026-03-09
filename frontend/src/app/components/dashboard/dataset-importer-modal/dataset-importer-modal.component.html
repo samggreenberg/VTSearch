@@ -38,6 +38,21 @@
           }
         </div>
 
+        @if (demoEmbedders.length > 1) {
+          <div class="demo-embedder-row">
+            <label class="form-label" for="demo-embedder">Embedder:</label>
+            <select
+              id="demo-embedder"
+              class="form-select form-select--inline"
+              [(ngModel)]="selectedDemoEmbedder"
+            >
+              @for (embedder of demoEmbedders; track embedder.name) {
+                <option [value]="embedder.name">{{ embedder.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
         <div class="demo-content-area">
           <table class="demo-table">
             <thead>
