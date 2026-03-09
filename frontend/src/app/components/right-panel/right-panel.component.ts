@@ -6,12 +6,13 @@ import { TrainableModelsApiService } from '../../services/trainable-models-api.s
 import { MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { VtDialogService } from '../../services/dialog.service';
+
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
+import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -27,6 +28,7 @@ export interface TrainModeContext {
     DetectorContextBarComponent,
     DetectorExportModalComponent,
     LabelExporterModalComponent,
+    LabelImporterModalComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -42,6 +44,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   showThumbnails = true;
+  showLabelImport = false;
   showLabelExport = false;
   showDetectorExport = false;
 
@@ -51,7 +54,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     private modelsApi: TrainableModelsApiService,
     public voteState: VoteStateService,
     private settingsState: SettingsStateService,
-    private dialog: VtDialogService,
   ) {}
 
   ngOnInit(): void {
@@ -75,7 +77,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   }
 
   onImportLabels(): void {
-    this.dialog.alert('Label import not yet available in the Angular frontend.', 'info');
+    this.showLabelImport = true;
   }
 
   onExportLabels(): void {
