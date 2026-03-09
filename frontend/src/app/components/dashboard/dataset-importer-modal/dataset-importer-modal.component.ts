@@ -43,6 +43,8 @@ export class DatasetImporterModalComponent implements OnInit {
   demoSortKey = 'num_files';
   demoSortAsc = true;
   demoLoading = false;
+  demoEmbedders: EmbedderInfo[] = [];
+  selectedDemoEmbedder = '';
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -165,7 +167,22 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.demoTabs.length > 0 && !this.activeTab) {
       this.activeTab = this.demoTabs[0];
+      this.loadDemoEmbedders(this.activeTab);
     }
+  }
+
+  private loadDemoEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.demoEmbedders = [];
+      this.selectedDemoEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.demoEmbedders = embedders;
+        this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+      },
+    });
   }
 
   get filteredDemos(): DemoDataset[] {
@@ -190,6 +207,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   selectDemoTab(tab: string): void {
     this.activeTab = tab;
+    this.loadDemoEmbedders(tab);
   }
 
   sortDemoBy(key: string): void {
@@ -227,7 +245,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   selectDemo(demo: DemoDataset): void {
-    this.demoSelected.emit(demo);
+    this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder } as any);
     this.closed.emit();
   }
 
