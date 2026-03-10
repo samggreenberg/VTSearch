@@ -19,6 +19,7 @@ export class MediaListComponent implements AfterViewChecked {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() viewMode: 'grid' | 'list' = 'list';
+  @Input() gridItemSize: 'small' | 'medium' | 'large' = 'medium';
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() showScores = true;
 

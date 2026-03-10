@@ -29,9 +29,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
+  gridItemSizeLeft: 'small' | 'medium' | 'large' = 'medium';
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
+  private gridItemSizeLeftDict: Record<string, 'small' | 'medium' | 'large'> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
@@ -84,6 +86,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+            this.gridItemSizeLeft = this.gridItemSizeLeftDict[newType] ?? 'medium';
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -195,6 +198,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
           if (this.currentMediaType) {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
+          }
+        }
+        const sizeDict = settings.grid_item_size_left;
+        if (sizeDict && typeof sizeDict === 'object') {
+          this.gridItemSizeLeftDict = sizeDict as Record<string, 'small' | 'medium' | 'large'>;
+          if (this.currentMediaType) {
+            this.gridItemSizeLeft = this.gridItemSizeLeftDict[this.currentMediaType] ?? 'medium';
           }
         }
         this.focusModeLeft = settings.focus_mode_left === 'hover' ? 'hover' : 'click';

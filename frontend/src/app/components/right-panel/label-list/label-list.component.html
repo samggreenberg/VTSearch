@@ -3,7 +3,7 @@
     {{ label === 'good' ? 'Good' : 'Bad' }}
     <span class="label-count">({{ ids.length }})</span>
   </h3>
-  <div class="vote-list" [class.grid-layout]="isGrid">
+  <div class="vote-list" [class.grid-layout]="isGrid" [class.grid-small]="isGrid && gridItemSize === 'small'" [class.grid-large]="isGrid && gridItemSize === 'large'">
     @for (entry of sortedEntries; track trackById($index, entry)) {
       <div
         class="vote-entry"

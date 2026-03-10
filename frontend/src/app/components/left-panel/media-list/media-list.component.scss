@@ -18,6 +18,15 @@
     gap: 4px;
     padding: 4px;
     align-content: start;
+
+    &.grid-small {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2px;
+    }
+
+    &.grid-large {
+      grid-template-columns: 1fr;
+    }
   }
 }
 
