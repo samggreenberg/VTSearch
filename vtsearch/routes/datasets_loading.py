@@ -224,6 +224,7 @@ def _auto_register_dataset(
 
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
+    embedder = first.get("embedder", "")
     num_items = len(snap)
 
     # Derive embedder from medias if not explicitly provided
