@@ -25,7 +25,7 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
-  @Input() showThumbnails = true;
+  @Input() viewMode: 'grid' | 'list' = 'grid';
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
 
@@ -98,9 +98,13 @@ export class LabelListComponent implements OnInit, OnChanges {
     return parts.join(' \u00B7 ');
   }
 
-  supportsThumbnail(id: number): boolean {
+  get isGrid(): boolean {
+    return this.viewMode === 'grid';
+  }
+
+  hasThumbnailUrl(id: number): boolean {
     const media = this.medias.find(m => m.id === id);
-    return !!media && (media.type === 'image' || media.type === 'video');
+    return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document');
   }
 
   isVideo(id: number): boolean {
@@ -115,8 +119,14 @@ export class LabelListComponent implements OnInit, OnChanges {
     return `/api/medias/${id}/image`;
   }
 
-  useThumbnail(id: number): boolean {
-    return this.showThumbnails && this.supportsThumbnail(id);
+  placeholderIcon(id: number): string | null {
+    if (!this.isGrid) return null;
+    const media = this.medias.find(m => m.id === id);
+    if (!media) return null;
+    if (media.type === 'image' || media.type === 'video' || media.type === 'document') return null;
+    if (media.type === 'audio') return '\u266B';
+    if (media.type === 'paragraph') return '\u00B6';
+    return '\u25A1';
   }
 
   onEntryClick(id: number): void {

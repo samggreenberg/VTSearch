@@ -1,4 +1,4 @@
-<div class="media-list" role="listbox" aria-label="Media items" #listContainer>
+<div class="media-list" [class.grid-layout]="viewMode === 'grid'" role="listbox" aria-label="Media items" #listContainer>
   @for (item of orderedItems; track trackByMediaId($index, item)) {
     @if (item.showThreshold) {
       <div class="media-threshold-line" aria-label="Good/Bad threshold">
@@ -10,7 +10,7 @@
       [active]="selectedId === item.media.id"
       [voteLabel]="getVoteLabel(item.media.id)"
       [score]="item.score"
-      [showThumbnail]="showThumbnails"
+      [viewMode]="viewMode"
       [focusMode]="focusMode"
       (select)="onMediaSelect($event)"
     />

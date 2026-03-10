@@ -14,17 +14,29 @@ export class MediaItemComponent {
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
-  @Input() showThumbnail = true;
+  @Input() viewMode: 'grid' | 'list' = 'list';
   @Input() focusMode: 'click' | 'hover' = 'click';
 
   @Output() select = new EventEmitter<number>();
 
+  get isGrid(): boolean {
+    return this.viewMode === 'grid';
+  }
+
   get thumbnailUrl(): string | null {
-    if (!this.showThumbnail) return null;
+    if (!this.isGrid) return null;
     if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document') {
       return `/api/medias/${this.media.id}/image`;
     }
     return null;
+  }
+
+  get placeholderIcon(): string | null {
+    if (!this.isGrid) return null;
+    if (this.thumbnailUrl) return null;
+    if (this.media.type === 'audio') return '\u266B';
+    if (this.media.type === 'paragraph') return '\u00B6';
+    return '\u25A1';
   }
 
   get displayName(): string {

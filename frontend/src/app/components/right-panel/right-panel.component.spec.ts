@@ -34,7 +34,7 @@ describe('RightPanelComponent', () => {
     // Settings request
     httpMock.expectOne('/api/settings').flush({
       volume: 1,
-      show_thumbnails_right: true,
+      view_mode_right: 'grid',
     });
     // First votes poll
     httpMock.expectOne('/api/votes').flush({
@@ -51,21 +51,21 @@ describe('RightPanelComponent', () => {
     cleanup();
   }));
 
-  it('should load settings on init', fakeAsync(() => {
+  it('should load view mode from settings on init', fakeAsync(() => {
     fixture.detectChanges();
     tick();
-    httpMock.expectOne('/api/settings').flush({ volume: 1, show_thumbnails_right: false });
+    httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: 'list' });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    expect(component.showThumbnails).toBeFalse();
+    expect(component.viewMode).toBe('list');
     cleanup();
   }));
 
-  it('should default showThumbnails to true when not in settings', fakeAsync(() => {
+  it('should default viewMode to grid when not in settings', fakeAsync(() => {
     fixture.detectChanges();
     tick();
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    expect(component.showThumbnails).toBeTrue();
+    expect(component.viewMode).toBe('grid');
     cleanup();
   }));
 

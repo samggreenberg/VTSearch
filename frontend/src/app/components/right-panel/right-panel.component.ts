@@ -44,7 +44,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
-  showThumbnails = true;
+  viewMode: 'grid' | 'list' = 'grid';
   showLabelImport = false;
   showLabelExport = false;
   showDetectorExport = false;
@@ -106,7 +106,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
       .subscribe({
         next: settings => {
           if (!settings) return;
-          this.showThumbnails = settings.show_thumbnails_right ?? true;
+          this.viewMode = settings.view_mode_right ?? 'grid';
         },
       });
   }
