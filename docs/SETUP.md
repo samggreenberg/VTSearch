@@ -177,10 +177,7 @@ brew install node
 Then install dependencies and build:
 
 ```bash
-cd frontend
-npm install
-npm run build:prod
-cd ..
+cd frontend; npm install; npm run build:prod; cd ..
 ```
 
 This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build — it installs the Angular CLI and other tools locally.
