@@ -32,6 +32,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
+  private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
+  private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
@@ -84,6 +86,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
+            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -197,8 +201,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
           }
         }
-        this.focusModeLeft = settings.focus_mode_left === 'hover' ? 'hover' : 'click';
-        this.focusModeRight = settings.focus_mode_right === 'hover' ? 'hover' : 'click';
+        const fmLeft = settings.focus_mode_left;
+        if (fmLeft && typeof fmLeft === 'object') {
+          this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
+          if (this.currentMediaType) {
+            this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
+          }
+        }
+        const fmRight = settings.focus_mode_right;
+        if (fmRight && typeof fmRight === 'object') {
+          this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
+          if (this.currentMediaType) {
+            this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
+          }
+        }
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
