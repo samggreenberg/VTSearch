@@ -1,21 +1,23 @@
-<div class="left-panel">
-  <div class="left-tabs" role="tablist" aria-label="Panel mode">
-    <button
-      class="left-tab"
-      role="tab"
-      [class.active]="activeTab === 'manual'"
-      [attr.aria-selected]="activeTab === 'manual'"
-      (click)="setTab('manual')"
-    >Manual</button>
-    <button
-      class="left-tab"
-      role="tab"
-      [class.active]="activeTab === 'autopilot'"
-      [attr.aria-selected]="activeTab === 'autopilot'"
-      (click)="setTab('autopilot')"
-      title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
-    >Autopilot</button>
-  </div>
+<div class="left-panel" [class.collapsed-autopilot]="activeTab === 'autopilot' && autopilotCollapsed">
+  @if (!(activeTab === 'autopilot' && autopilotCollapsed)) {
+    <div class="left-tabs" role="tablist" aria-label="Panel mode">
+      <button
+        class="left-tab"
+        role="tab"
+        [class.active]="activeTab === 'manual'"
+        [attr.aria-selected]="activeTab === 'manual'"
+        (click)="setTab('manual')"
+      >Manual</button>
+      <button
+        class="left-tab"
+        role="tab"
+        [class.active]="activeTab === 'autopilot'"
+        [attr.aria-selected]="activeTab === 'autopilot'"
+        (click)="setTab('autopilot')"
+        title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
+      >Autopilot</button>
+    </div>
+  }
 
   @if (activeTab === 'manual') {
     <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
@@ -72,13 +74,15 @@
       </div>
     </div>
   } @else {
-    <div class="tab-panel-autopilot" role="tabpanel" aria-label="Autopilot mode">
+    <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed" role="tabpanel" aria-label="Autopilot mode">
       <vt-autopilot-panel
         [goodVotes]="goodVotes"
         [badVotes]="badVotes"
         [labelingStatus]="labelingStatus"
+        [collapsed]="autopilotCollapsed"
         (started)="autopilotStart.emit()"
         (stopped)="autopilotStop.emit()"
+        (toggleCollapse)="autopilotToggleCollapse.emit()"
       />
     </div>
   }

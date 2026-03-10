@@ -51,6 +51,7 @@ _DEFAULTS: dict[str, Any] = {
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
+    "hide_autopilot": False,
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
@@ -192,6 +193,7 @@ _SETTING_SPECS: list[tuple] = [
     ("show_metadata", bool, None),
     ("show_thumbnails_left", bool, None),
     ("show_thumbnails_right", bool, None),
+    ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
 ]

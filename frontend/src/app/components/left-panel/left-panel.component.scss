@@ -33,6 +33,10 @@
   }
 }
 
+.left-panel.collapsed-autopilot {
+  align-items: center;
+}
+
 .tab-panel-manual,
 .tab-panel-autopilot {
   flex: 1;
@@ -41,6 +45,11 @@
   overflow: hidden;
   padding: 8px;
   gap: 8px;
+
+  &.collapsed {
+    padding: 4px 2px;
+    align-items: center;
+  }
 }
 
 .media-list-container {

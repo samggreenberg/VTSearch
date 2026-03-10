@@ -30,8 +30,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   showThumbnails = true;
   leftWidth = 260;
   rightWidth = 300;
+  autopilotCollapsed = false;
   progressModalMetric: ProgressMetric | null = null;
 
+  private readonly COLLAPSED_WIDTH = 36;
+  private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
   private readonly LEFT_MAX = 500;
   private readonly RIGHT_MIN = 150;
@@ -170,6 +173,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((settings) => {
         if (!settings) return;
         this.showThumbnails = settings.show_thumbnails_left !== false;
+        if (settings.hide_autopilot && !this.autopilotCollapsed) {
+          this.setAutopilotCollapsed(true);
+        } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
+          this.setAutopilotCollapsed(false);
+        }
         if (settings.inclusion != null) {
           this.sortState.setInclusion(settings.inclusion);
         }
@@ -339,6 +347,23 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (textQuery) {
       this.onTextSort(textQuery);
     }
+  }
+
+  onAutopilotToggleCollapse(): void {
+    const newVal = !this.autopilotCollapsed;
+    this.setAutopilotCollapsed(newVal);
+    this.settingsState.update({ hide_autopilot: newVal }).subscribe();
+  }
+
+  private setAutopilotCollapsed(collapsed: boolean): void {
+    this.autopilotCollapsed = collapsed;
+    if (collapsed) {
+      this.savedLeftWidth = this.leftWidth;
+      this.leftWidth = this.COLLAPSED_WIDTH;
+    } else {
+      this.leftWidth = this.savedLeftWidth;
+    }
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
   }
 
   onAutopilotStop(): void {

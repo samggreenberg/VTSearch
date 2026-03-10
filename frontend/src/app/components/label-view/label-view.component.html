@@ -24,8 +24,10 @@
       (loadSort)="onLoadSort()"
       (mediaSelect)="onMediaSelect($event)"
       (indicatorClick)="onIndicatorClick($event)"
+      [autopilotCollapsed]="autopilotCollapsed"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
+      (autopilotToggleCollapse)="onAutopilotToggleCollapse()"
     />
   </div>
   <div

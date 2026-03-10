@@ -14,9 +14,11 @@ interface StatusIcon {
   ariaLabel: string;
 }
 
-interface StepDisplay {
+export interface StepDisplay {
   phase: AutopilotPhase;
   label: string;
+  shortLabel: string;
+  stepNumber: number;
   state: 'done' | 'active' | 'future';
   detail: string;
   statusIcons: StatusIcon[];
@@ -34,9 +36,11 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() labelingStatus: LabelingStatusResponse | null = null;
+  @Input() collapsed = false;
 
   @Output() started = new EventEmitter<void>();
   @Output() stopped = new EventEmitter<void>();
+  @Output() toggleCollapse = new EventEmitter<void>();
 
   constructor(public autopilotState: AutopilotStateService) {}
 
@@ -61,6 +65,8 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       return {
         phase,
         label: this.phaseLabel(phase),
+        shortLabel: this.phaseShortLabel(phase),
+        stepNumber: i + 1,
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
         statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
@@ -102,6 +108,17 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       case 'bad': return 'Label Bad Examples';
       case 'hard': return 'Refine Boundary';
       case 'new': return 'Explore Diversity';
+      case 'done': return 'Done';
+      default: return '';
+    }
+  }
+
+  private phaseShortLabel(phase: AutopilotPhase): string {
+    switch (phase) {
+      case 'good': return 'Good';
+      case 'bad': return 'Bad';
+      case 'hard': return 'Boundary';
+      case 'new': return 'Diversity';
       case 'done': return 'Done';
       default: return '';
     }
