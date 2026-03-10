@@ -22,14 +22,20 @@
           <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
           Show metadata panel
         </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.show_thumbnails_left" (ngModelChange)="onToggle('show_thumbnails_left', $event)" />
-          Show thumbnails (left panel)
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.show_thumbnails_right" (ngModelChange)="onToggle('show_thumbnails_right', $event)" />
-          Show thumbnails (right panel)
-        </label>
+        <div class="form-group">
+          <label class="form-label">Left panel view</label>
+          <select class="form-select" [ngModel]="settings.view_mode_left" (ngModelChange)="onViewModeChange('view_mode_left', $event)">
+            <option value="list">List View</option>
+            <option value="grid">Grid View</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Right panel view</label>
+          <select class="form-select" [ngModel]="settings.view_mode_right" (ngModelChange)="onViewModeChange('view_mode_right', $event)">
+            <option value="list">List View</option>
+            <option value="grid">Grid View</option>
+          </select>
+        </div>
       </div>
 
       <!-- Sorting & Calibration -->

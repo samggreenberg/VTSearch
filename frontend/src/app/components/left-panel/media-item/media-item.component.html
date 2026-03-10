@@ -3,6 +3,7 @@
   [class.active]="active"
   [class.labeled-good]="voteLabel === 'good'"
   [class.labeled-bad]="voteLabel === 'bad'"
+  [class.grid-mode]="isGrid"
   role="option"
   [attr.aria-selected]="active"
   tabindex="0"
@@ -10,10 +11,16 @@
   (keydown.enter)="onClick()"
   (keydown.space)="onClick()"
 >
-  @if (thumbnailUrl) {
-    <img class="media-thumbnail" [src]="thumbnailUrl" alt="" loading="lazy" />
+  @if (isGrid) {
+    @if (thumbnailUrl) {
+      <img class="media-thumbnail" [src]="thumbnailUrl" alt="" loading="lazy" />
+    } @else if (placeholderIcon) {
+      <span class="media-placeholder">{{ placeholderIcon }}</span>
+    }
+    <span class="media-name-grid">{{ displayName }}</span>
+  } @else {
+    <span class="media-name">{{ displayName }}</span>
   }
-  <span class="media-name">{{ displayName }}</span>
   @if (score !== null) {
     <span class="media-score">{{ score | number:'1.2-2' }}</span>
   }

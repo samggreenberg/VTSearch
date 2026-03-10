@@ -251,8 +251,8 @@ export interface AppSettings {
   calibration_fraction?: number;
   swipe_animation?: boolean;
   show_metadata?: boolean;
-  show_thumbnails_left?: boolean;
-  show_thumbnails_right?: boolean;
+  view_mode_left?: 'grid' | 'list';
+  view_mode_right?: 'grid' | 'list';
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];

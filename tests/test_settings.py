@@ -184,35 +184,43 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_show_metadata() is False
 
-    def test_get_set_show_thumbnails_left(self, isolated_settings):
-        settings_mod.set_show_thumbnails_left(True)
-        assert settings_mod.get_show_thumbnails_left() is True
+    def test_get_set_view_mode_left(self, isolated_settings):
+        settings_mod.set_view_mode_left("grid")
+        assert settings_mod.get_view_mode_left() == "grid"
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["show_thumbnails_left"] is True
+        assert raw["view_mode_left"] == "grid"
 
-    def test_show_thumbnails_left_default(self):
-        assert settings_mod.get_show_thumbnails_left() is False
+    def test_view_mode_left_default(self):
+        assert settings_mod.get_view_mode_left() == "list"
 
-    def test_show_thumbnails_left_persists_across_reset(self, isolated_settings):
-        settings_mod.set_show_thumbnails_left(True)
+    def test_view_mode_left_persists_across_reset(self, isolated_settings):
+        settings_mod.set_view_mode_left("grid")
         settings_mod.reset()
-        assert settings_mod.get_show_thumbnails_left() is True
+        assert settings_mod.get_view_mode_left() == "grid"
 
-    def test_get_set_show_thumbnails_right(self, isolated_settings):
-        settings_mod.set_show_thumbnails_right(False)
-        assert settings_mod.get_show_thumbnails_right() is False
+    def test_view_mode_left_invalid(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_view_mode_left("invalid")
+
+    def test_get_set_view_mode_right(self, isolated_settings):
+        settings_mod.set_view_mode_right("list")
+        assert settings_mod.get_view_mode_right() == "list"
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["show_thumbnails_right"] is False
+        assert raw["view_mode_right"] == "list"
 
-    def test_show_thumbnails_right_default(self):
-        assert settings_mod.get_show_thumbnails_right() is True
+    def test_view_mode_right_default(self):
+        assert settings_mod.get_view_mode_right() == "grid"
 
-    def test_show_thumbnails_right_persists_across_reset(self, isolated_settings):
-        settings_mod.set_show_thumbnails_right(False)
+    def test_view_mode_right_persists_across_reset(self, isolated_settings):
+        settings_mod.set_view_mode_right("list")
         settings_mod.reset()
-        assert settings_mod.get_show_thumbnails_right() is False
+        assert settings_mod.get_view_mode_right() == "list"
+
+    def test_view_mode_right_invalid(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_view_mode_right("invalid")
 
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
@@ -222,8 +230,8 @@ class TestSettingsModule:
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
         assert defaults["show_metadata"] is True
-        assert defaults["show_thumbnails_left"] is False
-        assert defaults["show_thumbnails_right"] is True
+        assert defaults["view_mode_left"] == "list"
+        assert defaults["view_mode_right"] == "grid"
         assert defaults["autoload_media_types"] == []
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
@@ -598,43 +606,51 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["show_metadata"] is True
 
-    def test_update_show_thumbnails_left(self, client):
-        res = client.put("/api/settings", json={"show_thumbnails_left": True})
+    def test_update_view_mode_left(self, client):
+        res = client.put("/api/settings", json={"view_mode_left": "grid"})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails_left"] is True
+        assert res.get_json()["view_mode_left"] == "grid"
 
         # Verify it persisted
         res2 = client.get("/api/settings")
-        assert res2.get_json()["show_thumbnails_left"] is True
+        assert res2.get_json()["view_mode_left"] == "grid"
 
-    def test_update_show_thumbnails_left_false(self, client):
-        client.put("/api/settings", json={"show_thumbnails_left": True})
-        res = client.put("/api/settings", json={"show_thumbnails_left": False})
+    def test_update_view_mode_left_list(self, client):
+        client.put("/api/settings", json={"view_mode_left": "grid"})
+        res = client.put("/api/settings", json={"view_mode_left": "list"})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails_left"] is False
+        assert res.get_json()["view_mode_left"] == "list"
 
-    def test_update_show_thumbnails_right(self, client):
-        res = client.put("/api/settings", json={"show_thumbnails_right": True})
+    def test_update_view_mode_left_invalid(self, client):
+        res = client.put("/api/settings", json={"view_mode_left": "invalid"})
+        assert res.status_code == 400
+
+    def test_update_view_mode_right(self, client):
+        res = client.put("/api/settings", json={"view_mode_right": "list"})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails_right"] is True
+        assert res.get_json()["view_mode_right"] == "list"
 
         # Verify it persisted
         res2 = client.get("/api/settings")
-        assert res2.get_json()["show_thumbnails_right"] is True
+        assert res2.get_json()["view_mode_right"] == "list"
 
-    def test_update_show_thumbnails_right_false(self, client):
-        client.put("/api/settings", json={"show_thumbnails_right": True})
-        res = client.put("/api/settings", json={"show_thumbnails_right": False})
+    def test_update_view_mode_right_grid(self, client):
+        client.put("/api/settings", json={"view_mode_right": "list"})
+        res = client.put("/api/settings", json={"view_mode_right": "grid"})
         assert res.status_code == 200
-        assert res.get_json()["show_thumbnails_right"] is False
+        assert res.get_json()["view_mode_right"] == "grid"
 
-    def test_get_settings_includes_show_thumbnails(self, client):
+    def test_update_view_mode_right_invalid(self, client):
+        res = client.put("/api/settings", json={"view_mode_right": "invalid"})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_view_modes(self, client):
         res = client.get("/api/settings")
         assert res.status_code == 200
         data = res.get_json()
         assert "show_metadata" in data
-        assert "show_thumbnails_left" in data
-        assert "show_thumbnails_right" in data
+        assert "view_mode_left" in data
+        assert "view_mode_right" in data
 
     def test_update_autoload_media_types(self, client):
         res = client.put("/api/settings", json={"autoload_media_types": ["audio", "video"]})
