@@ -141,8 +141,8 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  private fetchDemos(): void {
-    this.datasetsApi.getDemoList().subscribe({
+  private fetchDemos(embedder?: string): void {
+    this.datasetsApi.getDemoList(embedder).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
         this.buildDemoTabs();
@@ -181,8 +181,36 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (embedders) => {
         this.demoEmbedders = embedders;
         this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        this.updateDemoStatuses();
       },
     });
+  }
+
+  onDemoEmbedderChange(embedder: string): void {
+    this.selectedDemoEmbedder = embedder;
+    this.updateDemoStatuses();
+  }
+
+  /**
+   * Re-compute each demo's status client-side based on the selected embedder.
+   * A demo that has a cached pkl (`pkl_embedder` is set) is only "ready" when
+   * the pkl embedder matches the currently selected embedder; otherwise it
+   * downgrades to "needs_embedding" (source data is still present).
+   */
+  private updateDemoStatuses(): void {
+    const emb = this.selectedDemoEmbedder;
+    for (const demo of this.demos) {
+      if (!demo.pkl_embedder) continue;  // no pkl or unknown embedder — keep server status
+      if (demo.status === 'needs_download') continue;  // source data missing — can't re-embed
+
+      if (emb && demo.pkl_embedder !== emb) {
+        demo.status = 'needs_embedding';
+        demo.ready = false;
+      } else {
+        demo.status = 'ready';
+        demo.ready = true;
+      }
+    }
   }
 
   get filteredDemos(): DemoDataset[] {

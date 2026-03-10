@@ -1233,6 +1233,46 @@ def embed_image_file_from_pil(image: Image.Image, embedder_name: str = "") -> Op
     return emb.embed_pil_image(image)
 
 
+def _write_embedder_sidecar(pkl_path: Path, embedder_name: str) -> None:
+    """Write a small ``<name>.embedder`` file next to *pkl_path*.
+
+    The file stores the embedder name used to produce the pickle so that
+    ``demo_dataset_list`` can cheaply check whether the cached embeddings
+    match the user's current embedder selection without loading the full pkl.
+    """
+    sidecar = pkl_path.with_suffix(".embedder")
+    sidecar.write_text(embedder_name, encoding="utf-8")
+
+
+def read_pkl_embedder(pkl_path: Path) -> str | None:
+    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown.
+
+    Checks the lightweight ``.embedder`` sidecar first.  Falls back to loading
+    the pickle and inspecting the first media entry's ``"embedder"`` field,
+    then writes the sidecar for future fast lookups.
+    """
+    sidecar = pkl_path.with_suffix(".embedder")
+    if sidecar.exists():
+        return sidecar.read_text(encoding="utf-8").strip()
+
+    # Fallback: peek into the pkl itself.
+    if not pkl_path.exists():
+        return None
+    try:
+        with open(pkl_path, "rb") as f:
+            data = pickle.load(f)  # noqa: S301
+        medias_dict = data.get("medias", {}) if isinstance(data, dict) else {}
+        for media in medias_dict.values():
+            name = media.get("embedder", "")
+            if name:
+                # Cache it for next time.
+                _write_embedder_sidecar(pkl_path, name)
+                return name
+    except Exception:
+        pass
+    return None
+
+
 def load_demo_dataset(
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
@@ -1301,6 +1341,7 @@ def load_demo_dataset(
             # Pickle file exists but media files are missing, delete and re-embed
             on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
             pkl_file.unlink()
+            pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
         else:
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
@@ -1380,6 +1421,10 @@ def load_demo_dataset(
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
     with open(pkl_file, "wb") as f:
         pickle.dump(pkl_data, f)
+
+    # Write a lightweight sidecar that records which embedder produced this pkl.
+    resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
+    _write_embedder_sidecar(pkl_file, resolved_name)
 
     on_progress("idle", f"Loaded {dataset_name} dataset")
 
