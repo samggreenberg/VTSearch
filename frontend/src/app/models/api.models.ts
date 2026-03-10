@@ -176,6 +176,7 @@ export interface DemoDataset {
   description: string;
   media_type: string;
   num_categories: number;
+  pkl_embedder?: string;
 }
 
 export interface DemoListResponse {

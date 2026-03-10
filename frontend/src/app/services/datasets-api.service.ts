@@ -38,8 +38,12 @@ export class DatasetsApiService {
     return this.http.get<ImportersResponse>('/api/dataset/all-importers');
   }
 
-  getDemoList(): Observable<DemoListResponse> {
-    return this.http.get<DemoListResponse>('/api/dataset/demo-list');
+  getDemoList(embedder?: string): Observable<DemoListResponse> {
+    const params: Record<string, string> = {};
+    if (embedder) {
+      params['embedder'] = embedder;
+    }
+    return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
   }
 
   getMediaTypes(): Observable<MediaTypesResponse> {
