@@ -22,25 +22,11 @@
           <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
           Show metadata panel
         </label>
-        <div class="form-group">
-          <label class="form-label">Focus mode (left panel)</label>
-          <select class="form-select" [ngModel]="settings.focus_mode_left" (ngModelChange)="onStringChange('focus_mode_left', $event)">
-            <option value="click">Click</option>
-            <option value="hover">Hover</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Focus mode (right panel)</label>
-          <select class="form-select" [ngModel]="settings.focus_mode_right" (ngModelChange)="onStringChange('focus_mode_right', $event)">
-            <option value="click">Click</option>
-            <option value="hover">Hover</option>
-          </select>
-        </div>
       </div>
 
-      <!-- View (per-media-type) -->
+      <!-- Media Type Settings (per-media-type) -->
       <div class="settings-section settings-section--wide">
-        <h3>View</h3>
+        <h3>Media Type Settings</h3>
         @if (mediaTypes.length > 0) {
           <div class="view-tabs">
             @for (mt of mediaTypes; track mt.type_id) {
@@ -65,6 +51,20 @@
               <select class="form-select" [ngModel]="getViewMode('view_mode_right', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_right', activeViewTab, $event)">
                 <option value="list">List View</option>
                 <option value="grid">Grid View</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Left focus mode</label>
+              <select class="form-select" [ngModel]="getFocusMode('focus_mode_left', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_left', activeViewTab, $event)">
+                <option value="click">Click</option>
+                <option value="hover">Hover</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right focus mode</label>
+              <select class="form-select" [ngModel]="getFocusMode('focus_mode_right', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_right', activeViewTab, $event)">
+                <option value="click">Click</option>
+                <option value="hover">Hover</option>
               </select>
             </div>
           </div>
