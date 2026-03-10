@@ -72,10 +72,15 @@ class ProgressTracker:
 # ---------------------------------------------------------------------------
 
 #: Dataset / import progress (used by dataset loading, downloading, embedding).
-dataset_progress = ProgressTracker(extra_fields={"error": None, "staging_result": None})
+dataset_progress = ProgressTracker(
+    extra_fields={"error": None, "staging_result": None, "step": None, "total_steps": None}
+)
 
 #: Sort-specific progress (used by text-sort operations).
 sort_progress = ProgressTracker()
+
+#: Eval progress (used by train-and-score / voting-iterations analysis).
+eval_progress = ProgressTracker()
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +95,8 @@ def update_progress(
     total: int = 0,
     error: Any = _UNSET,
     staging_result: Any = _UNSET,
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
 ) -> None:
     """Update the global dataset progress tracker.
 
@@ -105,6 +112,10 @@ def update_progress(
         kwargs["error"] = error
     if staging_result is not _UNSET:
         kwargs["staging_result"] = staging_result
+    if step is not _UNSET:
+        kwargs["step"] = step
+    if total_steps is not _UNSET:
+        kwargs["total_steps"] = total_steps
     dataset_progress.update(status, message, current, total, **kwargs)
 
 
@@ -126,3 +137,18 @@ def update_sort_progress(
 def get_sort_progress() -> dict[str, Any]:
     """Return a snapshot of the current sort progress data."""
     return sort_progress.get()
+
+
+def update_eval_progress(
+    status: str,
+    message: str = "",
+    current: int = 0,
+    total: int = 0,
+) -> None:
+    """Update the eval progress tracker in a thread-safe manner."""
+    eval_progress.update(status, message, current, total)
+
+
+def get_eval_progress() -> dict[str, Any]:
+    """Return a snapshot of the current eval progress data."""
+    return eval_progress.get()

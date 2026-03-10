@@ -12,11 +12,9 @@ describe('TextViewerComponent', () => {
   const mockMedia: MediaItem = {
     id: 4,
     type: 'paragraph',
-    duration: 0,
-    file_size: 512,
     filename: 'test.txt',
-    category: 'test',
     md5: 'jkl012',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {

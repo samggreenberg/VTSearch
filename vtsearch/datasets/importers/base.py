@@ -326,3 +326,22 @@ class DatasetImporter(PluginBase):
         strings.
         """
         return dict(origin.get("params", {}))
+
+    def resolve_file(
+        self,
+        origin: dict[str, Any],
+        origin_name: str = "",
+        filename: str = "",
+    ) -> "Path | None":
+        """Resolve a media file from its origin information.
+
+        Given the origin dict that this importer produced, plus the
+        ``origin_name`` and ``filename`` stored on the media, return the
+        :class:`~pathlib.Path` to the actual file on disk — or ``None``
+        if the file cannot be found.
+
+        The default implementation returns ``None``.  Importers that store
+        files on disk (e.g. ``folder``) should override this to resolve
+        the path.
+        """
+        return None

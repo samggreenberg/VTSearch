@@ -38,12 +38,17 @@
           }
         </div>
 
-        @if (demoEmbeddersForTab.length > 0) {
-          <div class="form-group demo-embedder-row">
-            <label class="form-label" for="demo-embedder">Embedder</label>
-            <select id="demo-embedder" class="form-select" [(ngModel)]="demoEmbedder">
-              @for (emb of demoEmbeddersForTab; track emb.name) {
-                <option [value]="emb.name">{{ emb.name }}</option>
+        @if (demoEmbedders.length > 1) {
+          <div class="demo-embedder-row">
+            <label class="form-label" for="demo-embedder">Embedder:</label>
+            <select
+              id="demo-embedder"
+              class="form-select form-select--inline"
+              [ngModel]="selectedDemoEmbedder"
+              (ngModelChange)="onDemoEmbedderChange($event)"
+            >
+              @for (embedder of demoEmbedders; track embedder.name) {
+                <option [value]="embedder.name">{{ embedder.name }}</option>
               }
             </select>
           </div>
@@ -108,6 +113,17 @@
                 [accept]="field.accept || ''"
                 (change)="onFileSelected($event, field.key)"
               />
+            } @else if (field.field_type === 'select' && field.key === 'media_type') {
+              <select
+                [id]="'field-' + field.key"
+                class="form-select"
+                [ngModel]="formValues[field.key]"
+                (ngModelChange)="onMediaTypeChange($event)"
+              >
+                @for (opt of field.options || []; track opt) {
+                  <option [value]="opt">{{ opt }}</option>
+                }
+              </select>
             } @else if (field.field_type === 'select') {
               <select
                 [id]="'field-' + field.key"
@@ -134,16 +150,31 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
-      @if (showEmbedderField && availableEmbedders.length > 0) {
+      @if (availableEmbedders.length > 1) {
         <div class="form-group">
           <label class="form-label" for="field-embedder">Embedder</label>
           <select
             id="field-embedder"
             class="form-select"
-            [(ngModel)]="formValues['embedder']"
+            [(ngModel)]="selectedEmbedder"
           >
-            @for (emb of availableEmbedders; track emb.name) {
-              <option [value]="emb.name">{{ emb.name }}</option>
+            @for (embedder of availableEmbedders; track embedder.name) {
+              <option [value]="embedder.name">{{ embedder.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      @if (availableClippers.length > 1) {
+        <div class="form-group">
+          <label class="form-label" for="field-clipper">Clipper</label>
+          <select
+            id="field-clipper"
+            class="form-select"
+            [(ngModel)]="selectedClipper"
+          >
+            @for (clipper of availableClippers; track clipper.name) {
+              <option [value]="clipper.name">{{ clipper.name }}</option>
             }
           </select>
         </div>

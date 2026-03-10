@@ -6,9 +6,13 @@ import { TrainableModelsApiService } from '../../services/trainable-models-api.s
 import { MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
+import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
+import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -22,6 +26,9 @@ export interface TrainModeContext {
     LabelSortComponent,
     LabelListComponent,
     DetectorContextBarComponent,
+    DetectorExportModalComponent,
+    LabelExporterModalComponent,
+    LabelImporterModalComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -37,6 +44,9 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   showThumbnails = true;
+  showLabelImport = false;
+  showLabelExport = false;
+  showDetectorExport = false;
 
   private destroy$ = new Subject<void>();
 
@@ -64,6 +74,18 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
   onMediaSelected(id: number): void {
     this.mediaSelected.emit(id);
+  }
+
+  onImportLabels(): void {
+    this.showLabelImport = true;
+  }
+
+  onExportLabels(): void {
+    this.showLabelExport = true;
+  }
+
+  onExportDetector(): void {
+    this.showDetectorExport = true;
   }
 
   onDetectorRenamed(newName: string): void {

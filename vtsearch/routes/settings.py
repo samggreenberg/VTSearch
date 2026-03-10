@@ -108,6 +108,9 @@ def update_settings():
     if "show_thumbnails_right" in body:
         settings.set_show_thumbnails_right(bool(body["show_thumbnails_right"]))
 
+    if "hide_autopilot" in body:
+        settings.set_hide_autopilot(bool(body["hide_autopilot"]))
+
     if "autopilot_top_greens" in body:
         try:
             val = body["autopilot_top_greens"]

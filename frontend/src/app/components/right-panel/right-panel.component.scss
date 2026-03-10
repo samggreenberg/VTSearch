@@ -12,3 +12,54 @@
   height: 100%;
   padding: 0;
 }
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+
+  vt-label-sort {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // Remove the sort component's own border since the row provides it
+  ::ng-deep .label-sort-bar {
+    border-bottom: none;
+  }
+}
+
+.export-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+
+.panel-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+}
+
+.import-btn {
+  margin-right: 8px;
+}
+
+.export-btn {
+  flex: 1;
+}

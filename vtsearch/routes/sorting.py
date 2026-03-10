@@ -35,6 +35,7 @@ from vtsearch.utils import (
     get_calibrate_count,
     get_calibration_fraction,
     get_diversity_tree,
+    get_eval_progress,
     get_inclusion,
     get_learned_scores,
     get_media,
@@ -48,6 +49,7 @@ from vtsearch.utils import (
     set_inclusion,
     set_safe_thresholds,
     snapshot_medias,
+    update_eval_progress,
     update_learned_scores,
     update_sort_progress,
 )
@@ -805,3 +807,69 @@ def diversity_tree_next():
     level = tree.diversity_level() if tree is not None else -1
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
+
+
+# ---------------------------------------------------------------------------
+# Eval routes
+# ---------------------------------------------------------------------------
+
+
+@sorting_bp.route("/api/eval/train-and-score", methods=["POST"])
+def eval_train_and_score():
+    """Compute indicator score history for a given metric.
+
+    Expects JSON::
+
+        {"metric": "smart" | "stable" | "diverse"}
+
+    Runs the computation in a background thread and returns the result
+    synchronously. Progress can be polled via ``/api/eval/voting-iterations``.
+    """
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    metric = data.get("metric", "").strip()
+    if metric not in ("smart", "stable", "diverse"):
+        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
+
+    clips = snapshot_medias()
+    inclusion = get_inclusion()
+    history = list(label_history)
+    n_total = max(len(history) - 1, 0)
+
+    update_eval_progress("running", f"Computing {metric}...", 0, n_total)
+
+    try:
+        if metric == "smart":
+            result_data = calculate_error_cost_over_time(clips, history, good_votes, bad_votes, inclusion)
+            update_eval_progress("idle", "Done", n_total, n_total)
+            return jsonify({"error_cost": result_data})
+        elif metric == "stable":
+            result_data = calculate_prediction_stability_over_time(clips, history, inclusion)
+            update_eval_progress("idle", "Done", n_total, n_total)
+            return jsonify({"stability": result_data})
+        else:
+            result_data = calculate_diversity_level_over_time(clips, history)
+            update_eval_progress("idle", "Done", n_total, n_total)
+            return jsonify({"diversity": result_data})
+    except Exception as e:
+        update_eval_progress("idle", "Error", 0, 0)
+        return jsonify({"error": str(e)}), 500
+
+
+@sorting_bp.route("/api/eval/voting-iterations", methods=["GET"])
+def eval_voting_iterations():
+    """Return progress of the current eval computation.
+
+    Returns::
+
+        {"progress": <int>, "total": <int>, "done": <bool>}
+    """
+    prog = get_eval_progress()
+    done = prog["status"] == "idle" and prog["total"] > 0 and prog["current"] >= prog["total"]
+    return jsonify({
+        "progress": prog["current"],
+        "total": prog["total"],
+        "done": done,
+    })

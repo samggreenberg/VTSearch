@@ -114,11 +114,15 @@ class TestDashboardHtmlPresent:
 
     def test_dashboard_view_in_bundle(self, client):
         """The Angular bundle should contain dashboard view references."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "dashboard" in text
-        assert "Datasets" in text
-        assert "Models" in text
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "dashboard" in combined
+        assert "Datasets" in combined
+        assert "Models" in combined
 
     def test_dashboard_route_defined(self, client):
         """The /dashboard route should serve the Angular SPA."""
@@ -292,6 +296,93 @@ class TestDashboardDatasetDupesColumn:
         assert ds["num_dupes"] == 3
 
 
+class TestDashboardDatasetEmbedderColumn:
+    """Tests that the dataset registry API returns the embedder field."""
+
+    def test_dataset_registry_includes_embedder(self, client):
+        """Registered datasets include an embedder string."""
+        register_dataset(
+            name="emb-ds", media_type="audio", num_items=10,
+            pkl_path="/tmp/emb.pkl", embedder="clap",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "embedder" in ds
+        assert ds["embedder"] == "clap"
+
+    def test_dataset_registry_embedder_defaults_to_empty(self, client):
+        """Datasets registered without embedder default to empty string."""
+        register_dataset(name="no-emb", media_type="audio", num_items=5, pkl_path="/tmp/noemb.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["embedder"] == ""
+
+    def test_dataset_registry_stores_explicit_embedder(self, client):
+        """Datasets registered with explicit embedder retain the value."""
+        register_dataset(
+            name="clip-ds", media_type="image", num_items=20,
+            pkl_path="/tmp/clipemb.pkl", embedder="clip",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["embedder"] == "clip"
+
+
+class TestEmbeddersApiEndpoint:
+    """Tests for the /api/embedders endpoint with optional media_type filtering."""
+
+    def test_list_all_embedders(self, client):
+        """GET /api/embedders returns all registered embedders."""
+        resp = client.get("/api/embedders")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "embedders" in data
+        names = [e["name"] for e in data["embedders"]]
+        assert "clap" in names
+        assert "clip" in names
+        assert "e5" in names
+        assert "xclip" in names
+
+    def test_filter_by_type_id(self, client):
+        """GET /api/embedders?media_type=audio returns only audio embedders."""
+        resp = client.get("/api/embedders?media_type=audio")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        embedders = data["embedders"]
+        assert all(e["media_type_id"] == "audio" for e in embedders)
+        names = [e["name"] for e in embedders]
+        assert "clap" in names
+        assert "clip" not in names
+
+    def test_filter_by_folder_name(self, client):
+        """GET /api/embedders?media_type=images returns image embedders."""
+        resp = client.get("/api/embedders?media_type=images")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        embedders = data["embedders"]
+        assert all(e["media_type_id"] == "image" for e in embedders)
+        names = [e["name"] for e in embedders]
+        assert "clip" in names
+
+    def test_filter_unknown_type_returns_empty(self, client):
+        """GET /api/embedders?media_type=nonexistent returns empty list."""
+        resp = client.get("/api/embedders?media_type=nonexistent")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["embedders"] == []
+
+    def test_embedder_dict_has_required_keys(self, client):
+        """Each embedder dict has name and media_type_id keys."""
+        resp = client.get("/api/embedders")
+        data = resp.get_json()
+        for emb in data["embedders"]:
+            assert "name" in emb
+            assert "media_type_id" in emb
+
+
 class TestDashboardModelRegistryColumns:
     """Tests that the model registry API returns fields needed for new columns."""
 
@@ -403,17 +494,25 @@ class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
 
     def test_dataset_grid_has_new_column_headers(self, client):
-        """main.js should include the dataset column headers."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "Created" in text
-        assert "Origin" in text
-        assert "Dupes" in text
-        assert "Loaded" in text
+        """Bundle JS should include the dataset column headers."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "Created" in combined
+        assert "Origin" in combined
+        assert "Dupes" in combined
+        assert "Loaded" in combined
 
     def test_model_grid_has_new_column_headers(self, client):
-        """main.js should include the model column headers."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "Autorun" in text
-        assert "Trainable" in text
+        """Bundle JS should include the model column headers."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "Autorun" in combined
+        assert "Trainable" in combined

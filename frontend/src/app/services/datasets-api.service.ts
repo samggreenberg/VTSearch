@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   DatasetStatus,
   DatasetProgress,
@@ -8,7 +9,11 @@ import {
   DemoListResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
+  ClipperInfo,
+  ClippersResponse,
   ConverterInfo,
+  ConvertersResponse,
+  EmbedderInfo,
   EmbeddersResponse,
   OkResponse,
 } from '../models/api.models';
@@ -33,12 +38,36 @@ export class DatasetsApiService {
     return this.http.get<ImportersResponse>('/api/dataset/all-importers');
   }
 
-  getDemoList(): Observable<DemoListResponse> {
-    return this.http.get<DemoListResponse>('/api/dataset/demo-list');
+  getDemoList(embedder?: string): Observable<DemoListResponse> {
+    const params: Record<string, string> = {};
+    if (embedder) {
+      params['embedder'] = embedder;
+    }
+    return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
   }
 
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
+  }
+
+  getClippers(mediaType?: string): Observable<ClipperInfo[]> {
+    const params: Record<string, string> = {};
+    if (mediaType) {
+      params['media_type'] = mediaType;
+    }
+    return this.http.get<ClippersResponse>('/api/clippers', { params }).pipe(
+      map((res) => res.clippers),
+    );
+  }
+
+  getEmbedders(mediaType?: string): Observable<EmbedderInfo[]> {
+    const params: Record<string, string> = {};
+    if (mediaType) {
+      params['media_type'] = mediaType;
+    }
+    return this.http.get<EmbeddersResponse>('/api/embedders', { params }).pipe(
+      map((res) => res.embedders),
+    );
   }
 
   getConverters(target?: string): Observable<ConverterInfo[]> {
@@ -46,27 +75,21 @@ export class DatasetsApiService {
     if (target) {
       params['target'] = target;
     }
-    return this.http.get<ConverterInfo[]>('/api/converters', { params });
+    return this.http.get<ConvertersResponse>('/api/converters', { params }).pipe(
+      map((res) => res.converters),
+    );
   }
 
-  getAvailableFiles(): Observable<{ files: string[] }> {
-    return this.http.get<{ files: string[] }>('/api/dataset/available-files');
+  getAvailableFiles(): Observable<{ files: { name: string; path: string; size_mb: number }[] }> {
+    return this.http.get<{ files: { name: string; path: string; size_mb: number }[] }>('/api/dataset/available-files');
   }
 
   runImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`/api/dataset/import/${importerName}`, params);
   }
 
-  getEmbedders(): Observable<EmbeddersResponse> {
-    return this.http.get<EmbeddersResponse>('/api/embedders');
-  }
-
-  loadDemo(name: string, embedder?: string): Observable<unknown> {
-    const body: Record<string, string> = { name };
-    if (embedder) {
-      body['embedder'] = embedder;
-    }
-    return this.http.post('/api/dataset/load-demo', body);
+  loadDemo(name: string, params?: Record<string, string>): Observable<unknown> {
+    return this.http.post('/api/dataset/load-demo', { name, ...params });
   }
 
   loadFile(file: File): Observable<unknown> {

@@ -5,9 +5,10 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS
+from vtsearch.datasets.loader import read_pkl_embedder
 from vtsearch.routes.datasets_loading import _origin_to_str
+from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
@@ -39,7 +40,12 @@ def demo_dataset_list():
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
     # Only include demo datasets whose media type is currently registered.
+    from vtsearch.converters import list_converters_for_source
     from vtsearch.media import get as media_get
+
+    # Optional embedder filter: when the caller specifies an embedder, a cached
+    # pkl is only considered "ready" if it was produced by that same embedder.
+    requested_embedder = request.args.get("embedder", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
@@ -70,6 +76,14 @@ def demo_dataset_list():
             else:
                 status = "needs_download"
 
+        # If the pkl exists but was embedded with a different embedder than
+        # the one the user selected, downgrade from "ready" to "needs_embedding".
+        pkl_embedder: str | None = None
+        if status == "ready" and requested_embedder:
+            pkl_embedder = read_pkl_embedder(pkl_file)
+            if pkl_embedder is not None and pkl_embedder != requested_embedder:
+                status = "needs_embedding"
+
         # Calculate number of files from slice parameters
         num_categories = len(dataset_info["categories"])
         slice_start = dataset_info.get("slice_start", 0)
@@ -89,6 +103,13 @@ def demo_dataset_list():
             # Use the download_size_mb from DemoDataset metadata
             download_size_mb = dataset_info.get("download_size_mb", 0)
 
+        # Converters that consume this demo's media type (M→N converters).
+        available_converters = [c.to_dict() for c in list_converters_for_source(media_type)]
+
+        # Resolve pkl_embedder if not already read above.
+        if pkl_embedder is None and has_pkl:
+            pkl_embedder = read_pkl_embedder(pkl_file)
+
         demos.append(
             {
                 "name": name,
@@ -100,6 +121,8 @@ def demo_dataset_list():
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
                 "num_categories": num_categories,
+                "available_converters": available_converters,
+                "pkl_embedder": pkl_embedder or "",
             }
         )
     return jsonify({"datasets": demos})

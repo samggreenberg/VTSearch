@@ -108,6 +108,7 @@ def register_dataset(
     origin: str = "unknown",
     source: dict[str, Any] | None = None,
     num_dupes: int = 0,
+    clipper: str = "",
     embedder: str = "",
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
@@ -125,6 +126,7 @@ def register_dataset(
         "pkl_path": pkl_path,
         "origin": origin,
         "source": source,
+        "clipper": clipper,
         "embedder": embedder,
         "created_at": time.time(),
     }

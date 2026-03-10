@@ -1,52 +1,111 @@
 # Extending VTSearch
 
-This guide explains how to add a new **Data Importer**, **Results Exporter**,
-**Label Importer**, **Processor Importer**, **Media Type**, or **Media
-Converter** to VTSearch. Each section describes the interface contract, where
-files go, and how to wire up dependencies.
+This guide explains how to add new plugins and extensions to VTSearch.
+Each section describes the interface contract, where files go, how
+discovery/registration works, and includes a complete example.
 
-All four plugin systems (data importers, results exporters, label importers,
-processor importers) share the same architecture: an abstract base class, a
-field dataclass for UI forms, auto-discovery via `pkgutil`, and CLI support
-auto-derived from field definitions. Media types and converters use explicit
-registration instead.
+**Extension types covered:**
+
+- [Plugin systems](#shared-plugin-architecture) (shared base for importers/exporters)
+  - [Data Importers](#adding-a-data-importer)
+  - [Results Exporters](#adding-a-results-exporter)
+  - [Label Importers](#adding-a-label-importer)
+  - [Processor Importers](#adding-a-processor-importer)
+- [Media system](#media-system) (explicit registration)
+  - [Media Types](#adding-a-media-type)
+  - [Media Embedders](#adding-a-media-embedder)
+  - [Media Clippers](#adding-a-media-clipper)
+  - [Media Converters](#adding-a-media-converter)
+- [Processor system](#processor-system) (Detectors, Localizers, Extractors)
+  - [Detectors](#adding-a-detector)
+  - [Localizers](#adding-a-localizer)
+  - [Extractors](#adding-an-extractor)
+- [Dependency Management](#dependency-management)
+- [Quick Reference Checklists](#quick-reference-checklist-for-each-extension-type)
 
 ---
 
-## Table of Contents
+## Shared Plugin Architecture
 
-1. [Adding a Data Importer](#adding-a-data-importer)
-2. [Adding a Results Exporter](#adding-a-results-exporter)
-3. [Adding a Label Importer](#adding-a-label-importer)
-4. [Adding a Processor Importer](#adding-a-processor-importer)
-5. [Adding a Media Type](#adding-a-media-type)
-6. [Adding a Media Converter](#adding-a-media-converter)
-7. [Dependency Management (requirements.txt)](#dependency-management)
+The four plugin systems — data importers, results exporters, label
+importers, and processor importers — share the same architecture built on
+two base classes in `vtsearch/utils/registry.py`:
+
+### PluginField
+
+A dataclass describing a single user-configurable input. All four plugin
+families use the same field type (aliased as `ImporterField`,
+`ExporterField`, `LabelImporterField`, `ProcessorImporterField`).
+
+| Parameter     | Type        | Default  | Description                                             |
+|---------------|-------------|----------|---------------------------------------------------------|
+| `key`         | `str`       | —        | Field identifier (dict key in `field_values`)           |
+| `label`       | `str`       | —        | Display label in the UI                                 |
+| `field_type`  | `FieldType` | —        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, or `"select"` |
+| `description` | `str`       | `""`     | Helper text shown below the field                       |
+| `accept`      | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
+| `options`     | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
+| `default`     | `str`       | `""`     | Pre-filled value                                        |
+| `required`    | `bool`      | `True`   | Whether the field must be filled before submitting      |
+| `placeholder` | `str`       | `""`     | Hint shown as placeholder text in the input widget      |
+
+### PluginBase
+
+Shared base class providing CLI-argument derivation, validation, and
+serialisation. All four plugin base classes inherit from it.
+
+**Required class attributes (set on your subclass):**
+
+| Attribute      | Type                | Required | Description                                   |
+|----------------|---------------------|----------|-----------------------------------------------|
+| `name`         | `str`               | Yes      | Snake_case identifier, used in API URL path   |
+| `display_name` | `str`               | Yes      | Human-readable label for the UI               |
+| `description`  | `str`               | Yes      | One-sentence subtitle                         |
+| `icon`         | `str`               | No       | Emoji/icon string (each family has a default) |
+| `fields`       | `list[PluginField]` | Yes      | Ordered list of user-facing input fields      |
+
+**Optional class attributes:**
+
+| Attribute            | Type   | Default  | Description                                     |
+|----------------------|--------|----------|-------------------------------------------------|
+| `ui_mode`            | `str`  | `"form"` | `"form"`, `"file_upload"`, `"custom"`, `"none"` |
+| `hidden_from_picker` | `bool` | `False`  | Exclude from generic picker list in frontend     |
+
+**Inherited methods (available on all plugins):**
+
+| Method                          | Description                                              |
+|---------------------------------|----------------------------------------------------------|
+| `add_cli_arguments(parser)`     | Auto-generates `argparse` flags from `fields`            |
+| `validate_cli_field_values(fv)` | Raises `ValueError` if any required field is missing     |
+| `to_dict()`                     | JSON-serialisable plugin metadata for API responses      |
+
+### PluginRegistry (Auto-Discovery)
+
+All four plugin families use `PluginRegistry` for auto-discovery. The
+registry uses `pkgutil.iter_modules` to scan for **sub-packages**
+(directories with `__init__.py`) under the plugin directory. For each
+sub-package, it imports the module and looks for a module-level sentinel
+attribute. If found, the plugin is registered by its `name`.
+
+| Plugin Family      | Package                            | Sentinel             | Base Class          |
+|--------------------|------------------------------------|----------------------|---------------------|
+| Data Importers     | `vtsearch.datasets.importers`      | `IMPORTER`           | `DatasetImporter`   |
+| Results Exporters  | `vtsearch.exporters`               | `EXPORTER`           | `LabelsetExporter`  |
+| Label Importers    | `vtsearch.labels.importers`        | `LABEL_IMPORTER`     | `LabelImporter`     |
+| Processor Importers| `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER` | `ProcessorImporter` |
+
+Failed imports emit a warning but do not break the application — a missing
+optional dependency gracefully disables that plugin.
 
 ---
 
 ## Adding a Data Importer
 
-Data importers let users load datasets from new sources (S3 buckets, databases,
-APIs, etc.).  The system auto-discovers importers at runtime — no changes to
-routes or core code are needed.
-
-### How discovery works
-
-The registry in `vtsearch/datasets/importers/__init__.py` uses `pkgutil` to
-scan for **sub-packages** (directories with `__init__.py`) under
-`vtsearch/datasets/importers/`.  For each sub-package it finds, it imports the
-module and looks for a module-level attribute named `IMPORTER`.  If that
-attribute exists and is a `DatasetImporter` instance, it is registered
-automatically.
-
-Failed imports emit a warning but do not break the application — this means a
-missing optional dependency gracefully disables that importer rather than
-crashing the whole app.
+Data importers let users load datasets from new sources (S3 buckets,
+databases, APIs, etc.). The system auto-discovers importers at runtime — no
+changes to routes or core code are needed.
 
 ### File structure
-
-Create a new sub-package directory:
 
 ```
 vtsearch/datasets/importers/<your_importer>/
@@ -56,40 +115,30 @@ vtsearch/datasets/importers/<your_importer>/
 
 ### What to implement
 
-Subclass `DatasetImporter` from `vtsearch.datasets.importers.base` and set the
-required class attributes.  Then implement the `run()` method and expose a
-module-level `IMPORTER` instance.
+Subclass `DatasetImporter` from `vtsearch.datasets.importers.base`.
+Set the required class attributes and implement the `run()` method.
+Expose a module-level `IMPORTER` instance.
 
 ```python
 # vtsearch/datasets/importers/s3/__init__.py
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import load_dataset_from_folder
+from vtsearch.media import all_folder_names
 
 
 class S3Importer(DatasetImporter):
-    # --- Required class attributes ---
-
     name = "s3"
-    #   Internal snake_case identifier.  Used in API routes:
-    #   POST /api/dataset/import/s3
-
     display_name = "AWS S3 Bucket"
-    #   Human-readable label shown in the frontend UI.
-
     description = "Download media files from an S3 bucket."
-    #   One-sentence subtitle shown below the display name.
-
     icon = "☁️"
-    #   Emoji shown next to the display name.  Defaults to "🔌" if omitted.
 
     fields = [
         ImporterField(
-            key="bucket",          # Form field identifier
-            label="Bucket Name",   # UI label
-            field_type="text",     # One of: "text", "url", "folder", "file", "select"
+            key="bucket",
+            label="Bucket Name",
+            field_type="text",
             description="The S3 bucket name.",
-            required=True,         # Defaults to True
+            required=True,
         ),
         ImporterField(
             key="prefix",
@@ -103,12 +152,12 @@ class S3Importer(DatasetImporter):
             key="media_type",
             label="Media Type",
             field_type="select",
-            options=all_folder_names(),  # from vtsearch.media
+            options=all_folder_names(),
             default="sounds",
         ),
     ]
 
-    def run(self, field_values: dict, medias: dict) -> None:
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         """Download files from S3, then load them into the dataset.
 
         Args:
@@ -117,6 +166,8 @@ class S3Importer(DatasetImporter):
                 - All other fields arrive as plain strings.
             medias: The global medias dict.  Populate it **in-place**; do not
                 replace the reference.
+            thin: When True, store media_path references instead of loading
+                media bytes into memory (for CLI workflows).
         """
         import boto3
         from pathlib import Path
@@ -127,7 +178,6 @@ class S3Importer(DatasetImporter):
         prefix = field_values.get("prefix", "")
         media_type = field_values.get("media_type", "sounds")
 
-        # Download files to a local temp directory
         download_dir = DATA_DIR / "s3_import"
         download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,17 +191,47 @@ class S3Importer(DatasetImporter):
             s3.download_file(bucket, key, str(local_path))
 
         # Delegate to the standard folder loader
-        load_dataset_from_folder(download_dir, media_type, medias)
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        load_dataset_from_folder(download_dir, media_type, medias, thin=thin)
 
 
 # This module-level instance is what the registry discovers.
 IMPORTER = S3Importer()
 ```
 
+### DatasetImporter class reference
+
+**Required to implement:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data |
+
+**Optional overrides:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
+| `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
+| `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
+| `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
+| `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
+| `origin_display()` | `(origin: dict) -> str` | Human-readable string for an origin dict |
+| `can_reload_from_origin()` | `(origin: dict) -> bool` | Whether data can be re-loaded from an origin. Default: `True` |
+| `reload_from_origin()` | `(origin: dict) -> dict | None` | Extract field_values from an origin for re-import |
+| `resolve_file()` | `(origin, origin_name, filename) -> Path | None` | Resolve a media file from origin info. Default: `None` |
+
+**Instance attributes (set during `run()`):**
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `content_vectors` | `dict[str, np.ndarray]` | Pre-computed embeddings keyed by filename; skips embedding model |
+| `content_md5s` | `dict[str, str]` | Pre-computed MD5 hashes keyed by filename; skips hash computation |
+
 ### Element-level origin tracking
 
 Every clip produced by an importer is automatically tagged with an
-**origin** — a dict identifying the importer and its parameters.  This
+**origin** — a dict identifying the importer and its parameters. This
 happens in `_run_importer_in_background()` after `run()` completes:
 
 ```python
@@ -160,96 +240,59 @@ clip["origin_name"] = "clip_001.wav"  # defaults to clip["filename"]
 ```
 
 If your importer pre-populates `clip["origin"]` in `run()`, those values
-are preserved.  Otherwise the system calls `build_origin(field_values)` on
-your importer class (inherited from `DatasetImporter`) and applies the
-result to all clips that lack an origin.
+are preserved. Otherwise the system calls `build_origin(field_values)` on
+your importer class and applies the result to all clips that lack an origin.
 
-Origins enable per-element provenance in label exports, results exports,
-and pickle round-trips.
+### Custom metadata
 
-### Class attributes reference
-
-| Attribute      | Type                | Required | Description                                          |
-|----------------|---------------------|----------|------------------------------------------------------|
-| `name`         | `str`               | Yes      | Snake_case identifier, used in API URL path          |
-| `display_name` | `str`               | Yes      | Human-readable label for the UI                      |
-| `description`  | `str`               | Yes      | One-sentence subtitle                                |
-| `icon`         | `str`               | No       | Emoji/icon string (default `"🔌"`)                   |
-| `fields`       | `list[ImporterField]`| Yes     | Ordered list of user-facing input fields             |
-
-### ImporterField options
-
-| Parameter    | Type        | Default  | Description                                            |
-|--------------|-------------|----------|--------------------------------------------------------|
-| `key`        | `str`       | —        | Field identifier (used as dict key in `field_values`)  |
-| `label`      | `str`       | —        | Display label in the UI                                |
-| `field_type` | `FieldType` | —        | `"text"`, `"url"`, `"folder"`, `"file"`, or `"select"` |
-| `description`| `str`       | `""`     | Helper text shown below the field                      |
-| `accept`     | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
-| `options`    | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values         |
-| `default`    | `str`       | `""`     | Pre-filled value                                       |
-| `required`   | `bool`      | `True`   | Whether the field must be filled before importing      |
+Importers can attach arbitrary per-media display metadata by setting
+`media["custom_metadata"]` to a `dict[str, Any]`. For example:
+`{"Uploaded By": "alice", "Bucket": "my-data"}`. These fields are merged
+with the media type's built-in display fields and rendered in the labeling
+UI.
 
 ### How it gets invoked
 
-1. The frontend calls `GET /api/dataset/importers` to discover available
-   importers.  The response includes your importer's `name`, `display_name`,
-   `description`, `icon`, and `fields` — the UI renders a form automatically.
-2. The user fills out the form and submits it.  The frontend sends
-   `POST /api/dataset/import/<name>` with either a JSON body or
-   `multipart/form-data` (if any field has `field_type="file"`).
-3. The route handler in `vtsearch/routes/datasets.py` extracts `field_values`
-   from the request, clears the current dataset, and calls `importer.run()`
-   in a background daemon thread.
-4. The frontend polls `GET /api/dataset/progress` to show a progress bar.
+1. `GET /api/dataset/importers` returns available importers (your importer
+   appears automatically).
+2. `POST /api/dataset/import/<name>` invokes `run()` in a background
+   daemon thread.
+3. `GET /api/dataset/progress` provides progress bar data.
 
 ### Progress reporting
 
-Call `update_progress()` from your `run()` method to give the user feedback:
-
 ```python
 from vtsearch.utils import update_progress
-
 update_progress("downloading", "Downloading file 3/10", 3, 10)
-#                ^status        ^message              ^cur ^total
 ```
 
-Any unhandled exception in `run()` is caught by the background thread wrapper
-and stored as an error in the progress tracker.
+### CLI usage
+
+Importers are automatically usable from the command line:
+
+```bash
+python app.py --autodetect --importer s3 --bucket my-data --prefix audio/ \
+    --media-type sounds --settings settings.json
+```
+
+CLI arguments are auto-generated from `fields`. Override `run_cli()` if
+your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-1. Create `vtsearch/datasets/importers/<name>/requirements.txt` listing any
-   pip packages your importer needs (create the file even if empty — see
-   [Dependency Management](#dependency-management) below).
-2. Add a reference line to `requirements-importers.txt`:
-   ```
-   -r vtsearch/datasets/importers/<name>/requirements.txt
-   ```
-3. If using `requirements-cpu.txt`, add the packages inline in that file too
-   (it uses inline pins instead of `-r` includes for version control).
+1. Create `vtsearch/datasets/importers/<name>/requirements.txt`
+2. Add `-r vtsearch/datasets/importers/<name>/requirements.txt` to
+   `requirements-importers.txt`
+3. Add packages inline to `requirements-cpu.txt` if needed
 
 ---
 
 ## Adding a Results Exporter
 
-Results exporters deliver autodetect results to a destination (file, webhook,
-email, etc.).  Like data importers, they use auto-discovery — no changes to
-routes or core code are needed.
-
-### How discovery works
-
-The registry in `vtsearch/exporters/__init__.py` uses `pkgutil` to scan for
-**sub-packages** under `vtsearch/exporters/`.  For each sub-package it finds,
-it imports the module and looks for a module-level attribute named `EXPORTER`.
-If that attribute exists and is a `LabelsetExporter` instance, it is registered
-automatically.
-
-Failed imports emit a warning but do not break the application.
+Results exporters deliver autodetect results to a destination (file,
+webhook, email, etc.). Auto-discovered — no changes to routes needed.
 
 ### File structure
-
-Create a new sub-package directory:
 
 ```
 vtsearch/exporters/<your_exporter>/
@@ -259,9 +302,7 @@ vtsearch/exporters/<your_exporter>/
 
 ### What to implement
 
-Subclass `LabelsetExporter` from `vtsearch.exporters.base` and set the
-required class attributes.  Then implement the `export()` method and expose a
-module-level `EXPORTER` instance.
+Subclass `LabelsetExporter` from `vtsearch.exporters.base`.
 
 ```python
 # vtsearch/exporters/sftp/__init__.py
@@ -328,83 +369,63 @@ class SftpLabelsetExporter(LabelsetExporter):
 EXPORTER = SftpLabelsetExporter()
 ```
 
-### Class attributes reference
+### LabelsetExporter class reference
 
-| Attribute      | Type                  | Required | Description                                    |
-|----------------|-----------------------|----------|------------------------------------------------|
-| `name`         | `str`                 | Yes      | Snake_case identifier, used in API URL path    |
-| `display_name` | `str`                 | Yes      | Human-readable label for the UI                |
-| `description`  | `str`                 | Yes      | One-sentence subtitle                          |
-| `icon`         | `str`                 | No       | Emoji/icon string (default `"📤"`)             |
-| `fields`       | `list[ExporterField]` | Yes      | Ordered list of user-facing input fields       |
+**Required to implement:**
 
-### ExporterField options
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `export()` | `(results: dict, field_values: dict) -> dict` | Perform the export; return dict with `"message"` key |
 
-| Parameter    | Type        | Default  | Description                                             |
-|--------------|-------------|----------|---------------------------------------------------------|
-| `key`        | `str`       | —        | Field identifier (used as dict key in `field_values`)   |
-| `label`      | `str`       | —        | Display label in the UI                                 |
-| `field_type` | `FieldType` | —        | `"text"`, `"password"`, `"email"`, `"file"`, `"folder"`, or `"select"` |
-| `description`| `str`       | `""`     | Helper text shown below the field                       |
-| `options`    | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
-| `default`    | `str`       | `""`     | Pre-filled value                                        |
-| `required`   | `bool`      | `True`   | Whether the field must be filled before exporting       |
-| `placeholder`| `str`       | `""`     | Hint shown as placeholder text in the input widget      |
+**Optional overrides:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export()` |
+
+**Default class attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `icon` | `"📤"` | Emoji shown in the UI |
 
 ### How it gets invoked
 
-1. The frontend calls `GET /api/exporters` to discover available exporters.
-   The response includes your exporter's `name`, `display_name`, `description`,
-   `icon`, and `fields`.
-2. The user fills out the form and submits it.  The frontend sends
-   `POST /api/exporters/export/<name>` with a JSON body.
-3. The route handler in `vtsearch/routes/exporters.py` extracts `field_values`
-   and calls `exporter.export()`.
+1. `GET /api/exporters` returns available exporters.
+2. `POST /api/exporters/export` with `exporter_name` and `field_values`.
 
 ### CLI usage
 
-Exporters are also usable from the command line via the `--exporter` flag on
-the autodetect workflow:
-
 ```bash
-python app.py --autodetect --dataset data.pkl --settings settings.json --exporter sftp --host example.com --user admin --password secret --path /results.json
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --exporter sftp --host example.com --user admin --password secret \
+    --path /results.json
 ```
-
-CLI arguments are auto-generated from the exporter's `fields` list.
-
-### Wiring up dependencies
-
-1. Create `vtsearch/exporters/<name>/requirements.txt` listing any pip
-   packages your exporter needs (create the file even if empty).
-2. Add a reference line to `requirements-exporters.txt`:
-   ```
-   -r vtsearch/exporters/<name>/requirements.txt
-   ```
-3. If using `requirements-cpu.txt`, add the packages inline in that file too.
 
 ### Built-in export endpoints
 
-In addition to the exporter plugin system, VTSearch has several built-in
-export endpoints:
+In addition to the exporter plugin system, VTSearch has built-in export
+endpoints:
 
-| Endpoint                  | Method | What it exports                              | Format          |
-|---------------------------|--------|----------------------------------------------|-----------------|
-| `/api/dataset/export`     | GET    | Full dataset (clips + embeddings + media)    | Pickle (`.pkl`) |
-| `/api/labels/export`      | GET    | LabelSet — labels with per-element origin    | JSON            |
-| `/api/detector/export`    | POST   | Trained MLP weights + threshold              | JSON            |
+| Endpoint                  | Method | What it exports                           | Format          |
+|---------------------------|--------|-------------------------------------------|-----------------|
+| `/api/dataset/export`     | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
+| `/api/labels/export`      | GET    | LabelSet — labels with per-element origin  | JSON            |
+| `/api/detector/export`    | POST   | Trained MLP weights + threshold            | JSON            |
+
+### Wiring up dependencies
+
+1. Create `vtsearch/exporters/<name>/requirements.txt`
+2. Add `-r vtsearch/exporters/<name>/requirements.txt` to
+   `requirements-exporters.txt`
+3. Add packages inline to `requirements-cpu.txt` if needed
 
 ---
 
 ## Adding a Label Importer
 
 Label importers let users import pre-existing labels (good/bad votes) from
-external sources (JSON files, CSV files, databases, etc.).  Like data
-importers, they are auto-discovered at runtime.
-
-### How discovery works
-
-The registry in `vtsearch/labels/importers/__init__.py` scans for sub-packages
-with a module-level `LABEL_IMPORTER` attribute.
+external sources. Auto-discovered at runtime.
 
 ### File structure
 
@@ -416,8 +437,8 @@ vtsearch/labels/importers/<your_importer>/
 
 ### What to implement
 
-Subclass `LabelImporter` from `vtsearch.labels.importers.base`.  The `run()`
-method must return a list of label dicts:
+Subclass `LabelImporter` from `vtsearch.labels.importers.base`. The
+`run()` method must return a list of label dicts.
 
 ```python
 # vtsearch/labels/importers/postgres/__init__.py
@@ -459,25 +480,40 @@ class PostgresLabelImporter(LabelImporter):
 LABEL_IMPORTER = PostgresLabelImporter()
 ```
 
+### LabelImporter class reference
+
+**Required to implement:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run()` | `(field_values: dict) -> list[dict[str, str]]` | Return list of `{"md5": ..., "label": "good"|"bad"}` dicts |
+
+**Optional overrides:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run_cli()` | `(field_values: dict) -> list[dict[str, str]]` | CLI variant; default delegates to `run()` |
+
+**Default class attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `icon` | `"🏷️"` | Emoji shown in the UI |
+
 ### How it gets invoked
 
-1. `GET /api/label-importers` returns the list of available label importers.
-2. `POST /api/label-importers/import/<name>` invokes `run()` and applies the
-   returned labels to the current dataset by matching clip MD5 hashes.
+1. `GET /api/label-importers` returns available label importers.
+2. `POST /api/label-importers/import/<name>` invokes `run()` and applies
+   returned labels by matching clip MD5 hashes.
 
 ---
 
 ## Adding a Processor Importer
 
 Processor importers let users import processors (detectors/extractors) from
-external sources.  A processor importer takes some input (a JSON detector
-file, a labeled media file, etc.) and returns a dict containing model weights
-and a threshold — which is then saved as a autorun detector.
-
-### How discovery works
-
-The registry in `vtsearch/processors/importers/__init__.py` scans for
-sub-packages with a module-level `PROCESSOR_IMPORTER` attribute.
+external sources. A processor importer takes input (a JSON detector file,
+etc.) and returns a dict containing model weights and a threshold — which
+is then saved as an autorun detector.
 
 ### File structure
 
@@ -489,9 +525,8 @@ vtsearch/processors/importers/<your_importer>/
 
 ### What to implement
 
-Subclass `ProcessorImporter` from `vtsearch.processors.importers.base`.  The
-`run()` method must return a dict with `media_type`, `weights`, and
-`threshold` keys:
+Subclass `ProcessorImporter` from `vtsearch.processors.importers.base`.
+The `run()` method must return a dict with model data.
 
 ```python
 # vtsearch/processors/importers/s3/__init__.py
@@ -516,6 +551,8 @@ class S3ProcessorImporter(ProcessorImporter):
             - "media_type" (str): e.g. "audio", "image"
             - "weights" (dict): MLP state dict as nested lists
             - "threshold" (float): decision boundary in [0, 1]
+        May also include:
+            - "name" (str): suggested default name
         """
         import json
         import boto3
@@ -533,15 +570,35 @@ class S3ProcessorImporter(ProcessorImporter):
 PROCESSOR_IMPORTER = S3ProcessorImporter()
 ```
 
+### ProcessorImporter class reference
+
+**Required to implement:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run()` | `(field_values: dict) -> dict` | Return dict with `media_type`, `weights`, `threshold` |
+
+**Optional overrides:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run_cli()` | `(field_values: dict) -> dict` | CLI variant; default delegates to `run()` |
+
+**Default class attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `icon` | `"🧩"` | Emoji shown in the UI |
+
 ### How it gets invoked
 
-1. `GET /api/processor-importers` returns the list of available importers.
-2. `POST /api/processor-importers/import/<name>` invokes `run()`, combines the
-   result with the user-supplied name, and saves it as a autorun detector.
+1. `GET /api/processor-importers` returns available importers.
+2. `POST /api/processor-importers/import/<name>` invokes `run()`, combines
+   with user-supplied name, and saves as an autorun detector.
 
 ### CLI usage
 
-Processor importers are used from the CLI via the settings file.  Add a
+Processor importers are used from the CLI via the settings file. Add a
 processor recipe to `autorun_processors` in `settings.json`:
 
 ```json
@@ -549,8 +606,8 @@ processor recipe to `autorun_processors` in `settings.json`:
     "autorun_processors": [
         {
             "processor_name": "my detector",
-            "processor_importer": "s3",
-            "field_values": {"bucket": "my-bucket", "key": "detector.json"}
+            "processor_importer": "server_detector_file",
+            "field_values": {"filepath": "/path/to/detector.json"}
         }
     ]
 }
@@ -564,18 +621,30 @@ python app.py --autodetect --dataset data.pkl --settings settings.json
 
 ---
 
+## Media System
+
+Media types, embedders, and clippers use **explicit registration** in
+`vtsearch/media/__init__.py`. Unlike the plugin systems above, they are
+not auto-discovered — you import your class and call the appropriate
+`register*()` function.
+
+The three registries:
+
+| Registry | Function | Keyed by |
+|----------|----------|----------|
+| Media types | `register(media_type)` | `MediaType.type_id` |
+| Embedders | `register_embedder(embedder)` | `MediaEmbedder.name` |
+| Clippers | `register_clipper(clipper)` | `MediaClipper.name` |
+
+---
+
 ## Adding a Media Type
 
-Media types define how VTSearch handles a particular kind of content: how to
-embed files into vectors, how to serve clips over HTTP, what file extensions to
-scan for, and what demo datasets are available.
-
-Unlike importers, media types use **explicit registration** — you import your
-class and call `register()` in `vtsearch/media/__init__.py`.
+Media types define how VTSearch handles a particular kind of content: how
+to serve clips over HTTP, what file extensions to scan for, what demo
+datasets are available, and how to load media-specific fields from files.
 
 ### File structure
-
-Create a new subdirectory under `vtsearch/media/`:
 
 ```
 vtsearch/media/<your_type>/
@@ -594,133 +663,48 @@ properties and methods.
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
-from typing import Optional
-
-import numpy as np
+from typing import Any
 
 from vtsearch.media.base import DemoDataset, MediaResponse, MediaType
 
 
 class CodeMediaType(MediaType):
-    """Source code files, embedded with a code-specific model."""
+    """Source code files."""
 
-    def __init__(self) -> None:
-        self._model = None
-
-    # ------------------------------------------------------------------
-    # Identity (required properties)
-    # ------------------------------------------------------------------
+    # --- Identity (required abstract properties) ---
 
     @property
     def type_id(self) -> str:
-        """Unique internal identifier stored in each clip's 'type' field."""
         return "code"
 
     @property
     def name(self) -> str:
-        """Human-readable label for the UI."""
         return "Source Code"
 
     @property
     def icon(self) -> str:
-        """Emoji shown in the UI."""
         return "💻"
 
-    # ------------------------------------------------------------------
-    # File import (required properties)
-    # ------------------------------------------------------------------
+    # --- File import (required abstract property) ---
 
     @property
     def file_extensions(self) -> list:
-        """Glob patterns used by the folder importer to find files."""
         return ["*.py", "*.js", "*.ts", "*.go", "*.rs"]
 
-    @property
-    def folder_import_name(self) -> str:
-        """Alias for the /api/dataset/load-folder endpoint.
-
-        Defaults to type_id if not overridden.  Override to use a
-        different name (e.g. audio uses "sounds" instead of "audio").
-        """
-        return "code"
-
-    # ------------------------------------------------------------------
-    # Viewer behaviour (required property)
-    # ------------------------------------------------------------------
+    # --- Viewer behaviour (required abstract property) ---
 
     @property
     def loops(self) -> bool:
-        """Whether the frontend viewer should loop.  True for audio/video."""
         return False
 
-    # ------------------------------------------------------------------
-    # Demo datasets (required property)
-    # ------------------------------------------------------------------
+    # --- Demo datasets (required abstract property) ---
 
     @property
     def demo_datasets(self) -> list:
-        """Return an empty list if no demos are available yet."""
-        return []
-        # To add demos later:
-        # return [
-        #     DemoDataset(
-        #         id="python_snippets",
-        #         label="Python Snippets",
-        #         description="Small Python functions from open-source projects.",
-        #         categories=["web", "cli", "data"],
-        #         source="",  # optional identifier for the raw data source
-        #     ),
-        # ]
+        return []  # No demos yet
 
-    # ------------------------------------------------------------------
-    # Embeddings (required methods)
-    # ------------------------------------------------------------------
-
-    def load_models(self) -> None:
-        """Load embedding model(s) into memory.
-
-        Called once at startup (or lazily on first use in --local mode).
-        Must be idempotent — a second call should be a fast no-op.
-        """
-        if self._model is not None:
-            return
-        from sentence_transformers import SentenceTransformer
-        self._model = SentenceTransformer("microsoft/codebert-base")
-
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the file.
-
-        Returns None if embedding fails (corrupt file, model not loaded, etc.).
-        The vector dimensionality must be consistent across all files of this
-        type AND must match the dimensionality of embed_text().
-        """
-        if self._model is None:
-            self.load_models()
-        try:
-            text = file_path.read_text(errors="replace")[:8000]
-            vec = self._model.encode(text, normalize_embeddings=True)
-            return vec
-        except Exception:
-            return None
-
-    def embed_text(self, text: str) -> Optional[np.ndarray]:
-        """Embed a text query into the SAME vector space as embed_media().
-
-        Used for text-query sorting: cosine similarity is computed between
-        this vector and each clip's embedding.
-        """
-        if self._model is None:
-            self.load_models()
-        try:
-            return self._model.encode(text, normalize_embeddings=True)
-        except Exception:
-            return None
-
-    # ------------------------------------------------------------------
-    # Media data (required method)
-    # ------------------------------------------------------------------
+    # --- Media data (required abstract method) ---
 
     def load_media_data(self, file_path: Path) -> dict:
         """Return media-specific fields to merge into the media dict.
@@ -736,21 +720,18 @@ class CodeMediaType(MediaType):
             "line_count": content.count("\n") + 1,
         }
 
-    # ------------------------------------------------------------------
-    # HTTP serving (required method)
-    # ------------------------------------------------------------------
+    # --- HTTP serving (required abstract method) ---
 
     def media_response(self, media: dict) -> MediaResponse:
-        """Return a MediaResponse serving this media's content.
+        """Return a MediaResponse for HTTP serving.
 
-        Set data to bytes for binary media (with an appropriate mimetype)
-        or to a dict for JSON responses.
+        Use _resolve_media_bytes() for binary media or
+        _resolve_media_string() for text media to support both
+        preloaded and thin (lazy-loaded) modes.
         """
+        content = self._resolve_media_string(media)
         return MediaResponse(
-            data={
-                "content": media.get("media_string", ""),
-                "line_count": media.get("line_count", 0),
-            },
+            data={"content": content, "line_count": media.get("line_count", 0)},
             mimetype="application/json",
         )
 ```
@@ -765,23 +746,9 @@ from vtsearch.media.code.media_type import CodeMediaType   # noqa: E402
 register(CodeMediaType())
 ```
 
-### What happens automatically after registration
+### MediaType abstract interface reference
 
-Once registered, the rest of the application picks up your type with zero
-additional changes:
-
-| Subsystem              | What happens                                                  |
-|------------------------|---------------------------------------------------------------|
-| **Model init**         | `load_models()` is called at startup for your type            |
-| **Folder import**      | Files matching your `file_extensions` are found and embedded  |
-| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `media_response()`|
-| **Text sorting**       | `embed_text()` is called for text-query cosine similarity     |
-| **Demo listing**       | Your `demo_datasets` appear in `GET /api/dataset/demo-list`   |
-| **Dataset export**     | Clip data is serialized to pickle (including your custom fields)|
-
-### Abstract interface reference
-
-**Required properties:**
+**Required abstract properties:**
 
 | Property          | Returns     | Example                              |
 |-------------------|-------------|--------------------------------------|
@@ -792,46 +759,316 @@ additional changes:
 | `loops`           | `bool`      | `True` for audio/video, else `False` |
 | `demo_datasets`   | `list[DemoDataset]` | See example above              |
 
-**Optional property:**
+**Required abstract methods:**
 
-| Property             | Returns | Default    | Purpose                          |
-|----------------------|---------|------------|----------------------------------|
-| `folder_import_name` | `str`   | `type_id`  | Legacy alias for folder imports  |
+| Method                      | Signature                      | Description                              |
+|-----------------------------|--------------------------------|------------------------------------------|
+| `load_media_data(file_path)`| `(Path) -> dict`               | Must include `"duration"` key            |
+| `media_response(media)`     | `(dict) -> MediaResponse`      | HTTP response for a media item           |
 
-**Required methods:**
+**Optional overridable properties (with defaults):**
 
-| Method                              | Signature                                          |
-|-------------------------------------|----------------------------------------------------|
-| `load_models()`                     | `() -> None`                                       |
-| `embed_media(file_path)`            | `(Path) -> Optional[np.ndarray]`                   |
-| `embed_text(text)`                  | `(str) -> Optional[np.ndarray]`                    |
-| `load_media_data(file_path)`        | `(Path) -> dict` (must include `"duration"` key)   |
-| `media_response(media)`             | `(dict) -> MediaResponse`                           |
+| Property             | Returns     | Default            | Purpose                                   |
+|----------------------|-------------|--------------------|-------------------------------------------|
+| `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (e.g. `"sounds"`) |
+| `tab_title`          | `str`       | `name + "s"`       | Plural name for UI tabs                    |
+| `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
+| `legacy_bytes_keys`  | `list[str]` | `[]`               | Legacy keys for inline bytes in old pickles |
+| `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
+
+**Optional overridable methods:**
+
+| Method                        | Signature                          | Description                        |
+|-------------------------------|------------------------------------|------------------------------------|
+| `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
+| `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
+| `embed_media(file_path)`      | `(Path) -> Optional[np.ndarray]`   | Inline embedding (legacy, prefer MediaEmbedder) |
+| `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
+| `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
+
+### What happens automatically after registration
+
+| Subsystem              | What happens                                                  |
+|------------------------|---------------------------------------------------------------|
+| **Folder import**      | Files matching your `file_extensions` are found and embedded  |
+| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `media_response()`|
+| **Demo listing**       | Your `demo_datasets` appear in `GET /api/dataset/demo-list`   |
+| **Dataset export**     | Clip data is serialized to pickle (including custom fields)   |
+| **Media types API**    | `GET /api/media-types` includes your type's metadata          |
 
 ### Making dataset export aware of custom clip fields
 
-The existing `export_dataset_to_file()` in `vtsearch/datasets/loader.py`
-serializes a fixed set of keys (`media_bytes`, `media_string`, `media_path`,
-`word_count`, `character_count`, `width`, `height`).  If your
-media type stores clip data under different keys, add those keys to the export
-function so they survive a round-trip through pickle export/import.
+If your media type stores clip data under non-standard keys, override
+`pickle_extra_fields` to return those key names so they survive pickle
+export/import. For example:
 
-### Frontend integration
+```python
+@property
+def pickle_extra_fields(self) -> list[str]:
+    return ["line_count"]
+```
 
-The generic `GET /api/medias/<id>/media` endpoint works for all media types.
-However, if your media type needs a specialized viewer (code highlighting,
-3D rendering, etc.), you will need to add rendering logic in
-`static/index.html`.  Check the clip's `type` field in the frontend JavaScript
-and render accordingly.
+---
+
+## Adding a Media Embedder
+
+Media embedders produce fixed-size vector embeddings from media files and
+text queries. Each embedder is associated with exactly one media type but a
+media type may have multiple embedders.
+
+### File structure
+
+```
+vtsearch/media/<type>/
+├── embedder.py      # Your MediaEmbedder subclass (required)
+└── requirements.txt # Dependencies (already exists for the media type)
+```
+
+### What to implement
+
+Subclass `MediaEmbedder` from `vtsearch.media.base`.
+
+```python
+# vtsearch/media/code/embedder.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+
+from vtsearch.media.base import MediaEmbedder
+
+
+class CodeBertEmbedder(MediaEmbedder):
+    """Embeds source code using CodeBERT."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._model = None
+
+    # --- Identity (required abstract properties) ---
+
+    @property
+    def name(self) -> str:
+        """Unique identifier — also the registry key."""
+        return "codebert"
+
+    @property
+    def media_type_id(self) -> str:
+        """The type_id of the media type this embedder works with."""
+        return "code"
+
+    # --- Model lifecycle (required abstract method) ---
+
+    def load_models(self) -> None:
+        """Load the embedding model. Must be idempotent."""
+        if self._model is not None:
+            return
+        from sentence_transformers import SentenceTransformer
+        self._on_progress("loading", "Loading CodeBERT…", 0, 0)
+        self._model = SentenceTransformer("microsoft/codebert-base")
+
+    # --- Embedding (required abstract method) ---
+
+    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for the file.
+
+        Returns None if embedding fails. The vector dimensionality
+        must be consistent and must match embed_text().
+        """
+        if self._model is None:
+            self.load_models()
+        try:
+            text = file_path.read_text(errors="replace")[:8000]
+            return self._model.encode(text, normalize_embeddings=True)
+        except Exception:
+            return None
+
+    # --- Optional: text embedding ---
+
+    def embed_text(self, text: str) -> Optional[np.ndarray]:
+        """Embed a text query into the SAME vector space as embed_media().
+
+        Used for text-query sorting. Default returns None (no text sort).
+        """
+        if self._model is None:
+            self.load_models()
+        try:
+            return self._model.encode(text, normalize_embeddings=True)
+        except Exception:
+            return None
+```
+
+### Register the embedder
+
+Add to `vtsearch/media/__init__.py`:
+
+```python
+from vtsearch.media.code.embedder import CodeBertEmbedder  # noqa: E402
+register_embedder(CodeBertEmbedder())
+```
+
+### MediaEmbedder abstract interface reference
+
+**Required abstract properties:**
+
+| Property        | Returns | Description                              |
+|-----------------|---------|------------------------------------------|
+| `name`          | `str`   | Unique identifier (e.g. `"clap"`, `"clip"`) |
+| `media_type_id` | `str`  | Which media type this embedder works with |
+
+**Required abstract methods:**
+
+| Method                    | Signature                        | Description                    |
+|---------------------------|----------------------------------|--------------------------------|
+| `load_models()`           | `() -> None`                     | Load model; must be idempotent |
+| `embed_media(file_path)`  | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
+
+**Optional overridable methods:**
+
+| Method                          | Signature                         | Description                          |
+|---------------------------------|-----------------------------------|--------------------------------------|
+| `embed_text(text)`              | `(str) -> Optional[np.ndarray]`   | Embed a text query (default: `None`) |
+| `embed_text_enriched(text)`     | `(str) -> Optional[np.ndarray]`   | Average over `description_wrappers`  |
+
+**Optional overridable properties:**
+
+| Property               | Returns     | Description                                |
+|------------------------|-------------|--------------------------------------------|
+| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`) |
+
+**Instance attributes:**
+
+| Attribute       | Type               | Description                         |
+|-----------------|--------------------|-------------------------------------|
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Set via `set_progress_callback()` |
+
+### Built-in embedders
+
+| Embedder | Name | Media Type | Model | Dimensions |
+|----------|------|------------|-------|------------|
+| `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
+| `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
+| `ImageClipEmbedder` | `clip` | `image` | OpenAI CLIP (openai/clip-vit-base-patch32) | 768 |
+| `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
+| `TextE5Embedder` | `e5` | `paragraph` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
+| `TextBGEEmbedder` | `bge` | `paragraph` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
+| `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
+
+---
+
+## Adding a Media Clipper
+
+Media clippers split a single media item into one or more items of the
+**same** type. Unlike processors which return metadata about media,
+clippers return **new media dicts** that can replace the original.
+
+### Built-in clippers
+
+| Clipper | Name | Media Type | Description |
+|---------|------|------------|-------------|
+| `SoundDefaultClipper` | `sound_default` | `audio` | Returns audio unchanged |
+| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Tiles into 2s segments |
+| `ImageDefaultClipper` | `image_default` | `image` | Returns image unchanged |
+| `ImageTilingClipper` | `image_tiling` | `image` | Tiles tall images into squares |
+| `TextDefaultClipper` | `text_default` | `paragraph` | Returns text unchanged |
+| `TextSentenceClipper` | `text_sentence` | `paragraph` | Splits into individual sentences |
+| `VideoDefaultClipper` | `video_default` | `video` | Returns video unchanged |
+| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Tiles into 2s segments |
+| `DocumentDefaultClipper` | `document_default` | `document` | Returns document unchanged |
+
+### What to implement
+
+Subclass `MediaClipper` from `vtsearch.media.base`.
+
+```python
+# vtsearch/media/audio/clipper.py  (or a new file)
+
+from vtsearch.media.base import MediaClipper
+from typing import Any
+
+
+class SoundOverlapClipper(MediaClipper):
+    """Tile audio with 50% overlap between segments."""
+
+    def __init__(self, duration: float) -> None:
+        self._duration = duration
+
+    @property
+    def name(self) -> str:
+        """Unique identifier for this clipper."""
+        return f"sound_overlap_{self._duration}s"
+
+    @property
+    def media_type(self) -> str:
+        """The type_id this clipper operates on."""
+        return "audio"
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Split media into one or more media dicts of the same type.
+
+        Each returned dict preserves the original structure (id, type,
+        category, origin, etc.) but with updated content.
+        Returns a list with at least one element.
+        """
+        wav_bytes = media.get("media_bytes")
+        if wav_bytes is None:
+            return [media]
+
+        # ... implement overlapping tiling logic ...
+        # Return list of new media dicts with updated media_bytes, duration, etc.
+        return [media]  # placeholder
+```
+
+### Register the clipper
+
+Add to `vtsearch/media/__init__.py`:
+
+```python
+from vtsearch.media.audio.clipper import SoundOverlapClipper  # noqa: E402
+register_clipper(SoundOverlapClipper(2.0))
+```
+
+### MediaClipper abstract interface reference
+
+**Required abstract properties:**
+
+| Property     | Returns | Description                                    |
+|--------------|---------|------------------------------------------------|
+| `name`       | `str`   | Unique identifier (e.g. `"sound_tiling_2.0s"`) |
+| `media_type` | `str`   | The `type_id` this clipper operates on          |
+
+**Required abstract methods:**
+
+| Method          | Signature              | Description                        |
+|-----------------|------------------------|------------------------------------|
+| `clip(media)`   | `(dict) -> list[dict]` | Split one media into one or more   |
+
+**Optional overridable methods:**
+
+| Method       | Signature      | Description                                              |
+|--------------|----------------|----------------------------------------------------------|
+| `to_dict()`  | `() -> dict`   | JSON-serialisable metadata (default: name + media_type)  |
+
+### Clip method contract
+
+Each dict in the returned list must:
+- Preserve the structure of the original (`id`, `type`, `category`,
+  `origin`, `origin_name`, etc.)
+- Contain the clipped content (updated `media_bytes`/`media_string`,
+  `duration`, and any type-specific fields)
+- Default clippers return `[media]` unchanged
 
 ---
 
 ## Adding a Media Converter
 
 Media converters transform content from one media type to another (e.g.
-document pages to images, video to audio). Unlike the four plugin systems
-above, converters use **explicit registration** in
-`vtsearch/converters/__init__.py` — they are not auto-discovered.
+document pages to images, video to audio). Converters use **explicit
+registration** in `vtsearch/converters/__init__.py` — they are not
+auto-discovered.
 
 ### Built-in converters
 
@@ -844,40 +1081,46 @@ above, converters use **explicit registration** in
 
 ### File structure
 
-Create a new module in `vtsearch/converters/`:
-
 ```
 vtsearch/converters/<source>2<target>.py   # Your converter class
 ```
 
 ### What to implement
 
-Subclass `MediaConverter` from `vtsearch.converters.base`:
+Subclass `MediaConverter` from `vtsearch.converters.base`.
 
 ```python
 # vtsearch/converters/audio2text.py
 
 from vtsearch.converters.base import MediaConverter
+from typing import Any
 
 
 class Audio2TextMediaConverter(MediaConverter):
+
+    display_name = "Audio → Text"
+    converter_description = "Transcribe audio to text using a speech model."
+
     @property
     def source_type(self) -> str:
+        """The type_id of the input media type."""
         return "audio"
 
     @property
     def target_type(self) -> str:
-        return "text"
+        """The type_id of the output media type."""
+        return "paragraph"
 
-    def convert(self, media: dict) -> list[dict]:
-        """Transcribe audio to text.
+    def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Convert one media dict into one or more target-type media dicts.
 
-        Args:
-            media: A media dict with at least "media_bytes" or "media_path".
+        Each returned dict must include:
+        - "filename": a descriptive filename
+        - Data fields expected by the target type (e.g. "media_string"
+          for text, "media_bytes" for images)
 
-        Returns:
-            A list of media dicts, each with "filename" and "media_string"
-            keys. Returns an empty list if conversion fails.
+        Returns empty list if conversion fails.
+        Does NOT include "id", "embedding", or "md5" — caller handles those.
         """
         # ... transcription logic ...
         return [{"filename": "transcript.txt", "media_string": transcript}]
@@ -885,33 +1128,206 @@ class Audio2TextMediaConverter(MediaConverter):
 
 ### Register the converter
 
-Add an import and export in `vtsearch/converters/__init__.py`:
+Edit `vtsearch/converters/__init__.py`:
 
-```python
-from vtsearch.converters.audio2text import Audio2TextMediaConverter
+1. Add the import at the top:
+   ```python
+   from vtsearch.converters.audio2text import Audio2TextMediaConverter
+   ```
+
+2. Add to `_ALL_CONVERTERS`:
+   ```python
+   _ALL_CONVERTERS: list[MediaConverter] = [
+       # ... existing converters ...
+       Audio2TextMediaConverter(),
+   ]
+   ```
+
+3. Add to `__all__`:
+   ```python
+   __all__ = [
+       # ... existing entries ...
+       "Audio2TextMediaConverter",
+   ]
+   ```
+
+### MediaConverter abstract interface reference
+
+**Required abstract properties:**
+
+| Property      | Returns | Description                                |
+|---------------|---------|--------------------------------------------|
+| `source_type` | `str`   | The `type_id` of the input media type      |
+| `target_type` | `str`   | The `type_id` of the output media type     |
+
+**Required abstract methods:**
+
+| Method             | Signature              | Description                              |
+|--------------------|------------------------|------------------------------------------|
+| `convert(media)`   | `(dict) -> list[dict]` | Convert one media into target-type dicts  |
+
+**Optional class attributes:**
+
+| Attribute               | Type  | Default | Description                              |
+|-------------------------|-------|---------|------------------------------------------|
+| `display_name`          | `str` | `""`    | Human-readable label (auto-derived if empty) |
+| `converter_description` | `str` | `""`    | Short description of the conversion      |
+
+**Derived property (not overridable):**
+
+| Property | Returns | Description |
+|----------|---------|-------------|
+| `name`   | `str`   | Auto-generated as `"{source_type}2{target_type}"` |
+
+---
+
+## Processor System
+
+Processors analyze media items. The hierarchy has a common base
+(`Processor`) with three concrete subtypes. All are defined in
+`vtsearch/media/base.py`.
+
+```
+Processor (ABC)
+├── Detector      — "does this media match?"      → bool
+├── Localizer     — "where in this media?"        → list[dict] (bounding boxes)
+└── Extractor     — "what details are inside?"    → list[dict] (structured results)
 ```
 
-And add it to `__all__`.
+Each processor operates on exactly one media type.
 
-### Abstract interface reference
+### Adding a Detector
+
+A Detector answers "is this media Good?" with a boolean.
+
+```python
+from vtsearch.media.base import Detector
+from typing import Any
+
+
+class LoudnessDetector(Detector):
+
+    @property
+    def name(self) -> str:
+        return "loud_audio"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    def load_model(self) -> None:
+        """Optional: load heavyweight resources once before first use."""
+        pass
+
+    def detect(self, media: dict[str, Any]) -> bool:
+        """Return True if the media matches, False otherwise."""
+        return media.get("duration", 0) > 5.0
+```
+
+### Adding a Localizer
+
+A Localizer returns bounding boxes with confidence scores.
+
+```python
+from vtsearch.media.base import Localizer
+from typing import Any
+
+
+class FaceLocalizer(Localizer):
+
+    @property
+    def name(self) -> str:
+        return "face_localizer"
+
+    @property
+    def media_type(self) -> str:
+        return "image"
+
+    def localize(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return bounding boxes. Each dict must include:
+        - "confidence": float in [0, 1]
+        - "bbox": bounding box (format is media-specific)
+
+        Returns empty list when nothing is found.
+        """
+        # ... face detection logic ...
+        return [
+            {"confidence": 0.95, "bbox": [10, 20, 200, 300]},
+            {"confidence": 0.73, "bbox": [400, 50, 600, 250]},
+        ]
+```
+
+### Adding an Extractor
+
+An Extractor returns structured details for each occurrence found.
+
+```python
+from vtsearch.media.base import Extractor
+from typing import Any
+
+
+class ObjectExtractor(Extractor):
+
+    @property
+    def name(self) -> str:
+        return "object_extractor"
+
+    @property
+    def media_type(self) -> str:
+        return "image"
+
+    def extract(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return a list of result dicts. Each dict must include
+        a "confidence" key (float in [0, 1]).
+
+        Returns empty list when nothing is found.
+        """
+        # ... object detection logic ...
+        return [
+            {"confidence": 0.92, "bbox": [10, 20, 200, 300], "label": "car"},
+            {"confidence": 0.87, "bbox": [400, 50, 600, 250], "label": "tree"},
+        ]
+```
+
+### Processor abstract interface reference
+
+**Processor (base class) — required:**
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `source_type` | `str` (property) | The `type_id` of the input media type |
-| `target_type` | `str` (property) | The `type_id` of the output media type |
-| `convert(media)` | `(dict) -> list[dict]` | Convert one media dict into one or more target-type media dicts |
+| `name` | `str` (property) | Unique identifier |
+| `media_type` | `str` (property) | Which media type it operates on |
+| `process(media)` | `(dict) -> Any` | Run the processor (delegates to subclass) |
 
-Each returned dict must include a `"filename"` key and the data fields expected
-by the target media type (e.g. `"media_bytes"` for images, `"media_string"` for
-text). The returned dicts do **not** include `"id"`, `"embedding"`, or `"md5"`
-— the caller handles those.
+**Processor (base class) — optional:**
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `load_model()` | `() -> None` | One-time model loading (default: no-op) |
+
+**Detector:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `detect(media)` | `(dict) -> bool` | Return True if media matches |
+
+**Localizer:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `localize(media)` | `(dict) -> list[dict]` | Return bounding boxes with `confidence` and `bbox` |
+
+**Extractor:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `extract(media)` | `(dict) -> list[dict]` | Return result dicts with `confidence` key |
 
 ---
 
 ## Dependency Management
 
-VTSearch uses a layered requirements file structure to keep dependencies
-modular:
+VTSearch uses a layered requirements file structure:
 
 ```
 requirements.txt              # Core deps + includes per-media + per-importer + per-exporter
@@ -941,78 +1357,49 @@ requirements-dev.txt          # Dev tools (pytest)
 
 ### For a new media type
 
-1. **Create** `vtsearch/media/<type>/requirements.txt` listing any packages
-   your embedder needs beyond core deps.  If none, add a comment explaining why
-   it's empty:
-   ```
-   # Code media type — no additional dependencies beyond sentence-transformers.
-   ```
-2. **Add** a `-r` line to `requirements.txt`:
-   ```
-   -r vtsearch/media/<type>/requirements.txt
-   ```
-3. **Add** the packages inline to `requirements-cpu.txt` under a comment header
-   (this file uses inline pins for CPU version compatibility instead of `-r`
-   includes):
-   ```
-   # Code (vtsearch/media/code/requirements.txt)
-   some-package>=1.0
-   ```
+1. Create `vtsearch/media/<type>/requirements.txt`
+2. Add `-r vtsearch/media/<type>/requirements.txt` to `requirements.txt`
+3. Add packages inline to `requirements-cpu.txt`
 
-### For a new importer
+### For a new data importer
 
-1. **Create** `vtsearch/datasets/importers/<name>/requirements.txt`.  Even if
-   your importer has no extra deps, create the file with a comment:
-   ```
-   # S3 importer dependencies
-   boto3
-   ```
-2. **Add** a `-r` line to `requirements-importers.txt`:
-   ```
-   -r vtsearch/datasets/importers/<name>/requirements.txt
-   ```
-3. **Add** packages inline to `requirements-cpu.txt` if CPU-specific pins are
-   needed.
+1. Create `vtsearch/datasets/importers/<name>/requirements.txt`
+2. Add `-r` line to `requirements-importers.txt`
+3. Add packages inline to `requirements-cpu.txt` if needed
 
 ### For a new exporter
 
-1. **Create** `vtsearch/exporters/<name>/requirements.txt`.  Even if your
-   exporter has no extra deps, create the file with a comment.
-2. **Add** a `-r` line to `requirements-exporters.txt`:
-   ```
-   -r vtsearch/exporters/<name>/requirements.txt
-   ```
-3. **Add** packages inline to `requirements-cpu.txt` if CPU-specific pins are
-   needed.
+1. Create `vtsearch/exporters/<name>/requirements.txt`
+2. Add `-r` line to `requirements-exporters.txt`
+3. Add packages inline to `requirements-cpu.txt` if needed
 
 ### Why the layered structure?
 
-- Each component owns its own `requirements.txt` so it's obvious which packages
-  belong to which feature.
-- The aggregator files (`requirements.txt`, `requirements-importers.txt`) tie
-  everything together for `pip install -r requirements.txt`.
-- `requirements-cpu.txt` duplicates packages inline with version pins because
-  CPU-only PyTorch wheels require a special `--extra-index-url` and certain
-  packages need pinned versions for compatibility.
-- Failed imports of an importer's sub-package emit a warning rather than
+- Each component owns its own `requirements.txt` so it's obvious which
+  packages belong to which feature.
+- The aggregator files tie everything together for `pip install -r
+  requirements.txt`.
+- `requirements-cpu.txt` duplicates packages inline with version pins
+  because CPU-only PyTorch wheels require a special `--extra-index-url`.
+- Failed imports of a plugin's sub-package emit a warning rather than
   crashing, so missing optional dependencies degrade gracefully.
 
 ---
 
 ## Quick Reference: Checklist for Each Extension Type
 
-### New Importer Checklist
+### New Data Importer Checklist
 
 - [ ] Create `vtsearch/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values, medias)` — populate `medias` in-place
+- [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
 - [ ] Create `vtsearch/datasets/importers/<name>/requirements.txt`
 - [ ] Add `-r` line to `requirements-importers.txt`
 - [ ] Add inline deps to `requirements-cpu.txt` if needed
 - [ ] Test: start the app and check `GET /api/dataset/importers` includes your importer
 
-### New Exporter Checklist
+### New Results Exporter Checklist
 
 - [ ] Create `vtsearch/exporters/<name>/__init__.py`
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
@@ -1048,13 +1435,36 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Register in `vtsearch/media/__init__.py` with `register(YourType())`
 - [ ] Add `-r` line to `requirements.txt` pointing to your `requirements.txt`
 - [ ] Add inline deps to `requirements-cpu.txt`
-- [ ] Update `export_dataset_to_file()` in `vtsearch/datasets/loader.py` if you use custom clip keys
-- [ ] Add rendering logic in `static/index.html` if the generic viewer isn't sufficient
-- [ ] Test: start the app, import a folder of your media type, verify clips appear and are sortable
+- [ ] Override `pickle_extra_fields` if you use custom clip keys
+- [ ] Test: import a folder of your media type, verify clips appear and are sortable
+
+### New Media Embedder Checklist
+
+- [ ] Create `vtsearch/media/<type>/embedder.py`
+- [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `load_models()`, `embed_media()`
+- [ ] Optionally implement `embed_text()` for text-query sorting
+- [ ] Optionally set `description_wrappers` for enriched text embedding
+- [ ] Register in `vtsearch/media/__init__.py` with `register_embedder(YourEmbedder())`
+- [ ] Test: load a dataset and verify embeddings are generated
+
+### New Media Clipper Checklist
+
+- [ ] Create or add to `vtsearch/media/<type>/clipper.py`
+- [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
+- [ ] Register in `vtsearch/media/__init__.py` with `register_clipper(YourClipper())`
+- [ ] Test: verify `clip()` returns valid media dicts
 
 ### New Media Converter Checklist
 
 - [ ] Create `vtsearch/converters/<source>2<target>.py`
 - [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
-- [ ] Add import and `__all__` entry in `vtsearch/converters/__init__.py`
-- [ ] Test: import a dataset of the source type, convert it, verify the output media dicts are valid
+- [ ] Add import and list entry in `vtsearch/converters/__init__.py`
+- [ ] Add to `__all__` in `vtsearch/converters/__init__.py`
+- [ ] Test: convert a source-type media and verify output dicts are valid
+
+### New Detector / Localizer / Extractor Checklist
+
+- [ ] Subclass `Detector`, `Localizer`, or `Extractor` from `vtsearch.media.base`
+- [ ] Implement `name`, `media_type`, and the type-specific method (`detect`, `localize`, or `extract`)
+- [ ] Optionally override `load_model()` for one-time resource loading
+- [ ] Register as autorun via `POST /api/autorun-detectors` (or extractors/localizers)

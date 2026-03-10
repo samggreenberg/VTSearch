@@ -185,6 +185,23 @@ class FolderDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        from vtsearch.converters import list_converters_for_target
+        from vtsearch.media import all_types_dict
+
+        # For each media type the user can select, list N→M converters
+        # that produce that type — so the UI can show a datagrid of
+        # available converters dynamically.
+        converters_by_target: dict[str, list[dict]] = {}
+        for mt_info in all_types_dict():
+            type_id = mt_info["type_id"]
+            convs = list_converters_for_target(type_id)
+            if convs:
+                converters_by_target[type_id] = [c.to_dict() for c in convs]
+        d["available_converters_by_media_type"] = converters_by_target
+        return d
+
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
@@ -276,6 +293,23 @@ class FolderDatasetImporter(DatasetImporter):
         params = origin.get("params", {})
         folder_path = params.get("path", "")
         return bool(folder_path) and Path(folder_path).is_dir()
+
+    def resolve_file(
+        self,
+        origin: dict[str, Any],
+        origin_name: str = "",
+        filename: str = "",
+    ) -> Path | None:
+        folder = origin.get("params", {}).get("path", "")
+        if not folder:
+            return None
+        folder_path = Path(folder)
+        for name in [origin_name, filename]:
+            if name:
+                candidate = folder_path / name
+                if candidate.is_file():
+                    return candidate
+        return None
 
 
 IMPORTER = FolderDatasetImporter()

@@ -26,14 +26,15 @@
           <thead>
             <tr>
               <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
-              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
-              <th (click)="sortDatasets('embedder')" class="sortable" title="Embedding model used to build this dataset (click to sort)">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span></th>
-              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
-              <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
-              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
+              <th (click)="sortDatasets('media_type')" class="sortable text-center" title="Media type: audio, image, text, video, or document (click to sort)">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
+              <th (click)="sortDatasets('num_items')" class="sortable text-center" title="Number of media items in the dataset (click to sort)">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable text-center" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
+              <th (click)="sortDatasets('created_at')" class="sortable text-center" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
               <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
-              <th title="Whether this dataset is currently loaded into memory">Loaded</th>
-              <th title="Available operations for this dataset">Actions</th>
+              <th (click)="sortDatasets('clipper')" class="sortable text-center" title="MediaClipper used at creation (click to sort)">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span></th>
+              <th (click)="sortDatasets('embedder')" class="sortable text-center" title="MediaEmbedder used for embedding (click to sort)">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span></th>
+              <th class="text-center" title="Whether this dataset is currently loaded into memory">Loaded</th>
+              <th class="text-center" title="Available operations for this dataset">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -69,12 +70,12 @@
           <thead>
             <tr>
               <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
-              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
-              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
-              <th title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
-              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
-              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
-              <th title="Available operations for this model">Actions</th>
+              <th (click)="sortModels('media_type')" class="sortable text-center" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
+              <th (click)="sortModels('num_training')" class="sortable text-center" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
+              <th class="text-center" title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
+              <th (click)="sortModels('last_trained_at')" class="sortable text-center" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
+              <th (click)="sortModels('created_at')" class="sortable text-center" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
+              <th class="text-center" title="Available operations for this model">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -143,5 +144,12 @@
   <vt-new-model-modal
     (closed)="closeNewModelModal()"
     (created)="onModelCreated()"
+  />
+}
+
+@if (findResultsOpen) {
+  <vt-autodetect-results-modal
+    [data]="findResultsData"
+    (closed)="closeFindResults()"
   />
 }

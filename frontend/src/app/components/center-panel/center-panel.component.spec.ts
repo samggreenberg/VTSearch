@@ -12,11 +12,9 @@ describe('CenterPanelComponent', () => {
   const mockMedia: MediaItem = {
     id: 1,
     type: 'audio',
-    duration: 5.0,
-    file_size: 1024,
     filename: 'test.wav',
-    category: 'test',
     md5: 'abc123',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {
@@ -124,6 +122,21 @@ describe('CenterPanelComponent', () => {
     expect(component.voteState.goodVotes.has(1)).toBeTrue();
     expect(component.voteState.goodVotes.has(2)).toBeTrue();
     expect(component.voteState.badVotes.has(3)).toBeTrue();
+  });
+
+  it('should clear swipe class when media changes', () => {
+    component.media = mockMedia;
+    fixture.detectChanges();
+    // Simulate swipe ending
+    component.swipeClass = 'swipe-right';
+
+    // Change to new media (triggers ngOnChanges)
+    component.media = { ...mockMedia, id: 2, filename: 'next.wav' };
+    component.ngOnChanges({
+      media: { currentValue: component.media, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+    });
+
+    expect(component.swipeClass).toBe('');
   });
 
   it('should format metadata values', () => {

@@ -53,5 +53,11 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu \
 # Install dev tools (linter + test runner)
 pip install pytest ruff -q
 
+# Install frontend (Angular) dependencies if not already present
+if [ -f "frontend/package.json" ] && [ ! -d "frontend/node_modules" ]; then
+  echo "Installing frontend dependencies..."
+  (cd frontend && npm install --no-audit --no-fund -q)
+fi
+
 touch "$MARKER"
 echo "Dependencies installed."

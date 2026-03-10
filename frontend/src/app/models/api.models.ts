@@ -5,11 +5,9 @@
 export interface MediaItem {
   id: number;
   type: string;
-  duration: number;
-  file_size: number;
   filename: string;
-  category: string;
   md5: string;
+  custom_metadata: Record<string, unknown>;
   origin_name?: string;
   description?: string;
 }
@@ -178,6 +176,7 @@ export interface DemoDataset {
   description: string;
   media_type: string;
   num_categories: number;
+  pkl_embedder?: string;
 }
 
 export interface DemoListResponse {
@@ -257,6 +256,7 @@ export interface AppSettings {
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];
+  hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
   [key: string]: unknown;
@@ -306,10 +306,26 @@ export interface ProcessorImporterInfo {
   [key: string]: unknown;
 }
 
+// --- Clippers ---
+
+export interface ClipperInfo {
+  name: string;
+  media_type: string;
+  [key: string]: unknown;
+}
+
+export interface ClippersResponse {
+  clippers: ClipperInfo[];
+}
+
 // --- Converters ---
 
 export interface ConverterInfo {
   [key: string]: unknown;
+}
+
+export interface ConvertersResponse {
+  converters: ConverterInfo[];
 }
 
 // --- Error ---
@@ -326,12 +342,19 @@ export interface OkResponse {
 
 // --- Server Files ---
 
+export interface ServerFileEntry {
+  name: string;
+  filename?: string;
+  path?: string;
+  size_bytes?: number;
+}
+
 export interface ServerMediaFilesResponse {
-  files: string[];
+  files: ServerFileEntry[];
 }
 
 export interface DetectorServerFilesResponse {
-  files: string[];
+  files: ServerFileEntry[];
 }
 
 // --- Eval / Progress Charts ---
@@ -394,7 +417,7 @@ export interface AutoDetectDetectorResult {
 
 export interface AutoDetectResultsData {
   media_type?: string;
-  detectors_run?: string;
+  detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
   // Find mode fields
   models?: string[];

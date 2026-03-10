@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, EmbedderInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo';
 
@@ -27,9 +27,14 @@ export class DatasetImporterModalComponent implements OnInit {
   submitting = false;
   error = '';
 
+  // Clipper state
+  availableClippers: ClipperInfo[] = [];
+  selectedClipper = '';
+
   // Embedder state
   allEmbedders: EmbedderInfo[] = [];
   availableEmbedders: EmbedderInfo[] = [];
+  selectedEmbedder = '';
 
   // Demo picker state
   demos: DemoDataset[] = [];
@@ -39,6 +44,8 @@ export class DatasetImporterModalComponent implements OnInit {
   demoSortKey = 'num_files';
   demoSortAsc = true;
   demoLoading = false;
+  demoEmbedders: EmbedderInfo[] = [];
+  selectedDemoEmbedder = '';
   demoEmbedder = '';
 
   constructor(private datasetsApi: DatasetsApiService) {}
@@ -47,13 +54,13 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.importers = (res.importers || []).filter(
-          (imp) => !imp.hidden_from_picker
+          (imp) => !imp['hidden_from_picker']
         );
       },
     });
     this.datasetsApi.getEmbedders().subscribe({
-      next: (res) => {
-        this.allEmbedders = res.embedders || [];
+      next: (embedders) => {
+        this.allEmbedders = embedders || [];
       },
     });
     this.datasetsApi.getMediaTypes().subscribe({
@@ -67,6 +74,10 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter = importer;
     this.formValues = {};
     this.error = '';
+    this.selectedClipper = '';
+    this.availableClippers = [];
+    this.selectedEmbedder = '';
+    this.availableEmbedders = [];
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -77,42 +88,52 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    // If the importer has a media_type field, initialize embedder choices
-    this.updateAvailableEmbedders();
+    // Load clippers and embedders for the default media type
+    const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
+    if (mediaTypeField) {
+      const defaultType = this.formValues['media_type'] || mediaTypeField.default || '';
+      this.loadClippers(defaultType);
+      this.loadEmbedders(defaultType);
+    }
 
     this.view = 'form';
   }
 
-  /** Whether the selected importer should show an embedder dropdown. */
-  get showEmbedderField(): boolean {
-    if (!this.selectedImporter?.fields) return false;
-    return this.selectedImporter.fields.some((f) => f.key === 'media_type');
+  onMediaTypeChange(mediaType: string): void {
+    this.formValues['media_type'] = mediaType;
+    this.loadClippers(mediaType);
+    this.loadEmbedders(mediaType);
   }
 
-  /** Resolve the type_id from a folder_import_name (e.g. "sounds" -> "audio"). */
-  private folderNameToTypeId(folderName: string): string {
-    const mt = this.mediaTypes.find((m) => m.folder_import_name === folderName);
-    return mt ? mt.type_id : folderName;
-  }
-
-  /** Called when media_type changes to refresh the embedder dropdown. */
-  onMediaTypeChange(): void {
-    this.updateAvailableEmbedders();
-  }
-
-  private updateAvailableEmbedders(): void {
-    const folderName = this.formValues['media_type'] || '';
-    const typeId = this.folderNameToTypeId(folderName);
-    this.availableEmbedders = this.allEmbedders.filter((e) => e.media_type_id === typeId);
-    // Auto-select first embedder if current selection is invalid
-    if (this.availableEmbedders.length > 0) {
-      const current = this.formValues['embedder'] || '';
-      if (!this.availableEmbedders.some((e) => e.name === current)) {
-        this.formValues['embedder'] = this.availableEmbedders[0].name;
-      }
-    } else {
-      this.formValues['embedder'] = '';
+  private loadClippers(mediaType: string): void {
+    if (!mediaType) {
+      this.availableClippers = [];
+      this.selectedClipper = '';
+      return;
     }
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.availableClippers = clippers;
+        // Default to the first clipper (the default/null clipper)
+        this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
+      },
+    });
+  }
+
+  private loadEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.availableEmbedders = [];
+      this.selectedEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.availableEmbedders = embedders;
+        // Default to the first embedder
+        this.selectedEmbedder = embedders.length > 0 ? embedders[0].name : '';
+      },
+    });
+  }
   }
 
   openDemoPicker(): void {
@@ -133,8 +154,8 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  private fetchDemos(): void {
-    this.datasetsApi.getDemoList().subscribe({
+  private fetchDemos(embedder?: string): void {
+    this.datasetsApi.getDemoList(embedder).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
         this.buildDemoTabs();
@@ -159,8 +180,51 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.demoTabs.length > 0 && !this.activeTab) {
       this.activeTab = this.demoTabs[0];
-      const embedders = this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
-      this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+      this.loadDemoEmbedders(this.activeTab);
+    }
+  }
+
+  private loadDemoEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.demoEmbedders = [];
+      this.selectedDemoEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.demoEmbedders = embedders;
+        this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        this.demoEmbedder = this.selectedDemoEmbedder;
+        this.updateDemoStatuses();
+      },
+    });
+  }
+
+  onDemoEmbedderChange(embedder: string): void {
+    this.selectedDemoEmbedder = embedder;
+    this.demoEmbedder = embedder;
+    this.updateDemoStatuses();
+  }
+
+  /**
+   * Re-compute each demo's status client-side based on the selected embedder.
+   * A demo that has a cached pkl (`pkl_embedder` is set) is only "ready" when
+   * the pkl embedder matches the currently selected embedder; otherwise it
+   * downgrades to "needs_embedding" (source data is still present).
+   */
+  private updateDemoStatuses(): void {
+    const emb = this.selectedDemoEmbedder;
+    for (const demo of this.demos) {
+      if (!demo.pkl_embedder) continue;  // no pkl or unknown embedder — keep server status
+      if (demo.status === 'needs_download') continue;  // source data missing — can't re-embed
+
+      if (emb && demo.pkl_embedder !== emb) {
+        demo.status = 'needs_embedding';
+        demo.ready = false;
+      } else {
+        demo.status = 'ready';
+        demo.ready = true;
+      }
     }
   }
 
@@ -186,6 +250,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   selectDemoTab(tab: string): void {
     this.activeTab = tab;
+    this.loadDemoEmbedders(tab);
   }
 
   sortDemoBy(key: string): void {
@@ -228,9 +293,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   selectDemo(demo: DemoDataset): void {
-    // Attach the selected embedder to the demo object so the parent can use it
-    (demo as any).embedder = this.demoEmbedder || '';
-    this.demoSelected.emit(demo);
+    this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder } as any);
     this.closed.emit();
   }
 
@@ -260,6 +323,15 @@ export class DatasetImporterModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
 
+    // Include clipper and embedder in form values if selected
+    const submitValues = { ...this.formValues };
+    if (this.selectedClipper) {
+      submitValues['clipper'] = this.selectedClipper;
+    }
+    if (this.selectedEmbedder) {
+      submitValues['embedder'] = this.selectedEmbedder;
+    }
+
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
@@ -274,7 +346,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
       });
     } else {
-      this.datasetsApi.runImporter(this.selectedImporter.name, this.formValues).subscribe({
+      this.datasetsApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
         next: () => {
           this.submitting = false;
           this.importStarted.emit();

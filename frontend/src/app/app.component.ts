@@ -4,8 +4,6 @@ import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
-import { VtDialogService } from './services/dialog.service';
-
 @Component({
   selector: 'app-root',
   imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
@@ -17,12 +15,9 @@ export class AppComponent {
   menuOpen = false;
   showSettings = false;
   isOnLabelView = false;
-  labelsStatus = '';
-  detectorStatus = '';
 
   constructor(
     private router: Router,
-    private dialog: VtDialogService,
   ) {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -87,23 +82,6 @@ export class AppComponent {
     this.router.navigate(['/dashboard']);
   }
 
-  onImportLabels(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.dialog.alert('Label import not yet available in the Angular frontend.', 'info');
-  }
-
-  onExportDetector(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.dialog.alert('Detector export not yet available in the Angular frontend.', 'info');
-  }
-
-  onExportLabels(): void {
-    if (!this.isOnLabelView) return;
-    this.menuOpen = false;
-    this.dialog.alert('Label export not yet available in the Angular frontend.', 'info');
-  }
 
   onSettings(): void {
     this.menuOpen = false;

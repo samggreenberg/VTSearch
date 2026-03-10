@@ -7,6 +7,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
+import { AutopilotStateService } from '../../services/autopilot-state.service';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -32,8 +33,8 @@ describe('LabelViewComponent', () => {
     fixture.detectChanges();
     // Flush /api/medias
     httpMock.expectOne('/api/medias').flush([
-      { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
-      { id: 2, type: 'audio', duration: 3, file_size: 512, filename: 'b.wav', category: '', md5: 'b2' },
+      { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
+      { id: 2, type: 'audio', filename: 'b.wav', md5: 'b2', custom_metadata: {} },
     ]);
     // Flush /api/votes (label-view + right-panel both poll)
     httpMock.match('/api/votes').forEach(req =>
@@ -264,7 +265,7 @@ describe('LabelViewComponent', () => {
     // Now trigger init which loads medias
     fixture.detectChanges();
     httpMock.expectOne('/api/medias').flush([
-      { id: 1, type: 'audio', duration: 5, file_size: 1024, filename: 'a.wav', category: '', md5: 'a1' },
+      { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
     ]);
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
@@ -292,5 +293,84 @@ describe('LabelViewComponent', () => {
 
     component.onAutopilotStart();
     httpMock.expectNone('/api/sort');
+  });
+
+  it('should trigger learned sort when autopilot transitions from bad to hard', fakeAsync(() => {
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    const sortState = TestBed.inject(SortStateService);
+
+    // Set up votes so learned sort will fire
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+
+    // Activate autopilot → good phase
+    autopilot.activate();
+    fixture.detectChanges();
+
+    // Transition good → bad
+    autopilot.checkPhaseTransition(3, 0);
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('bad');
+
+    // Transition bad → hard: should trigger learned sort
+    autopilot.checkPhaseTransition(3, 4);
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('hard');
+    expect(sortState.selectMode).toBe('hard');
+    expect(sortState.sortMode).toBe('learned');
+    expect(sortState.sortBusy).toBeTrue();
+
+    // Flush the learned sort request
+    const req = httpMock.expectOne('/api/learned-sort');
+    req.flush({
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
+
+    expect(sortState.sortBusy).toBeFalse();
+    expect(sortState.threshold).toBe(0.5);
+  }));
+
+  it('should advance past just-voted item even when vote state is stale', () => {
+    flushInitialRequests();
+
+    // Set up sort order in hard mode
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.5 }],
+      0.5,
+    );
+    component.sortState.setSelectMode('hard');
+
+    // Simulate voting on id 1 (closest to threshold) but votes not yet loaded
+    // (vote state still shows empty — the async loadVotes hasn't returned)
+    component.onMediaVoted({ id: 1, vote: 'bad' });
+
+    // Flush the loadVotes triggered by onMediaVoted
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // Even with stale votes (id 1 not yet in badVotes), the selection should
+    // have advanced to id 2 because onMediaVoted excludes the just-voted id.
+    expect(component.mediaState.selectedId).toBe(2);
+  });
+
+  it('should clear stale autopilot state from previous session on init', () => {
+    const autopilot = TestBed.inject(AutopilotStateService);
+    // Simulate leftover state from a previous detector session
+    autopilot.activate();
+    autopilot.checkPhaseTransition(3, 0); // advance to 'bad'
+    expect(autopilot.state.phase).toBe('bad');
+
+    // Creating a new label-view should clear stale state
+    const freshFixture = TestBed.createComponent(LabelViewComponent);
+    freshFixture.detectChanges();
+
+    // After init, autopilot should be in 'good' phase (cleared then re-activated
+    // by the child autopilot panel), NOT stuck in 'bad' from the old session
+    expect(autopilot.state.phase).toBe('good');
+
+    freshFixture.componentInstance.ngOnDestroy();
+    httpMock.match(() => true);
   });
 });

@@ -9,11 +9,9 @@ describe('ImageViewerComponent', () => {
   const mockMedia: MediaItem = {
     id: 2,
     type: 'image',
-    duration: 0,
-    file_size: 2048,
     filename: 'test.png',
-    category: 'test',
     md5: 'def456',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {
@@ -34,6 +32,44 @@ describe('ImageViewerComponent', () => {
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
     expect(component.imageSrc).toBe('/api/medias/2/image');
+  });
+
+  it('should hide image until loaded to prevent flash of old image', () => {
+    component.media = mockMedia;
+    component.ngOnChanges({
+      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
+    });
+    expect(component.imageReady).toBeFalse();
+
+    component.onImageLoad();
+    expect(component.imageReady).toBeTrue();
+  });
+
+  it('should reset imageReady when media changes', () => {
+    component.media = mockMedia;
+    component.ngOnChanges({
+      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
+    });
+    component.onImageLoad();
+    expect(component.imageReady).toBeTrue();
+
+    const nextMedia = { ...mockMedia, id: 3, filename: 'next.png' };
+    component.media = nextMedia;
+    component.ngOnChanges({
+      media: { currentValue: nextMedia, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.imageReady).toBeFalse();
+  });
+
+  it('should show image on error to avoid stuck black screen', () => {
+    component.media = mockMedia;
+    component.ngOnChanges({
+      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
+    });
+    expect(component.imageReady).toBeFalse();
+
+    component.onImageError();
+    expect(component.imageReady).toBeTrue();
   });
 
   it('should render image element', () => {

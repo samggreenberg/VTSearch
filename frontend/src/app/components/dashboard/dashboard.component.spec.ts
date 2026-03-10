@@ -173,10 +173,64 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBeFalse();
     });
 
-    it('should enable Find with any dataset + any model selected', () => {
-      flushInitialRequests();
-      component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.add('m1');
+    it('should enable Find with matching media types', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBeTrue();
+    });
+
+    it('should disable Find on media type mismatch', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBeFalse();
+    });
+
+    it('should disable Find when multiple datasets have different media types', () => {
+      const datasets = [
+        { id: 'd1', name: 'DS1', media_type: 'audio' },
+        { id: 'd2', name: 'DS2', media_type: 'image' },
+      ];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+      component.selectedDatasetIds.add('d2');
+      expect(component.findEnabled).toBeFalse();
+    });
+
+    it('should enable Find when all selected items share media type', () => {
+      const datasets = [
+        { id: 'd1', name: 'DS1', media_type: 'image' },
+        { id: 'd2', name: 'DS2', media_type: 'image' },
+      ];
+      const models = [
+        { id: 'm1', name: 'M1', media_type: 'image' },
+        { id: 'm2', name: 'M2', media_type: 'image' },
+      ];
+      flushInitialRequests(datasets, models);
+      component.selectedDatasetIds.add('d2');
+      component.selectedModelIds.add('m2');
+      expect(component.findEnabled).toBeTrue();
+    });
+
+    it('should disable Find when a trainable model has 0 training', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 0 }];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBeFalse();
+    });
+
+    it('should enable Find for a trainable model with training', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 5 }];
+      flushInitialRequests(datasets, models);
+      expect(component.findEnabled).toBeTrue();
+    });
+
+    it('should enable Find for a non-trainable model with 0 training', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: false, num_training: 0 }];
+      flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBeTrue();
     });
   });
@@ -254,11 +308,25 @@ describe('DashboardComponent', () => {
       expect(component.findHint).toBe('Select a model');
     });
 
-    it('should return empty hint when find is enabled', () => {
-      flushInitialRequests();
-      component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.add('m1');
-      expect(component.findHint).toBe('');
+    it('should hint about media type mismatch', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
+      flushInitialRequests(datasets, models);
+      expect(component.findHint).toBe('Media type mismatch');
+    });
+
+    it('should return score hint when find is enabled', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      flushInitialRequests(datasets, models);
+      expect(component.findHint).toBe('Score selected datasets with selected models');
+    });
+
+    it('should hint about untrained model', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 0 }];
+      flushInitialRequests(datasets, models);
+      expect(component.findHint).toBe('Selected model has no training labels');
     });
   });
 

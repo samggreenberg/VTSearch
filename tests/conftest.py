@@ -66,6 +66,7 @@ _TEST_GROUPS = {
         "test_eval",
         "test_eval_visualize",
         "test_eval_voting_iterations",
+        "test_resolver",
     ],
     "downloads": [
         "test_ag_news_download",

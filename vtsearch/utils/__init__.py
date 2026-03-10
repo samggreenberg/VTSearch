@@ -1,7 +1,7 @@
 """Utility modules for progress tracking and state management."""
 
 from vtsearch.utils.hits import build_media_hit
-from vtsearch.utils.progress import get_progress, get_sort_progress, update_progress, update_sort_progress
+from vtsearch.utils.progress import get_eval_progress, get_progress, get_sort_progress, update_eval_progress, update_progress, update_sort_progress
 from vtsearch.utils.state import (
     _state_lock,
     add_autorun_detector,

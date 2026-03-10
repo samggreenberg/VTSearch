@@ -25,7 +25,8 @@ semantically sorting collections of audio, images, text, video, or
 documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), CLIP (images), X-CLIP
-  (video), E5-base-v2 (text) for embedding-based similarity search.
+  (video), E5-base-v2 (text) for embedding-based similarity search,
+  with alternative embedders available (CLAP Music, SigLIP, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -46,14 +47,26 @@ VTSearch/
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── settings.py                 Persistent settings & autorun processors
 │   │
-│   ├── media/                      Media type registry + plugins
-│   │   ├── base.py                 MediaType ABC, MediaResponse, Processor, Detector, Localizer, Extractor, MediaClipper
-│   │   ├── __init__.py             Registry (register/get/all_types)
-│   │   ├── audio/media_type.py     CLAP embeddings
-│   │   ├── image/media_type.py     CLIP embeddings
-│   │   ├── text/media_type.py      E5 embeddings
-│   │   ├── video/media_type.py     X-CLIP embeddings
-│   │   └── document/media_type.py  Document handling (no embedder; convert first)
+│   ├── media/                      Media type, embedder, and clipper registries + plugins
+│   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper, Processor, Detector, Localizer, Extractor ABCs
+│   │   ├── __init__.py             Three registries: register/register_embedder/register_clipper
+│   │   ├── audio/media_type.py     Audio media type (WAV serving, folder import)
+│   │   ├── audio/embedder.py       AudioClapEmbedder (LAION CLAP, 512-d)
+│   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
+│   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
+│   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
+│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
+│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d)
+│   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
+│   │   ├── text/media_type.py      Text/paragraph media type (JSON serving)
+│   │   ├── text/embedder.py        TextE5Embedder (E5-base-v2, 768-d)
+│   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
+│   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
+│   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
+│   │   ├── video/embedder.py       VideoXClipEmbedder (X-CLIP, 768-d)
+│   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
+│   │   ├── document/media_type.py  Document handling (no embedder; convert first)
+│   │   └── document/clipper.py     DocumentDefaultClipper
 │   │
 │   ├── converters/                 Media type converters
 │   │   ├── base.py                 MediaConverter ABC
@@ -128,7 +141,8 @@ VTSearch/
 │   │
 │   ├── utils/
 │   │   ├── state.py                Global state (medias, votes, autorun config, history)
-│   │   └── progress.py             Thread-safe progress tracking
+│   │   ├── progress.py             Thread-safe progress tracking
+│   │   └── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
 │   │
 │   └── audio/                      WAV/tone generation utilities
 │
@@ -323,24 +337,43 @@ application as-is.
 
 ## Plugin architecture details
 
-All four plugin systems (dataset importers, exporters, label importers,
-processor importers) follow the same pattern:
+### Auto-discovered plugins (importers / exporters)
 
-1. **Base class** defines `name`, `display_name`, `fields`, and an
-   abstract `run()`/`export()` method.
-2. **Field dataclass** (`ImporterField`, `ExporterField`,
-   `LabelImporterField`, `ProcessorImporterField`) describes each
-   user-configurable input with type, label, default, validation, and
-   placeholder.
-3. **Auto-discovery** scans sub-packages for a sentinel attribute and
-   registers them lazily on first access.
+All four plugin systems (dataset importers, exporters, label importers,
+processor importers) share a common `PluginBase` / `PluginField` /
+`PluginRegistry` architecture in `vtsearch/utils/registry.py`:
+
+1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
+   and an abstract `run()`/`export()` method.
+2. **Field dataclass** (`PluginField`, aliased as `ImporterField`,
+   `ExporterField`, `LabelImporterField`, `ProcessorImporterField`)
+   describes each user-configurable input with type, label, default,
+   validation, and placeholder.
+3. **Auto-discovery** via `PluginRegistry` scans sub-packages for a
+   sentinel attribute (`IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`,
+   `PROCESSOR_IMPORTER`) and registers them lazily on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
 5. **Graceful degradation** — if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
-To add a new plugin, create a package directory, implement the base
-class, and expose the sentinel.  See `EXTENDING.md` (in this directory) for full examples.
+### Explicitly registered plugins (media types / embedders / clippers)
+
+Media types, embedders, and clippers use three separate dict-based
+registries in `vtsearch/media/__init__.py`:
+
+| Registry | Registration function | Lookup functions |
+|----------|----------------------|------------------|
+| Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
+| Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
+| Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+
+Media converters use a hardcoded list in `vtsearch/converters/__init__.py`
+with `list_converters()`, `get_converter(name)`,
+`list_converters_for_source()`, and `list_converters_for_target()`.
+
+To add a new extension, create the class, import it, and call the
+register function.  See `EXTENDING.md` (in this directory) for full examples.
 
 ---
 
@@ -367,9 +400,9 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_thumbnails_left`, `show_thumbnails_right`,
-`autopilot_top_greens`, `autopilot_hard_reds`,
-autorun processor recipes) live
+`swipe_animation`, `show_metadata`, `show_thumbnails_left`,
+`show_thumbnails_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
+`autoload_media_types`, autorun processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).

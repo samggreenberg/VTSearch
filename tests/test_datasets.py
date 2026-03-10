@@ -236,6 +236,169 @@ class TestDemoDatasetReadiness:
             assert ds["status"] in ("ready", "needs_embedding", "needs_download")
 
 
+class TestDemoDatasetEmbedderStatus:
+    """Demo dataset status respects which embedder produced the cached pkl."""
+
+    def test_ready_with_matching_embedder(self, client):
+        """pkl with sidecar matching requested embedder → ready."""
+        import pickle
+
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets import DEMO_DATASETS
+
+        # Pick a demo that has no required_folder (e.g. a text or image demo).
+        demo_name = None
+        for name, info in DEMO_DATASETS.items():
+            if info.get("required_folder") is None:
+                demo_name = name
+                break
+        if demo_name is None:
+            pytest.skip("No demo dataset without required_folder found")
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
+        sidecar = pkl_file.with_suffix(".embedder")
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
+        sidecar.write_text("TestEmbedder", encoding="utf-8")
+        try:
+            resp = client.get("/api/dataset/demo-list?embedder=TestEmbedder")
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
+            assert ds is not None
+            assert ds["status"] == "ready"
+            assert ds["ready"] is True
+            assert ds["pkl_embedder"] == "TestEmbedder"
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
+    def test_needs_embedding_with_mismatched_embedder(self, client):
+        """pkl with sidecar NOT matching requested embedder → needs_embedding."""
+        import pickle
+
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets import DEMO_DATASETS
+
+        demo_name = None
+        for name, info in DEMO_DATASETS.items():
+            if info.get("required_folder") is None:
+                demo_name = name
+                break
+        if demo_name is None:
+            pytest.skip("No demo dataset without required_folder found")
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
+        sidecar = pkl_file.with_suffix(".embedder")
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
+        sidecar.write_text("OldEmbedder", encoding="utf-8")
+        try:
+            resp = client.get("/api/dataset/demo-list?embedder=NewEmbedder")
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
+            assert ds is not None
+            assert ds["status"] == "needs_embedding"
+            assert ds["ready"] is False
+            assert ds["pkl_embedder"] == "OldEmbedder"
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
+    def test_no_embedder_param_ignores_check(self, client):
+        """Without embedder query param, pkl existence alone means ready."""
+        import pickle
+
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets import DEMO_DATASETS
+
+        demo_name = None
+        for name, info in DEMO_DATASETS.items():
+            if info.get("required_folder") is None:
+                demo_name = name
+                break
+        if demo_name is None:
+            pytest.skip("No demo dataset without required_folder found")
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
+        sidecar = pkl_file.with_suffix(".embedder")
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
+        sidecar.write_text("SomeEmbedder", encoding="utf-8")
+        try:
+            resp = client.get("/api/dataset/demo-list")
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
+            assert ds is not None
+            assert ds["status"] == "ready"
+            assert ds["ready"] is True
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
+    def test_pkl_embedder_field_present(self, client):
+        """Every demo in the response should have a pkl_embedder field."""
+        resp = client.get("/api/dataset/demo-list")
+        data = resp.get_json()
+        for ds in data["datasets"]:
+            assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
+
+    def test_fallback_reads_embedder_from_pkl_medias(self, client):
+        """When no sidecar file exists, embedder is read from the pkl medias and cached."""
+        import pickle
+
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets import DEMO_DATASETS
+
+        demo_name = None
+        for name, info in DEMO_DATASETS.items():
+            if info.get("required_folder") is None:
+                demo_name = name
+                break
+        if demo_name is None:
+            pytest.skip("No demo dataset without required_folder found")
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
+        sidecar = pkl_file.with_suffix(".embedder")
+        # Write pkl with embedder info in media entries, no sidecar
+        pkl_file.write_bytes(
+            pickle.dumps({
+                "name": demo_name,
+                "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
+            })
+        )
+        sidecar.unlink(missing_ok=True)
+        try:
+            resp = client.get("/api/dataset/demo-list?embedder=FallbackEmb")
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
+            assert ds is not None
+            assert ds["pkl_embedder"] == "FallbackEmb"
+            assert ds["status"] == "ready"
+            # Sidecar should have been created as a cache
+            assert sidecar.exists(), "Sidecar should be written as cache after fallback read"
+            assert sidecar.read_text(encoding="utf-8").strip() == "FallbackEmb"
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
+
 class TestImporterMetadata:
     """Importer to_dict() must include the icon field."""
 
@@ -659,3 +822,36 @@ class TestLoadProgressRaceCondition:
             from vtsearch.datasets.registry import unregister_dataset
 
             unregister_dataset(dataset_id)
+
+    def test_stepped_progress_filters_idle(self):
+        """_stepped_progress must drop 'idle' so cached-pkl loads can't leak it.
+
+        When a demo dataset is already cached, load_demo_dataset() emits
+        ``on_progress("idle", ...)`` before the outer finalization wrapper
+        has finished.  If this leaks through to the global progress tracker,
+        a frontend poll can see 'idle' and stop polling — leaving the UI
+        stuck on the progress overlay.
+        """
+        from vtsearch.routes.datasets_loading import _stepped_progress
+        from vtsearch.utils.progress import get_progress, update_progress
+
+        # Set progress to a known non-idle state
+        update_progress("loading", "In progress…", step=2, total_steps=4)
+
+        # Simulate the inner load function signalling idle (e.g. cached pkl)
+        _stepped_progress("idle", "Loaded dataset")
+
+        # Progress must NOT have changed to idle
+        progress = get_progress()
+        assert progress["status"] == "loading", (
+            "_stepped_progress must filter out 'idle' to prevent "
+            "premature completion signals from cached dataset loads"
+        )
+        assert progress["message"] == "In progress…"
+
+        # Non-idle statuses must still pass through
+        _stepped_progress("downloading", "Fetching files…", 50, 100)
+        progress = get_progress()
+        assert progress["status"] == "downloading"
+        assert progress["message"] == "Fetching files…"
+        assert progress["step"] == 1  # downloading maps to step 1

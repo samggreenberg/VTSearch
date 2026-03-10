@@ -15,6 +15,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: #000;
 }
 
 .image-element {
@@ -24,5 +25,9 @@
   border-radius: 8px;
   user-select: none;
   -webkit-user-drag: none;
+
+  &.image-loading {
+    visibility: hidden;
+  }
 }
 

@@ -9,11 +9,9 @@ describe('VideoPlayerComponent', () => {
   const mockMedia: MediaItem = {
     id: 3,
     type: 'video',
-    duration: 10.0,
-    file_size: 4096,
     filename: 'test.mp4',
-    category: 'test',
     md5: 'ghi789',
+    custom_metadata: {},
   };
 
   beforeEach(async () => {

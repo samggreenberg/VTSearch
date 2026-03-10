@@ -1,11 +1,13 @@
-<canvas
-  #waveformCanvas
-  class="waveform-canvas"
-  width="600"
-  height="120"
-  role="img"
-  aria-label="Audio waveform visualization"
-></canvas>
+<div class="waveform-swipe-wrapper" [class]="swipeClass">
+  <canvas
+    #waveformCanvas
+    class="waveform-canvas"
+    width="600"
+    height="120"
+    role="img"
+    aria-label="Audio waveform visualization"
+  ></canvas>
+</div>
 <audio
   #audioEl
   controls

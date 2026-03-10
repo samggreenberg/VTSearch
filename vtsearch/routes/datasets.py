@@ -19,7 +19,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400
-from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers, load_demo_dataset
+from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     get_loaded_id as _reg_loaded_id,
@@ -47,6 +47,7 @@ import vtsearch.utils.paths as _paths
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.routes.datasets_loading import (  # noqa: F401
     STAGING_DIR,
+    _apply_clipper,
     _auto_register_dataset,
     _load_embedder_for_clips,
     _origin_to_str,
@@ -80,10 +81,59 @@ def media_types_list():
 
 @datasets_bp.route("/api/embedders")
 def embedders_list():
-    """Return all registered embedders with their metadata."""
-    from vtsearch.media import all_embedders_dict
+    """Return all registered embedders, optionally filtered by media type.
 
-    return jsonify({"embedders": all_embedders_dict()})
+    Query parameters:
+        media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only embedders whose
+            ``media_type_id`` matches are returned.
+    """
+    from vtsearch.media import all_embedders_dict, embedders_for_type, get_by_folder_name
+
+    media_type = request.args.get("media_type", "").strip()
+    if media_type:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(media_type)
+            media_type = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        embedders = [e.to_dict() for e in embedders_for_type(media_type)]
+    else:
+        embedders = all_embedders_dict()
+
+    return jsonify({"embedders": embedders})
+
+
+# ---------------------------------------------------------------------------
+# Clipper chooser
+# ---------------------------------------------------------------------------
+
+
+@datasets_bp.route("/api/clippers")
+def clippers_list():
+    """Return all clippers, optionally filtered by media type.
+
+    Query parameters:
+        media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only clippers whose
+            ``media_type`` matches are returned.
+    """
+    from vtsearch.media import all_clippers_dict, clippers_for_type, get_by_folder_name
+
+    media_type = request.args.get("media_type", "").strip()
+    if media_type:
+        # Accept both type_id ("image") and folder_import_name ("images").
+        try:
+            mt = get_by_folder_name(media_type)
+            media_type = mt.type_id
+        except KeyError:
+            pass  # assume it is already a type_id
+        clippers = [c.to_dict() for c in clippers_for_type(media_type)]
+    else:
+        clippers = all_clippers_dict()
+
+    return jsonify({"clippers": clippers})
 
 
 # ---------------------------------------------------------------------------
@@ -93,25 +143,36 @@ def embedders_list():
 
 @datasets_bp.route("/api/converters")
 def converters_list():
-    """Return all converters, optionally filtered by target media type.
+    """Return all converters, optionally filtered by source or target media type.
 
     Query parameters:
         target: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
             (e.g. ``"images"``).  When provided, only converters whose
             ``target_type`` matches are returned.
+        source: A ``type_id`` (e.g. ``"video"``) or ``folder_import_name``
+            (e.g. ``"videos"``).  When provided, only converters whose
+            ``source_type`` matches are returned.
     """
-    from vtsearch.converters import list_converters, list_converters_for_target
+    from vtsearch.converters import list_converters, list_converters_for_source, list_converters_for_target
     from vtsearch.media import get_by_folder_name
 
     target = request.args.get("target", "").strip()
+    source = request.args.get("source", "").strip()
+
     if target:
-        # Accept both type_id ("image") and folder_import_name ("images").
         try:
             mt = get_by_folder_name(target)
             target = mt.type_id
         except KeyError:
-            pass  # assume it is already a type_id
+            pass
         converters = list_converters_for_target(target)
+    elif source:
+        try:
+            mt = get_by_folder_name(source)
+            source = mt.type_id
+        except KeyError:
+            pass
+        converters = list_converters_for_source(source)
     else:
         converters = list_converters()
 
@@ -302,51 +363,19 @@ def stage_demo(name: str):
     if name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
-    def stage_task():
-        try:
-            temp_medias: dict = {}
-            load_demo_dataset(name, temp_medias)
+    importer = get_importer("demo")
+    if importer is None:
+        return jsonify({"error": "demo importer not available"}), 500
 
-            if not temp_medias:
-                update_progress("idle", "", 0, 0, "Demo produced no medias.")
-                return
+    body = request.get_json(force=True, silent=True) or {}
+    converter_name = body.get("converter", "")
 
-            first = next(iter(temp_medias.values()))
-            media_type = first.get("type", "audio")
-            count = len(temp_medias)
-            label = DEMO_DATASETS[name].get("label", name)
+    field_values: dict = {"name": name}
+    if converter_name:
+        field_values["converter"] = converter_name
 
-            data_bytes = export_dataset_to_file(temp_medias)
-            del temp_medias
-            gc.collect()
-
-            STAGING_DIR.mkdir(parents=True, exist_ok=True)
-            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
-            staging_path.write_bytes(data_bytes)
-            del data_bytes
-            gc.collect()
-
-            update_progress(
-                "idle",
-                f"Staged: {label} ({count} medias)",
-                100,
-                100,
-                staging_result={"path": str(staging_path), "name": label, "count": count, "media_type": media_type},
-            )
-        except MemoryError:
-            gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
-
-    thread = threading.Thread(target=stage_task, daemon=True)
-    thread.start()
+    label = DEMO_DATASETS[name].get("label", name)
+    _stage_importer_in_background(importer, field_values, label=label)
     return jsonify({"ok": True, "message": "Staging demo dataset..."})
 
 
@@ -405,6 +434,22 @@ def import_dataset(importer_name: str):
     if converters_val:
         field_values["converters"] = converters_val
 
+    # Pass through the optional "clipper" key for post-import clipping.
+    if file_keys:
+        clipper_val = request.form.get("clipper", "")
+    else:
+        clipper_val = (request.get_json(force=True) or {}).get("clipper", "")
+    if clipper_val:
+        field_values["clipper"] = clipper_val
+
+    # Pass through the optional "embedder" key for embedder selection.
+    if file_keys:
+        embedder_val = request.form.get("embedder", "")
+    else:
+        embedder_val = (request.get_json(force=True) or {}).get("embedder", "")
+    if embedder_val:
+        field_values["embedder"] = embedder_val
+
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
@@ -416,24 +461,38 @@ def import_dataset(importer_name: str):
 
 @datasets_bp.route("/api/dataset/load-demo", methods=["POST"])
 def load_demo_dataset_route():
-    """Load a demo dataset in a background thread."""
+    """Load a demo dataset in a background thread.
+
+    When a ``converter`` is specified, the demo data is loaded using its
+    original media type, then converted to the converter's target type.
+    The resulting dataset has the *target* type, not the demo's original
+    type.
+    """
     data = get_json_or_400()
     if not isinstance(data, dict):
         return data
 
     dataset_name = data.get("name")
     embedder_name = data.get("embedder", "")
+    clipper_name = data.get("clipper", "")
+    converter_name = data.get("converter", "")
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
 
-    demo_origin = {"importer": "demo", "params": {"name": dataset_name}}
-    _run_origin_load_in_background(
-        lambda: load_demo_dataset(dataset_name, medias, embedder_name=embedder_name),
-        demo_origin,
-        name=dataset_name,
-    )
+    importer = get_importer("demo")
+    if importer is None:
+        return jsonify({"error": "demo importer not available"}), 500
 
+    field_values: dict = {"name": dataset_name}
+    if converter_name:
+        field_values["converter"] = converter_name
+    if clipper_name:
+        field_values["clipper"] = clipper_name
+    if embedder_name:
+        field_values["embedder"] = embedder_name
+
+    _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
 
 
@@ -537,6 +596,7 @@ def list_registered_datasets():
             entry["num_dupes"] = get_dupe_count()
         else:
             entry.setdefault("num_dupes", 0)
+        entry.setdefault("embedder", "")
     return jsonify({"datasets": entries})
 
 
@@ -637,12 +697,11 @@ def load_dataset_from_source():
 def _load_from_origin(source: dict):
     """Start loading a dataset from a raw origin dict (internal helper).
 
-    Special pseudo-origins (``"dupe_set"``, ``"demo"``) are handled inline.
-    All real importers are dispatched generically via
+    Special pseudo-origins (``"dupe_set"``) are handled inline.
+    All real importers (including ``"demo"``) are dispatched generically via
     :meth:`~DatasetImporter.reload_from_origin`.
     """
     importer_name = source.get("importer", "")
-    params = source.get("params", {})
 
     # --- pseudo-origins (not real importers) ---
 
@@ -653,18 +712,6 @@ def _load_from_origin(source: dict):
             if isinstance(member_origin, dict):
                 return _load_from_origin(member_origin)
         return jsonify({"error": "Cannot reload from dupe_set origin"}), 400
-
-    if importer_name == "demo":
-        demo_name = params.get("name", "")
-        if demo_name not in DEMO_DATASETS:
-            return jsonify({"error": f"Unknown demo dataset: {demo_name}"}), 400
-        origin = {"importer": "demo", "params": {"name": demo_name}}
-        _run_origin_load_in_background(
-            lambda: load_demo_dataset(demo_name, medias),
-            origin,
-            name=demo_name,
-        )
-        return jsonify({"ok": True, "message": "Loading started"})
 
     # --- real importers: generic dispatch ---
 

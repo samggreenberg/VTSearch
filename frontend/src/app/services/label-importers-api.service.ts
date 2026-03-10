@@ -11,7 +11,17 @@ export class LabelImportersApiService {
     return this.http.get<LabelImporterInfo[]>('/api/label-importers');
   }
 
-  runImport(importerName: string, params: Record<string, unknown>): Observable<unknown> {
+  runImport(importerName: string, params: Record<string, unknown>, file?: File, fileFieldKey?: string): Observable<unknown> {
+    if (file && fileFieldKey) {
+      const formData = new FormData();
+      formData.append(fileFieldKey, file, file.name);
+      for (const [key, value] of Object.entries(params)) {
+        if (key !== fileFieldKey) {
+          formData.append(key, String(value ?? ''));
+        }
+      }
+      return this.http.post(`/api/label-importers/import/${importerName}`, formData);
+    }
     return this.http.post(`/api/label-importers/import/${importerName}`, params);
   }
 

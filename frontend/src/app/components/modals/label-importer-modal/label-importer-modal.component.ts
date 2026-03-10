@@ -32,6 +32,7 @@ export class LabelImporterModalComponent implements OnInit {
   selectedImporter: LabelImporter | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
+  selectedFileFieldKey: string | null = null;
   submitting = false;
   error = '';
   successMessage = '';
@@ -70,6 +71,7 @@ export class LabelImporterModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       this.selectedFile = input.files[0];
+      this.selectedFileFieldKey = fieldName;
       this.formValues[fieldName] = input.files[0].name;
     }
   }
@@ -80,7 +82,12 @@ export class LabelImporterModalComponent implements OnInit {
     this.error = '';
     this.successMessage = '';
 
-    this.labelImportersApi.runImport(this.selectedImporter.name, this.formValues).subscribe({
+    this.labelImportersApi.runImport(
+      this.selectedImporter.name,
+      this.formValues,
+      this.selectedFile ?? undefined,
+      this.selectedFileFieldKey ?? undefined,
+    ).subscribe({
       next: (res: any) => {
         this.submitting = false;
         this.successMessage = res.message || `Applied ${res.applied ?? 0} labels`;

@@ -44,6 +44,7 @@ export class LeftPanelComponent implements OnInit {
   @Input() showThumbnails = true;
   @Input() loadSortLabel = '';
   @Input() textQuery = '';
+  @Input() autopilotCollapsed = false;
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();
@@ -55,6 +56,7 @@ export class LeftPanelComponent implements OnInit {
   @Output() indicatorClick = new EventEmitter<string>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
+  @Output() autopilotToggleCollapse = new EventEmitter<void>();
 
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 

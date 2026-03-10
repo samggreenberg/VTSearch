@@ -183,6 +183,20 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        from vtsearch.converters import list_converters_for_target
+        from vtsearch.media import all_types_dict
+
+        converters_by_target: dict[str, list[dict]] = {}
+        for mt_info in all_types_dict():
+            type_id = mt_info["type_id"]
+            convs = list_converters_for_target(type_id)
+            if convs:
+                converters_by_target[type_id] = [c.to_dict() for c in convs]
+        d["available_converters_by_media_type"] = converters_by_target
+        return d
+
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
         validate_url(url)
@@ -299,6 +313,80 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         if converters:
             origin["params"]["converters"] = converters
         return origin
+
+
+    def resolve_file(
+        self,
+        origin: dict[str, Any],
+        origin_name: str = "",
+        filename: str = "",
+    ) -> Path | None:
+        url = origin.get("params", {}).get("url", "")
+        if not url:
+            return None
+
+        url_filename = url.rsplit("/", 1)[-1].split("?")[0]
+        download_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        extract_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
+
+        # If already extracted, search there
+        if extract_dir.is_dir():
+            found = _search_dir_for_file(extract_dir, origin_name, filename)
+            if found:
+                return found
+
+        # If archive downloaded but not extracted
+        if download_path.is_file() and not extract_dir.is_dir():
+            try:
+                extract_dir.mkdir(parents=True, exist_ok=True)
+                _extract_archive(download_path, extract_dir)
+                found = _search_dir_for_file(extract_dir, origin_name, filename)
+                if found:
+                    return found
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning("Failed to extract %s", download_path, exc_info=True)
+
+        # Download if not present
+        if not download_path.is_file():
+            try:
+                import logging
+                import urllib.request
+
+                logging.getLogger(__name__).info("Downloading %s for label resolution...", url)
+                download_path.parent.mkdir(parents=True, exist_ok=True)
+                urllib.request.urlretrieve(url, str(download_path))  # noqa: S310
+                if download_path.is_file():
+                    extract_dir.mkdir(parents=True, exist_ok=True)
+                    _extract_archive(download_path, extract_dir)
+                    found = _search_dir_for_file(extract_dir, origin_name, filename)
+                    if found:
+                        return found
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Failed to download %s for label resolution", url, exc_info=True
+                )
+
+        return None
+
+
+def _search_dir_for_file(
+    directory: Path, origin_name: str, filename: str
+) -> Path | None:
+    """Search a directory for a file matching origin_name or filename."""
+    for name in [origin_name, filename]:
+        if not name:
+            continue
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+        matches = list(directory.rglob(Path(name).name))
+        if matches:
+            return matches[0]
+    return None
 
 
 IMPORTER = HttpArchiveDatasetImporter()

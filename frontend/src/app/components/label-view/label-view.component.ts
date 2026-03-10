@@ -30,8 +30,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   showThumbnails = true;
   leftWidth = 260;
   rightWidth = 300;
+  autopilotCollapsed = false;
   progressModalMetric: ProgressMetric | null = null;
 
+  private readonly COLLAPSED_WIDTH = 48;
+  private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
   private readonly LEFT_MAX = 500;
   private readonly RIGHT_MIN = 150;
@@ -59,6 +62,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.autopilotStateService.clear();
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
@@ -80,8 +84,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
         if (curr.phase === 'good') this.sortState.setSelectMode('top');
-        else if (curr.phase === 'bad') this.sortState.setSelectMode('bottom');
-        else if (curr.phase === 'hard') this.sortState.setSelectMode('hard');
+        else if (curr.phase === 'bad') this.sortState.setSelectMode('hard');
+        else if (curr.phase === 'hard') {
+          this.sortState.setSelectMode('hard');
+          this.sortState.setSortMode('learned');
+          this.onLearnedSort();
+        }
         else if (curr.phase === 'new') this.sortState.setSelectMode('new');
       });
   }
@@ -115,8 +123,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.dragging) return;
     const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
     let newWidth = event.clientX - layoutRect.left;
-    newWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, newWidth));
+    const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+    newWidth = Math.max(minWidth, Math.min(this.LEFT_MAX, newWidth));
     this.ngZone.run(() => {
+      if (this.autopilotCollapsed && newWidth >= this.LEFT_MIN) {
+        this.autopilotCollapsed = false;
+        this.settingsState.update({ hide_autopilot: false }).subscribe();
+      }
       this.leftWidth = newWidth;
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
     });
@@ -165,6 +178,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((settings) => {
         if (!settings) return;
         this.showThumbnails = settings.show_thumbnails_left !== false;
+        if (settings.hide_autopilot && !this.autopilotCollapsed) {
+          this.setAutopilotCollapsed(true);
+        } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
+          this.setAutopilotCollapsed(false);
+        }
         if (settings.inclusion != null) {
           this.sortState.setInclusion(settings.inclusion);
         }
@@ -188,6 +206,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSortModeChange(mode: SortMode): void {
     this.sortState.setSortMode(mode);
+    this.autoSelectNext();
   }
 
   onTextSort(text: string): void {
@@ -211,7 +230,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  onLearnedSort(): void {
+  onLearnedSort(autoSelect = true): void {
     if (this.voteState.goodVotes.size === 0 || this.voteState.badVotes.size === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training...');
@@ -223,7 +242,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         );
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
-        this.autoSelectNext();
+        if (autoSelect) {
+          this.autoSelectNext();
+        }
       },
       error: () => {
         this.sortState.setSortBusy(false);
@@ -265,17 +286,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onInclusionChange(value: number): void {
     this.sortState.setInclusion(value);
     this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
+    this.autoSelectNext();
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
-      this.scheduleLearnedSort();
+      this.scheduleLearnedSort(false);
     }
   }
 
-  private scheduleLearnedSort(): void {
+  private scheduleLearnedSort(autoSelect = true): void {
     if (this.learnedSortPending) return;
     this.learnedSortPending = true;
     setTimeout(() => {
       this.learnedSortPending = false;
-      this.onLearnedSort();
+      this.onLearnedSort(autoSelect);
     }, 300);
   }
 
@@ -287,9 +309,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
     this.voteState.loadVotes();
-    this.autoSelectNext();
+    this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
-      this.scheduleLearnedSort();
+      this.scheduleLearnedSort(false);
     }
   }
 
@@ -332,41 +354,60 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  onAutopilotToggleCollapse(): void {
+    const newVal = !this.autopilotCollapsed;
+    this.setAutopilotCollapsed(newVal);
+    this.settingsState.update({ hide_autopilot: newVal }).subscribe();
+  }
+
+  private setAutopilotCollapsed(collapsed: boolean): void {
+    this.autopilotCollapsed = collapsed;
+    if (collapsed) {
+      this.savedLeftWidth = this.leftWidth;
+      this.leftWidth = this.COLLAPSED_WIDTH;
+    } else {
+      this.leftWidth = this.savedLeftWidth;
+    }
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+  }
+
   onAutopilotStop(): void {
     const phase = this.autopilotStateService.state.phase;
 
-    // Map autopilot phase to a valid Manual select mode.
-    // 'bottom' has no radio button in Manual UI, so map to 'top'.
-    if (phase === 'good' || phase === 'bad') {
+    // Map autopilot phase to the same Sort + Select that autopilot was using.
+    if (phase === 'good') {
+      this.sortState.setSortMode('text');
       this.sortState.setSelectMode('top');
+    } else if (phase === 'bad') {
+      this.sortState.setSortMode('text');
+      this.sortState.setSelectMode('hard');
     } else if (phase === 'hard') {
+      this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('hard');
     } else if (phase === 'new' || phase === 'done') {
+      this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('new');
     }
-
-    // Keep sort mode as 'text' (what autopilot uses) so the sort bar
-    // shows the current text query and results carry over.
-    this.sortState.setSortMode('text');
   }
 
   // --- Helpers ---
 
-  private autoSelectNext(): void {
+  private autoSelectNext(excludeId?: number): void {
     const sortOrder = this.sortState.sortOrder;
     if (!sortOrder || sortOrder.length === 0) return;
     const goodVotes = this.voteState.goodVotes;
     const badVotes = this.voteState.badVotes;
 
+    const isVoted = (id: number): boolean =>
+      id === excludeId || goodVotes.has(id) || badVotes.has(id);
+
     if (this.sortState.selectMode === 'top') {
-      const next = sortOrder.find(
-        (s) => !goodVotes.has(s.id) && !badVotes.has(s.id),
-      );
+      const next = sortOrder.find((s) => !isVoted(s.id));
       if (next) this.mediaState.selectMedia(next.id);
     } else if (this.sortState.selectMode === 'bottom') {
       for (let i = sortOrder.length - 1; i >= 0; i--) {
         const s = sortOrder[i];
-        if (!goodVotes.has(s.id) && !badVotes.has(s.id)) {
+        if (!isVoted(s.id)) {
           this.mediaState.selectMedia(s.id);
           break;
         }
@@ -375,7 +416,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       let best: SortedItem | null = null;
       let bestDist = Infinity;
       for (const s of sortOrder) {
-        if (goodVotes.has(s.id) || badVotes.has(s.id)) continue;
+        if (isVoted(s.id)) continue;
         const dist = Math.abs(s.score - this.sortState.threshold!);
         if (dist < bestDist) {
           bestDist = dist;

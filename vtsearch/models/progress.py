@@ -251,7 +251,20 @@ def _ensure_cache(
         bad_ids = list(_cache_bad_ids)
         num_labels = len(good_ids) + len(bad_ids)
 
-        model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+        # Check whether the training data actually changed compared to the
+        # previous step.  If the good/bad ID sets are identical, the model
+        # would be the same — skip training and stability recording so the
+        # line graph and Stable indicator only reflect genuine model updates.
+        prev = _cached_steps[-1] if _cached_steps else None
+        training_data_changed = prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
+
+        if training_data_changed:
+            model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+        else:
+            # Reuse previous model — no new training or stability entry.
+            model = prev["model"] if prev else None
+            threshold = prev["threshold"] if prev else None
+            stability = None
 
         _cached_steps.append(
             {

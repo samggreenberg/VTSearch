@@ -56,6 +56,10 @@
       <!-- Autopilot & Actions -->
       <div class="settings-section">
         <h3>Autopilot &amp; Actions</h3>
+        <label class="checkbox-row">
+          <input type="checkbox" [ngModel]="settings.hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
+          Hide autopilot panel
+        </label>
         <div class="form-group">
           <label class="form-label"># Good to start</label>
           <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" />

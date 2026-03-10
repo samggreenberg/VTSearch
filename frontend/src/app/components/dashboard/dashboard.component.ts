@@ -4,11 +4,14 @@ import { Router } from '@angular/router';
 import { Subject, timer } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
+import { DetectorsApiService } from '../../services/detectors-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
+import { AutoDetectResultsData } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
@@ -20,6 +23,7 @@ import { NewModelModalComponent } from './new-model-modal/new-model-modal.compon
   imports: [
     CommonModule,
     ProgressBarComponent,
+    AutoDetectResultsModalComponent,
     DatasetCardComponent,
     ModelCardComponent,
     DatasetImporterModalComponent,
@@ -38,6 +42,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   newModelModalOpen = false;
+  findResultsOpen = false;
+  findResultsData: AutoDetectResultsData = { results: {} };
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -50,6 +56,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router,
     private datasetsApi: DatasetsApiService,
+    private detectorsApi: DetectorsApiService,
     private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
@@ -206,7 +213,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
     this.progressIndeterminate = true;
-    this.datasetsApi.loadDemo(demo.name, demo.embedder || '').subscribe({
+    const params: Record<string, string> = {};
+    if (demo.embedder) {
+      params['embedder'] = demo.embedder;
+    }
+    this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
         this.startProgressPolling();
       },
@@ -247,12 +258,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (progress: any) => {
-          if (progress.progress != null && progress.total != null) {
+          if (progress.current != null && progress.total != null && progress.total > 0) {
             this.progressIndeterminate = false;
-            this.progressValue = progress.progress;
+            this.progressValue = progress.current;
             this.progressTotal = progress.total;
+          } else {
+            this.progressIndeterminate = true;
           }
-          this.datasetState.setProgressMessage(progress.message || 'Loading...');
+
+          // Build message with step info when available
+          let msg = progress.message || 'Loading...';
+          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
+            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
+          }
+          this.datasetState.setProgressMessage(msg);
 
           if (progress.status === 'idle' || progress.status === 'error') {
             this.datasetState.setLoading(false);
@@ -339,8 +358,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return true;
   }
 
+  private findMediaTypesMatch(): boolean {
+    const selectedDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    const types = new Set([
+      ...selectedDatasets.map((d) => d.media_type),
+      ...selectedModels.map((m) => m.media_type),
+    ]);
+    return types.size === 1;
+  }
+
+  private hasUntrainedModel(): boolean {
+    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    return selectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+  }
+
   get findEnabled(): boolean {
     if (this.selectedDatasetIds.size < 1 || this.selectedModelIds.size < 1) return false;
+    if (!this.findMediaTypesMatch()) return false;
+    if (this.hasUntrainedModel()) return false;
     return true;
   }
 
@@ -348,6 +384,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.selectedDatasetIds.size === 0 && this.selectedModelIds.size === 0) return 'Select a dataset and a model';
     if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
     if (this.selectedModelIds.size === 0) return 'Select a model';
+    if (!this.findMediaTypesMatch()) return 'Media type mismatch';
+    if (this.hasUntrainedModel()) return 'Selected model has no training labels';
     return 'Score selected datasets with selected models';
   }
 
@@ -408,6 +446,74 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onFind(): void {
-    // Phase 7+ will implement the find/auto-detect flow
+    const datasetIds = [...this.selectedDatasetIds];
+    const modelIds = [...this.selectedModelIds];
+
+    this.datasetState.setLoading(true);
+    this.datasetState.setProgressMessage('Running Find...');
+    this.progressIndeterminate = true;
+
+    this.detectorsApi.find({ dataset_ids: datasetIds, model_ids: modelIds }).subscribe({
+      next: (response: any) => {
+        this.datasetState.setLoading(false);
+        this.progressIndeterminate = false;
+
+        // Convert /api/find response to AutoDetectResultsData format
+        const hits = (response.results || []).map((r: any) => ({
+          md5: r.md5 || '',
+          filename: r.filename || '',
+          origin_name: r.origin_name || '',
+          origin: r.origin,
+          dataset_name: r.dataset_name || '',
+          model_verdicts: r.model_verdicts || {},
+        }));
+
+        const modelNames: string[] = response.models || [];
+        const detectorResults: Record<string, any> = {};
+
+        if (modelNames.length <= 1) {
+          // Single model: one result group
+          const label = modelNames[0] || 'Find';
+          detectorResults[label] = {
+            detector_name: label,
+            total_hits: hits.length,
+            hits,
+          };
+        } else {
+          // Multiple models: group hits by model
+          for (const name of modelNames) {
+            const modelHits = hits.filter(
+              (h: any) => h.model_verdicts?.[name]?.verdict === 'Good',
+            );
+            detectorResults[name] = {
+              detector_name: name,
+              total_hits: modelHits.length,
+              hits: modelHits,
+            };
+          }
+        }
+
+        this.findResultsData = {
+          media_type: `Find (${response.total_hits || 0} hits)`,
+          detectors_run: modelNames.length,
+          results: detectorResults,
+          models: modelNames,
+          datasets: response.datasets || [],
+          multiple_datasets: response.multiple_datasets || false,
+          multiple_models: response.multiple_models || false,
+        } as AutoDetectResultsData;
+
+        this.findResultsOpen = true;
+      },
+      error: (err) => {
+        this.datasetState.setLoading(false);
+        this.progressIndeterminate = false;
+        this.dialog.alert(err.error?.error || 'Find failed.', 'error');
+      },
+    });
+  }
+
+  closeFindResults(): void {
+    this.findResultsOpen = false;
   }
 }

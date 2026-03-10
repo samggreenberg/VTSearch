@@ -141,6 +141,43 @@ def all_demo_datasets() -> dict:
 
 
 # ------------------------------------------------------------------
+# Clipper registry
+# ------------------------------------------------------------------
+
+_clipper_registry: dict[str, "MediaClipper"] = {}
+
+
+def register_clipper(clipper: "MediaClipper") -> None:
+    """Add *clipper* to the registry, keyed by :attr:`~MediaClipper.name`."""
+    _clipper_registry[clipper.name] = clipper
+
+
+def get_clipper(name: str) -> "MediaClipper":
+    """Return the :class:`MediaClipper` registered under *name*.
+
+    Raises :class:`KeyError` if *name* is not registered.
+    """
+    if name not in _clipper_registry:
+        raise KeyError(f"Unknown clipper: {name!r}")
+    return _clipper_registry[name]
+
+
+def clippers_for_type(type_id: str) -> list["MediaClipper"]:
+    """Return all clippers registered for a given media type."""
+    return [c for c in _clipper_registry.values() if c.media_type == type_id]
+
+
+def all_clippers() -> list["MediaClipper"]:
+    """Return all registered :class:`MediaClipper` instances."""
+    return list(_clipper_registry.values())
+
+
+def all_clippers_dict() -> list[dict]:
+    """Return a list of JSON-serialisable dicts describing all registered clippers."""
+    return [c.to_dict() for c in _clipper_registry.values()]
+
+
+# ------------------------------------------------------------------
 # Embedder registry
 # ------------------------------------------------------------------
 
@@ -198,14 +235,40 @@ register(DocumentMediaType())
 # ------------------------------------------------------------------
 
 from vtsearch.media.audio.embedder import AudioClapEmbedder  # noqa: E402
+from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder  # noqa: E402
 from vtsearch.media.image.embedder import ImageClipEmbedder  # noqa: E402
+from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder  # noqa: E402
 from vtsearch.media.text.embedder import TextE5Embedder  # noqa: E402
+from vtsearch.media.text.embedder_bge import TextBGEEmbedder  # noqa: E402
 from vtsearch.media.video.embedder import VideoXClipEmbedder  # noqa: E402
 
 register_embedder(AudioClapEmbedder())
+register_embedder(AudioClapMusicEmbedder())
 register_embedder(ImageClipEmbedder())
+register_embedder(ImageSiglipEmbedder())
 register_embedder(TextE5Embedder())
+register_embedder(TextBGEEmbedder())
 register_embedder(VideoXClipEmbedder())
+
+# ------------------------------------------------------------------
+# Register all built-in clippers
+# ------------------------------------------------------------------
+
+from vtsearch.media.audio.clipper import SoundDefaultClipper, SoundTilingClipper  # noqa: E402
+from vtsearch.media.document.clipper import DocumentDefaultClipper  # noqa: E402
+from vtsearch.media.image.clipper import ImageDefaultClipper, ImageTilingClipper  # noqa: E402
+from vtsearch.media.text.clipper import TextDefaultClipper, TextSentenceClipper  # noqa: E402
+from vtsearch.media.video.clipper import VideoDefaultClipper, VideoTilingClipper  # noqa: E402
+
+register_clipper(SoundDefaultClipper())
+register_clipper(SoundTilingClipper(2.0))
+register_clipper(ImageDefaultClipper())
+register_clipper(ImageTilingClipper())
+register_clipper(TextDefaultClipper())
+register_clipper(TextSentenceClipper())
+register_clipper(VideoDefaultClipper())
+register_clipper(VideoTilingClipper(2.0))
+register_clipper(DocumentDefaultClipper())
 
 
 def set_progress_callback(callback: "ProgressCallback") -> None:
@@ -233,8 +296,10 @@ __all__ = [
     "ProgressCallback",
     "register",
     "register_embedder",
+    "register_clipper",
     "get",
     "get_embedder",
+    "get_clipper",
     "get_by_folder_name",
     "get_by_extension",
     "all_types",
@@ -244,6 +309,9 @@ __all__ = [
     "all_demo_datasets",
     "all_embedders",
     "all_embedders_dict",
+    "all_clippers",
+    "all_clippers_dict",
     "embedders_for_type",
+    "clippers_for_type",
     "set_progress_callback",
 ]
