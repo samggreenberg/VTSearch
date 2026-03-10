@@ -659,3 +659,36 @@ class TestLoadProgressRaceCondition:
             from vtsearch.datasets.registry import unregister_dataset
 
             unregister_dataset(dataset_id)
+
+    def test_stepped_progress_filters_idle(self):
+        """_stepped_progress must drop 'idle' so cached-pkl loads can't leak it.
+
+        When a demo dataset is already cached, load_demo_dataset() emits
+        ``on_progress("idle", ...)`` before the outer finalization wrapper
+        has finished.  If this leaks through to the global progress tracker,
+        a frontend poll can see 'idle' and stop polling — leaving the UI
+        stuck on the progress overlay.
+        """
+        from vtsearch.routes.datasets_loading import _stepped_progress
+        from vtsearch.utils.progress import get_progress, update_progress
+
+        # Set progress to a known non-idle state
+        update_progress("loading", "In progress…", step=2, total_steps=4)
+
+        # Simulate the inner load function signalling idle (e.g. cached pkl)
+        _stepped_progress("idle", "Loaded dataset")
+
+        # Progress must NOT have changed to idle
+        progress = get_progress()
+        assert progress["status"] == "loading", (
+            "_stepped_progress must filter out 'idle' to prevent "
+            "premature completion signals from cached dataset loads"
+        )
+        assert progress["message"] == "In progress…"
+
+        # Non-idle statuses must still pass through
+        _stepped_progress("downloading", "Fetching files…", 50, 100)
+        progress = get_progress()
+        assert progress["status"] == "downloading"
+        assert progress["message"] == "Fetching files…"
+        assert progress["step"] == 1  # downloading maps to step 1

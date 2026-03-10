@@ -48,7 +48,17 @@ def _stepped_progress(status: str, message: str = "", current: int = 0, total: i
     Translates the ``status`` value emitted by inner functions (downloader,
     media-type ``load_demo_source``, etc.) into a step number so the
     frontend can display "Step 1/4", "Step 2/4", etc.
+
+    ``"idle"`` signals are silently dropped because the outer
+    :func:`_run_origin_load_in_background` wrapper is responsible for
+    emitting the final ``"idle"`` after registration and embedder warm-up
+    are complete.  Without this filter a cached-pickle load can briefly set
+    ``"idle"`` before the wrapper overrides it, and a frontend poll during
+    that window would stop polling prematurely — leaving the UI stuck on
+    the progress overlay.
     """
+    if status == "idle":
+        return
     step = _STATUS_TO_STEP.get(status)
     update_progress(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
@@ -286,11 +296,10 @@ def _run_origin_load_in_background(
             clear_dataset()
             gc.collect()
             load_fn()
-            # Suppress any premature "idle" that load_fn may have emitted
-            # (e.g. load_demo_dataset signals idle before returning).
-            # The frontend must not see "idle" until registration and
-            # embedder warm-up are complete, otherwise the dashboard grid
-            # renders before the new entry exists in the registry.
+            # _stepped_progress (the progress callback injected by
+            # _run_importer_in_background) filters out "idle" so that
+            # inner functions like load_demo_dataset cannot prematurely
+            # signal completion to the frontend.
             update_progress(
                 "loading", "Finalizing…",
                 step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
