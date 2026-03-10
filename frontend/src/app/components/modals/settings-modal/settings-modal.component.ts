@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import { AppSettings, EmbedderInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 
@@ -24,6 +25,7 @@ export class SettingsModalComponent implements OnInit {
 
   constructor(
     private settingsApi: SettingsApiService,
+    private settingsState: SettingsStateService,
     private themeService: ThemeService,
   ) {}
 
@@ -93,6 +95,7 @@ export class SettingsModalComponent implements OnInit {
     });
   }
 
+
   exportSettings(): void {
     const blob = new Blob([JSON.stringify(this.settings, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -124,7 +127,7 @@ export class SettingsModalComponent implements OnInit {
   }
 
   private save(): void {
-    this.settingsApi.updateSettings(this.settings).subscribe({
+    this.settingsState.update(this.settings).subscribe({
       error: () => {
         this.error = 'Failed to save settings';
       },
