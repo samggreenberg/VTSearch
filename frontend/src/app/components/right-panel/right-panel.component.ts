@@ -36,6 +36,7 @@ export interface TrainModeContext {
 export class RightPanelComponent implements OnInit, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() trainMode: TrainModeContext | null = null;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
 
   goodIds: number[] = [];

@@ -214,6 +214,44 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_show_thumbnails_right() is False
 
+    def test_get_set_focus_mode_left(self, isolated_settings):
+        settings_mod.set_focus_mode_left("hover")
+        assert settings_mod.get_focus_mode_left() == "hover"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["focus_mode_left"] == "hover"
+
+    def test_focus_mode_left_default(self):
+        assert settings_mod.get_focus_mode_left() == "click"
+
+    def test_focus_mode_left_invalid(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_focus_mode_left("invalid")
+
+    def test_focus_mode_left_persists_across_reset(self, isolated_settings):
+        settings_mod.set_focus_mode_left("hover")
+        settings_mod.reset()
+        assert settings_mod.get_focus_mode_left() == "hover"
+
+    def test_get_set_focus_mode_right(self, isolated_settings):
+        settings_mod.set_focus_mode_right("hover")
+        assert settings_mod.get_focus_mode_right() == "hover"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["focus_mode_right"] == "hover"
+
+    def test_focus_mode_right_default(self):
+        assert settings_mod.get_focus_mode_right() == "click"
+
+    def test_focus_mode_right_invalid(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_focus_mode_right("invalid")
+
+    def test_focus_mode_right_persists_across_reset(self, isolated_settings):
+        settings_mod.set_focus_mode_right("hover")
+        settings_mod.reset()
+        assert settings_mod.get_focus_mode_right() == "hover"
+
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
@@ -224,6 +262,8 @@ class TestSettingsModule:
         assert defaults["show_metadata"] is True
         assert defaults["show_thumbnails_left"] is False
         assert defaults["show_thumbnails_right"] is True
+        assert defaults["focus_mode_left"] == "click"
+        assert defaults["focus_mode_right"] == "click"
         assert defaults["autoload_media_types"] == []
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
@@ -562,6 +602,8 @@ class TestSettingsAPI:
         assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
+        assert data["focus_mode_left"] == "click"
+        assert data["focus_mode_right"] == "click"
         assert data["autoload_media_types"] == []
         assert "autorun_processors" not in data
         assert "saved_datasets_dir" not in data
@@ -635,6 +677,51 @@ class TestSettingsAPI:
         assert "show_metadata" in data
         assert "show_thumbnails_left" in data
         assert "show_thumbnails_right" in data
+
+    def test_update_focus_mode_left(self, client):
+        res = client.put("/api/settings", json={"focus_mode_left": "hover"})
+        assert res.status_code == 200
+        assert res.get_json()["focus_mode_left"] == "hover"
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["focus_mode_left"] == "hover"
+
+    def test_update_focus_mode_left_click(self, client):
+        client.put("/api/settings", json={"focus_mode_left": "hover"})
+        res = client.put("/api/settings", json={"focus_mode_left": "click"})
+        assert res.status_code == 200
+        assert res.get_json()["focus_mode_left"] == "click"
+
+    def test_update_focus_mode_left_invalid(self, client):
+        res = client.put("/api/settings", json={"focus_mode_left": "invalid"})
+        assert res.status_code == 400
+
+    def test_update_focus_mode_right(self, client):
+        res = client.put("/api/settings", json={"focus_mode_right": "hover"})
+        assert res.status_code == 200
+        assert res.get_json()["focus_mode_right"] == "hover"
+
+        # Verify it persisted
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["focus_mode_right"] == "hover"
+
+    def test_update_focus_mode_right_click(self, client):
+        client.put("/api/settings", json={"focus_mode_right": "hover"})
+        res = client.put("/api/settings", json={"focus_mode_right": "click"})
+        assert res.status_code == 200
+        assert res.get_json()["focus_mode_right"] == "click"
+
+    def test_update_focus_mode_right_invalid(self, client):
+        res = client.put("/api/settings", json={"focus_mode_right": "invalid"})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_focus_modes(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "focus_mode_left" in data
+        assert "focus_mode_right" in data
 
     def test_update_autoload_media_types(self, client):
         res = client.put("/api/settings", json={"autoload_media_types": ["audio", "video"]})

@@ -26,6 +26,7 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() learnedScores: Record<string, number> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
   @Input() showThumbnails = true;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
 
   sortedEntries: LabelEntry[] = [];
@@ -120,6 +121,12 @@ export class LabelListComponent implements OnInit, OnChanges {
 
   onEntryClick(id: number): void {
     this.mediaSelected.emit(id);
+  }
+
+  onEntryMouseEnter(id: number): void {
+    if (this.focusMode === 'hover') {
+      this.mediaSelected.emit(id);
+    }
   }
 
   onEntryKeydown(event: KeyboardEvent, id: number): void {

@@ -28,6 +28,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   showThumbnails = true;
+  focusModeLeft: 'click' | 'hover' = 'click';
+  focusModeRight: 'click' | 'hover' = 'click';
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
@@ -178,6 +180,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((settings) => {
         if (!settings) return;
         this.showThumbnails = settings.show_thumbnails_left !== false;
+        this.focusModeLeft = settings.focus_mode_left === 'hover' ? 'hover' : 'click';
+        this.focusModeRight = settings.focus_mode_right === 'hover' ? 'hover' : 'click';
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {

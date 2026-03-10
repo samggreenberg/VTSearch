@@ -11,6 +11,7 @@
       [voteLabel]="getVoteLabel(item.media.id)"
       [score]="item.score"
       [showThumbnail]="showThumbnails"
+      [focusMode]="focusMode"
       (select)="onMediaSelect($event)"
     />
   }

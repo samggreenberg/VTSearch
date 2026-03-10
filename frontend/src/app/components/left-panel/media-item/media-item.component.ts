@@ -15,6 +15,7 @@ export class MediaItemComponent {
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
   @Input() showThumbnail = true;
+  @Input() focusMode: 'click' | 'hover' = 'click';
 
   @Output() select = new EventEmitter<number>();
 
@@ -32,5 +33,11 @@ export class MediaItemComponent {
 
   onClick(): void {
     this.select.emit(this.media.id);
+  }
+
+  onMouseEnter(): void {
+    if (this.focusMode === 'hover') {
+      this.select.emit(this.media.id);
+    }
   }
 }

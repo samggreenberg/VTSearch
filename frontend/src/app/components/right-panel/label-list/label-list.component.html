@@ -12,6 +12,7 @@
         tabindex="0"
         [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name"
         (click)="onEntryClick(entry.id)"
+        (mouseenter)="onEntryMouseEnter(entry.id)"
         (keydown)="onEntryKeydown($event, entry.id)"
       >
         @if (useThumbnail(entry.id)) {

@@ -42,6 +42,7 @@ export class LeftPanelComponent implements OnInit {
   @Input() sortStatus = '';
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() showThumbnails = true;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() loadSortLabel = '';
   @Input() textQuery = '';
   @Input() autopilotCollapsed = false;
