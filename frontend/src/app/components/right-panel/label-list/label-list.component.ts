@@ -28,6 +28,7 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() viewMode: 'grid' | 'list' = 'grid';
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
+  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   sortedEntries: LabelEntry[] = [];
 
@@ -130,7 +131,18 @@ export class LabelListComponent implements OnInit, OnChanges {
   }
 
   onEntryClick(id: number): void {
-    this.mediaSelected.emit(id);
+    if (this.focusMode === 'hover') {
+      this.mediaVote.emit({ id, vote: 'bad' });
+    } else {
+      this.mediaSelected.emit(id);
+    }
+  }
+
+  onEntryContextMenu(event: MouseEvent, id: number): void {
+    if (this.focusMode === 'hover') {
+      event.preventDefault();
+      this.mediaVote.emit({ id, vote: 'good' });
+    }
   }
 
   onEntryMouseEnter(id: number): void {

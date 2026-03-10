@@ -54,6 +54,7 @@ export class LeftPanelComponent implements OnInit {
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
   @Output() mediaSelect = new EventEmitter<number>();
+  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @Output() indicatorClick = new EventEmitter<string>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();

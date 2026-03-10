@@ -62,6 +62,7 @@
           [focusMode]="focusMode"
           [showScores]="false"
           (mediaSelect)="mediaSelect.emit($event)"
+          (mediaVote)="mediaVote.emit($event)"
         />
         <vt-stripe-overview
           [sortOrder]="sortOrder"
