@@ -28,6 +28,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
+  focusModeLeft: 'click' | 'hover' = 'click';
+  focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
   private currentMediaType = '';
   leftWidth = 260;
@@ -193,6 +195,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
           }
         }
+        this.focusModeLeft = settings.focus_mode_left === 'hover' ? 'hover' : 'click';
+        this.focusModeRight = settings.focus_mode_right === 'hover' ? 'hover' : 'click';
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {

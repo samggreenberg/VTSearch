@@ -22,6 +22,20 @@
           <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
           Show metadata panel
         </label>
+        <div class="form-group">
+          <label class="form-label">Focus mode (left panel)</label>
+          <select class="form-select" [ngModel]="settings.focus_mode_left" (ngModelChange)="onStringChange('focus_mode_left', $event)">
+            <option value="click">Click</option>
+            <option value="hover">Hover</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Focus mode (right panel)</label>
+          <select class="form-select" [ngModel]="settings.focus_mode_right" (ngModelChange)="onStringChange('focus_mode_right', $event)">
+            <option value="click">Click</option>
+            <option value="hover">Hover</option>
+          </select>
+        </div>
       </div>
 
       <!-- View (per-media-type) -->
