@@ -23,6 +23,7 @@ export class MediaListComponent implements AfterViewChecked {
   @Input() showScores = true;
 
   @Output() mediaSelect = new EventEmitter<number>();
+  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
 
   private pendingScrollToSelected = false;
@@ -63,6 +64,10 @@ export class MediaListComponent implements AfterViewChecked {
   onMediaSelect(id: number): void {
     this.pendingScrollToSelected = true;
     this.mediaSelect.emit(id);
+  }
+
+  onMediaVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.mediaVote.emit(event);
   }
 
   ngAfterViewChecked(): void {

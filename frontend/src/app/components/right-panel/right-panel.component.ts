@@ -38,6 +38,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() trainMode: TrainModeContext | null = null;
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
+  @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
@@ -87,6 +88,10 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onMediaSelected(id: number): void {
     this.mediaSelected.emit(id);
+  }
+
+  onMediaVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.mediaVoted.emit(event);
   }
 
   onImportLabels(): void {

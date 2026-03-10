@@ -6,6 +6,7 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { MediasApiService } from '../../services/medias-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -56,6 +57,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private sortingApi: SortingApiService,
+    private mediasApi: MediasApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
     public mediaState: MediaStateService,
@@ -324,6 +326,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaSelect(id: number): void {
     this.mediaState.selectMedia(id);
+  }
+
+  onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.onMediaVoted(event);
+      },
+    });
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {

@@ -24,6 +24,7 @@
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
       (mediaSelect)="onMediaSelect($event)"
+      (mediaVote)="onHoverVote($event)"
       (indicatorClick)="onIndicatorClick($event)"
       [autopilotCollapsed]="autopilotCollapsed"
       (autopilotStart)="onAutopilotStart()"
@@ -50,6 +51,7 @@
       [medias]="mediaState.medias"
       [focusMode]="focusModeRight"
       (mediaSelected)="onMediaSelect($event)"
+      (mediaVoted)="onHoverVote($event)"
     />
   </div>
 </div>

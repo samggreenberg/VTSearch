@@ -18,6 +18,7 @@ export class MediaItemComponent {
   @Input() focusMode: 'click' | 'hover' = 'click';
 
   @Output() select = new EventEmitter<number>();
+  @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   get isGrid(): boolean {
     return this.viewMode === 'grid';
@@ -44,7 +45,18 @@ export class MediaItemComponent {
   }
 
   onClick(): void {
-    this.select.emit(this.media.id);
+    if (this.focusMode === 'hover') {
+      this.vote.emit({ id: this.media.id, vote: 'bad' });
+    } else {
+      this.select.emit(this.media.id);
+    }
+  }
+
+  onContextMenu(event: MouseEvent): void {
+    if (this.focusMode === 'hover') {
+      event.preventDefault();
+      this.vote.emit({ id: this.media.id, vote: 'good' });
+    }
   }
 
   onMouseEnter(): void {
