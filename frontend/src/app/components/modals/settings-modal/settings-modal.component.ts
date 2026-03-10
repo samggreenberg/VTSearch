@@ -67,6 +67,11 @@ export class SettingsModalComponent implements OnInit {
     this.save();
   }
 
+  onStringChange(key: string, value: string): void {
+    (this.settings as Record<string, unknown>)[key] = value;
+    this.save();
+  }
+
   isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
     return (this.settings.autoload_media_embedders || []).includes(embedder.name);
   }

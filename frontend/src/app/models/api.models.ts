@@ -253,6 +253,8 @@ export interface AppSettings {
   show_metadata?: boolean;
   view_mode_left?: 'grid' | 'list';
   view_mode_right?: 'grid' | 'list';
+  focus_mode_left?: 'click' | 'hover';
+  focus_mode_right?: 'click' | 'hover';
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];

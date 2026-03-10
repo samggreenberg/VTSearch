@@ -48,6 +48,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_metadata": True,
     "view_mode_left": "list",
     "view_mode_right": "grid",
+    "focus_mode_left": "click",
+    "focus_mode_right": "click",
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
@@ -128,6 +130,7 @@ def get_all() -> dict[str, Any]:
 
 VALID_THEMES = ("dark", "light", "highviz")
 VALID_VIEW_MODES = ("grid", "list")
+VALID_FOCUS_MODES = ("click", "hover")
 
 
 # -------------------------------------------------------------------
@@ -194,6 +197,8 @@ _SETTING_SPECS: list[tuple] = [
     ("show_metadata", bool, None),
     ("view_mode_left", str, _one_of("view_mode_left", VALID_VIEW_MODES)),
     ("view_mode_right", str, _one_of("view_mode_right", VALID_VIEW_MODES)),
+    ("focus_mode_left", str, _one_of("focus_mode_left", VALID_FOCUS_MODES)),
+    ("focus_mode_right", str, _one_of("focus_mode_right", VALID_FOCUS_MODES)),
     ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),

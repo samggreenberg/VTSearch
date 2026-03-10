@@ -114,6 +114,18 @@ def update_settings():
         except ValueError:
             return jsonify({"error": "view_mode_right must be 'grid' or 'list'"}), 400
 
+    if "focus_mode_left" in body:
+        try:
+            settings.set_focus_mode_left(str(body["focus_mode_left"]))
+        except ValueError:
+            return jsonify({"error": "focus_mode_left must be 'click' or 'hover'"}), 400
+
+    if "focus_mode_right" in body:
+        try:
+            settings.set_focus_mode_right(str(body["focus_mode_right"]))
+        except ValueError:
+            return jsonify({"error": "focus_mode_right must be 'click' or 'hover'"}), 400
+
     if "hide_autopilot" in body:
         settings.set_hide_autopilot(bool(body["hide_autopilot"]))
 
