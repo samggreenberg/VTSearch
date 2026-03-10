@@ -22,6 +22,10 @@
     font-size: 0.85rem;
     color: var(--text-secondary);
   }
+
+  &--wide {
+    grid-column: span 2;
+  }
 }
 
 .checkbox-row {
@@ -31,6 +35,39 @@
   margin-bottom: 0.5rem;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color, #444);
+  margin-bottom: 0.75rem;
+}
+
+.view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &--active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-color, #6cf);
+  }
+}
+
+.view-tab-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
 }
 
 .settings-actions {

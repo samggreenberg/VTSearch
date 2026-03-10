@@ -104,15 +104,15 @@ def update_settings():
 
     if "view_mode_left" in body:
         try:
-            settings.set_view_mode_left(str(body["view_mode_left"]))
-        except ValueError:
-            return jsonify({"error": "view_mode_left must be 'grid' or 'list'"}), 400
+            settings.set_view_mode_left(body["view_mode_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
 
     if "view_mode_right" in body:
         try:
-            settings.set_view_mode_right(str(body["view_mode_right"]))
-        except ValueError:
-            return jsonify({"error": "view_mode_right must be 'grid' or 'list'"}), 400
+            settings.set_view_mode_right(body["view_mode_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
 
     if "focus_mode_left" in body:
         try:
