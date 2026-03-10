@@ -32,6 +32,7 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedClipper = '';
 
   // Embedder state
+  allEmbedders: EmbedderInfo[] = [];
   availableEmbedders: EmbedderInfo[] = [];
   selectedEmbedder = '';
 
@@ -45,6 +46,7 @@ export class DatasetImporterModalComponent implements OnInit {
   demoLoading = false;
   demoEmbedders: EmbedderInfo[] = [];
   selectedDemoEmbedder = '';
+  demoEmbedder = '';
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -54,6 +56,16 @@ export class DatasetImporterModalComponent implements OnInit {
         this.importers = (res.importers || []).filter(
           (imp) => !imp['hidden_from_picker']
         );
+      },
+    });
+    this.datasetsApi.getEmbedders().subscribe({
+      next: (embedders) => {
+        this.allEmbedders = embedders || [];
+      },
+    });
+    this.datasetsApi.getMediaTypes().subscribe({
+      next: (res) => {
+        this.mediaTypes = res.media_types || [];
       },
     });
   }
@@ -122,6 +134,7 @@ export class DatasetImporterModalComponent implements OnInit {
       },
     });
   }
+  }
 
   openDemoPicker(): void {
     this.view = 'demo';
@@ -181,6 +194,7 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (embedders) => {
         this.demoEmbedders = embedders;
         this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
       },
     });
@@ -188,6 +202,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   onDemoEmbedderChange(embedder: string): void {
     this.selectedDemoEmbedder = embedder;
+    this.demoEmbedder = embedder;
     this.updateDemoStatuses();
   }
 
@@ -272,9 +287,21 @@ export class DatasetImporterModalComponent implements OnInit {
     return 'Needs Download';
   }
 
+  /** Embedders available for the currently active demo tab's media type. */
+  get demoEmbeddersForTab(): EmbedderInfo[] {
+    return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
+  }
+
   selectDemo(demo: DemoDataset): void {
     this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder } as any);
     this.closed.emit();
+  }
+
+  selectDemoTabWithEmbedder(tab: string): void {
+    this.selectDemoTab(tab);
+    // Reset embedder selection for the new tab
+    const embedders = this.allEmbedders.filter((e) => e.media_type_id === tab);
+    this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';
   }
 
   back(): void {

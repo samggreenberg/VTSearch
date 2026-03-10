@@ -452,6 +452,165 @@ class TestDocumentDefaultClipper:
 
 
 # ---------------------------------------------------------------------------
+# VideoSceneClipper
+# ---------------------------------------------------------------------------
+
+
+class TestVideoSceneClipper:
+    def test_identity(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper()
+        assert c.name == "video_scene"
+        assert c.media_type == "video"
+        assert c.threshold == 0.3
+        assert c.min_scene_duration == 1.0
+        assert isinstance(c, MediaClipper)
+
+    def test_custom_params(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper(threshold=0.5, min_scene_duration=2.0)
+        assert c.threshold == 0.5
+        assert c.min_scene_duration == 2.0
+
+    def test_rejects_invalid_threshold(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        with pytest.raises(ValueError):
+            VideoSceneClipper(threshold=-0.1)
+        with pytest.raises(ValueError):
+            VideoSceneClipper(threshold=1.1)
+
+    def test_rejects_non_positive_min_scene_duration(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        with pytest.raises(ValueError):
+            VideoSceneClipper(min_scene_duration=0)
+        with pytest.raises(ValueError):
+            VideoSceneClipper(min_scene_duration=-1)
+
+    def test_zero_duration_returns_unchanged(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        media = {"id": 1, "type": "video", "duration": 0}
+        result = VideoSceneClipper().clip(media)
+        assert result == [media]
+
+    def test_no_media_bytes_or_path_returns_unchanged(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        media = {"id": 1, "type": "video", "duration": 10.0}
+        result = VideoSceneClipper().clip(media)
+        assert result == [media]
+
+    def test_to_dict_includes_params(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper(threshold=0.4, min_scene_duration=1.5)
+        d = c.to_dict()
+        assert d["name"] == "video_scene"
+        assert d["media_type"] == "video"
+        assert d["threshold"] == 0.4
+        assert d["min_scene_duration"] == 1.5
+
+    def test_detect_scene_boundaries_no_cv2(self, monkeypatch):
+        """When OpenCV is not available, clip returns the media unchanged."""
+        import builtins
+
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "cv2":
+                raise ImportError("no cv2")
+            return real_import(name, *args, **kwargs)
+
+        media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        result = VideoSceneClipper().clip(media)
+        assert result == [media]
+
+    def test_detect_scene_boundaries_helper_empty(self, monkeypatch):
+        """When _detect_scene_boundaries returns no cuts, media is unchanged."""
+        from vtsearch.media.video import clipper as clipper_mod
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [])
+        media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
+        result = VideoSceneClipper().clip(media)
+        assert result == [media]
+
+    def test_splits_at_detected_boundaries(self, monkeypatch):
+        """When boundaries are found, the clipper produces the right scenes."""
+        from vtsearch.media.video import clipper as clipper_mod
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        # Simulate two scene boundaries at 3.0s and 7.0s in a 10s video.
+        monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [3.0, 7.0])
+        media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
+        result = VideoSceneClipper().clip(media)
+
+        assert len(result) == 3
+
+        # Scene 0: [0, 3)
+        assert result[0]["clip_start"] == pytest.approx(0.0)
+        assert result[0]["clip_end"] == pytest.approx(3.0)
+        assert result[0]["duration"] == pytest.approx(3.0)
+        assert result[0]["clip_index"] == 0
+        assert result[0]["scene_index"] == 0
+
+        # Scene 1: [3, 7)
+        assert result[1]["clip_start"] == pytest.approx(3.0)
+        assert result[1]["clip_end"] == pytest.approx(7.0)
+        assert result[1]["duration"] == pytest.approx(4.0)
+        assert result[1]["clip_index"] == 1
+        assert result[1]["scene_index"] == 1
+
+        # Scene 2: [7, 10)
+        assert result[2]["clip_start"] == pytest.approx(7.0)
+        assert result[2]["clip_end"] == pytest.approx(10.0)
+        assert result[2]["duration"] == pytest.approx(3.0)
+        assert result[2]["clip_index"] == 2
+        assert result[2]["scene_index"] == 2
+
+    def test_single_boundary_produces_two_scenes(self, monkeypatch):
+        from vtsearch.media.video import clipper as clipper_mod
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [5.0])
+        media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 8.0}
+        result = VideoSceneClipper().clip(media)
+        assert len(result) == 2
+        assert result[0]["clip_start"] == pytest.approx(0.0)
+        assert result[0]["clip_end"] == pytest.approx(5.0)
+        assert result[1]["clip_start"] == pytest.approx(5.0)
+        assert result[1]["clip_end"] == pytest.approx(8.0)
+
+    def test_media_path_used_when_available(self, monkeypatch, tmp_path):
+        """When media_path exists, it's used instead of writing a temp file."""
+        from vtsearch.media.video import clipper as clipper_mod
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"fake video data")
+
+        paths_seen = []
+
+        def mock_detect(video_path, threshold, min_scene_duration):
+            paths_seen.append(video_path)
+            return [2.0]
+
+        monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", mock_detect)
+
+        media = {"id": 1, "type": "video", "media_path": str(video_file), "duration": 5.0}
+        result = VideoSceneClipper().clip(media)
+        assert len(result) == 2
+        assert paths_seen[0] == str(video_file)
+
+
+# ---------------------------------------------------------------------------
 # Clipper Registry
 # ---------------------------------------------------------------------------
 

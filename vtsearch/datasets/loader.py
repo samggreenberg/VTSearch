@@ -1577,6 +1577,7 @@ def export_dataset_to_file(
                 "duration": media["duration"],
                 "file_size": media["file_size"],
                 "md5": media["md5"],
+                "embedder": media.get("embedder", ""),
                 "embedding": media["embedding"].tolist()
                 if isinstance(media["embedding"], np.ndarray)
                 else media["embedding"],
