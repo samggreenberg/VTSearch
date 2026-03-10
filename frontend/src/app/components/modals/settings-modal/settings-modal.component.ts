@@ -57,6 +57,11 @@ export class SettingsModalComponent implements OnInit {
     this.save();
   }
 
+  onViewModeChange(key: string, value: string): void {
+    (this.settings as Record<string, unknown>)[key] = value;
+    this.save();
+  }
+
   onNumberChange(key: string, value: number): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();

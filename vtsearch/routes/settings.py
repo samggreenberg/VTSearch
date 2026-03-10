@@ -102,11 +102,17 @@ def update_settings():
     if "show_metadata" in body:
         settings.set_show_metadata(bool(body["show_metadata"]))
 
-    if "show_thumbnails_left" in body:
-        settings.set_show_thumbnails_left(bool(body["show_thumbnails_left"]))
+    if "view_mode_left" in body:
+        try:
+            settings.set_view_mode_left(str(body["view_mode_left"]))
+        except ValueError:
+            return jsonify({"error": "view_mode_left must be 'grid' or 'list'"}), 400
 
-    if "show_thumbnails_right" in body:
-        settings.set_show_thumbnails_right(bool(body["show_thumbnails_right"]))
+    if "view_mode_right" in body:
+        try:
+            settings.set_view_mode_right(str(body["view_mode_right"]))
+        except ValueError:
+            return jsonify({"error": "view_mode_right must be 'grid' or 'list'"}), 400
 
     if "hide_autopilot" in body:
         settings.set_hide_autopilot(bool(body["hide_autopilot"]))

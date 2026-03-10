@@ -154,21 +154,21 @@ describe('LabelListComponent', () => {
     });
   });
 
-  describe('thumbnails', () => {
+  describe('view modes and thumbnails', () => {
     beforeEach(() => {
       component.medias = sampleMedias;
     });
 
-    it('should support thumbnail for images', () => {
-      expect(component.supportsThumbnail(2)).toBeTrue();
+    it('should have thumbnail URL for images', () => {
+      expect(component.hasThumbnailUrl(2)).toBeTrue();
     });
 
-    it('should support thumbnail for videos', () => {
-      expect(component.supportsThumbnail(3)).toBeTrue();
+    it('should have thumbnail URL for videos', () => {
+      expect(component.hasThumbnailUrl(3)).toBeTrue();
     });
 
-    it('should not support thumbnail for audio', () => {
-      expect(component.supportsThumbnail(1)).toBeFalse();
+    it('should not have thumbnail URL for audio', () => {
+      expect(component.hasThumbnailUrl(1)).toBeFalse();
     });
 
     it('should identify video type', () => {
@@ -181,15 +181,29 @@ describe('LabelListComponent', () => {
       expect(component.thumbnailUrl(3)).toBe('/api/medias/3/video');
     });
 
-    it('should use thumbnail when showThumbnails is true and media supports it', () => {
-      component.showThumbnails = true;
-      expect(component.useThumbnail(2)).toBeTrue();
-      expect(component.useThumbnail(1)).toBeFalse();
+    it('should be in grid mode when viewMode is grid', () => {
+      component.viewMode = 'grid';
+      expect(component.isGrid).toBeTrue();
     });
 
-    it('should not use thumbnail when showThumbnails is false', () => {
-      component.showThumbnails = false;
-      expect(component.useThumbnail(2)).toBeFalse();
+    it('should not be in grid mode when viewMode is list', () => {
+      component.viewMode = 'list';
+      expect(component.isGrid).toBeFalse();
+    });
+
+    it('should show placeholder icon for audio in grid mode', () => {
+      component.viewMode = 'grid';
+      expect(component.placeholderIcon(1)).toBe('\u266B');
+    });
+
+    it('should not show placeholder icon for image in grid mode', () => {
+      component.viewMode = 'grid';
+      expect(component.placeholderIcon(2)).toBeNull();
+    });
+
+    it('should not show placeholder icon in list mode', () => {
+      component.viewMode = 'list';
+      expect(component.placeholderIcon(1)).toBeNull();
     });
   });
 

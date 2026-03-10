@@ -27,7 +27,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   labelingStatus: LabelingStatusResponse | null = null;
-  showThumbnails = true;
+  viewModeLeft: 'grid' | 'list' = 'list';
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
@@ -177,7 +177,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((settings) => {
         if (!settings) return;
-        this.showThumbnails = settings.show_thumbnails_left !== false;
+        this.viewModeLeft = settings.view_mode_left ?? 'list';
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
