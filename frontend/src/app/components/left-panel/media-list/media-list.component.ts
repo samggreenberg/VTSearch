@@ -1,4 +1,14 @@
-import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  ElementRef,
+  ViewChild,
+  AfterViewChecked,
+  OnChanges,
+  SimpleChanges,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { MediaItem } from '../../../models/api.models';
@@ -11,7 +21,7 @@ import { SortedItem } from '../left-panel.component';
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements AfterViewChecked {
+export class MediaListComponent implements AfterViewChecked, OnChanges {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -27,6 +37,12 @@ export class MediaListComponent implements AfterViewChecked {
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
 
   private pendingScrollToSelected = false;
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedId'] && !changes['selectedId'].firstChange) {
+      this.pendingScrollToSelected = true;
+    }
+  }
 
   get orderedItems(): { media: MediaItem; score: number | null; showThreshold: boolean }[] {
     const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
@@ -62,7 +78,6 @@ export class MediaListComponent implements AfterViewChecked {
   }
 
   onMediaSelect(id: number): void {
-    this.pendingScrollToSelected = true;
     this.mediaSelect.emit(id);
   }
 
