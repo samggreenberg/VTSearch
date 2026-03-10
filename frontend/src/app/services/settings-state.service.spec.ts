@@ -11,8 +11,8 @@ describe('SettingsStateService', () => {
     volume: 0.8,
     theme: 'dark',
     swipe_animation: true,
-    view_mode_left: 'grid',
-    view_mode_right: 'list',
+    view_mode_left: { audio: 'grid', image: 'grid' },
+    view_mode_right: { audio: 'list', image: 'list' },
     inclusion: 0.5,
   };
 
