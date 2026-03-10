@@ -134,7 +134,6 @@ export class DatasetImporterModalComponent implements OnInit {
       },
     });
   }
-  }
 
   openDemoPicker(): void {
     this.view = 'demo';

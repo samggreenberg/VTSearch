@@ -1145,8 +1145,8 @@ GET /api/settings
   "calibrate_count": 5,
   "calibration_fraction": 0.2,
   "swipe_animation": true,
-  "show_thumbnails_left": true,
-  "show_thumbnails_right": true,
+  "view_mode_left": "list",
+  "view_mode_right": "grid",
   "autopilot_top_greens": 0,
   "autopilot_hard_reds": 0,
   "autoload_media_types": [],
@@ -1171,8 +1171,8 @@ PUT /api/settings
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
-(number), `swipe_animation` (bool), `show_thumbnails_left` (bool),
-`show_thumbnails_right` (bool), `autopilot_top_greens` (int),
+(number), `swipe_animation` (bool), `view_mode_left` (`"grid"` / `"list"`),
+`view_mode_right` (`"grid"` / `"list"`), `autopilot_top_greens` (int),
 `autopilot_hard_reds` (int), `autoload_media_types` (list of strings).
 
 ### Get default settings
