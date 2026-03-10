@@ -304,7 +304,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
     this.voteState.loadVotes();
-    this.autoSelectNext();
+    this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
       this.scheduleLearnedSort(false);
     }
@@ -387,21 +387,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Helpers ---
 
-  private autoSelectNext(): void {
+  private autoSelectNext(excludeId?: number): void {
     const sortOrder = this.sortState.sortOrder;
     if (!sortOrder || sortOrder.length === 0) return;
     const goodVotes = this.voteState.goodVotes;
     const badVotes = this.voteState.badVotes;
 
+    const isVoted = (id: number): boolean =>
+      id === excludeId || goodVotes.has(id) || badVotes.has(id);
+
     if (this.sortState.selectMode === 'top') {
-      const next = sortOrder.find(
-        (s) => !goodVotes.has(s.id) && !badVotes.has(s.id),
-      );
+      const next = sortOrder.find((s) => !isVoted(s.id));
       if (next) this.mediaState.selectMedia(next.id);
     } else if (this.sortState.selectMode === 'bottom') {
       for (let i = sortOrder.length - 1; i >= 0; i--) {
         const s = sortOrder[i];
-        if (!goodVotes.has(s.id) && !badVotes.has(s.id)) {
+        if (!isVoted(s.id)) {
           this.mediaState.selectMedia(s.id);
           break;
         }
@@ -410,7 +411,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       let best: SortedItem | null = null;
       let bestDist = Infinity;
       for (const s of sortOrder) {
-        if (goodVotes.has(s.id) || badVotes.has(s.id)) continue;
+        if (isVoted(s.id)) continue;
         const dist = Math.abs(s.score - this.sortState.threshold!);
         if (dist < bestDist) {
           bestDist = dist;

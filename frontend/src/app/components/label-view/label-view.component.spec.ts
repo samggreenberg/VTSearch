@@ -333,6 +333,28 @@ describe('LabelViewComponent', () => {
     expect(sortState.threshold).toBe(0.5);
   }));
 
+  it('should advance past just-voted item even when vote state is stale', () => {
+    flushInitialRequests();
+
+    // Set up sort order in hard mode
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.5 }],
+      0.5,
+    );
+    component.sortState.setSelectMode('hard');
+
+    // Simulate voting on id 1 (closest to threshold) but votes not yet loaded
+    // (vote state still shows empty — the async loadVotes hasn't returned)
+    component.onMediaVoted({ id: 1, vote: 'bad' });
+
+    // Flush the loadVotes triggered by onMediaVoted
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // Even with stale votes (id 1 not yet in badVotes), the selection should
+    // have advanced to id 2 because onMediaVoted excludes the just-voted id.
+    expect(component.mediaState.selectedId).toBe(2);
+  });
+
   it('should clear stale autopilot state from previous session on init', () => {
     const autopilot = TestBed.inject(AutopilotStateService);
     // Simulate leftover state from a previous detector session
