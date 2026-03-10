@@ -33,7 +33,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   autopilotCollapsed = false;
   progressModalMetric: ProgressMetric | null = null;
 
-  private readonly COLLAPSED_WIDTH = 36;
+  private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
   private readonly LEFT_MAX = 500;
@@ -123,8 +123,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.dragging) return;
     const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
     let newWidth = event.clientX - layoutRect.left;
-    newWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, newWidth));
+    const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+    newWidth = Math.max(minWidth, Math.min(this.LEFT_MAX, newWidth));
     this.ngZone.run(() => {
+      if (this.autopilotCollapsed && newWidth >= this.LEFT_MIN) {
+        this.autopilotCollapsed = false;
+        this.settingsState.update({ hide_autopilot: false }).subscribe();
+      }
       this.leftWidth = newWidth;
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
     });
