@@ -28,6 +28,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
+  private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
+  private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
@@ -73,6 +75,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
       .subscribe((medias) => {
+        if (medias.length > 0) {
+          const newType = medias[0].type;
+          if (newType !== this.currentMediaType) {
+            this.currentMediaType = newType;
+            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+          }
+        }
         if (this.autopilotTextSortPending && medias.length > 0) {
           this.autopilotTextSortPending = false;
           this.triggerAutopilotTextSort();
@@ -177,7 +186,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((settings) => {
         if (!settings) return;
-        this.viewModeLeft = settings.view_mode_left ?? 'list';
+        const dict = settings.view_mode_left;
+        if (dict && typeof dict === 'object') {
+          this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
+          if (this.currentMediaType) {
+            this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
+          }
+        }
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {

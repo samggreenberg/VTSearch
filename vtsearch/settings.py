@@ -46,8 +46,8 @@ _DEFAULTS: dict[str, Any] = {
     "calibration_fraction": 0.5,
     "swipe_animation": True,
     "show_metadata": True,
-    "view_mode_left": "list",
-    "view_mode_right": "grid",
+    "view_mode_left": {},
+    "view_mode_right": {},
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
@@ -114,7 +114,12 @@ def _ensure_loaded() -> dict[str, Any]:
 
 def get_defaults() -> dict[str, Any]:
     """Return a copy of the default settings (excluding infrastructure keys)."""
-    return {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    result = {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    # Expand view mode defaults to per-media-type dicts
+    valid_types = _valid_media_types()
+    result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
+    result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
+    return result
 
 
 def get_all() -> dict[str, Any]:
@@ -123,6 +128,9 @@ def get_all() -> dict[str, Any]:
         s = _ensure_loaded()
         result = dict(_DEFAULTS)
         result.update(s)
+        # Always return expanded per-media-type view mode dicts
+        result["view_mode_left"] = get_view_mode_left()
+        result["view_mode_right"] = get_view_mode_right()
         return result
 
 
@@ -192,8 +200,6 @@ _SETTING_SPECS: list[tuple] = [
     ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
     ("swipe_animation", bool, None),
     ("show_metadata", bool, None),
-    ("view_mode_left", str, _one_of("view_mode_left", VALID_VIEW_MODES)),
-    ("view_mode_right", str, _one_of("view_mode_right", VALID_VIEW_MODES)),
     ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
@@ -205,6 +211,77 @@ for _key, _cast, _coerce in _SETTING_SPECS:
     globals()[f"set_{_key}"] = _s
 
 del _key, _cast, _coerce, _g, _s
+
+
+# -------------------------------------------------------------------
+# Per-media-type view mode settings
+# -------------------------------------------------------------------
+
+_VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
+
+
+def _get_view_mode_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type view mode dict for *key* (``view_mode_left`` or ``view_mode_right``).
+
+    Handles backward compatibility: if the stored value is a plain string
+    (old format), it is treated as the mode for all known media types.
+    """
+    side = key.replace("view_mode_", "")
+    default_mode = _VIEW_MODE_DEFAULTS.get(side, "list")
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, str):
+        # Legacy scalar value — expand to dict for all known types
+        return {tid: raw for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        # Fill in missing types with the side default
+        result = {}
+        for tid in _valid_media_types():
+            val = raw.get(tid, default_mode)
+            result[tid] = val if val in VALID_VIEW_MODES else default_mode
+        return result
+    return {tid: default_mode for tid in _valid_media_types()}
+
+
+def get_view_mode_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> view mode for the left panel."""
+    return _get_view_mode_dict("view_mode_left")
+
+
+def get_view_mode_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> view mode for the right panel."""
+    return _get_view_mode_dict("view_mode_right")
+
+
+def set_view_mode_left(value: dict[str, str] | str) -> None:
+    """Set the left panel view mode (per-media-type dict or legacy scalar)."""
+    _set_view_mode_dict("view_mode_left", value)
+
+
+def set_view_mode_right(value: dict[str, str] | str) -> None:
+    """Set the right panel view mode (per-media-type dict or legacy scalar)."""
+    _set_view_mode_dict("view_mode_right", value)
+
+
+def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type view mode dict for *key*."""
+    valid_types = _valid_media_types()
+    if isinstance(value, str):
+        # Legacy scalar — expand to all types
+        if value not in VALID_VIEW_MODES:
+            raise ValueError(f"Invalid {key}: {value!r}")
+        value = {tid: value for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict or string")
+    for tid, mode in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if mode not in VALID_VIEW_MODES:
+            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = dict(value)
+        _save(s)
 
 
 def _valid_media_types() -> tuple[str, ...]:

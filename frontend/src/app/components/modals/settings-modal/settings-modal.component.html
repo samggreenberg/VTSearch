@@ -22,20 +22,39 @@
           <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
           Show metadata panel
         </label>
-        <div class="form-group">
-          <label class="form-label">Left panel view</label>
-          <select class="form-select" [ngModel]="settings.view_mode_left" (ngModelChange)="onViewModeChange('view_mode_left', $event)">
-            <option value="list">List View</option>
-            <option value="grid">Grid View</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Right panel view</label>
-          <select class="form-select" [ngModel]="settings.view_mode_right" (ngModelChange)="onViewModeChange('view_mode_right', $event)">
-            <option value="list">List View</option>
-            <option value="grid">Grid View</option>
-          </select>
-        </div>
+      </div>
+
+      <!-- View (per-media-type) -->
+      <div class="settings-section settings-section--wide">
+        <h3>View</h3>
+        @if (mediaTypes.length > 0) {
+          <div class="view-tabs">
+            @for (mt of mediaTypes; track mt.type_id) {
+              <button
+                class="view-tab"
+                [class.view-tab--active]="activeViewTab === mt.type_id"
+                (click)="activeViewTab = mt.type_id">
+                {{ mt.name }}
+              </button>
+            }
+          </div>
+          <div class="view-tab-content">
+            <div class="form-group">
+              <label class="form-label">Left panel view</label>
+              <select class="form-select" [ngModel]="getViewMode('view_mode_left', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_left', activeViewTab, $event)">
+                <option value="list">List View</option>
+                <option value="grid">Grid View</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right panel view</label>
+              <select class="form-select" [ngModel]="getViewMode('view_mode_right', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_right', activeViewTab, $event)">
+                <option value="list">List View</option>
+                <option value="grid">Grid View</option>
+              </select>
+            </div>
+          </div>
+        }
       </div>
 
       <!-- Sorting & Calibration -->

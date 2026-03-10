@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -33,7 +33,7 @@ export interface TrainModeContext {
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
 })
-export class RightPanelComponent implements OnInit, OnDestroy {
+export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() trainMode: TrainModeContext | null = null;
   @Output() mediaSelected = new EventEmitter<number>();
@@ -48,6 +48,8 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   showLabelExport = false;
   showDetectorExport = false;
 
+  private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
+  private currentMediaType = '';
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -61,6 +63,16 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     this.loadSettings();
     this.voteState.startPolling();
     this.subscribeToVotes();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['medias'] && this.medias.length > 0) {
+      const newType = this.medias[0].type;
+      if (newType !== this.currentMediaType) {
+        this.currentMediaType = newType;
+        this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
+      }
+    }
   }
 
   ngOnDestroy(): void {
@@ -105,7 +117,13 @@ export class RightPanelComponent implements OnInit, OnDestroy {
       .subscribe({
         next: settings => {
           if (!settings) return;
-          this.viewMode = settings.view_mode_right ?? 'grid';
+          const dict = settings.view_mode_right;
+          if (dict && typeof dict === 'object') {
+            this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
+            if (this.currentMediaType) {
+              this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
+            }
+          }
         },
       });
   }
