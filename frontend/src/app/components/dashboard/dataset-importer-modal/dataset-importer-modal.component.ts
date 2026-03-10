@@ -195,6 +195,11 @@ export class DatasetImporterModalComponent implements OnInit {
         this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
         this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
+        // The initial demo fetch had no embedder context, so re-fetch with the
+        // now-known default embedder for authoritative status values.
+        if (this.selectedDemoEmbedder) {
+          this.refetchDemoStatuses(this.selectedDemoEmbedder);
+        }
       },
     });
   }
@@ -203,6 +208,9 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedDemoEmbedder = embedder;
     this.demoEmbedder = embedder;
     this.updateDemoStatuses();
+    // Re-fetch from the server for authoritative status when the pkl_embedder
+    // is missing or the client-side heuristic might be wrong.
+    this.refetchDemoStatuses(embedder);
   }
 
   /**
@@ -210,12 +218,27 @@ export class DatasetImporterModalComponent implements OnInit {
    * A demo that has a cached pkl (`pkl_embedder` is set) is only "ready" when
    * the pkl embedder matches the currently selected embedder; otherwise it
    * downgrades to "needs_embedding" (source data is still present).
+   *
+   * Only processes demos for the active tab to avoid accidentally changing
+   * statuses of demos from other media types (whose embedder names live in a
+   * different namespace).
    */
   private updateDemoStatuses(): void {
     const emb = this.selectedDemoEmbedder;
     for (const demo of this.demos) {
-      if (!demo.pkl_embedder) continue;  // no pkl or unknown embedder — keep server status
+      if (demo.media_type !== this.activeTab) continue;  // only touch current tab
       if (demo.status === 'needs_download') continue;  // source data missing — can't re-embed
+
+      if (!demo.pkl_embedder) {
+        // pkl_embedder unknown — if the demo was marked "ready" by the server
+        // (no embedder param on initial fetch) we can't verify it matches the
+        // selected embedder, so conservatively downgrade.
+        if (emb && demo.status === 'ready') {
+          demo.status = 'needs_embedding';
+          demo.ready = false;
+        }
+        continue;
+      }
 
       if (emb && demo.pkl_embedder !== emb) {
         demo.status = 'needs_embedding';
@@ -225,6 +248,18 @@ export class DatasetImporterModalComponent implements OnInit {
         demo.ready = true;
       }
     }
+  }
+
+  /**
+   * Re-fetch the demo list from the server with the given embedder so the
+   * backend can authoritatively determine each demo's status.
+   */
+  private refetchDemoStatuses(embedder: string): void {
+    this.datasetsApi.getDemoList(embedder).subscribe({
+      next: (demoRes) => {
+        this.demos = demoRes.datasets || [];
+      },
+    });
   }
 
   get filteredDemos(): DemoDataset[] {
