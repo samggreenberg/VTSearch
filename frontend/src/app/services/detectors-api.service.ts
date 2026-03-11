@@ -53,8 +53,13 @@ export class DetectorsApiService {
     return this.http.put(`/api/autorun-detectors/${name}/examples`, { examples });
   }
 
-  importDetectorPkl(data: unknown): Observable<unknown> {
-    return this.http.post('/api/autorun-detectors/import-pkl', data);
+  importDetectorPkl(file: File, name?: string): Observable<unknown> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    if (name) {
+      formData.append('name', name);
+    }
+    return this.http.post('/api/autorun-detectors/import-pkl', formData);
   }
 
   getServerFiles(): Observable<DetectorServerFilesResponse> {

@@ -89,6 +89,10 @@ def list_medias() -> Response:
         if importer_custom:
             custom.update(importer_custom)
         media_data["custom_metadata"] = custom
+        if "origin_name" in c:
+            media_data["origin_name"] = c["origin_name"]
+        if "description" in c:
+            media_data["description"] = c["description"]
         result.append(media_data)
     return jsonify(result)
 

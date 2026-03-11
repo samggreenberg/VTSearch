@@ -78,7 +78,7 @@ export interface FillFromSortDryRunResponse {
 export interface FillFromSortConfirmResponse {
   good_applied: number;
   bad_applied: number;
-  results: unknown[];
+  results: Record<string, unknown>;
 }
 
 export interface DiversityTreeNextResponse {
