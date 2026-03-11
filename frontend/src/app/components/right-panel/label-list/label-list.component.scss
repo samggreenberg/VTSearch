@@ -40,17 +40,8 @@ h3 {
 .vote-list {
   &.grid-layout {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(var(--grid-columns, 2), 1fr);
     gap: 4px;
-
-    &.grid-small {
-      grid-template-columns: repeat(4, 1fr);
-      gap: 2px;
-    }
-
-    &.grid-large {
-      grid-template-columns: 1fr;
-    }
   }
 }
 

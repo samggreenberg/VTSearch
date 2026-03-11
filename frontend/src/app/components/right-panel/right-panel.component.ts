@@ -46,13 +46,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
-  gridItemSize: 'small' | 'medium' | 'large' = 'medium';
+  gridColumns: '1' | '2' | '3' = '2';
   showLabelImport = false;
   showLabelExport = false;
   showDetectorExport = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
-  private gridItemSizeRightDict: Record<string, 'small' | 'medium' | 'large'> = {};
+  private gridColumnsRightDict: Record<string, '1' | '2' | '3'> = {};
   private currentMediaType = '';
   private destroy$ = new Subject<void>();
 
@@ -75,7 +75,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       if (newType !== this.currentMediaType) {
         this.currentMediaType = newType;
         this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
-        this.gridItemSize = this.gridItemSizeRightDict[newType] ?? 'medium';
+        this.gridColumns = this.gridColumnsRightDict[newType] ?? '2';
       }
     }
   }
@@ -133,11 +133,11 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
               this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
             }
           }
-          const sizeDict = settings.grid_item_size_right;
-          if (sizeDict && typeof sizeDict === 'object') {
-            this.gridItemSizeRightDict = sizeDict as Record<string, 'small' | 'medium' | 'large'>;
+          const colsDict = settings.grid_columns_right;
+          if (colsDict && typeof colsDict === 'object') {
+            this.gridColumnsRightDict = colsDict as Record<string, '1' | '2' | '3'>;
             if (this.currentMediaType) {
-              this.gridItemSize = this.gridItemSizeRightDict[this.currentMediaType] ?? 'medium';
+              this.gridColumns = this.gridColumnsRightDict[this.currentMediaType] ?? '2';
             }
           }
         },
