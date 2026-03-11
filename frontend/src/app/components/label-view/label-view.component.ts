@@ -386,6 +386,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.voteState.applyOptimisticVote(event.id, event.vote);
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {

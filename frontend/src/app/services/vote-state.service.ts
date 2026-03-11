@@ -44,6 +44,37 @@ export class VoteStateService implements OnDestroy {
     return this.learnedScoresSubject.value;
   }
 
+  /**
+   * Optimistically update local vote sets to reflect a toggle vote.
+   *
+   * This mirrors the backend toggle semantics so that callers checking
+   * vote state immediately after a vote see the updated counts without
+   * waiting for the async loadVotes() HTTP round-trip.
+   */
+  applyOptimisticVote(id: number, vote: 'good' | 'bad'): void {
+    const good = new Set(this.goodVotesSubject.value);
+    const bad = new Set(this.badVotesSubject.value);
+
+    if (vote === 'good') {
+      if (good.has(id)) {
+        good.delete(id);
+      } else {
+        good.add(id);
+        bad.delete(id);
+      }
+    } else {
+      if (bad.has(id)) {
+        bad.delete(id);
+      } else {
+        bad.add(id);
+        good.delete(id);
+      }
+    }
+
+    this.goodVotesSubject.next(good);
+    this.badVotesSubject.next(bad);
+  }
+
   loadVotes(): void {
     this.sortingApi
       .getVotes()
