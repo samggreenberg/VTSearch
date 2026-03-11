@@ -28,6 +28,10 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 21. [Dashboard](#dashboard)
 22. [Multi-dataset Find](#multi-dataset-find)
 
+Endpoints for embedders, clippers, and converters are under
+[Datasets](#datasets). Indicator score history and evaluation endpoints
+are under [Labeling Progress](#labeling-progress).
+
 ---
 
 ## Conventions
@@ -414,6 +418,38 @@ GET /api/labeling-status
 
 Each metric has a `status` of `"red"`, `"yellow"`, or `"green"`.
 
+### Indicator score history
+
+```
+GET /api/indicator-score-history
+```
+
+**Query params:** `metric` — one of `"smart"`, `"stable"`, `"diverse"`.
+
+→ `{"metric": "smart", "history": [...]}`
+
+Returns cached per-step indicator data (computed during labeling-status
+polling).
+
+### Evaluate metric (train-and-score)
+
+```
+POST /api/eval/train-and-score
+```
+
+**Body:** `{"metric": "smart"}` (or `"stable"` / `"diverse"`)
+
+→ `{"error_cost": [...]}` (smart), `{"stability": [...]}` (stable), or
+`{"diversity": [...]}` (diverse).
+
+### Evaluation progress
+
+```
+GET /api/eval/voting-iterations
+```
+
+→ `{"progress": 5, "total": 10, "done": false}`
+
 ---
 
 ## Diversity Tree
@@ -760,6 +796,43 @@ Registers all predefined processors as autorun entries.
 ```
 GET /api/media-types
 ```
+
+→ JSON object with a `media_types` array (see below).
+
+### Embedders
+
+```
+GET /api/embedders
+```
+
+**Query params:** `media_type` (optional) — filter by `type_id` or
+`folder_import_name`.
+
+→ `{"embedders": [...]}`
+
+### Clippers
+
+```
+GET /api/clippers
+```
+
+**Query params:** `media_type` (optional) — filter by `type_id` or
+`folder_import_name`.
+
+→ `{"clippers": [...]}`
+
+### Converters
+
+```
+GET /api/converters
+```
+
+**Query params (mutually exclusive):** `source` or `target` — filter by
+`type_id` or `folder_import_name`. Omit both to list all converters.
+
+→ `{"converters": [...]}`
+
+---
 
 → ```json
 {
@@ -1142,15 +1215,26 @@ GET /api/settings
   "inclusion": 0,
   "enrich_descriptions": false,
   "safe_thresholds": false,
-  "calibrate_count": 5,
-  "calibration_fraction": 0.2,
+  "calibrate_count": 2,
+  "calibration_fraction": 0.5,
+  "audio_playing": true,
   "swipe_animation": true,
-  "view_mode_left": "list",
-  "view_mode_right": "grid",
-  "autopilot_top_greens": 0,
-  "autopilot_hard_reds": 0,
+  "show_metadata": true,
+  "view_mode_left": {},
+  "view_mode_right": {},
+  "grid_columns_left": {},
+  "grid_columns_right": {},
+  "focus_mode_left": {},
+  "focus_mode_right": {},
+  "panel_pct_left": {},
+  "panel_pct_right": {},
   "autoload_media_types": [],
-  "autorun_processors": [...]
+  "autoload_media_embedders": [],
+  "autorun_processors": [...],
+  "autopilot_enabled": true,
+  "hide_autopilot": false,
+  "autopilot_top_greens": 3,
+  "autopilot_hard_reds": 4
 }
 ```
 
@@ -1171,9 +1255,14 @@ PUT /api/settings
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
-(number), `swipe_animation` (bool), `view_mode_left` (`"grid"` / `"list"`),
-`view_mode_right` (`"grid"` / `"list"`), `autopilot_top_greens` (int),
-`autopilot_hard_reds` (int), `autoload_media_types` (list of strings).
+(number), `audio_playing` (bool), `swipe_animation` (bool),
+`show_metadata` (bool), `view_mode_left` (object), `view_mode_right`
+(object), `grid_columns_left` (object), `grid_columns_right` (object),
+`focus_mode_left` (object), `focus_mode_right` (object), `panel_pct_left`
+(object), `panel_pct_right` (object), `autopilot_enabled` (bool),
+`hide_autopilot` (bool), `autopilot_top_greens` (int),
+`autopilot_hard_reds` (int), `autoload_media_types` (list of strings),
+`autoload_media_embedders` (list of strings).
 
 ### Get default settings
 

@@ -228,13 +228,24 @@ and auto-saved on every change. Schema:
   "safe_thresholds": false,
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
+  "audio_playing": true,
   "swipe_animation": true,
-  "view_mode_left": "list",
-  "view_mode_right": "grid",
-  "autopilot_top_greens": 3,
-  "autopilot_hard_reds": 4,
+  "show_metadata": true,
+  "view_mode_left": {},
+  "view_mode_right": {},
+  "grid_columns_left": {},
+  "grid_columns_right": {},
+  "focus_mode_left": {},
+  "focus_mode_right": {},
+  "panel_pct_left": {},
+  "panel_pct_right": {},
   "autoload_media_types": [],
-  "autorun_processors": []
+  "autoload_media_embedders": [],
+  "autorun_processors": [],
+  "autopilot_enabled": true,
+  "hide_autopilot": false,
+  "autopilot_top_greens": 3,
+  "autopilot_hard_reds": 4
 }
 ```
 
@@ -242,9 +253,14 @@ Notable fields:
 
 - `autoload_media_types` — media types to preload at startup (triggers
   model downloads if models aren't cached)
+- `autoload_media_embedders` — specific embedder names to preload per
+  media type (empty = use defaults)
 - `autorun_processors` — saved detector/extractor configurations with
   importer name, processor name, and field values
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
+- `view_mode_*`, `grid_columns_*`, `focus_mode_*`, `panel_pct_*` —
+  per-media-type UI layout preferences (keyed by media type ID)
+- `autopilot_enabled` — whether the autopilot feature is active
 
 ---
 
