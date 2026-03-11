@@ -52,6 +52,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
+  private knownDatasetIds = new Set<string>();
+  private knownModelIds = new Set<string>();
 
   constructor(
     private router: Router,
@@ -64,6 +66,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // Auto-select newly added items whenever the dataset/model lists change
+    this.datasetState.datasets$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((datasets) => {
+        const currentIds = new Set(datasets.map((d: any) => d.id));
+        const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
+        if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
+          // Items were added after initial load — select the new ones
+          for (const id of newIds) {
+            this.selectedDatasetIds.add(id);
+          }
+        } else if (datasets.length === 1 && this.selectedDatasetIds.size === 0) {
+          // First load with exactly one item — auto-select it
+          this.selectedDatasetIds.add(datasets[0].id);
+        }
+        this.knownDatasetIds = currentIds;
+      });
+    this.datasetState.models$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((models) => {
+        const currentIds = new Set(models.map((m: any) => m.id));
+        const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
+        if (newIds.length > 0 && this.knownModelIds.size > 0) {
+          // Items were added after initial load — select the new ones
+          for (const id of newIds) {
+            this.selectedModelIds.add(id);
+          }
+        } else if (models.length === 1 && this.selectedModelIds.size === 0) {
+          // First load with exactly one item — auto-select it
+          this.selectedModelIds.add(models[0].id);
+        }
+        this.knownModelIds = currentIds;
+      });
     this.refresh();
   }
 
@@ -92,21 +127,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   refresh(): void {
     this.datasetState.refresh();
-    // Auto-select single items after refresh
-    this.datasetState.datasets$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((datasets) => {
-        if (datasets.length === 1 && this.selectedDatasetIds.size === 0) {
-          this.selectedDatasetIds.add(datasets[0].id);
-        }
-      });
-    this.datasetState.models$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((models) => {
-        if (models.length === 1 && this.selectedModelIds.size === 0) {
-          this.selectedModelIds.add(models[0].id);
-        }
-      });
   }
 
   // --- Dataset selection ---
@@ -266,10 +286,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.progressIndeterminate = true;
           }
 
-          // Build message with step info when available
+          // Build message with step info and percentage when available
           let msg = progress.message || 'Loading...';
           if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
+          }
+          if (progress.current != null && progress.total != null && progress.total > 0) {
+            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
+            msg += ` (${pct}%)`;
           }
           this.datasetState.setProgressMessage(msg);
 

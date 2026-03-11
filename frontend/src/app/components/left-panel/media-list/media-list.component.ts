@@ -1,4 +1,14 @@
-import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  ElementRef,
+  ViewChild,
+  AfterViewChecked,
+  OnChanges,
+  SimpleChanges,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { MediaItem } from '../../../models/api.models';
@@ -11,20 +21,29 @@ import { SortedItem } from '../left-panel.component';
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements AfterViewChecked {
+export class MediaListComponent implements AfterViewChecked, OnChanges {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
-  @Input() showThumbnails = true;
+  @Input() viewMode: 'grid' | 'list' = 'list';
+  @Input() gridColumns: number = 2;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() showScores = true;
 
   @Output() mediaSelect = new EventEmitter<number>();
+  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
 
   private pendingScrollToSelected = false;
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedId'] && !changes['selectedId'].firstChange) {
+      this.pendingScrollToSelected = true;
+    }
+  }
 
   get orderedItems(): { media: MediaItem; score: number | null; showThreshold: boolean }[] {
     const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
@@ -60,8 +79,11 @@ export class MediaListComponent implements AfterViewChecked {
   }
 
   onMediaSelect(id: number): void {
-    this.pendingScrollToSelected = true;
     this.mediaSelect.emit(id);
+  }
+
+  onMediaVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.mediaVote.emit(event);
   }
 
   ngAfterViewChecked(): void {
@@ -76,10 +98,17 @@ export class MediaListComponent implements AfterViewChecked {
 
   scrollToIndex(index: number): void {
     if (!this.listContainer) return;
-    const items = this.listContainer.nativeElement.querySelectorAll('vt-media-item');
-    if (items[index]) {
-      items[index].scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+    const container = this.listContainer.nativeElement;
+    const items = container.querySelectorAll('vt-media-item');
+    const target = items[index] as HTMLElement | undefined;
+    if (!target) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const offset = targetRect.top - containerRect.top + container.scrollTop;
+    container.scrollTo({
+      top: offset - containerRect.height / 2 + targetRect.height / 2,
+      behavior: 'smooth',
+    });
   }
 
   trackByMediaId(_index: number, item: { media: MediaItem }): number {

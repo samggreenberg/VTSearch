@@ -40,6 +40,6 @@
   <router-outlet />
 </div>
 @if (showSettings) {
-  <vt-settings-modal (closed)="showSettings = false" />
+  <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="showSettings = false" />
 }
 <vt-dialog-host />

@@ -14,16 +14,30 @@ export class MediaItemComponent {
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
-  @Input() showThumbnail = true;
+  @Input() viewMode: 'grid' | 'list' = 'list';
+  @Input() focusMode: 'click' | 'hover' = 'click';
 
   @Output() select = new EventEmitter<number>();
+  @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+
+  get isGrid(): boolean {
+    return this.viewMode === 'grid';
+  }
 
   get thumbnailUrl(): string | null {
-    if (!this.showThumbnail) return null;
+    if (!this.isGrid) return null;
     if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document') {
       return `/api/medias/${this.media.id}/image`;
     }
     return null;
+  }
+
+  get placeholderIcon(): string | null {
+    if (!this.isGrid) return null;
+    if (this.thumbnailUrl) return null;
+    if (this.media.type === 'audio') return '\u266B';
+    if (this.media.type === 'paragraph') return '\u00B6';
+    return '\u25A1';
   }
 
   get displayName(): string {
@@ -31,6 +45,23 @@ export class MediaItemComponent {
   }
 
   onClick(): void {
-    this.select.emit(this.media.id);
+    if (this.focusMode === 'hover') {
+      this.vote.emit({ id: this.media.id, vote: 'bad' });
+    } else {
+      this.select.emit(this.media.id);
+    }
+  }
+
+  onContextMenu(event: MouseEvent): void {
+    if (this.focusMode === 'hover') {
+      event.preventDefault();
+      this.vote.emit({ id: this.media.id, vote: 'good' });
+    }
+  }
+
+  onMouseEnter(): void {
+    if (this.focusMode === 'hover') {
+      this.select.emit(this.media.id);
+    }
   }
 }

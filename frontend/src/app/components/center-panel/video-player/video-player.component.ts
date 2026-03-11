@@ -1,4 +1,4 @@
-import { Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
 
 @Component({
@@ -10,6 +10,8 @@ import { MediaItem } from '../../../models/api.models';
 export class VideoPlayerComponent implements OnChanges {
   @Input() media!: MediaItem;
   @Input() volume = 1;
+  @Input() audioPlaying = true;
+  @Output() playingChanged = new EventEmitter<boolean>();
 
   @ViewChild('videoEl') videoRef!: ElementRef<HTMLVideoElement>;
 
@@ -21,6 +23,21 @@ export class VideoPlayerComponent implements OnChanges {
     }
     if (changes['volume'] && this.videoRef?.nativeElement) {
       this.videoRef.nativeElement.volume = this.volume;
+    }
+    if (changes['audioPlaying'] && !changes['media'] && this.videoRef?.nativeElement) {
+      this.syncPlaybackState();
+    }
+  }
+
+  onPlay(): void {
+    if (!this.audioPlaying) {
+      this.playingChanged.emit(true);
+    }
+  }
+
+  onPause(): void {
+    if (this.audioPlaying) {
+      this.playingChanged.emit(false);
     }
   }
 
@@ -43,6 +60,17 @@ export class VideoPlayerComponent implements OnChanges {
   onLoadedMetadata(): void {
     if (this.videoRef?.nativeElement) {
       this.videoRef.nativeElement.volume = this.volume;
+      this.syncPlaybackState();
+    }
+  }
+
+  private syncPlaybackState(): void {
+    const video = this.videoRef?.nativeElement;
+    if (!video) return;
+    if (this.audioPlaying && video.paused) {
+      video.play().catch(() => {});
+    } else if (!this.audioPlaying && !video.paused) {
+      video.pause();
     }
   }
 }

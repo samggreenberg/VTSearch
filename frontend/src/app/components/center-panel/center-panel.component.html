@@ -5,13 +5,13 @@
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass">
       @switch (mediaType) {
         @case ('audio') {
-          <vt-audio-player [media]="media" [volume]="volume" [swipeClass]="swipeClass"></vt-audio-player>
+          <vt-audio-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" [swipeClass]="swipeClass" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
           <vt-image-viewer [media]="media"></vt-image-viewer>
         }
         @case ('video') {
-          <vt-video-player [media]="media" [volume]="volume"></vt-video-player>
+          <vt-video-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
         }
         @case ('paragraph') {
           <vt-text-viewer [media]="media"></vt-text-viewer>

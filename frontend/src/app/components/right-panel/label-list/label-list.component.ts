@@ -25,8 +25,11 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
-  @Input() showThumbnails = true;
+  @Input() viewMode: 'grid' | 'list' = 'grid';
+  @Input() gridColumns: number = 2;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
+  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   sortedEntries: LabelEntry[] = [];
 
@@ -97,9 +100,13 @@ export class LabelListComponent implements OnInit, OnChanges {
     return parts.join(' \u00B7 ');
   }
 
-  supportsThumbnail(id: number): boolean {
+  get isGrid(): boolean {
+    return this.viewMode === 'grid';
+  }
+
+  hasThumbnailUrl(id: number): boolean {
     const media = this.medias.find(m => m.id === id);
-    return !!media && (media.type === 'image' || media.type === 'video');
+    return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document');
   }
 
   isVideo(id: number): boolean {
@@ -114,12 +121,35 @@ export class LabelListComponent implements OnInit, OnChanges {
     return `/api/medias/${id}/image`;
   }
 
-  useThumbnail(id: number): boolean {
-    return this.showThumbnails && this.supportsThumbnail(id);
+  placeholderIcon(id: number): string | null {
+    if (!this.isGrid) return null;
+    const media = this.medias.find(m => m.id === id);
+    if (!media) return null;
+    if (media.type === 'image' || media.type === 'video' || media.type === 'document') return null;
+    if (media.type === 'audio') return '\u266B';
+    if (media.type === 'paragraph') return '\u00B6';
+    return '\u25A1';
   }
 
   onEntryClick(id: number): void {
-    this.mediaSelected.emit(id);
+    if (this.focusMode === 'hover') {
+      this.mediaVote.emit({ id, vote: 'bad' });
+    } else {
+      this.mediaSelected.emit(id);
+    }
+  }
+
+  onEntryContextMenu(event: MouseEvent, id: number): void {
+    if (this.focusMode === 'hover') {
+      event.preventDefault();
+      this.mediaVote.emit({ id, vote: 'good' });
+    }
+  }
+
+  onEntryMouseEnter(id: number): void {
+    if (this.focusMode === 'hover') {
+      this.mediaSelected.emit(id);
+    }
   }
 
   onEntryKeydown(event: KeyboardEvent, id: number): void {

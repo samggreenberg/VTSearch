@@ -20,8 +20,11 @@
     [clickTimes]="clickTimes"
     [learnedScores]="learnedScores"
     [sortMode]="sortMode"
-    [showThumbnails]="showThumbnails"
+    [viewMode]="viewMode"
+    [gridColumns]="gridColumns"
+    [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
+    (mediaVote)="onMediaVote($event)"
   />
 
   <vt-label-list
@@ -31,8 +34,11 @@
     [clickTimes]="clickTimes"
     [learnedScores]="learnedScores"
     [sortMode]="sortMode"
-    [showThumbnails]="showThumbnails"
+    [viewMode]="viewMode"
+    [gridColumns]="gridColumns"
+    [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
+    (mediaVote)="onMediaVote($event)"
   />
 
   <div class="export-row">

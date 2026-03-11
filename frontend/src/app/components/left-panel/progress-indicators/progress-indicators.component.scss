@@ -2,8 +2,8 @@
   display: flex;
   gap: 4px;
   align-items: stretch;
-  /* Fixed height prevents layout jitter when switching between indicators and progress bar */
-  height: 26px;
+  min-height: 26px;
+  flex-wrap: wrap;
 }
 
 .sort-overlay {
@@ -45,6 +45,7 @@
   background: var(--bg-panel);
   cursor: pointer;
   transition: border-color 0.2s;
+  min-width: 0;
 
   &:hover {
     background: var(--bg-hover);
@@ -100,4 +101,8 @@
   color: var(--text-secondary);
   font-weight: 500;
   line-height: 1;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  min-width: 0;
+  text-align: center;
 }

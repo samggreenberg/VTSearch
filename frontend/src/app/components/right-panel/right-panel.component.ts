@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -33,21 +33,27 @@ export interface TrainModeContext {
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
 })
-export class RightPanelComponent implements OnInit, OnDestroy {
+export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() trainMode: TrainModeContext | null = null;
+  @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
+  @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
-  showThumbnails = true;
+  viewMode: 'grid' | 'list' = 'grid';
+  gridColumns: number = 2;
   showLabelImport = false;
   showLabelExport = false;
   showDetectorExport = false;
 
+  private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
+  private gridColumnsRightDict: Record<string, number> = {};
+  private currentMediaType = '';
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -63,6 +69,17 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     this.subscribeToVotes();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['medias'] && this.medias.length > 0) {
+      const newType = this.medias[0].type;
+      if (newType !== this.currentMediaType) {
+        this.currentMediaType = newType;
+        this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
+        this.gridColumns = this.gridColumnsRightDict[newType] ?? 2;
+      }
+    }
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -74,6 +91,10 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
   onMediaSelected(id: number): void {
     this.mediaSelected.emit(id);
+  }
+
+  onMediaVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.mediaVoted.emit(event);
   }
 
   onImportLabels(): void {
@@ -105,7 +126,20 @@ export class RightPanelComponent implements OnInit, OnDestroy {
       .subscribe({
         next: settings => {
           if (!settings) return;
-          this.showThumbnails = settings.show_thumbnails_right ?? true;
+          const dict = settings.view_mode_right;
+          if (dict && typeof dict === 'object') {
+            this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
+            if (this.currentMediaType) {
+              this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
+            }
+          }
+          const colsDict = settings.grid_columns_right;
+          if (colsDict && typeof colsDict === 'object') {
+            this.gridColumnsRightDict = colsDict as Record<string, number>;
+            if (this.currentMediaType) {
+              this.gridColumns = this.gridColumnsRightDict[this.currentMediaType] ?? 2;
+            }
+          }
         },
       });
   }

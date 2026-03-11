@@ -294,6 +294,10 @@ def _run_origin_load_in_background(
 
     def task():
         try:
+            update_progress(
+                "loading", "Clearing previous dataset…", 0, 0,
+                step=1, total_steps=_TOTAL_LOAD_STEPS,
+            )
             clear_dataset()
             gc.collect()
             load_fn()
@@ -302,14 +306,26 @@ def _run_origin_load_in_background(
             # inner functions like load_demo_dataset cannot prematurely
             # signal completion to the frontend.
             update_progress(
-                "loading", "Finalizing…",
+                "loading", "Removing duplicates…",
                 step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
             )
             _set_clip_origins(medias, origin)
             if clipper:
                 _apply_clipper(medias, clipper)
             collapse_duplicates(medias)
-            build_diversity_tree()
+            def _diversity_progress(current: int, total: int) -> None:
+                update_progress(
+                    "loading", "Building diversity index…",
+                    current=current, total=total,
+                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                )
+
+            _diversity_progress(0, 0)
+            build_diversity_tree(on_progress=_diversity_progress)
+            update_progress(
+                "loading", "Saving to registry…",
+                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+            )
             origin_str = _origin_to_str(origin)
             _auto_register_dataset(
                 name=name,

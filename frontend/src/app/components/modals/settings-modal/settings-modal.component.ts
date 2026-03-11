@@ -1,10 +1,12 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
-import { AppSettings, EmbedderInfo } from '../../../models/api.models';
+import { SettingsStateService } from '../../../services/settings-state.service';
+import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { AppSettings, EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 
 @Component({
@@ -15,15 +17,20 @@ import { Theme, ThemeService } from '../../../services/theme.service';
   styleUrl: './settings-modal.component.scss',
 })
 export class SettingsModalComponent implements OnInit {
+  @Input() preselectedViewTab = '';
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
   embedders: EmbedderInfo[] = [];
+  mediaTypes: MediaTypeInfo[] = [];
+  activeViewTab = '';
   loading = true;
   error = '';
 
   constructor(
     private settingsApi: SettingsApiService,
+    private settingsState: SettingsStateService,
+    private datasetsApi: DatasetsApiService,
     private themeService: ThemeService,
   ) {}
 
@@ -31,12 +38,22 @@ export class SettingsModalComponent implements OnInit {
     forkJoin({
       settings: this.settingsApi.getSettings(),
       embedders: this.settingsApi.getEmbedders(),
+      mediaTypes: this.datasetsApi.getMediaTypes(),
     }).subscribe({
       next: (res) => {
         this.settings = res.settings;
         this.embedders = (res.embedders.embedders || []).sort(
           (a, b) => a.media_type_id.localeCompare(b.media_type_id) || a.name.localeCompare(b.name),
         );
+        this.mediaTypes = res.mediaTypes.media_types || [];
+        if (this.mediaTypes.length > 0) {
+          const preselected = this.preselectedViewTab;
+          if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
+            this.activeViewTab = preselected;
+          } else {
+            this.activeViewTab = this.mediaTypes[0].type_id;
+          }
+        }
         this.loading = false;
       },
       error: () => {
@@ -57,7 +74,75 @@ export class SettingsModalComponent implements OnInit {
     this.save();
   }
 
+  onViewModeChange(side: 'view_mode_left' | 'view_mode_right', typeId: string, value: string): void {
+    const dict = (this.settings[side] as Record<string, string>) || {};
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.save();
+  }
+
+  getViewMode(side: 'view_mode_left' | 'view_mode_right', typeId: string): string {
+    const dict = this.settings[side];
+    if (!dict) return side === 'view_mode_left' ? 'list' : 'grid';
+    return dict[typeId] ?? (side === 'view_mode_left' ? 'list' : 'grid');
+  }
+
+  onGridColumnsChange(side: 'grid_columns_left' | 'grid_columns_right', typeId: string, value: number): void {
+    const clamped = Math.max(1, Math.min(6, Math.round(value)));
+    const dict = (this.settings[side] as Record<string, number>) || {};
+    dict[typeId] = clamped;
+    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.save();
+  }
+
+  getGridColumns(side: 'grid_columns_left' | 'grid_columns_right', typeId: string): number {
+    const dict = this.settings[side];
+    if (!dict) return 2;
+    return dict[typeId] ?? 2;
+  }
+
+  onFocusModeChange(side: 'focus_mode_left' | 'focus_mode_right', typeId: string, value: string): void {
+    const dict = (this.settings[side] as Record<string, string>) || {};
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.save();
+  }
+
+  getFocusMode(side: 'focus_mode_left' | 'focus_mode_right', typeId: string): string {
+    const dict = this.settings[side];
+    if (!dict) return 'click';
+    return dict[typeId] ?? 'click';
+  }
+
+  onPanelPctChange(side: 'panel_pct_left' | 'panel_pct_right', typeId: string, value: number | null): void {
+    const dict = (this.settings[side] as Record<string, number | null>) || {};
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.save();
+  }
+
+  getPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): number | null {
+    const dict = this.settings[side];
+    if (!dict) return null;
+    return dict[typeId] ?? null;
+  }
+
+  getPanelPctDisplay(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): string {
+    const pct = this.getPanelPct(side, typeId);
+    if (pct == null) return '—';
+    return Math.round(pct * 100) + '%';
+  }
+
+  clearPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): void {
+    this.onPanelPctChange(side, typeId, null);
+  }
+
   onNumberChange(key: string, value: number): void {
+    (this.settings as Record<string, unknown>)[key] = value;
+    this.save();
+  }
+
+  onStringChange(key: string, value: string): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
   }
@@ -87,6 +172,7 @@ export class SettingsModalComponent implements OnInit {
       },
     });
   }
+
 
   exportSettings(): void {
     const blob = new Blob([JSON.stringify(this.settings, null, 2)], { type: 'application/json' });
@@ -119,7 +205,7 @@ export class SettingsModalComponent implements OnInit {
   }
 
   private save(): void {
-    this.settingsApi.updateSettings(this.settings).subscribe({
+    this.settingsState.update(this.settings).subscribe({
       error: () => {
         this.error = 'Failed to save settings';
       },

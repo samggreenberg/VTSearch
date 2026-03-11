@@ -87,6 +87,9 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "calibration_fraction must be a number"}), 400
 
+    if "audio_playing" in body:
+        settings.set_audio_playing(bool(body["audio_playing"]))
+
     if "swipe_animation" in body:
         settings.set_swipe_animation(bool(body["swipe_animation"]))
 
@@ -102,11 +105,56 @@ def update_settings():
     if "show_metadata" in body:
         settings.set_show_metadata(bool(body["show_metadata"]))
 
-    if "show_thumbnails_left" in body:
-        settings.set_show_thumbnails_left(bool(body["show_thumbnails_left"]))
+    if "view_mode_left" in body:
+        try:
+            settings.set_view_mode_left(body["view_mode_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
 
-    if "show_thumbnails_right" in body:
-        settings.set_show_thumbnails_right(bool(body["show_thumbnails_right"]))
+    if "view_mode_right" in body:
+        try:
+            settings.set_view_mode_right(body["view_mode_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "grid_columns_left" in body:
+        try:
+            settings.set_grid_columns_left(body["grid_columns_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "grid_columns_right" in body:
+        try:
+            settings.set_grid_columns_right(body["grid_columns_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "focus_mode_left" in body:
+        try:
+            settings.set_focus_mode_left(body["focus_mode_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "focus_mode_right" in body:
+        try:
+            settings.set_focus_mode_right(body["focus_mode_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "panel_pct_left" in body:
+        try:
+            settings.set_panel_pct_left(body["panel_pct_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "panel_pct_right" in body:
+        try:
+            settings.set_panel_pct_right(body["panel_pct_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "autopilot_enabled" in body:
+        settings.set_autopilot_enabled(bool(body["autopilot_enabled"]))
 
     if "hide_autopilot" in body:
         settings.set_hide_autopilot(bool(body["hide_autopilot"]))

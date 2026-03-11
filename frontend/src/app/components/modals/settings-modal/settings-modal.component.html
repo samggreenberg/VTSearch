@@ -22,14 +22,75 @@
           <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
           Show metadata panel
         </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.show_thumbnails_left" (ngModelChange)="onToggle('show_thumbnails_left', $event)" />
-          Show thumbnails (left panel)
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.show_thumbnails_right" (ngModelChange)="onToggle('show_thumbnails_right', $event)" />
-          Show thumbnails (right panel)
-        </label>
+      </div>
+
+      <!-- Media Type Settings (per-media-type) -->
+      <div class="settings-section settings-section--wide">
+        <h3>Media Type Settings</h3>
+        @if (mediaTypes.length > 0) {
+          <div class="view-tabs">
+            @for (mt of mediaTypes; track mt.type_id) {
+              <button
+                class="view-tab"
+                [class.view-tab--active]="activeViewTab === mt.type_id"
+                (click)="activeViewTab = mt.type_id">
+                {{ mt.name }}
+              </button>
+            }
+          </div>
+          <div class="view-tab-content">
+            <div class="form-group">
+              <label class="form-label">Left panel view</label>
+              <select class="form-select" [ngModel]="getViewMode('view_mode_left', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_left', activeViewTab, $event)">
+                <option value="list">List View</option>
+                <option value="grid">Grid View</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right panel view</label>
+              <select class="form-select" [ngModel]="getViewMode('view_mode_right', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_right', activeViewTab, $event)">
+                <option value="list">List View</option>
+                <option value="grid">Grid View</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Left focus mode</label>
+              <select class="form-select" [ngModel]="getFocusMode('focus_mode_left', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_left', activeViewTab, $event)">
+                <option value="click">Click</option>
+                <option value="hover">Hover</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right focus mode</label>
+              <select class="form-select" [ngModel]="getFocusMode('focus_mode_right', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_right', activeViewTab, $event)">
+                <option value="click">Click</option>
+                <option value="hover">Hover</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Left panel grid columns</label>
+              <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right panel grid columns</label>
+              <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Left Panel %</label>
+              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_left', activeViewTab) }}</span>
+              @if (getPanelPct('panel_pct_left', activeViewTab) != null) {
+                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_left', activeViewTab)">Reset</button>
+              }
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right Panel %</label>
+              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_right', activeViewTab) }}</span>
+              @if (getPanelPct('panel_pct_right', activeViewTab) != null) {
+                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_right', activeViewTab)">Reset</button>
+              }
+            </div>
+          </div>
+        }
       </div>
 
       <!-- Sorting & Calibration -->

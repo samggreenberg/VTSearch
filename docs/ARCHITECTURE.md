@@ -400,8 +400,8 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_metadata`, `show_thumbnails_left`,
-`show_thumbnails_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
+`swipe_animation`, `show_metadata`, `view_mode_left`,
+`view_mode_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
 `autoload_media_types`, autorun processor recipes) live
 separately in `vtsearch/settings.py` and are auto-saved to
 `data/settings.json`.

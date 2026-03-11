@@ -44,13 +44,21 @@ _DEFAULTS: dict[str, Any] = {
     "safe_thresholds": False,
     "calibrate_count": 2,
     "calibration_fraction": 0.5,
+    "audio_playing": True,
     "swipe_animation": True,
     "show_metadata": True,
-    "show_thumbnails_left": False,
-    "show_thumbnails_right": True,
+    "view_mode_left": {},
+    "view_mode_right": {},
+    "grid_columns_left": {},
+    "grid_columns_right": {},
+    "focus_mode_left": {},
+    "focus_mode_right": {},
+    "panel_pct_left": {},
+    "panel_pct_right": {},
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
+    "autopilot_enabled": True,
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
@@ -114,7 +122,20 @@ def _ensure_loaded() -> dict[str, Any]:
 
 def get_defaults() -> dict[str, Any]:
     """Return a copy of the default settings (excluding infrastructure keys)."""
-    return {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    result = {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    # Expand view mode defaults to per-media-type dicts
+    valid_types = _valid_media_types()
+    result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
+    result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
+    result["grid_columns_left"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
+    result["grid_columns_right"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
+    # Expand focus mode defaults to per-media-type dicts
+    result["focus_mode_left"] = {tid: _FOCUS_MODE_DEFAULTS["left"] for tid in valid_types}
+    result["focus_mode_right"] = {tid: _FOCUS_MODE_DEFAULTS["right"] for tid in valid_types}
+    # Expand panel percentage defaults to per-media-type dicts
+    result["panel_pct_left"] = {tid: _PANEL_PCT_DEFAULTS["left"] for tid in valid_types}
+    result["panel_pct_right"] = {tid: _PANEL_PCT_DEFAULTS["right"] for tid in valid_types}
+    return result
 
 
 def get_all() -> dict[str, Any]:
@@ -123,10 +144,24 @@ def get_all() -> dict[str, Any]:
         s = _ensure_loaded()
         result = dict(_DEFAULTS)
         result.update(s)
+        # Always return expanded per-media-type view mode dicts
+        result["view_mode_left"] = get_view_mode_left()
+        result["view_mode_right"] = get_view_mode_right()
+        result["grid_columns_left"] = get_grid_columns_left()
+        result["grid_columns_right"] = get_grid_columns_right()
+        # Always return expanded per-media-type focus mode dicts
+        result["focus_mode_left"] = get_focus_mode_left()
+        result["focus_mode_right"] = get_focus_mode_right()
+        # Always return expanded per-media-type panel percentage dicts
+        result["panel_pct_left"] = get_panel_pct_left()
+        result["panel_pct_right"] = get_panel_pct_right()
         return result
 
 
 VALID_THEMES = ("dark", "light", "highviz")
+VALID_VIEW_MODES = ("grid", "list")
+VALID_GRID_COLUMNS = range(1, 7)  # 1–6 inclusive
+VALID_FOCUS_MODES = ("click", "hover")
 
 
 # -------------------------------------------------------------------
@@ -189,10 +224,10 @@ _SETTING_SPECS: list[tuple] = [
     ("safe_thresholds", bool, None),
     ("calibrate_count", int, _clamp(int, 1, 100)),
     ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
+    ("audio_playing", bool, None),
     ("swipe_animation", bool, None),
     ("show_metadata", bool, None),
-    ("show_thumbnails_left", bool, None),
-    ("show_thumbnails_right", bool, None),
+    ("autopilot_enabled", bool, None),
     ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
@@ -206,11 +241,326 @@ for _key, _cast, _coerce in _SETTING_SPECS:
 del _key, _cast, _coerce, _g, _s
 
 
+# -------------------------------------------------------------------
+# Per-media-type view mode settings
+# -------------------------------------------------------------------
+
+_VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
+_GRID_COLUMNS_DEFAULT = 2
+_FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
+_PANEL_PCT_DEFAULTS: dict[str, float | None] = {"left": None, "right": None}
+VALID_PANEL_PCT = (0.05, 0.80)  # 5%–80% of window width
+
+
+def _get_view_mode_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type view mode dict for *key* (``view_mode_left`` or ``view_mode_right``).
+
+    Handles backward compatibility: if the stored value is a plain string
+    (old format), it is treated as the mode for all known media types.
+    """
+    side = key.replace("view_mode_", "")
+    default_mode = _VIEW_MODE_DEFAULTS.get(side, "list")
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, str):
+        # Legacy scalar value — expand to dict for all known types
+        return {tid: raw for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        # Fill in missing types with the side default
+        result = {}
+        for tid in _valid_media_types():
+            val = raw.get(tid, default_mode)
+            result[tid] = val if val in VALID_VIEW_MODES else default_mode
+        return result
+    return {tid: default_mode for tid in _valid_media_types()}
+
+
+def get_view_mode_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> view mode for the left panel."""
+    return _get_view_mode_dict("view_mode_left")
+
+
+def get_view_mode_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> view mode for the right panel."""
+    return _get_view_mode_dict("view_mode_right")
+
+
+def set_view_mode_left(value: dict[str, str] | str) -> None:
+    """Set the left panel view mode (per-media-type dict or legacy scalar)."""
+    _set_view_mode_dict("view_mode_left", value)
+
+
+def set_view_mode_right(value: dict[str, str] | str) -> None:
+    """Set the right panel view mode (per-media-type dict or legacy scalar)."""
+    _set_view_mode_dict("view_mode_right", value)
+
+
+def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type view mode dict for *key*."""
+    valid_types = _valid_media_types()
+    if isinstance(value, str):
+        # Legacy scalar — expand to all types
+        if value not in VALID_VIEW_MODES:
+            raise ValueError(f"Invalid {key}: {value!r}")
+        value = {tid: value for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict or string")
+    for tid, mode in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if mode not in VALID_VIEW_MODES:
+            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = dict(value)
+        _save(s)
+
+
+def _get_grid_columns_dict(key: str) -> dict[str, int]:
+    """Return the per-media-type grid columns dict for *key*.
+
+    Handles backward compatibility: if the stored value is a plain string
+    or int, it is treated as the column count for all known media types.
+    """
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, (str, int)):
+        try:
+            val = int(raw)
+        except (ValueError, TypeError):
+            val = _GRID_COLUMNS_DEFAULT
+        if val not in VALID_GRID_COLUMNS:
+            val = _GRID_COLUMNS_DEFAULT
+        return {tid: val for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        result = {}
+        for tid in _valid_media_types():
+            v = raw.get(tid, _GRID_COLUMNS_DEFAULT)
+            try:
+                v = int(v)
+            except (ValueError, TypeError):
+                v = _GRID_COLUMNS_DEFAULT
+            result[tid] = v if v in VALID_GRID_COLUMNS else _GRID_COLUMNS_DEFAULT
+        return result
+    return {tid: _GRID_COLUMNS_DEFAULT for tid in _valid_media_types()}
+
+
+def get_grid_columns_left() -> dict[str, int]:
+    """Return a dict mapping media type ID -> grid columns for the left panel."""
+    return _get_grid_columns_dict("grid_columns_left")
+
+
+def get_grid_columns_right() -> dict[str, int]:
+    """Return a dict mapping media type ID -> grid columns for the right panel."""
+    return _get_grid_columns_dict("grid_columns_right")
+
+
+def set_grid_columns_left(value: dict[str, int] | int) -> None:
+    """Set the left panel grid columns (per-media-type dict or scalar)."""
+    _set_grid_columns_dict("grid_columns_left", value)
+
+
+def set_grid_columns_right(value: dict[str, int] | int) -> None:
+    """Set the right panel grid columns (per-media-type dict or scalar)."""
+    _set_grid_columns_dict("grid_columns_right", value)
+
+
+def _set_grid_columns_dict(key: str, value: dict[str, int] | int) -> None:
+    """Persist the per-media-type grid columns dict for *key*."""
+    valid_types = _valid_media_types()
+    if isinstance(value, (str, int)):
+        try:
+            value = int(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid {key}: {value!r}")
+        if value not in VALID_GRID_COLUMNS:
+            raise ValueError(f"Invalid {key}: {value!r}")
+        value = {tid: value for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict or int")
+    coerced = {}
+    for tid, cols in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        try:
+            cols = int(cols)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
+        if cols not in VALID_GRID_COLUMNS:
+            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
+        coerced[tid] = cols
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = coerced
+        _save(s)
+
+
 def _valid_media_types() -> tuple[str, ...]:
     """Return valid media type IDs from the media registry."""
     from vtsearch.media import all_type_ids
 
     return tuple(all_type_ids())
+
+
+# -------------------------------------------------------------------
+# Per-media-type focus mode settings
+# -------------------------------------------------------------------
+
+
+def _get_focus_mode_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type focus mode dict for *key* (``focus_mode_left`` or ``focus_mode_right``).
+
+    Handles backward compatibility: if the stored value is a plain string
+    (old format), it is treated as the mode for all known media types.
+    """
+    side = key.replace("focus_mode_", "")
+    default_mode = _FOCUS_MODE_DEFAULTS.get(side, "click")
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, str):
+        # Legacy scalar value — expand to dict for all known types
+        mode = raw if raw in VALID_FOCUS_MODES else default_mode
+        return {tid: mode for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        # Fill in missing types with the side default
+        result = {}
+        for tid in _valid_media_types():
+            val = raw.get(tid, default_mode)
+            result[tid] = val if val in VALID_FOCUS_MODES else default_mode
+        return result
+    return {tid: default_mode for tid in _valid_media_types()}
+
+
+def get_focus_mode_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> focus mode for the left panel."""
+    return _get_focus_mode_dict("focus_mode_left")
+
+
+def get_focus_mode_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> focus mode for the right panel."""
+    return _get_focus_mode_dict("focus_mode_right")
+
+
+def set_focus_mode_left(value: dict[str, str] | str) -> None:
+    """Set the left panel focus mode (per-media-type dict or legacy scalar)."""
+    _set_focus_mode_dict("focus_mode_left", value)
+
+
+def set_focus_mode_right(value: dict[str, str] | str) -> None:
+    """Set the right panel focus mode (per-media-type dict or legacy scalar)."""
+    _set_focus_mode_dict("focus_mode_right", value)
+
+
+def _set_focus_mode_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type focus mode dict for *key*."""
+    valid_types = _valid_media_types()
+    if isinstance(value, str):
+        # Legacy scalar — expand to all types
+        if value not in VALID_FOCUS_MODES:
+            raise ValueError(f"Invalid {key}: {value!r}")
+        value = {tid: value for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict or string")
+    for tid, mode in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if mode not in VALID_FOCUS_MODES:
+            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = dict(value)
+        _save(s)
+
+
+# -------------------------------------------------------------------
+# Per-media-type panel percentage settings
+# -------------------------------------------------------------------
+
+
+def _get_panel_pct_dict(key: str) -> dict[str, float | None]:
+    """Return the per-media-type panel percentage dict for *key*.
+
+    Values are floats in [0.05, 0.80] representing fraction of window width,
+    or ``None`` if not yet set (use default pixel widths).
+    """
+    side = key.replace("panel_pct_", "")
+    default_val = _PANEL_PCT_DEFAULTS.get(side)
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, (int, float)):
+        # Legacy scalar — expand to all types
+        val = float(raw)
+        lo, hi = VALID_PANEL_PCT
+        val = max(lo, min(hi, val))
+        return {tid: val for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        result: dict[str, float | None] = {}
+        lo, hi = VALID_PANEL_PCT
+        for tid in _valid_media_types():
+            v = raw.get(tid, default_val)
+            if v is None:
+                result[tid] = None
+            else:
+                try:
+                    fv = float(v)
+                    result[tid] = max(lo, min(hi, fv))
+                except (ValueError, TypeError):
+                    result[tid] = default_val
+        return result
+    return {tid: default_val for tid in _valid_media_types()}
+
+
+def get_panel_pct_left() -> dict[str, float | None]:
+    """Return a dict mapping media type ID -> panel width fraction for the left panel."""
+    return _get_panel_pct_dict("panel_pct_left")
+
+
+def get_panel_pct_right() -> dict[str, float | None]:
+    """Return a dict mapping media type ID -> panel width fraction for the right panel."""
+    return _get_panel_pct_dict("panel_pct_right")
+
+
+def set_panel_pct_left(value: dict[str, float | None] | float | None) -> None:
+    """Set the left panel width fraction (per-media-type dict or scalar)."""
+    _set_panel_pct_dict("panel_pct_left", value)
+
+
+def set_panel_pct_right(value: dict[str, float | None] | float | None) -> None:
+    """Set the right panel width fraction (per-media-type dict or scalar)."""
+    _set_panel_pct_dict("panel_pct_right", value)
+
+
+def _set_panel_pct_dict(key: str, value: dict[str, float | None] | float | None) -> None:
+    """Persist the per-media-type panel percentage dict for *key*."""
+    valid_types = _valid_media_types()
+    lo, hi = VALID_PANEL_PCT
+    if value is None:
+        value = {tid: None for tid in valid_types}
+    elif isinstance(value, (int, float)):
+        fv = float(value)
+        if not (lo <= fv <= hi):
+            raise ValueError(f"Invalid {key}: {fv!r} (must be between {lo} and {hi})")
+        value = {tid: fv for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict, number, or null")
+    coerced: dict[str, float | None] = {}
+    for tid, pct in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if pct is None:
+            coerced[tid] = None
+        else:
+            try:
+                fv = float(pct)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid {key} value for {tid}: {pct!r}")
+            if not (lo <= fv <= hi):
+                raise ValueError(f"Invalid {key} value for {tid}: {fv!r} (must be between {lo} and {hi})")
+            coerced[tid] = fv
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = coerced
+        _save(s)
 
 
 def get_autoload_media_types() -> list[str]:

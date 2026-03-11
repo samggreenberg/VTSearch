@@ -12,8 +12,8 @@ describe('SettingsModalComponent', () => {
     volume: 50,
     theme: 'dark',
     swipe_animation: true,
-    show_thumbnails_left: true,
-    show_thumbnails_right: false,
+    view_mode_left: { audio: 'list', image: 'grid' },
+    view_mode_right: { audio: 'grid', image: 'list' },
     enrich_descriptions: false,
     safe_thresholds: false,
     calibrate_count: 50,
@@ -22,6 +22,13 @@ describe('SettingsModalComponent', () => {
     autopilot_hard_reds: 3,
     autoload_media_types: ['audio'],
     autoload_media_embedders: ['audio'],
+  };
+
+  const mockMediaTypes = {
+    media_types: [
+      { type_id: 'audio', name: 'Sound' },
+      { type_id: 'image', name: 'Image' },
+    ],
   };
 
   beforeEach(async () => {
@@ -41,11 +48,13 @@ describe('SettingsModalComponent', () => {
 
   function flushInit(): void {
     fixture.detectChanges();
-    // forkJoin makes both requests in parallel
+    // forkJoin makes all requests in parallel
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
+    const mediaTypesReq = httpMock.expectOne('/api/media-types');
     settingsReq.flush(mockSettings);
     embeddersReq.flush({ embedders: [{ name: 'audio', media_type_id: 'audio' }, { name: 'images', media_type_id: 'image' }, { name: 'text', media_type_id: 'text' }] });
+    mediaTypesReq.flush(mockMediaTypes);
   }
 
   it('should create', () => {
@@ -58,6 +67,12 @@ describe('SettingsModalComponent', () => {
     expect(component.settings.theme).toBe('dark');
     expect(component.embedders.length).toBe(3);
     expect(component.loading).toBeFalse();
+  });
+
+  it('should load media types and set active view tab', () => {
+    flushInit();
+    expect(component.mediaTypes.length).toBe(2);
+    expect(component.activeViewTab).toBe('audio');
   });
 
   it('should update theme and save', () => {
@@ -79,6 +94,20 @@ describe('SettingsModalComponent', () => {
     component.onNumberChange('calibrate_count', 100);
     expect(component.settings.calibrate_count).toBe(100);
     httpMock.expectOne('/api/settings').flush(mockSettings);
+  });
+
+  it('should update per-media-type view mode and save', () => {
+    flushInit();
+    component.onViewModeChange('view_mode_left', 'audio', 'grid');
+    const dict = component.settings.view_mode_left as Record<string, string>;
+    expect(dict['audio']).toBe('grid');
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+  });
+
+  it('should get view mode for a media type', () => {
+    flushInit();
+    expect(component.getViewMode('view_mode_left', 'audio')).toBe('list');
+    expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
   it('should check if embedder is autoloaded', () => {
@@ -110,6 +139,7 @@ describe('SettingsModalComponent', () => {
     fixture.detectChanges();
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
+    const mediaTypesReq = httpMock.expectOne('/api/media-types');
     settingsReq.flush(mockSettings);
     embeddersReq.flush({
       embedders: [
@@ -120,6 +150,7 @@ describe('SettingsModalComponent', () => {
         { name: 'clip', media_type_id: 'image' },
       ],
     });
+    mediaTypesReq.flush(mockMediaTypes);
     expect(component.embedders.map((e) => `${e.media_type_id}:${e.name}`)).toEqual([
       'audio:alpha',
       'audio:beta',
@@ -127,6 +158,24 @@ describe('SettingsModalComponent', () => {
       'image:zebra',
       'text:alpha',
     ]);
+  });
+
+  it('should use preselectedViewTab when valid', () => {
+    component.preselectedViewTab = 'image';
+    flushInit();
+    expect(component.activeViewTab).toBe('image');
+  });
+
+  it('should ignore preselectedViewTab when not in mediaTypes', () => {
+    component.preselectedViewTab = 'video';
+    flushInit();
+    expect(component.activeViewTab).toBe('audio');
+  });
+
+  it('should ignore empty preselectedViewTab', () => {
+    component.preselectedViewTab = '';
+    flushInit();
+    expect(component.activeViewTab).toBe('audio');
   });
 
   it('should emit closed on close', () => {
@@ -140,8 +189,10 @@ describe('SettingsModalComponent', () => {
     fixture.detectChanges();
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
+    const mediaTypesReq = httpMock.expectOne('/api/media-types');
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
     embeddersReq.flush({ embedders: [] });
+    mediaTypesReq.flush({ media_types: [] });
     expect(component.loading).toBeFalse();
     expect(component.error).toBe('Failed to load settings');
   });

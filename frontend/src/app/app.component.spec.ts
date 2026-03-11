@@ -5,6 +5,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
 import { VtDialogService } from './services/dialog.service';
+import { MediaStateService } from './services/media-state.service';
+import { DatasetStateService } from './services/dataset-state.service';
 
 describe('AppComponent', () => {
   let dialogSpy: jasmine.SpyObj<VtDialogService>;
@@ -163,5 +165,44 @@ describe('AppComponent', () => {
     fixture.componentInstance.onSettings();
     expect(fixture.componentInstance.showSettings).toBeTrue();
     expect(fixture.componentInstance.menuOpen).toBeFalse();
+  });
+
+  it('should set settingsViewTab from labeling media type', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const mediaState = TestBed.inject(MediaStateService);
+    spyOnProperty(mediaState, 'medias', 'get').and.returnValue([
+      { id: 1, type: 'image', filename: 'a.png', md5: 'abc', custom_metadata: {} },
+    ]);
+    fixture.componentInstance.isOnLabelView = true;
+    fixture.componentInstance.onSettings();
+    expect(fixture.componentInstance.settingsViewTab).toBe('image');
+  });
+
+  it('should set settingsViewTab from dashboard when all same media type', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const datasetState = TestBed.inject(DatasetStateService);
+    spyOnProperty(datasetState, 'datasets', 'get').and.returnValue([
+      { media_type: 'audio' },
+      { media_type: 'audio' },
+    ]);
+    spyOnProperty(datasetState, 'models', 'get').and.returnValue([
+      { media_type: 'audio' },
+    ]);
+    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.onSettings();
+    expect(fixture.componentInstance.settingsViewTab).toBe('audio');
+  });
+
+  it('should set empty settingsViewTab from dashboard when mixed media types', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const datasetState = TestBed.inject(DatasetStateService);
+    spyOnProperty(datasetState, 'datasets', 'get').and.returnValue([
+      { media_type: 'audio' },
+      { media_type: 'image' },
+    ]);
+    spyOnProperty(datasetState, 'models', 'get').and.returnValue([]);
+    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.onSettings();
+    expect(fixture.componentInstance.settingsViewTab).toBe('');
   });
 });

@@ -15,7 +15,7 @@
         [attr.aria-selected]="activeTab === 'autopilot'"
         (click)="setTab('autopilot')"
         title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
-      >Autopilot</button>
+      ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
     </div>
   }
 
@@ -58,9 +58,12 @@
           [selectedId]="selectedId"
           [goodVotes]="goodVotes"
           [badVotes]="badVotes"
-          [showThumbnails]="showThumbnails"
+          [viewMode]="viewMode"
+          [gridColumns]="gridColumns"
+          [focusMode]="focusMode"
           [showScores]="false"
           (mediaSelect)="mediaSelect.emit($event)"
+          (mediaVote)="mediaVote.emit($event)"
         />
         <vt-stripe-overview
           [sortOrder]="sortOrder"

@@ -611,18 +611,39 @@ def load_registered_dataset(dataset_id: str):
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
+    _LOAD_STEPS = 4  # read pickle, process items, build diversity index, warm up embedder
+
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Loading dataset from file...")
+    update_progress("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
+
+    def _pickle_progress(status, message, current, total):
+        update_progress(status, message, current, total, step=2, total_steps=_LOAD_STEPS)
 
     def load_task():
         try:
+            update_progress(
+                "loading", "Clearing previous dataset…", 0, 0,
+                step=1, total_steps=_LOAD_STEPS,
+            )
             clear_dataset()
             _reg_set_loaded(None)
             gc.collect()
-            load_dataset_from_pickle(Path(pkl_path), medias)
+            load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
+            update_progress(
+                "loading", "Removing duplicates…", 0, 0,
+                step=3, total_steps=_LOAD_STEPS,
+            )
             collapse_duplicates(medias)
-            build_diversity_tree()
+            def _diversity_progress(current: int, total: int) -> None:
+                update_progress(
+                    "loading", "Building diversity index…",
+                    current=current, total=total,
+                    step=3, total_steps=_LOAD_STEPS,
+                )
+
+            _diversity_progress(0, 0)
+            build_diversity_tree(on_progress=_diversity_progress)
             _reg_set_loaded(dataset_id)
             # Update item count and dupe count in case they changed
             _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
@@ -631,13 +652,13 @@ def load_registered_dataset(dataset_id: str):
         except MemoryError:
             medias.clear()
             gc.collect()
-            update_progress("idle", "", 0, 0, "Out of memory — dataset too large.")
+            update_progress("idle", "", 0, 0, "Out of memory — dataset too large.", step=None, total_steps=None)
         except Exception as e:
-            update_progress("idle", "", 0, 0, str(e))
+            update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0)
+    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_LOAD_STEPS)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()

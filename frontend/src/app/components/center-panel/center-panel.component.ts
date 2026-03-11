@@ -38,6 +38,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   isVoting = false;
   volume = 1;
+  audioPlaying = true;
   swipeAnimation = true;
   showMetadata = true;
   swipeClass = '';
@@ -151,6 +152,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.settingsState.settings$.subscribe((settings) => {
         if (!settings) return;
         this.volume = settings.volume ?? 1;
+        this.audioPlaying = settings.audio_playing !== false;
         this.swipeAnimation = settings.swipe_animation !== false;
         this.showMetadata = settings.show_metadata !== false;
       }),
@@ -168,12 +170,19 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.settingsState.update({ volume: this.volume }).subscribe();
   }
 
+  onPlayingChanged(playing: boolean): void {
+    this.audioPlaying = playing;
+    this.settingsState.update({ audio_playing: this.audioPlaying }).subscribe();
+  }
+
   private togglePlayback(): void {
+    this.audioPlaying = !this.audioPlaying;
     if (this.audioPlayer) {
       this.audioPlayer.togglePlayback();
     }
     if (this.videoPlayer) {
       this.videoPlayer.togglePlayback();
     }
+    this.settingsState.update({ audio_playing: this.audioPlaying }).subscribe();
   }
 }

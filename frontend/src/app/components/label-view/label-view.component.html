@@ -13,7 +13,9 @@
       [sortBusy]="sortState.sortBusy"
       [sortStatus]="sortState.sortStatus"
       [labelingStatus]="labelingStatus"
-      [showThumbnails]="showThumbnails"
+      [viewMode]="viewModeLeft"
+      [gridColumns]="gridColumnsLeft"
+      [focusMode]="focusModeLeft"
       [loadSortLabel]="sortState.loadSortLabel"
       [textQuery]="sortState.textQuery"
       (sortModeChange)="onSortModeChange($event)"
@@ -23,11 +25,14 @@
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
       (mediaSelect)="onMediaSelect($event)"
+      (mediaVote)="onHoverVote($event)"
       (indicatorClick)="onIndicatorClick($event)"
       [autopilotCollapsed]="autopilotCollapsed"
+      [autopilotEnabled]="autopilotEnabled"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
       (autopilotToggleCollapse)="onAutopilotToggleCollapse()"
+      (autopilotEnabledChange)="onAutopilotEnabledChange($event)"
     />
   </div>
   <div
@@ -47,7 +52,9 @@
   <div class="panel-right">
     <vt-right-panel
       [medias]="mediaState.medias"
+      [focusMode]="focusModeRight"
       (mediaSelected)="onMediaSelect($event)"
+      (mediaVoted)="onHoverVote($event)"
     />
   </div>
 </div>
