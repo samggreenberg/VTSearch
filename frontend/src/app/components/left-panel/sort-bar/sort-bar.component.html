@@ -11,6 +11,16 @@
       />
       Text
     </label>
+    <label class="sort-radio" [class.active]="sortMode === 'load'" title="Load a previously saved model or detector and rank items using its predictions.">
+      <input
+        type="radio"
+        name="sortMode"
+        value="load"
+        [checked]="sortMode === 'load'"
+        (change)="onSortModeChange('load')"
+      />
+      Load
+    </label>
     <label class="sort-radio" [class.active]="sortMode === 'learned'" title="Train a model on your good/bad votes and rank items by predicted score. Requires at least 1 good and 1 bad vote.">
       <input
         type="radio"
@@ -21,16 +31,6 @@
         (change)="onSortModeChange('learned')"
       />
       Learned
-    </label>
-    <label class="sort-radio" [class.active]="sortMode === 'load'" title="Load a previously saved model or detector and rank items using its predictions.">
-      <input
-        type="radio"
-        name="sortMode"
-        value="load"
-        [checked]="sortMode === 'load'"
-        (change)="onSortModeChange('load')"
-      />
-      Load
     </label>
   </div>
 
