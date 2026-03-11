@@ -266,10 +266,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.progressIndeterminate = true;
           }
 
-          // Build message with step info when available
+          // Build message with step info and percentage when available
           let msg = progress.message || 'Loading...';
           if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
+          }
+          if (progress.current != null && progress.total != null && progress.total > 0) {
+            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
+            msg += ` (${pct}%)`;
           }
           this.datasetState.setProgressMessage(msg);
 

@@ -810,6 +810,7 @@ def load_dataset_from_pickle(
     file_path: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any] | None:
     """Load a dataset from a pickle file into the medias dict in-place.
 
@@ -843,6 +844,9 @@ def load_dataset_from_pickle(
         ``None``.  (Formerly returned ``creation_info``; that field has been
         removed.)
     """
+    if on_progress is not None:
+        on_progress("loading", f"Reading {file_path.name}…", 0, 0)
+
     try:
         with open(file_path, "rb") as f:
             data = safe_pickle_load(f)
@@ -887,6 +891,10 @@ def load_dataset_from_pickle(
     missing_media = 0
     loaded_count = 0
     total_count = len(medias_data)
+    # Report progress every ~2% or at least every 50 items
+    _progress_interval = max(1, min(50, total_count // 50)) if total_count > 0 else 1
+    if on_progress is not None:
+        on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
             # Determine media type
@@ -934,6 +942,8 @@ def load_dataset_from_pickle(
 
                 medias[media_id] = media_data
                 loaded_count += 1
+                if on_progress is not None and loaded_count % _progress_interval == 0:
+                    on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
                 continue
 
             # ── Full mode (original behaviour) ──
@@ -1011,6 +1021,8 @@ def load_dataset_from_pickle(
 
                 medias[media_id] = media_data
                 loaded_count += 1
+                if on_progress is not None and loaded_count % _progress_interval == 0:
+                    on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
     except MemoryError:
         medias.clear()
         del data
