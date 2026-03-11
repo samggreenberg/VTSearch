@@ -87,6 +87,9 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "calibration_fraction must be a number"}), 400
 
+    if "audio_playing" in body:
+        settings.set_audio_playing(bool(body["audio_playing"]))
+
     if "swipe_animation" in body:
         settings.set_swipe_animation(bool(body["swipe_animation"]))
 

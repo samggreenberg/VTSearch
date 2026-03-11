@@ -1,9 +1,11 @@
 import {
   Component,
   ElementRef,
+  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
+  Output,
   SimpleChanges,
   ViewChild,
   AfterViewInit,
@@ -19,7 +21,9 @@ import { MediaItem } from '../../../models/api.models';
 export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit {
   @Input() media!: MediaItem;
   @Input() volume = 1;
+  @Input() audioPlaying = true;
   @Input() swipeClass = '';
+  @Output() playingChanged = new EventEmitter<boolean>();
 
   @ViewChild('waveformCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('audioEl') audioRef!: ElementRef<HTMLAudioElement>;
@@ -44,6 +48,9 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     if (changes['volume'] && this.audioRef?.nativeElement) {
       this.audioRef.nativeElement.volume = this.volume;
     }
+    if (changes['audioPlaying'] && !changes['media'] && this.audioRef?.nativeElement) {
+      this.syncPlaybackState();
+    }
   }
 
   ngOnDestroy(): void {
@@ -55,6 +62,18 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   onVolumeChange(): void {
     if (this.audioRef?.nativeElement) {
       this.volume = this.audioRef.nativeElement.volume;
+    }
+  }
+
+  onPlay(): void {
+    if (!this.audioPlaying) {
+      this.playingChanged.emit(true);
+    }
+  }
+
+  onPause(): void {
+    if (this.audioPlaying) {
+      this.playingChanged.emit(false);
     }
   }
 
@@ -80,6 +99,17 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     await this.drawWaveform(this.media.id);
     if (this.audioRef?.nativeElement) {
       this.audioRef.nativeElement.volume = this.volume;
+      this.syncPlaybackState();
+    }
+  }
+
+  private syncPlaybackState(): void {
+    const audio = this.audioRef?.nativeElement;
+    if (!audio) return;
+    if (this.audioPlaying && audio.paused) {
+      audio.play().catch(() => {});
+    } else if (!this.audioPlaying && !audio.paused) {
+      audio.pause();
     }
   }
 
