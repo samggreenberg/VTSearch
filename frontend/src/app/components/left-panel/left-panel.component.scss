@@ -3,6 +3,8 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: left-panel;
 }
 
 .left-tabs {
@@ -30,6 +32,19 @@
     background: var(--bg-surface);
     color: var(--text-primary);
     border-bottom: 2px solid var(--accent);
+  }
+}
+
+.label-short {
+  display: none;
+}
+
+@container left-panel (max-width: 140px) {
+  .label-full {
+    display: none;
+  }
+  .label-short {
+    display: inline;
   }
 }
 
