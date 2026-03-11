@@ -47,6 +47,7 @@ export class LeftPanelComponent implements OnInit {
   @Input() loadSortLabel = '';
   @Input() textQuery = '';
   @Input() autopilotCollapsed = false;
+  @Input() autopilotEnabled = true;
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();
@@ -60,13 +61,17 @@ export class LeftPanelComponent implements OnInit {
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
   @Output() autopilotToggleCollapse = new EventEmitter<void>();
+  @Output() autopilotEnabledChange = new EventEmitter<boolean>();
 
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
 
   ngOnInit(): void {
-    this.autopilotStart.emit();
+    this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
+    if (this.autopilotEnabled) {
+      this.autopilotStart.emit();
+    }
   }
 
   onStripeClick(index: number): void {
@@ -85,5 +90,6 @@ export class LeftPanelComponent implements OnInit {
     if (tab === 'autopilot') {
       this.autopilotStart.emit();
     }
+    this.autopilotEnabledChange.emit(tab === 'autopilot');
   }
 }

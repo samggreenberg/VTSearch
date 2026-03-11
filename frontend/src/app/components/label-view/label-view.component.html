@@ -28,9 +28,11 @@
       (mediaVote)="onHoverVote($event)"
       (indicatorClick)="onIndicatorClick($event)"
       [autopilotCollapsed]="autopilotCollapsed"
+      [autopilotEnabled]="autopilotEnabled"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
       (autopilotToggleCollapse)="onAutopilotToggleCollapse()"
+      (autopilotEnabledChange)="onAutopilotEnabledChange($event)"
     />
   </div>
   <div

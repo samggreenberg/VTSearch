@@ -40,6 +40,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
+  autopilotEnabled = true;
   progressModalMetric: ProgressMetric | null = null;
 
   private readonly COLLAPSED_WIDTH = 48;
@@ -224,6 +225,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (this.currentMediaType) {
             this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
           }
+        }
+        if (settings.autopilot_enabled != null) {
+          this.autopilotEnabled = settings.autopilot_enabled;
         }
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
@@ -424,6 +428,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.leftWidth = this.savedLeftWidth;
     }
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+  }
+
+  onAutopilotEnabledChange(enabled: boolean): void {
+    this.autopilotEnabled = enabled;
+    this.settingsState.update({ autopilot_enabled: enabled }).subscribe();
   }
 
   onAutopilotStop(): void {

@@ -443,6 +443,7 @@ class TestSettingsModule:
         for v in defaults["focus_mode_right"].values():
             assert v == "click"
         assert defaults["autoload_media_types"] == []
+        assert defaults["autopilot_enabled"] is True
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
         assert "autorun_processors" not in defaults
@@ -538,6 +539,21 @@ class TestSettingsModule:
         settings_mod.set_autopilot_hard_reds(30)
         settings_mod.reset()
         assert settings_mod.get_autopilot_hard_reds() == 30
+
+    def test_get_set_autopilot_enabled(self, isolated_settings):
+        # Default is True
+        assert settings_mod.get_autopilot_enabled() is True
+
+        settings_mod.set_autopilot_enabled(False)
+        assert settings_mod.get_autopilot_enabled() is False
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["autopilot_enabled"] is False
+
+    def test_autopilot_enabled_persists_across_reset(self, isolated_settings):
+        settings_mod.set_autopilot_enabled(False)
+        settings_mod.reset()
+        assert settings_mod.get_autopilot_enabled() is False
 
     def test_corrupt_settings_file(self, isolated_settings):
         isolated_settings.write_text("not json!!!")
@@ -1056,10 +1072,25 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"autopilot_hard_reds": "not a number"})
         assert res.status_code == 400
 
+    def test_update_autopilot_enabled(self, client):
+        res = client.put("/api/settings", json={"autopilot_enabled": False})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_enabled"] is False
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["autopilot_enabled"] is False
+
+    def test_update_autopilot_enabled_true(self, client):
+        client.put("/api/settings", json={"autopilot_enabled": False})
+        res = client.put("/api/settings", json={"autopilot_enabled": True})
+        assert res.status_code == 200
+        assert res.get_json()["autopilot_enabled"] is True
+
     def test_get_settings_includes_autopilot(self, client):
         res = client.get("/api/settings")
         assert res.status_code == 200
         data = res.get_json()
+        assert "autopilot_enabled" in data
         assert "autopilot_top_greens" in data
         assert "autopilot_hard_reds" in data
 
@@ -1067,6 +1098,7 @@ class TestSettingsAPI:
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200
         data = res.get_json()
+        assert data["autopilot_enabled"] is True
         assert data["autopilot_top_greens"] == 3
         assert data["autopilot_hard_reds"] == 4
 
