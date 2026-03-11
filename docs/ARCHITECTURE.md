@@ -398,13 +398,15 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 | `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
 | `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
 
-Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
-`safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_metadata`, `view_mode_left`,
-`view_mode_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
-`autoload_media_types`, autorun processor recipes) live
-separately in `vtsearch/settings.py` and are auto-saved to
-`data/settings.json`.
+Persistent settings live separately in `vtsearch/settings.py` and are
+auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
+`inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
+`calibration_fraction`, `audio_playing`, `swipe_animation`,
+`show_metadata`, `view_mode_*`, `grid_columns_*`, `focus_mode_*`,
+`panel_pct_*` (per-media-type layout), `autoload_media_types`,
+`autoload_media_embedders`, `autopilot_enabled`, `hide_autopilot`,
+`autopilot_top_greens`, `autopilot_hard_reds`, and autorun processor
+recipes.  See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
 Trainable models are persisted as JSON files in `data/trainable_models/`
