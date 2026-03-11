@@ -257,6 +257,75 @@ class TestSettingsModule:
         with pytest.raises(ValueError):
             settings_mod.set_view_mode_left({"nonexistent_type": "grid"})
 
+    def test_get_grid_item_size_left_default(self):
+        result = settings_mod.get_grid_item_size_left()
+        assert isinstance(result, dict)
+        for v in result.values():
+            assert v == "medium"
+
+    def test_get_grid_item_size_right_default(self):
+        result = settings_mod.get_grid_item_size_right()
+        assert isinstance(result, dict)
+        for v in result.values():
+            assert v == "medium"
+
+    def test_set_grid_item_size_left_per_type(self, isolated_settings):
+        settings_mod.set_grid_item_size_left({"audio": "small", "image": "large"})
+        result = settings_mod.get_grid_item_size_left()
+        assert result["audio"] == "small"
+        assert result["image"] == "large"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["grid_item_size_left"]["audio"] == "small"
+        assert raw["grid_item_size_left"]["image"] == "large"
+
+    def test_set_grid_item_size_right_per_type(self, isolated_settings):
+        settings_mod.set_grid_item_size_right({"audio": "large", "video": "small"})
+        result = settings_mod.get_grid_item_size_right()
+        assert result["audio"] == "large"
+        assert result["video"] == "small"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["grid_item_size_right"]["audio"] == "large"
+
+    def test_grid_item_size_left_legacy_scalar(self, isolated_settings):
+        settings_mod.set_grid_item_size_left("small")
+        result = settings_mod.get_grid_item_size_left()
+        for v in result.values():
+            assert v == "small"
+
+    def test_grid_item_size_right_legacy_scalar(self, isolated_settings):
+        settings_mod.set_grid_item_size_right("large")
+        result = settings_mod.get_grid_item_size_right()
+        for v in result.values():
+            assert v == "large"
+
+    def test_grid_item_size_left_persists_across_reset(self, isolated_settings):
+        settings_mod.set_grid_item_size_left({"audio": "small"})
+        settings_mod.reset()
+        assert settings_mod.get_grid_item_size_left()["audio"] == "small"
+
+    def test_grid_item_size_right_persists_across_reset(self, isolated_settings):
+        settings_mod.set_grid_item_size_right({"audio": "large"})
+        settings_mod.reset()
+        assert settings_mod.get_grid_item_size_right()["audio"] == "large"
+
+    def test_grid_item_size_left_invalid_size(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_item_size_left({"audio": "invalid"})
+
+    def test_grid_item_size_right_invalid_size(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_item_size_right({"audio": "invalid"})
+
+    def test_grid_item_size_invalid_scalar(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_item_size_left("invalid")
+
+    def test_grid_item_size_invalid_media_type(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_item_size_left({"nonexistent_type": "small"})
+
     def test_get_focus_mode_left_default(self):
         result = settings_mod.get_focus_mode_left()
         assert isinstance(result, dict)
@@ -344,6 +413,12 @@ class TestSettingsModule:
         assert isinstance(defaults["view_mode_right"], dict)
         for v in defaults["view_mode_right"].values():
             assert v == "grid"
+        assert isinstance(defaults["grid_item_size_left"], dict)
+        for v in defaults["grid_item_size_left"].values():
+            assert v == "medium"
+        assert isinstance(defaults["grid_item_size_right"], dict)
+        for v in defaults["grid_item_size_right"].values():
+            assert v == "medium"
         assert isinstance(defaults["focus_mode_left"], dict)
         for v in defaults["focus_mode_left"].values():
             assert v == "click"
@@ -786,6 +861,52 @@ class TestSettingsAPI:
         assert "show_metadata" in data
         assert "view_mode_left" in data
         assert "view_mode_right" in data
+
+    def test_update_grid_item_size_left_per_type(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_left": {"audio": "small", "image": "large"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_item_size_left"]["audio"] == "small"
+        assert data["grid_item_size_left"]["image"] == "large"
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["grid_item_size_left"]["audio"] == "small"
+
+    def test_update_grid_item_size_left_legacy_scalar(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_left": "small"})
+        assert res.status_code == 200
+        data = res.get_json()
+        for v in data["grid_item_size_left"].values():
+            assert v == "small"
+
+    def test_update_grid_item_size_left_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_left": {"audio": "invalid"}})
+        assert res.status_code == 400
+
+    def test_update_grid_item_size_left_invalid_scalar(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_left": "invalid"})
+        assert res.status_code == 400
+
+    def test_update_grid_item_size_right_per_type(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_right": {"audio": "large", "video": "small"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_item_size_right"]["audio"] == "large"
+        assert data["grid_item_size_right"]["video"] == "small"
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["grid_item_size_right"]["audio"] == "large"
+
+    def test_update_grid_item_size_right_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_item_size_right": {"audio": "invalid"}})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_grid_item_sizes(self, client):
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "grid_item_size_left" in data
+        assert "grid_item_size_right" in data
 
     def test_update_focus_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"focus_mode_left": {"audio": "hover", "image": "click"}})

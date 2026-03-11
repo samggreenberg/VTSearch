@@ -1,4 +1,4 @@
-<div class="media-list" [class.grid-layout]="viewMode === 'grid'" role="listbox" aria-label="Media items" #listContainer>
+<div class="media-list" [class.grid-layout]="viewMode === 'grid'" [class.grid-small]="viewMode === 'grid' && gridItemSize === 'small'" [class.grid-large]="viewMode === 'grid' && gridItemSize === 'large'" role="listbox" aria-label="Media items" #listContainer>
   @for (item of orderedItems; track trackByMediaId($index, item)) {
     @if (item.showThreshold) {
       <div class="media-threshold-line" aria-label="Good/Bad threshold">

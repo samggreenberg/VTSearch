@@ -253,6 +253,8 @@ export interface AppSettings {
   show_metadata?: boolean;
   view_mode_left?: Record<string, 'grid' | 'list'>;
   view_mode_right?: Record<string, 'grid' | 'list'>;
+  grid_item_size_left?: Record<string, 'small' | 'medium' | 'large'>;
+  grid_item_size_right?: Record<string, 'small' | 'medium' | 'large'>;
   focus_mode_left?: Record<string, 'click' | 'hover'>;
   focus_mode_right?: Record<string, 'click' | 'hover'>;
   autoload_media_types?: string[];
