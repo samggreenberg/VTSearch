@@ -81,6 +81,22 @@
   }
 }
 
+.label-indicator {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  text-align: center;
+  line-height: 1;
+
+  &.good {
+    color: var(--color-good);
+  }
+
+  &.bad {
+    color: var(--color-bad);
+  }
+}
+
 .media-name {
   flex: 1;
   font-size: 0.78rem;
