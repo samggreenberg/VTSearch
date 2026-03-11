@@ -138,6 +138,18 @@ def update_settings():
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
 
+    if "panel_pct_left" in body:
+        try:
+            settings.set_panel_pct_left(body["panel_pct_left"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "panel_pct_right" in body:
+        try:
+            settings.set_panel_pct_right(body["panel_pct_right"])
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
     if "autopilot_enabled" in body:
         settings.set_autopilot_enabled(bool(body["autopilot_enabled"]))
 

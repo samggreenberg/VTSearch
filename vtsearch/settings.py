@@ -52,6 +52,8 @@ _DEFAULTS: dict[str, Any] = {
     "grid_columns_right": {},
     "focus_mode_left": {},
     "focus_mode_right": {},
+    "panel_pct_left": {},
+    "panel_pct_right": {},
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
@@ -129,6 +131,9 @@ def get_defaults() -> dict[str, Any]:
     # Expand focus mode defaults to per-media-type dicts
     result["focus_mode_left"] = {tid: _FOCUS_MODE_DEFAULTS["left"] for tid in valid_types}
     result["focus_mode_right"] = {tid: _FOCUS_MODE_DEFAULTS["right"] for tid in valid_types}
+    # Expand panel percentage defaults to per-media-type dicts
+    result["panel_pct_left"] = {tid: _PANEL_PCT_DEFAULTS["left"] for tid in valid_types}
+    result["panel_pct_right"] = {tid: _PANEL_PCT_DEFAULTS["right"] for tid in valid_types}
     return result
 
 
@@ -146,6 +151,9 @@ def get_all() -> dict[str, Any]:
         # Always return expanded per-media-type focus mode dicts
         result["focus_mode_left"] = get_focus_mode_left()
         result["focus_mode_right"] = get_focus_mode_right()
+        # Always return expanded per-media-type panel percentage dicts
+        result["panel_pct_left"] = get_panel_pct_left()
+        result["panel_pct_right"] = get_panel_pct_right()
         return result
 
 
@@ -238,6 +246,8 @@ del _key, _cast, _coerce, _g, _s
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
 _GRID_COLUMNS_DEFAULT = 2
 _FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
+_PANEL_PCT_DEFAULTS: dict[str, float | None] = {"left": None, "right": None}
+VALID_PANEL_PCT = (0.05, 0.80)  # 5%–80% of window width
 
 
 def _get_view_mode_dict(key: str) -> dict[str, str]:
@@ -457,6 +467,97 @@ def _set_focus_mode_dict(key: str, value: dict[str, str] | str) -> None:
     with _settings_lock:
         s = _ensure_loaded()
         s[key] = dict(value)
+        _save(s)
+
+
+# -------------------------------------------------------------------
+# Per-media-type panel percentage settings
+# -------------------------------------------------------------------
+
+
+def _get_panel_pct_dict(key: str) -> dict[str, float | None]:
+    """Return the per-media-type panel percentage dict for *key*.
+
+    Values are floats in [0.05, 0.80] representing fraction of window width,
+    or ``None`` if not yet set (use default pixel widths).
+    """
+    side = key.replace("panel_pct_", "")
+    default_val = _PANEL_PCT_DEFAULTS.get(side)
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, (int, float)):
+        # Legacy scalar — expand to all types
+        val = float(raw)
+        lo, hi = VALID_PANEL_PCT
+        val = max(lo, min(hi, val))
+        return {tid: val for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        result: dict[str, float | None] = {}
+        lo, hi = VALID_PANEL_PCT
+        for tid in _valid_media_types():
+            v = raw.get(tid, default_val)
+            if v is None:
+                result[tid] = None
+            else:
+                try:
+                    fv = float(v)
+                    result[tid] = max(lo, min(hi, fv))
+                except (ValueError, TypeError):
+                    result[tid] = default_val
+        return result
+    return {tid: default_val for tid in _valid_media_types()}
+
+
+def get_panel_pct_left() -> dict[str, float | None]:
+    """Return a dict mapping media type ID -> panel width fraction for the left panel."""
+    return _get_panel_pct_dict("panel_pct_left")
+
+
+def get_panel_pct_right() -> dict[str, float | None]:
+    """Return a dict mapping media type ID -> panel width fraction for the right panel."""
+    return _get_panel_pct_dict("panel_pct_right")
+
+
+def set_panel_pct_left(value: dict[str, float | None] | float | None) -> None:
+    """Set the left panel width fraction (per-media-type dict or scalar)."""
+    _set_panel_pct_dict("panel_pct_left", value)
+
+
+def set_panel_pct_right(value: dict[str, float | None] | float | None) -> None:
+    """Set the right panel width fraction (per-media-type dict or scalar)."""
+    _set_panel_pct_dict("panel_pct_right", value)
+
+
+def _set_panel_pct_dict(key: str, value: dict[str, float | None] | float | None) -> None:
+    """Persist the per-media-type panel percentage dict for *key*."""
+    valid_types = _valid_media_types()
+    lo, hi = VALID_PANEL_PCT
+    if value is None:
+        value = {tid: None for tid in valid_types}
+    elif isinstance(value, (int, float)):
+        fv = float(value)
+        if not (lo <= fv <= hi):
+            raise ValueError(f"Invalid {key}: {fv!r} (must be between {lo} and {hi})")
+        value = {tid: fv for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict, number, or null")
+    coerced: dict[str, float | None] = {}
+    for tid, pct in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if pct is None:
+            coerced[tid] = None
+        else:
+            try:
+                fv = float(pct)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid {key} value for {tid}: {pct!r}")
+            if not (lo <= fv <= hi):
+                raise ValueError(f"Invalid {key} value for {tid}: {fv!r} (must be between {lo} and {hi})")
+            coerced[tid] = fv
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = coerced
         _save(s)
 
 

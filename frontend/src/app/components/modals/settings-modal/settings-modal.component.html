@@ -75,6 +75,20 @@
               <label class="form-label">Right panel grid columns</label>
               <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
             </div>
+            <div class="form-group">
+              <label class="form-label">Left Panel %</label>
+              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_left', activeViewTab) }}</span>
+              @if (getPanelPct('panel_pct_left', activeViewTab) != null) {
+                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_left', activeViewTab)">Reset</button>
+              }
+            </div>
+            <div class="form-group">
+              <label class="form-label">Right Panel %</label>
+              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_right', activeViewTab) }}</span>
+              @if (getPanelPct('panel_pct_right', activeViewTab) != null) {
+                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_right', activeViewTab)">Reset</button>
+              }
+            </div>
           </div>
         }
       </div>

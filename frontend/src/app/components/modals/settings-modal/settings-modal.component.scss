@@ -83,6 +83,12 @@
   background: var(--bg-primary, #1e1e2e);
 }
 
+.panel-pct-display {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-right: 0.5rem;
+}
+
 .settings-actions {
   display: flex;
   gap: 0.5rem;
