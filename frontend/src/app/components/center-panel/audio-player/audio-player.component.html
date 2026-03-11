@@ -13,9 +13,10 @@
   controls
   controlsList="nodownload"
   loop
-  autoplay
   [src]="audioSrc"
   [attr.aria-label]="media.filename || 'Audio media'"
   (volumechange)="onVolumeChange()"
+  (play)="onPlay()"
+  (pause)="onPause()"
   class="audio-element"
 ></audio>

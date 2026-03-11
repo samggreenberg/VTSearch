@@ -249,6 +249,7 @@ export interface AppSettings {
   safe_thresholds?: boolean;
   calibrate_count?: number;
   calibration_fraction?: number;
+  audio_playing?: boolean;
   swipe_animation?: boolean;
   show_metadata?: boolean;
   view_mode_left?: Record<string, 'grid' | 'list'>;
