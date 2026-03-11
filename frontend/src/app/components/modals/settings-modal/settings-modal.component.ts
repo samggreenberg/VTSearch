@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
@@ -17,6 +17,7 @@ import { Theme, ThemeService } from '../../../services/theme.service';
   styleUrl: './settings-modal.component.scss',
 })
 export class SettingsModalComponent implements OnInit {
+  @Input() preselectedViewTab = '';
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
@@ -46,7 +47,12 @@ export class SettingsModalComponent implements OnInit {
         );
         this.mediaTypes = res.mediaTypes.media_types || [];
         if (this.mediaTypes.length > 0) {
-          this.activeViewTab = this.mediaTypes[0].type_id;
+          const preselected = this.preselectedViewTab;
+          if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
+            this.activeViewTab = preselected;
+          } else {
+            this.activeViewTab = this.mediaTypes[0].type_id;
+          }
         }
         this.loading = false;
       },

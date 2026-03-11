@@ -4,6 +4,8 @@ import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { MediaStateService } from './services/media-state.service';
+import { DatasetStateService } from './services/dataset-state.service';
 @Component({
   selector: 'app-root',
   imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
@@ -15,9 +17,12 @@ export class AppComponent {
   menuOpen = false;
   showSettings = false;
   isOnLabelView = false;
+  settingsViewTab = '';
 
   constructor(
     private router: Router,
+    private mediaState: MediaStateService,
+    private datasetState: DatasetStateService,
   ) {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -85,6 +90,32 @@ export class AppComponent {
 
   onSettings(): void {
     this.menuOpen = false;
+    this.settingsViewTab = this.inferMediaType();
     this.showSettings = true;
+  }
+
+  private inferMediaType(): string {
+    // From labeling view: use the media type of loaded medias
+    if (this.isOnLabelView) {
+      const medias = this.mediaState.medias;
+      if (medias.length > 0) {
+        return medias[0].type;
+      }
+      return '';
+    }
+    // From dashboard: if all datasets and models share a single media type, use it
+    const datasets = this.datasetState.datasets;
+    const models = this.datasetState.models;
+    const types = new Set<string>();
+    for (const d of datasets) {
+      if (d.media_type) types.add(d.media_type);
+    }
+    for (const m of models) {
+      if (m.media_type) types.add(m.media_type);
+    }
+    if (types.size === 1) {
+      return [...types][0];
+    }
+    return '';
   }
 }
