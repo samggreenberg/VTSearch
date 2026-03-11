@@ -21,6 +21,9 @@
     }
     <span class="media-name-grid">{{ displayName }}</span>
   } @else {
+    <span class="label-indicator" [class.good]="voteLabel === 'good'" [class.bad]="voteLabel === 'bad'">
+      @if (voteLabel === 'good') { &#x2713; } @else if (voteLabel === 'bad') { &#x2717; }
+    </span>
     <span class="media-name">{{ displayName }}</span>
   }
   @if (score !== null) {
