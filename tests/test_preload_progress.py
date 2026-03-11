@@ -118,9 +118,10 @@ class TestPreloadConsoleOutput:
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_emb._on_progress("loading", "model.safetensors", 50, 100)
             mock_emb._on_progress("loading", "model.safetensors", 100, 100)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 3)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: preprocessing...", 2, 3)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 3, 3)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 4)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: resampling JIT...", 2, 4)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: preprocessing...", 3, 4)
+            mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 4, 4)
 
         mock_emb.load_models = fake_load_models
         mock_embedders_for_type.return_value = [mock_emb]
