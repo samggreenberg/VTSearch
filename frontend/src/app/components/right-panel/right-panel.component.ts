@@ -46,13 +46,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
-  gridColumns: '1' | '2' | '3' = '2';
+  gridColumns: number = 2;
   showLabelImport = false;
   showLabelExport = false;
   showDetectorExport = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsRightDict: Record<string, '1' | '2' | '3'> = {};
+  private gridColumnsRightDict: Record<string, number> = {};
   private currentMediaType = '';
   private destroy$ = new Subject<void>();
 
@@ -75,7 +75,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       if (newType !== this.currentMediaType) {
         this.currentMediaType = newType;
         this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
-        this.gridColumns = this.gridColumnsRightDict[newType] ?? '2';
+        this.gridColumns = this.gridColumnsRightDict[newType] ?? 2;
       }
     }
   }
@@ -135,9 +135,9 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
           }
           const colsDict = settings.grid_columns_right;
           if (colsDict && typeof colsDict === 'object') {
-            this.gridColumnsRightDict = colsDict as Record<string, '1' | '2' | '3'>;
+            this.gridColumnsRightDict = colsDict as Record<string, number>;
             if (this.currentMediaType) {
-              this.gridColumns = this.gridColumnsRightDict[this.currentMediaType] ?? '2';
+              this.gridColumns = this.gridColumnsRightDict[this.currentMediaType] ?? 2;
             }
           }
         },

@@ -150,7 +150,7 @@ def get_all() -> dict[str, Any]:
 
 VALID_THEMES = ("dark", "light", "highviz")
 VALID_VIEW_MODES = ("grid", "list")
-VALID_GRID_COLUMNS = ("1", "2", "3")
+VALID_GRID_COLUMNS = range(1, 7)  # 1–6 inclusive
 VALID_FOCUS_MODES = ("click", "hover")
 
 
@@ -234,7 +234,7 @@ del _key, _cast, _coerce, _g, _s
 # -------------------------------------------------------------------
 
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
-_GRID_COLUMNS_DEFAULT = "2"
+_GRID_COLUMNS_DEFAULT = 2
 _FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
 
 
@@ -302,62 +302,82 @@ def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
         _save(s)
 
 
-def _get_grid_columns_dict(key: str) -> dict[str, str]:
+def _get_grid_columns_dict(key: str) -> dict[str, int]:
     """Return the per-media-type grid columns dict for *key*.
 
-    Handles backward compatibility: if the stored value is a plain string,
-    it is treated as the column count for all known media types.
+    Handles backward compatibility: if the stored value is a plain string
+    or int, it is treated as the column count for all known media types.
     """
     with _settings_lock:
         raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    if isinstance(raw, str):
-        return {tid: raw for tid in _valid_media_types()}
+    if isinstance(raw, (str, int)):
+        try:
+            val = int(raw)
+        except (ValueError, TypeError):
+            val = _GRID_COLUMNS_DEFAULT
+        if val not in VALID_GRID_COLUMNS:
+            val = _GRID_COLUMNS_DEFAULT
+        return {tid: val for tid in _valid_media_types()}
     if isinstance(raw, dict):
         result = {}
         for tid in _valid_media_types():
-            val = raw.get(tid, _GRID_COLUMNS_DEFAULT)
-            result[tid] = val if val in VALID_GRID_COLUMNS else _GRID_COLUMNS_DEFAULT
+            v = raw.get(tid, _GRID_COLUMNS_DEFAULT)
+            try:
+                v = int(v)
+            except (ValueError, TypeError):
+                v = _GRID_COLUMNS_DEFAULT
+            result[tid] = v if v in VALID_GRID_COLUMNS else _GRID_COLUMNS_DEFAULT
         return result
     return {tid: _GRID_COLUMNS_DEFAULT for tid in _valid_media_types()}
 
 
-def get_grid_columns_left() -> dict[str, str]:
+def get_grid_columns_left() -> dict[str, int]:
     """Return a dict mapping media type ID -> grid columns for the left panel."""
     return _get_grid_columns_dict("grid_columns_left")
 
 
-def get_grid_columns_right() -> dict[str, str]:
+def get_grid_columns_right() -> dict[str, int]:
     """Return a dict mapping media type ID -> grid columns for the right panel."""
     return _get_grid_columns_dict("grid_columns_right")
 
 
-def set_grid_columns_left(value: dict[str, str] | str) -> None:
+def set_grid_columns_left(value: dict[str, int] | int) -> None:
     """Set the left panel grid columns (per-media-type dict or scalar)."""
     _set_grid_columns_dict("grid_columns_left", value)
 
 
-def set_grid_columns_right(value: dict[str, str] | str) -> None:
+def set_grid_columns_right(value: dict[str, int] | int) -> None:
     """Set the right panel grid columns (per-media-type dict or scalar)."""
     _set_grid_columns_dict("grid_columns_right", value)
 
 
-def _set_grid_columns_dict(key: str, value: dict[str, str] | str) -> None:
+def _set_grid_columns_dict(key: str, value: dict[str, int] | int) -> None:
     """Persist the per-media-type grid columns dict for *key*."""
     valid_types = _valid_media_types()
-    if isinstance(value, str):
+    if isinstance(value, (str, int)):
+        try:
+            value = int(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid {key}: {value!r}")
         if value not in VALID_GRID_COLUMNS:
             raise ValueError(f"Invalid {key}: {value!r}")
         value = {tid: value for tid in valid_types}
     if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or string")
+        raise ValueError(f"{key} must be a dict or int")
+    coerced = {}
     for tid, cols in value.items():
         if tid not in valid_types:
             raise ValueError(f"Invalid media type: {tid!r}")
+        try:
+            cols = int(cols)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
         if cols not in VALID_GRID_COLUMNS:
             raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
+        coerced[tid] = cols
     with _settings_lock:
         s = _ensure_loaded()
-        s[key] = dict(value)
+        s[key] = coerced
         _save(s)
 
 

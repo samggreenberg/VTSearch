@@ -261,54 +261,54 @@ class TestSettingsModule:
         result = settings_mod.get_grid_columns_left()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v == "2"
+            assert v == 2
 
     def test_get_grid_columns_right_default(self):
         result = settings_mod.get_grid_columns_right()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v == "2"
+            assert v == 2
 
     def test_set_grid_columns_left_per_type(self, isolated_settings):
-        settings_mod.set_grid_columns_left({"audio": "3", "image": "1"})
+        settings_mod.set_grid_columns_left({"audio": 3, "image": 1})
         result = settings_mod.get_grid_columns_left()
-        assert result["audio"] == "3"
-        assert result["image"] == "1"
+        assert result["audio"] == 3
+        assert result["image"] == 1
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["grid_columns_left"]["audio"] == "3"
-        assert raw["grid_columns_left"]["image"] == "1"
+        assert raw["grid_columns_left"]["audio"] == 3
+        assert raw["grid_columns_left"]["image"] == 1
 
     def test_set_grid_columns_right_per_type(self, isolated_settings):
-        settings_mod.set_grid_columns_right({"audio": "1", "video": "3"})
+        settings_mod.set_grid_columns_right({"audio": 1, "video": 3})
         result = settings_mod.get_grid_columns_right()
-        assert result["audio"] == "1"
-        assert result["video"] == "3"
+        assert result["audio"] == 1
+        assert result["video"] == 3
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["grid_columns_right"]["audio"] == "1"
+        assert raw["grid_columns_right"]["audio"] == 1
 
     def test_grid_columns_left_legacy_scalar(self, isolated_settings):
-        settings_mod.set_grid_columns_left("3")
+        settings_mod.set_grid_columns_left(3)
         result = settings_mod.get_grid_columns_left()
         for v in result.values():
-            assert v == "3"
+            assert v == 3
 
     def test_grid_columns_right_legacy_scalar(self, isolated_settings):
-        settings_mod.set_grid_columns_right("1")
+        settings_mod.set_grid_columns_right(1)
         result = settings_mod.get_grid_columns_right()
         for v in result.values():
-            assert v == "1"
+            assert v == 1
 
     def test_grid_columns_left_persists_across_reset(self, isolated_settings):
-        settings_mod.set_grid_columns_left({"audio": "3"})
+        settings_mod.set_grid_columns_left({"audio": 3})
         settings_mod.reset()
-        assert settings_mod.get_grid_columns_left()["audio"] == "3"
+        assert settings_mod.get_grid_columns_left()["audio"] == 3
 
     def test_grid_columns_right_persists_across_reset(self, isolated_settings):
-        settings_mod.set_grid_columns_right({"audio": "1"})
+        settings_mod.set_grid_columns_right({"audio": 1})
         settings_mod.reset()
-        assert settings_mod.get_grid_columns_right()["audio"] == "1"
+        assert settings_mod.get_grid_columns_right()["audio"] == 1
 
     def test_grid_columns_left_invalid_value(self):
         with pytest.raises(ValueError):
@@ -324,7 +324,24 @@ class TestSettingsModule:
 
     def test_grid_columns_invalid_media_type(self):
         with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left({"nonexistent_type": "3"})
+            settings_mod.set_grid_columns_left({"nonexistent_type": 3})
+
+    def test_grid_columns_out_of_range(self):
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_columns_left({"audio": 0})
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_columns_left({"audio": 7})
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_columns_left(0)
+        with pytest.raises(ValueError):
+            settings_mod.set_grid_columns_left(7)
+
+    def test_grid_columns_allows_up_to_six(self, isolated_settings):
+        settings_mod.set_grid_columns_left({"audio": 6})
+        assert settings_mod.get_grid_columns_left()["audio"] == 6
+        settings_mod.set_grid_columns_right(5)
+        for v in settings_mod.get_grid_columns_right().values():
+            assert v == 5
 
     def test_get_focus_mode_left_default(self):
         result = settings_mod.get_focus_mode_left()
@@ -415,10 +432,10 @@ class TestSettingsModule:
             assert v == "grid"
         assert isinstance(defaults["grid_columns_left"], dict)
         for v in defaults["grid_columns_left"].values():
-            assert v == "2"
+            assert v == 2
         assert isinstance(defaults["grid_columns_right"], dict)
         for v in defaults["grid_columns_right"].values():
-            assert v == "2"
+            assert v == 2
         assert isinstance(defaults["focus_mode_left"], dict)
         for v in defaults["focus_mode_left"].values():
             assert v == "click"
@@ -863,21 +880,21 @@ class TestSettingsAPI:
         assert "view_mode_right" in data
 
     def test_update_grid_columns_left_per_type(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": {"audio": "3", "image": "1"}})
+        res = client.put("/api/settings", json={"grid_columns_left": {"audio": 3, "image": 1}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["grid_columns_left"]["audio"] == "3"
-        assert data["grid_columns_left"]["image"] == "1"
+        assert data["grid_columns_left"]["audio"] == 3
+        assert data["grid_columns_left"]["image"] == 1
 
         res2 = client.get("/api/settings")
-        assert res2.get_json()["grid_columns_left"]["audio"] == "3"
+        assert res2.get_json()["grid_columns_left"]["audio"] == 3
 
-    def test_update_grid_columns_left_legacy_scalar(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": "3"})
+    def test_update_grid_columns_left_scalar(self, client):
+        res = client.put("/api/settings", json={"grid_columns_left": 3})
         assert res.status_code == 200
         data = res.get_json()
         for v in data["grid_columns_left"].values():
-            assert v == "3"
+            assert v == 3
 
     def test_update_grid_columns_left_invalid(self, client):
         res = client.put("/api/settings", json={"grid_columns_left": {"audio": "invalid"}})
@@ -887,15 +904,21 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"grid_columns_left": "invalid"})
         assert res.status_code == 400
 
+    def test_update_grid_columns_left_out_of_range(self, client):
+        res = client.put("/api/settings", json={"grid_columns_left": 0})
+        assert res.status_code == 400
+        res = client.put("/api/settings", json={"grid_columns_left": 7})
+        assert res.status_code == 400
+
     def test_update_grid_columns_right_per_type(self, client):
-        res = client.put("/api/settings", json={"grid_columns_right": {"audio": "1", "video": "3"}})
+        res = client.put("/api/settings", json={"grid_columns_right": {"audio": 1, "video": 3}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["grid_columns_right"]["audio"] == "1"
-        assert data["grid_columns_right"]["video"] == "3"
+        assert data["grid_columns_right"]["audio"] == 1
+        assert data["grid_columns_right"]["video"] == 3
 
         res2 = client.get("/api/settings")
-        assert res2.get_json()["grid_columns_right"]["audio"] == "1"
+        assert res2.get_json()["grid_columns_right"]["audio"] == 1
 
     def test_update_grid_columns_right_invalid(self, client):
         res = client.put("/api/settings", json={"grid_columns_right": {"audio": "invalid"}})
