@@ -36,6 +36,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private gridColumnsLeftDict: Record<string, number> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
+  private panelPctLeftDict: Record<string, number | null> = {};
+  private panelPctRightDict: Record<string, number | null> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
@@ -92,6 +94,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
+            this.applyPanelPct(newType);
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -160,6 +163,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    this.savePanelPct('left');
   }
 
   // --- Right divider drag ---
@@ -188,6 +192,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
+    this.savePanelPct('right');
   }
 
   // --- Data loading ---
@@ -224,6 +229,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
           if (this.currentMediaType) {
             this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
+          }
+        }
+        const pplDict = settings.panel_pct_left;
+        if (pplDict && typeof pplDict === 'object') {
+          this.panelPctLeftDict = pplDict as Record<string, number | null>;
+          if (this.currentMediaType) {
+            this.applyPanelPct(this.currentMediaType);
+          }
+        }
+        const pprDict = settings.panel_pct_right;
+        if (pprDict && typeof pprDict === 'object') {
+          this.panelPctRightDict = pprDict as Record<string, number | null>;
+          if (this.currentMediaType) {
+            this.applyPanelPct(this.currentMediaType);
           }
         }
         if (settings.autopilot_enabled != null) {
@@ -451,6 +470,37 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     } else if (phase === 'new' || phase === 'done') {
       this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('new');
+    }
+  }
+
+  // --- Panel percentage helpers ---
+
+  private savePanelPct(side: 'left' | 'right'): void {
+    if (!this.currentMediaType) return;
+    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+    if (layoutWidth <= 0) return;
+    const px = side === 'left' ? this.leftWidth : this.rightWidth;
+    const pct = Math.round((px / layoutWidth) * 1000) / 1000; // 3 decimal places
+    const key = side === 'left' ? 'panel_pct_left' : 'panel_pct_right';
+    const dict = side === 'left' ? this.panelPctLeftDict : this.panelPctRightDict;
+    dict[this.currentMediaType] = pct;
+    this.settingsState.update({ [key]: { ...dict } }).subscribe();
+  }
+
+  private applyPanelPct(mediaType: string): void {
+    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+    if (layoutWidth <= 0) return;
+    const leftPct = this.panelPctLeftDict[mediaType];
+    if (leftPct != null && !this.autopilotCollapsed) {
+      const px = Math.round(leftPct * layoutWidth);
+      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, px));
+      this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+    }
+    const rightPct = this.panelPctRightDict[mediaType];
+    if (rightPct != null) {
+      const px = Math.round(rightPct * layoutWidth);
+      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, px));
+      this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }
   }
 
