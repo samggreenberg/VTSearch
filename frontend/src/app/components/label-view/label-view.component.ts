@@ -29,11 +29,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
-  gridColumnsLeft: '1' | '2' | '3' = '2';
+  gridColumnsLeft: number = 2;
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsLeftDict: Record<string, '1' | '2' | '3'> = {};
+  private gridColumnsLeftDict: Record<string, number> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private currentMediaType = '';
@@ -88,7 +88,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? '2';
+            this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
           }
@@ -206,9 +206,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         const colsDict = settings.grid_columns_left;
         if (colsDict && typeof colsDict === 'object') {
-          this.gridColumnsLeftDict = colsDict as Record<string, '1' | '2' | '3'>;
+          this.gridColumnsLeftDict = colsDict as Record<string, number>;
           if (this.currentMediaType) {
-            this.gridColumnsLeft = this.gridColumnsLeftDict[this.currentMediaType] ?? '2';
+            this.gridColumnsLeft = this.gridColumnsLeftDict[this.currentMediaType] ?? 2;
           }
         }
         const fmLeft = settings.focus_mode_left;

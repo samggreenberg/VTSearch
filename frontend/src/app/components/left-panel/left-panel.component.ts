@@ -42,7 +42,7 @@ export class LeftPanelComponent implements OnInit {
   @Input() sortStatus = '';
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridColumns: '1' | '2' | '3' = '2';
+  @Input() gridColumns: number = 2;
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() loadSortLabel = '';
   @Input() textQuery = '';
