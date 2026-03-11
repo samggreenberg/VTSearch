@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import vtsearch.utils.state_core as _core
 from vtsearch.utils.state_core import _state_lock, bad_votes, good_votes, medias
 
 
-def build_diversity_tree(media_dict: dict[int, dict[str, Any]] | None = None) -> None:
+def build_diversity_tree(
+    media_dict: dict[int, dict[str, Any]] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> None:
     """Build a 3-Diversity Tree from media embeddings.
 
     Uses the global ``medias`` dict by default, or an explicit *media_dict*
     if provided.  Existing labels in ``good_votes`` and ``bad_votes`` are
     replayed into the new tree so the seen state stays accurate.
+
+    *on_progress*, when provided, is called as ``on_progress(current, total)``
+    to report how many vectors have been placed into leaf nodes so far.
     """
     import numpy as np
 
@@ -31,7 +38,7 @@ def build_diversity_tree(media_dict: dict[int, dict[str, Any]] | None = None) ->
             _core._diversity_tree = None
             return
 
-        _core._diversity_tree = DiversityTree(vectors, k=3)
+        _core._diversity_tree = DiversityTree(vectors, k=3, on_progress=on_progress)
 
         # Replay existing labels so the tree reflects the current vote state.
         for cid in good_votes:

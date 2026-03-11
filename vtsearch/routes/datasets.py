@@ -635,11 +635,15 @@ def load_registered_dataset(dataset_id: str):
                 step=3, total_steps=_LOAD_STEPS,
             )
             collapse_duplicates(medias)
-            update_progress(
-                "loading", "Building diversity index…", 0, 0,
-                step=3, total_steps=_LOAD_STEPS,
-            )
-            build_diversity_tree()
+            def _diversity_progress(current: int, total: int) -> None:
+                update_progress(
+                    "loading", "Building diversity index…",
+                    current=current, total=total,
+                    step=3, total_steps=_LOAD_STEPS,
+                )
+
+            _diversity_progress(0, 0)
+            build_diversity_tree(on_progress=_diversity_progress)
             _reg_set_loaded(dataset_id)
             # Update item count and dupe count in case they changed
             _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())

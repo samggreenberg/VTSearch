@@ -313,11 +313,15 @@ def _run_origin_load_in_background(
             if clipper:
                 _apply_clipper(medias, clipper)
             collapse_duplicates(medias)
-            update_progress(
-                "loading", "Building diversity index…",
-                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
-            )
-            build_diversity_tree()
+            def _diversity_progress(current: int, total: int) -> None:
+                update_progress(
+                    "loading", "Building diversity index…",
+                    current=current, total=total,
+                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                )
+
+            _diversity_progress(0, 0)
+            build_diversity_tree(on_progress=_diversity_progress)
             update_progress(
                 "loading", "Saving to registry…",
                 step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
