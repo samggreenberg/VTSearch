@@ -28,6 +28,10 @@
   padding: 2px 8px;
   margin: 2px 0;
 
+  .grid-layout & {
+    grid-column: 1 / -1;
+  }
+
   &::before,
   &::after {
     content: '';
