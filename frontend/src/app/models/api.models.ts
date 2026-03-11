@@ -255,8 +255,8 @@ export interface AppSettings {
   view_mode_right?: Record<string, 'grid' | 'list'>;
   grid_item_size_left?: Record<string, 'small' | 'medium' | 'large'>;
   grid_item_size_right?: Record<string, 'small' | 'medium' | 'large'>;
-  focus_mode_left?: 'click' | 'hover';
-  focus_mode_right?: 'click' | 'hover';
+  focus_mode_left?: Record<string, 'click' | 'hover'>;
+  focus_mode_right?: Record<string, 'click' | 'hover'>;
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];

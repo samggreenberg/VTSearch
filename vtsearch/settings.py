@@ -50,8 +50,8 @@ _DEFAULTS: dict[str, Any] = {
     "view_mode_right": {},
     "grid_item_size_left": {},
     "grid_item_size_right": {},
-    "focus_mode_left": "click",
-    "focus_mode_right": "click",
+    "focus_mode_left": {},
+    "focus_mode_right": {},
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
@@ -125,6 +125,9 @@ def get_defaults() -> dict[str, Any]:
     result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
     result["grid_item_size_left"] = {tid: _GRID_ITEM_SIZE_DEFAULT for tid in valid_types}
     result["grid_item_size_right"] = {tid: _GRID_ITEM_SIZE_DEFAULT for tid in valid_types}
+    # Expand focus mode defaults to per-media-type dicts
+    result["focus_mode_left"] = {tid: _FOCUS_MODE_DEFAULTS["left"] for tid in valid_types}
+    result["focus_mode_right"] = {tid: _FOCUS_MODE_DEFAULTS["right"] for tid in valid_types}
     return result
 
 
@@ -139,6 +142,9 @@ def get_all() -> dict[str, Any]:
         result["view_mode_right"] = get_view_mode_right()
         result["grid_item_size_left"] = get_grid_item_size_left()
         result["grid_item_size_right"] = get_grid_item_size_right()
+        # Always return expanded per-media-type focus mode dicts
+        result["focus_mode_left"] = get_focus_mode_left()
+        result["focus_mode_right"] = get_focus_mode_right()
         return result
 
 
@@ -210,8 +216,6 @@ _SETTING_SPECS: list[tuple] = [
     ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
     ("swipe_animation", bool, None),
     ("show_metadata", bool, None),
-    ("focus_mode_left", str, _one_of("focus_mode_left", VALID_FOCUS_MODES)),
-    ("focus_mode_right", str, _one_of("focus_mode_right", VALID_FOCUS_MODES)),
     ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
@@ -231,6 +235,7 @@ del _key, _cast, _coerce, _g, _s
 
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
 _GRID_ITEM_SIZE_DEFAULT = "medium"
+_FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
 
 
 def _get_view_mode_dict(key: str) -> dict[str, str]:
@@ -361,6 +366,76 @@ def _valid_media_types() -> tuple[str, ...]:
     from vtsearch.media import all_type_ids
 
     return tuple(all_type_ids())
+
+
+# -------------------------------------------------------------------
+# Per-media-type focus mode settings
+# -------------------------------------------------------------------
+
+
+def _get_focus_mode_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type focus mode dict for *key* (``focus_mode_left`` or ``focus_mode_right``).
+
+    Handles backward compatibility: if the stored value is a plain string
+    (old format), it is treated as the mode for all known media types.
+    """
+    side = key.replace("focus_mode_", "")
+    default_mode = _FOCUS_MODE_DEFAULTS.get(side, "click")
+    with _settings_lock:
+        raw = _ensure_loaded().get(key, _DEFAULTS[key])
+    if isinstance(raw, str):
+        # Legacy scalar value — expand to dict for all known types
+        mode = raw if raw in VALID_FOCUS_MODES else default_mode
+        return {tid: mode for tid in _valid_media_types()}
+    if isinstance(raw, dict):
+        # Fill in missing types with the side default
+        result = {}
+        for tid in _valid_media_types():
+            val = raw.get(tid, default_mode)
+            result[tid] = val if val in VALID_FOCUS_MODES else default_mode
+        return result
+    return {tid: default_mode for tid in _valid_media_types()}
+
+
+def get_focus_mode_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> focus mode for the left panel."""
+    return _get_focus_mode_dict("focus_mode_left")
+
+
+def get_focus_mode_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> focus mode for the right panel."""
+    return _get_focus_mode_dict("focus_mode_right")
+
+
+def set_focus_mode_left(value: dict[str, str] | str) -> None:
+    """Set the left panel focus mode (per-media-type dict or legacy scalar)."""
+    _set_focus_mode_dict("focus_mode_left", value)
+
+
+def set_focus_mode_right(value: dict[str, str] | str) -> None:
+    """Set the right panel focus mode (per-media-type dict or legacy scalar)."""
+    _set_focus_mode_dict("focus_mode_right", value)
+
+
+def _set_focus_mode_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type focus mode dict for *key*."""
+    valid_types = _valid_media_types()
+    if isinstance(value, str):
+        # Legacy scalar — expand to all types
+        if value not in VALID_FOCUS_MODES:
+            raise ValueError(f"Invalid {key}: {value!r}")
+        value = {tid: value for tid in valid_types}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a dict or string")
+    for tid, mode in value.items():
+        if tid not in valid_types:
+            raise ValueError(f"Invalid media type: {tid!r}")
+        if mode not in VALID_FOCUS_MODES:
+            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
+    with _settings_lock:
+        s = _ensure_loaded()
+        s[key] = dict(value)
+        _save(s)
 
 
 def get_autoload_media_types() -> list[str]:

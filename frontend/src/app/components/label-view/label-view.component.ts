@@ -34,6 +34,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
   private gridItemSizeLeftDict: Record<string, 'small' | 'medium' | 'large'> = {};
+  private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
+  private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
@@ -87,6 +89,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
             this.gridItemSizeLeft = this.gridItemSizeLeftDict[newType] ?? 'medium';
+            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
+            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -207,8 +211,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.gridItemSizeLeft = this.gridItemSizeLeftDict[this.currentMediaType] ?? 'medium';
           }
         }
-        this.focusModeLeft = settings.focus_mode_left === 'hover' ? 'hover' : 'click';
-        this.focusModeRight = settings.focus_mode_right === 'hover' ? 'hover' : 'click';
+        const fmLeft = settings.focus_mode_left;
+        if (fmLeft && typeof fmLeft === 'object') {
+          this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
+          if (this.currentMediaType) {
+            this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
+          }
+        }
+        const fmRight = settings.focus_mode_right;
+        if (fmRight && typeof fmRight === 'object') {
+          this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
+          if (this.currentMediaType) {
+            this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
+          }
+        }
         if (settings.hide_autopilot && !this.autopilotCollapsed) {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {

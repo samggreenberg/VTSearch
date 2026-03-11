@@ -94,6 +94,19 @@ export class SettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'medium';
   }
 
+  onFocusModeChange(side: 'focus_mode_left' | 'focus_mode_right', typeId: string, value: string): void {
+    const dict = (this.settings[side] as Record<string, string>) || {};
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.save();
+  }
+
+  getFocusMode(side: 'focus_mode_left' | 'focus_mode_right', typeId: string): string {
+    const dict = this.settings[side];
+    if (!dict) return 'click';
+    return dict[typeId] ?? 'click';
+  }
+
   onNumberChange(key: string, value: number): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
