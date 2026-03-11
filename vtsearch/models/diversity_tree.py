@@ -14,6 +14,7 @@ The tree supports:
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 
 import numpy as np
 
@@ -43,6 +44,7 @@ class DiversityTree:
         k: int = DIVERSITY_TREE_DEFAULT_K,
         max_depth: int = DIVERSITY_TREE_MAX_DEPTH,
         min_node_size: int = DIVERSITY_TREE_MIN_NODE_SIZE,
+        on_progress: Callable[[int, int], None] | None = None,
     ):
         if k < 2 or k > 9:
             raise ValueError(f"k must be between 2 and 9, got {k}")
@@ -67,8 +69,15 @@ class DiversityTree:
 
         if vectors:
             ids = list(vectors.keys())
+            total = len(ids)
             vecs = np.array([vectors[i] for i in ids], dtype=np.float32)
+            self._leaves_placed = 0
+            self._on_progress = on_progress
+            self._total_vectors = total
+            if on_progress:
+                on_progress(0, total)
             self._build_node("0", ids, vecs, depth=0, parent=None)
+            self._on_progress = None
 
     def _build_node(
         self,
@@ -91,12 +100,14 @@ class DiversityTree:
         if len(ids) < self.min_node_size or depth >= self.max_depth:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
+            self._report_leaf_progress(len(ids))
             return
 
         actual_k = min(self.k, len(ids))
         if actual_k < 2:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
+            self._report_leaf_progress(len(ids))
             return
 
         # Run k-means
@@ -122,6 +133,13 @@ class DiversityTree:
         if not children:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
+            self._report_leaf_progress(len(ids))
+
+    def _report_leaf_progress(self, count: int) -> None:
+        """Report progress when vectors are assigned to a leaf node."""
+        self._leaves_placed += count
+        if self._on_progress:
+            self._on_progress(self._leaves_placed, self._total_vectors)
 
     def lookup(self, vector_id: int) -> str:
         """Return the name of the deepest (leaf) node containing this vector."""
