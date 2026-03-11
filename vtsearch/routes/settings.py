@@ -138,6 +138,9 @@ def update_settings():
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
 
+    if "autopilot_enabled" in body:
+        settings.set_autopilot_enabled(bool(body["autopilot_enabled"]))
+
     if "hide_autopilot" in body:
         settings.set_hide_autopilot(bool(body["hide_autopilot"]))
 
