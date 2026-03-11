@@ -47,6 +47,16 @@
     gap: 2px;
     min-width: 0;
     overflow: hidden;
+
+    &.labeled-good {
+      border: 2px solid var(--color-good);
+      padding: 2px;
+    }
+
+    &.labeled-bad {
+      border: 2px dashed var(--color-bad);
+      padding: 2px;
+    }
   }
 }
 
