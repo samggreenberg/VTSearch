@@ -160,6 +160,24 @@ describe('SettingsModalComponent', () => {
     ]);
   });
 
+  it('should use preselectedViewTab when valid', () => {
+    component.preselectedViewTab = 'image';
+    flushInit();
+    expect(component.activeViewTab).toBe('image');
+  });
+
+  it('should ignore preselectedViewTab when not in mediaTypes', () => {
+    component.preselectedViewTab = 'video';
+    flushInit();
+    expect(component.activeViewTab).toBe('audio');
+  });
+
+  it('should ignore empty preselectedViewTab', () => {
+    component.preselectedViewTab = '';
+    flushInit();
+    expect(component.activeViewTab).toBe('audio');
+  });
+
   it('should emit closed on close', () => {
     flushInit();
     spyOn(component.closed, 'emit');
