@@ -98,10 +98,17 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
 
   scrollToIndex(index: number): void {
     if (!this.listContainer) return;
-    const items = this.listContainer.nativeElement.querySelectorAll('vt-media-item');
-    if (items[index]) {
-      items[index].scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+    const container = this.listContainer.nativeElement;
+    const items = container.querySelectorAll('vt-media-item');
+    const target = items[index] as HTMLElement | undefined;
+    if (!target) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const offset = targetRect.top - containerRect.top + container.scrollTop;
+    container.scrollTo({
+      top: offset - containerRect.height / 2 + targetRect.height / 2,
+      behavior: 'smooth',
+    });
   }
 
   trackByMediaId(_index: number, item: { media: MediaItem }): number {
