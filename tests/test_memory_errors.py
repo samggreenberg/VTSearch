@@ -181,7 +181,7 @@ class TestCombineMemoryError:
         # Make the second _load_clips_from_pickle call OOM
         call_count = 0
 
-        def oom_second_load(path):
+        def oom_second_load(path, thin=False):
             nonlocal call_count
             call_count += 1
             if call_count >= 2:
@@ -189,7 +189,7 @@ class TestCombineMemoryError:
             from vtsearch.datasets.loader import load_dataset_from_pickle
 
             temp: dict = {}
-            load_dataset_from_pickle(path, temp)
+            load_dataset_from_pickle(path, temp, thin=thin)
             return temp
 
         with mock.patch(
