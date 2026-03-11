@@ -167,6 +167,10 @@ def _download_and_extract(
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
                     on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
+                # Guard against path traversal in zip entries
+                member_path = Path(extract_to) / member
+                if not str(member_path.resolve()).startswith(str(Path(extract_to).resolve())):
+                    continue
                 zip_ref.extract(member, extract_to)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")

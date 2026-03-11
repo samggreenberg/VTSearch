@@ -35,6 +35,7 @@ from vtsearch.utils import (
     build_diversity_tree,
     collapse_duplicates,
     medias,
+    get_dataset_display_name,
     get_dupe_count,
     get_progress,
     good_votes,
@@ -197,6 +198,7 @@ def dataset_status():
             "num_medias": len(snap),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
+            "display_name": get_dataset_display_name(),
             "num_dupes": get_dupe_count(),
         }
     )

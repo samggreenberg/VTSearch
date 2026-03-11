@@ -210,7 +210,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
         run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
         extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
@@ -257,7 +257,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
         run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
         extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
