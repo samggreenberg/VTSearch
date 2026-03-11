@@ -26,7 +26,7 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() learnedScores: Record<string, number> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
   @Input() viewMode: 'grid' | 'list' = 'grid';
-  @Input() gridItemSize: 'small' | 'medium' | 'large' = 'medium';
+  @Input() gridColumns: '1' | '2' | '3' = '2';
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();

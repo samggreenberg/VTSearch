@@ -114,15 +114,15 @@ def update_settings():
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
 
-    if "grid_item_size_left" in body:
+    if "grid_columns_left" in body:
         try:
-            settings.set_grid_item_size_left(body["grid_item_size_left"])
+            settings.set_grid_columns_left(body["grid_columns_left"])
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
 
-    if "grid_item_size_right" in body:
+    if "grid_columns_right" in body:
         try:
-            settings.set_grid_item_size_right(body["grid_item_size_right"])
+            settings.set_grid_columns_right(body["grid_columns_right"])
         except (ValueError, TypeError) as exc:
             return jsonify({"error": str(exc)}), 400
 

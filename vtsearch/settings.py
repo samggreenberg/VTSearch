@@ -48,8 +48,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_metadata": True,
     "view_mode_left": {},
     "view_mode_right": {},
-    "grid_item_size_left": {},
-    "grid_item_size_right": {},
+    "grid_columns_left": {},
+    "grid_columns_right": {},
     "focus_mode_left": {},
     "focus_mode_right": {},
     "autoload_media_types": [],
@@ -123,8 +123,8 @@ def get_defaults() -> dict[str, Any]:
     valid_types = _valid_media_types()
     result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
     result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
-    result["grid_item_size_left"] = {tid: _GRID_ITEM_SIZE_DEFAULT for tid in valid_types}
-    result["grid_item_size_right"] = {tid: _GRID_ITEM_SIZE_DEFAULT for tid in valid_types}
+    result["grid_columns_left"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
+    result["grid_columns_right"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
     # Expand focus mode defaults to per-media-type dicts
     result["focus_mode_left"] = {tid: _FOCUS_MODE_DEFAULTS["left"] for tid in valid_types}
     result["focus_mode_right"] = {tid: _FOCUS_MODE_DEFAULTS["right"] for tid in valid_types}
@@ -140,8 +140,8 @@ def get_all() -> dict[str, Any]:
         # Always return expanded per-media-type view mode dicts
         result["view_mode_left"] = get_view_mode_left()
         result["view_mode_right"] = get_view_mode_right()
-        result["grid_item_size_left"] = get_grid_item_size_left()
-        result["grid_item_size_right"] = get_grid_item_size_right()
+        result["grid_columns_left"] = get_grid_columns_left()
+        result["grid_columns_right"] = get_grid_columns_right()
         # Always return expanded per-media-type focus mode dicts
         result["focus_mode_left"] = get_focus_mode_left()
         result["focus_mode_right"] = get_focus_mode_right()
@@ -150,7 +150,7 @@ def get_all() -> dict[str, Any]:
 
 VALID_THEMES = ("dark", "light", "highviz")
 VALID_VIEW_MODES = ("grid", "list")
-VALID_GRID_ITEM_SIZES = ("small", "medium", "large")
+VALID_GRID_COLUMNS = ("1", "2", "3")
 VALID_FOCUS_MODES = ("click", "hover")
 
 
@@ -234,7 +234,7 @@ del _key, _cast, _coerce, _g, _s
 # -------------------------------------------------------------------
 
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
-_GRID_ITEM_SIZE_DEFAULT = "medium"
+_GRID_COLUMNS_DEFAULT = "2"
 _FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
 
 
@@ -302,11 +302,11 @@ def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
         _save(s)
 
 
-def _get_grid_item_size_dict(key: str) -> dict[str, str]:
-    """Return the per-media-type grid item size dict for *key*.
+def _get_grid_columns_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type grid columns dict for *key*.
 
     Handles backward compatibility: if the stored value is a plain string,
-    it is treated as the size for all known media types.
+    it is treated as the column count for all known media types.
     """
     with _settings_lock:
         raw = _ensure_loaded().get(key, _DEFAULTS[key])
@@ -315,46 +315,46 @@ def _get_grid_item_size_dict(key: str) -> dict[str, str]:
     if isinstance(raw, dict):
         result = {}
         for tid in _valid_media_types():
-            val = raw.get(tid, _GRID_ITEM_SIZE_DEFAULT)
-            result[tid] = val if val in VALID_GRID_ITEM_SIZES else _GRID_ITEM_SIZE_DEFAULT
+            val = raw.get(tid, _GRID_COLUMNS_DEFAULT)
+            result[tid] = val if val in VALID_GRID_COLUMNS else _GRID_COLUMNS_DEFAULT
         return result
-    return {tid: _GRID_ITEM_SIZE_DEFAULT for tid in _valid_media_types()}
+    return {tid: _GRID_COLUMNS_DEFAULT for tid in _valid_media_types()}
 
 
-def get_grid_item_size_left() -> dict[str, str]:
-    """Return a dict mapping media type ID -> grid item size for the left panel."""
-    return _get_grid_item_size_dict("grid_item_size_left")
+def get_grid_columns_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> grid columns for the left panel."""
+    return _get_grid_columns_dict("grid_columns_left")
 
 
-def get_grid_item_size_right() -> dict[str, str]:
-    """Return a dict mapping media type ID -> grid item size for the right panel."""
-    return _get_grid_item_size_dict("grid_item_size_right")
+def get_grid_columns_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> grid columns for the right panel."""
+    return _get_grid_columns_dict("grid_columns_right")
 
 
-def set_grid_item_size_left(value: dict[str, str] | str) -> None:
-    """Set the left panel grid item size (per-media-type dict or scalar)."""
-    _set_grid_item_size_dict("grid_item_size_left", value)
+def set_grid_columns_left(value: dict[str, str] | str) -> None:
+    """Set the left panel grid columns (per-media-type dict or scalar)."""
+    _set_grid_columns_dict("grid_columns_left", value)
 
 
-def set_grid_item_size_right(value: dict[str, str] | str) -> None:
-    """Set the right panel grid item size (per-media-type dict or scalar)."""
-    _set_grid_item_size_dict("grid_item_size_right", value)
+def set_grid_columns_right(value: dict[str, str] | str) -> None:
+    """Set the right panel grid columns (per-media-type dict or scalar)."""
+    _set_grid_columns_dict("grid_columns_right", value)
 
 
-def _set_grid_item_size_dict(key: str, value: dict[str, str] | str) -> None:
-    """Persist the per-media-type grid item size dict for *key*."""
+def _set_grid_columns_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type grid columns dict for *key*."""
     valid_types = _valid_media_types()
     if isinstance(value, str):
-        if value not in VALID_GRID_ITEM_SIZES:
+        if value not in VALID_GRID_COLUMNS:
             raise ValueError(f"Invalid {key}: {value!r}")
         value = {tid: value for tid in valid_types}
     if not isinstance(value, dict):
         raise ValueError(f"{key} must be a dict or string")
-    for tid, size in value.items():
+    for tid, cols in value.items():
         if tid not in valid_types:
             raise ValueError(f"Invalid media type: {tid!r}")
-        if size not in VALID_GRID_ITEM_SIZES:
-            raise ValueError(f"Invalid {key} value for {tid}: {size!r}")
+        if cols not in VALID_GRID_COLUMNS:
+            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
     with _settings_lock:
         s = _ensure_loaded()
         s[key] = dict(value)
