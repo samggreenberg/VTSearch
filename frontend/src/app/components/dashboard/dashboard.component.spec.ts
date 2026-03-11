@@ -59,13 +59,51 @@ describe('DashboardComponent', () => {
     expect(component.selectedModelIds.has('m1')).toBeTrue();
   });
 
-  it('should not auto-select when multiple datasets', () => {
+  it('should not auto-select when multiple datasets on initial load', () => {
     const datasets = [
       { id: 'd1', name: 'First' },
       { id: 'd2', name: 'Second' },
     ];
     flushInitialRequests(datasets);
     expect(component.selectedDatasetIds.size).toBe(0);
+  });
+
+  it('should auto-select newly added dataset', () => {
+    const datasets = [{ id: 'd1', name: 'First' }];
+    flushInitialRequests(datasets);
+    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+
+    // Simulate adding a second dataset via refresh
+    component.refresh();
+    httpMock.expectOne('/api/datasets/registry').flush({
+      datasets: [
+        { id: 'd1', name: 'First' },
+        { id: 'd2', name: 'Second' },
+      ],
+    });
+    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+
+    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d2')).toBeTrue();
+  });
+
+  it('should auto-select newly added model', () => {
+    const models = [{ id: 'm1', name: 'First' }];
+    flushInitialRequests([], models);
+    expect(component.selectedModelIds.has('m1')).toBeTrue();
+
+    // Simulate adding a second model via refresh
+    component.refresh();
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/models/registry').flush({
+      models: [
+        { id: 'm1', name: 'First' },
+        { id: 'm2', name: 'Second' },
+      ],
+    });
+
+    expect(component.selectedModelIds.has('m1')).toBeTrue();
+    expect(component.selectedModelIds.has('m2')).toBeTrue();
   });
 
   it('should toggle dataset selection on click', () => {
