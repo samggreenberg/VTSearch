@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.models import (
     build_model_from_weights,
@@ -368,7 +369,7 @@ def import_detector_labels():
             weights[key] = value.tolist()
 
         final_media_type = detected_media_type or "audio"
-        add_autorun_detector(name, final_media_type, weights, threshold)
+        add_autorun_detector(name, final_media_type, weights, threshold, created_by=get_current_user())
         return jsonify(
             {
                 "success": True,
@@ -500,7 +501,7 @@ def train_from_label_import(importer_name: str):
         weights[key] = value.tolist()
 
     media_type = next(iter(snap.values())).get("type", "audio")
-    add_autorun_detector(name, media_type, weights, threshold)
+    add_autorun_detector(name, media_type, weights, threshold, created_by=get_current_user())
 
     # Register in the persistent model registry for the dashboard grid.
     from vtsearch.models.registry import find_by_detector_name, register_model
@@ -512,6 +513,7 @@ def train_from_label_import(importer_name: str):
             trainable=False,
             num_training=loaded_count,
             detector_name=name,
+            created_by=get_current_user(),
         )
 
     return jsonify(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
@@ -85,7 +86,8 @@ def add_autorun_detector_route():
         return jsonify({"error": "media_type is required"}), 400
 
     add_autorun_detector(
-        name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels
+        name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels,
+        created_by=get_current_user(),
     )
 
     # Extract text_query from examples (first text example) for the registry
@@ -129,6 +131,7 @@ def add_autorun_detector_route():
             detector_name=name,
             text_query=text_query,
             trainable_model_name=trainable_model_name,
+            created_by=get_current_user(),
         )
 
     return jsonify({"success": True, "name": name})
@@ -317,7 +320,7 @@ def import_detector_pkl():
             else:
                 media_type = "audio"
 
-        add_autorun_detector(name, media_type, weights, threshold)
+        add_autorun_detector(name, media_type, weights, threshold, created_by=get_current_user())
         return jsonify({"success": True, "name": name, "media_type": media_type})
 
     except Exception as e:

@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
 from vtsearch.datasets.registry import (
@@ -211,6 +212,7 @@ def _auto_register_dataset(
     source: dict | None = None,
     clipper: str = "",
     embedder: str = "",
+    created_by: str = "",
 ) -> None:
     """Save the current medias as a pkl and register in the dataset registry.
 
@@ -258,12 +260,14 @@ def _auto_register_dataset(
         source=source,
         clipper=clipper,
         embedder=embedder,
+        created_by=created_by,
     )
     _reg_set_loaded(entry["id"])
 
 
 def _run_origin_load_in_background(
     load_fn, origin: dict, *, name: str = "", clipper: str = "", embedder: str = "",
+    created_by: str = "",
 ) -> None:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -286,6 +290,9 @@ def _run_origin_load_in_background(
     embedder:
         Name of the embedder used.  When empty, derived from the medias
         at registration time.
+    created_by:
+        Username of the user who initiated the load.  Captured before
+        the background thread starts (no Flask request context in thread).
     """
 
     # Set progress to "loading" synchronously so the frontend never sees a
@@ -333,6 +340,7 @@ def _run_origin_load_in_background(
                 source=origin,
                 clipper=clipper,
                 embedder=embedder,
+                created_by=created_by,
             )
             _load_embedder_for_clips()
         except MemoryError:
@@ -359,6 +367,7 @@ def _run_origin_load_in_background(
 
 def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
+    created_by = get_current_user()
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "")
     embedder_name = field_values.get("embedder", "")
@@ -387,6 +396,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         name=importer.resolve_display_name(field_values),
         clipper=clipper_name,
         embedder=embedder_name,
+        created_by=created_by,
     )
 
 

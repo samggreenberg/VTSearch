@@ -34,6 +34,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
@@ -417,6 +418,7 @@ def register_model_route():
         text_query=text_query,
         detector_name=detector_name,
         trainable_model_name=trainable_model_name,
+        created_by=get_current_user(),
     )
     return jsonify({"ok": True, "model": entry}), 201
 

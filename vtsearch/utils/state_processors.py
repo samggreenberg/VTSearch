@@ -26,6 +26,7 @@ def add_autorun_detector(
     autodetect: bool = False,
     examples: list[dict[str, str]] | None = None,
     num_labels: int = 0,
+    created_by: str = "default",
 ) -> None:
     """Add or overwrite a named autorun detector in the global store.
 
@@ -46,6 +47,7 @@ def add_autorun_detector(
             (``"text"``, ``"media"``, or ``"detector"``) and ``"value"`` (str).
         num_labels: Number of training labels used when this detector was last
             trained.  Defaults to ``0`` for untrained stubs.
+        created_by: Username of the user who created this detector.
     """
     import time
 
@@ -59,6 +61,7 @@ def add_autorun_detector(
             "autodetect": autodetect,
             "examples": examples or [],
             "num_labels": num_labels,
+            "created_by": created_by,
         }
 
 

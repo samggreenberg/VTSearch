@@ -110,8 +110,12 @@ def register_dataset(
     num_dupes: int = 0,
     clipper: str = "",
     embedder: str = "",
+    created_by: str = "default",
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
+
+    Args:
+        created_by: Username of the user who created this dataset.
 
     Returns the newly created entry (with a generated ``id``).
     """
@@ -128,6 +132,7 @@ def register_dataset(
         "source": source,
         "clipper": clipper,
         "embedder": embedder,
+        "created_by": created_by,
         "created_at": time.time(),
     }
     with _lock:
