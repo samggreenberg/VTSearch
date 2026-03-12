@@ -99,6 +99,7 @@ def register_model(
     detector_name: str = "",
     trainable_model_name: str = "",
     text_query: str = "",
+    created_by: str = "default",
 ) -> dict[str, Any]:
     """Add a new model to the registry and persist.
 
@@ -110,6 +111,7 @@ def register_model(
         detector_name: The key used in ``autorun_detectors`` (for non-trainable).
         trainable_model_name: The key used in ``data/trainable_models/`` (for trainable).
         text_query: Text-sort query associated with the model.
+        created_by: Username of the user who created this model.
 
     Returns:
         The newly created entry dict.
@@ -125,6 +127,7 @@ def register_model(
         "detector_name": detector_name,
         "trainable_model_name": trainable_model_name,
         "text_query": text_query,
+        "created_by": created_by,
         "created_at": time.time(),
     }
     with _lock:

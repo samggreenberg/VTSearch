@@ -23,12 +23,13 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **Format**: `ruff format .`
 
 ## Architecture
-- `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing
+- `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware
+- `vtsearch/auth/` — Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, autoload_media_types, autorun_processors, hide_autopilot, autopilot_top_greens, autopilot_hard_reds); auto-saves to `data/settings.json`
-- `vtsearch/routes/` — Flask blueprints: `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
+- `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
@@ -92,6 +93,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
   - `test_load_sort_window.py` — Load Sort window endpoints: example-sort, server-media-files, detector server-files
   - `test_memory_errors.py` — Graceful MemoryError handling during dataset loading
+  - `test_multi_user_security.py` — LoginProvider ABC, DefaultLoginProvider, g.user middleware, created_by ownership, auth status endpoint, user data dir isolation
   - `test_pdf_import.py` — PDF-to-image import: render_pdf_pages conversion, folder importer PDF handling, origin tracking
   - `test_preload_progress.py` — Console progress output during embedding model preloading
   - `test_slow_integration.py` — Slow integration tests: chunked loading, detector scoring, export, label round-trips, settings persistence (marked slow)

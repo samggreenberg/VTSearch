@@ -26,6 +26,7 @@ _TEST_GROUPS = {
         "test_error_recovery",
         "test_dashboard",
         "test_path_validation",
+        "test_multi_user_security",
     ],
     "sorting": [
         "test_sorting",
@@ -272,6 +273,11 @@ def reset_state():
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
+
+    # Reset the login provider to DefaultLoginProvider
+    from vtsearch.auth import DefaultLoginProvider, set_login_provider
+
+    set_login_provider(DefaultLoginProvider())
 
     # Reset the dataset and model registries
     from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg

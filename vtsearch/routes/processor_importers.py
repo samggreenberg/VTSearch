@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
 from vtsearch.utils import add_autorun_detector
 import vtsearch.utils.paths as _paths
@@ -126,7 +127,7 @@ def run_processor_import(importer_name: str):
 
     # Use suggested name from the importer if the user didn't provide one
     # (already checked above that name is non-empty, but importer may suggest)
-    add_autorun_detector(name, media_type, weights, threshold)
+    add_autorun_detector(name, media_type, weights, threshold, created_by=get_current_user())
 
     # Register in the persistent model registry for the dashboard grid.
     from vtsearch.models.registry import find_by_detector_name, register_model
@@ -137,6 +138,7 @@ def run_processor_import(importer_name: str):
             media_type=media_type,
             trainable=False,
             detector_name=name,
+            created_by=get_current_user(),
         )
 
     response: dict = {
