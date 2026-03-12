@@ -21,7 +21,7 @@ python app.py --autodetect --importer folder --path /data/sounds --media-type so
 python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them.
+Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `demo`. Each importer adds its own flags — run `python app.py --autodetect --importer <name> --help` to see them.
 
 **Chunked loading** — for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
@@ -36,9 +36,10 @@ python app.py --autodetect --importer folder --path /data/sounds --media-type so
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_json_file --filepath results.json
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_csv_file --filepath results.csv
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter webhook --url https://example.com/hook
+python app.py --autodetect --dataset data.pkl --settings settings.json --exporter email_smtp --to recipient@example.com
 ```
 
-Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST), `email_smtp`, `gui` (default — print to console).
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `gui` (default — print to console).
 
 **How to get the files:**
 

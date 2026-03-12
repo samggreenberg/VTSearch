@@ -58,6 +58,9 @@ python -m vtsearch.eval --mode text --datasets caltech101_s caltech256_l --outpu
 # Learned sort with a different train/test split
 python -m vtsearch.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
+# Learned sort with safe thresholds and calibration tuning
+python -m vtsearch.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
+
 # List available eval datasets
 python -m vtsearch.eval --list
 ```

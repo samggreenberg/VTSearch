@@ -30,8 +30,9 @@ strategies:
 - **Learned sorting** — trains a small MLP neural network on user votes to
   predict good/bad labels.
 
-Built with Flask + Angular + PyTorch. Single-user, no auth,
-runs locally or in Docker.
+Built with Flask + Angular + PyTorch. Single-user by default;
+pluggable authentication via `LoginProvider` ABC supports multi-user
+deployments. Runs locally or in Docker.
 
 ---
 
@@ -122,7 +123,7 @@ of **processors** and can be exported/imported as JSON files.
 Four auto-discovered plugin systems share the same architecture:
 
 - **Dataset importers** — load data from folders, pickles, HTTP archives,
-  or combined datasets.
+  combined datasets, or demo catalogues.
 - **Results exporters** — write autodetect results to server files (JSON/CSV),
   email, webhooks, or the GUI.
 - **Label importers** — import labels from server-side JSON or CSV files.
@@ -156,6 +157,7 @@ argument parsing. Key startup sequence:
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
+| Authentication | `vtsearch/auth/` (LoginProvider ABC, DefaultLoginProvider) |
 | Global state (medias, votes) | `vtsearch/utils/state.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
 | ML training and inference | `vtsearch/models/training.py` |
@@ -293,11 +295,20 @@ See [EVAL.md](EVAL.md) for the full evaluation framework guide.
 
 ## Known constraints and trade-offs
 
-### Single-user design
+### Single-user default, pluggable multi-user
 
-VTSearch is designed for single-user operation. There is no authentication,
-no session isolation, and global state is shared. Running multiple
-simultaneous users against the same instance will cause vote conflicts.
+VTSearch ships with `DefaultLoginProvider` (single-user, no auth).
+A pluggable `LoginProvider` ABC in `vtsearch/auth/` allows custom
+providers (e.g. PKI, OAuth, username/password) without changing route
+code. The `created_by` field on detectors, datasets, and models tracks
+ownership, and `get_user_data_dir()` supports per-user data directories.
+
+**Current limitation:** In-memory state (votes, medias, labels) and
+settings are still global. Full multi-user isolation of runtime state
+is not yet implemented — the auth infrastructure enables metadata
+tracking and per-user data directories, but votes and loaded datasets
+are shared. Running multiple simultaneous users against a single
+instance with DefaultLoginProvider will cause vote conflicts.
 
 ### Memory usage
 

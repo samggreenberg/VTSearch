@@ -20,6 +20,7 @@ discovery/registration works, and includes a complete example.
   - [Detectors](#adding-a-detector)
   - [Localizers](#adding-a-localizer)
   - [Extractors](#adding-an-extractor)
+- [Authentication Providers](#authentication-providers)
 - [Dependency Management](#dependency-management)
 - [Quick Reference Checklists](#quick-reference-checklist-for-each-extension-type)
 
@@ -1468,3 +1469,65 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Implement `name`, `media_type`, and the type-specific method (`detect`, `localize`, or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading
 - [ ] Register as autorun via `POST /api/autorun-detectors` (or extractors/localizers)
+
+### New Login Provider Checklist
+
+- [ ] Create a new module (e.g. `vtsearch/auth/my_provider.py`)
+- [ ] Subclass `LoginProvider` from `vtsearch.auth`
+- [ ] Implement `get_user(request)` and `is_authenticated(request)`
+- [ ] Override `login_required()` if the frontend should show a login screen
+- [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
+- [ ] Call `set_login_provider(MyProvider())` at app startup (in `app.py`)
+
+---
+
+## Authentication Providers
+
+VTSearch uses a pluggable `LoginProvider` ABC (`vtsearch/auth/__init__.py`)
+so that multi-user deployments can be supported without modifying routes.
+
+### Interface
+
+```python
+from vtsearch.auth import LoginProvider
+
+class MyProvider(LoginProvider):
+    name = "my_provider"
+
+    def get_user(self, request) -> str:
+        """Return username from the request (e.g. header, cookie, cert)."""
+        return request.headers.get("X-User", "anonymous")
+
+    def is_authenticated(self, request) -> bool:
+        """Return True if the request is authenticated."""
+        return "X-User" in request.headers
+
+    def login_required(self) -> bool:
+        """Return True to show a login screen in the frontend."""
+        return True
+
+    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
+        """Return a per-user data directory for isolated storage."""
+        return base_data_dir / username
+```
+
+### How it works
+
+1. `set_login_provider(provider)` is called once at startup (in `app.py`).
+2. The `before_request` middleware calls `provider.get_user(request)` and
+   stores the result in `g.user`.
+3. Routes call `get_current_user()` to read `g.user`.
+4. `GET /api/auth/status` calls `provider.status_dict(request)`.
+
+### Built-in provider
+
+`DefaultLoginProvider` (the default) returns `"default"` for every request,
+is always authenticated, and uses the shared `data/` directory.
+
+### Current limitations
+
+In-memory state (votes, medias, labels, settings) is globally shared.
+The auth infrastructure supports ownership tracking (`created_by`) and
+per-user data directories, but full runtime state isolation is not yet
+implemented. Custom providers should be aware that votes and loaded
+datasets are shared across all users.

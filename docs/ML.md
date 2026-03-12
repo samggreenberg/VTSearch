@@ -71,16 +71,16 @@ Threading is restricted to 1 to minimize memory overhead — the real cost is th
 
 Each media type uses a different pretrained model to produce fixed-size embedding vectors:
 
-| Media type | Embedder | Model | Embedding dim |
-|------------|----------|-------|--------------|
-| Audio | `clap` (default) | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
-| Audio | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
-| Image | `clip` (default) | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
-| Image | `siglip` | SigLIP (`google/siglip-base-patch16-224`) | 768 |
-| Video | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
-| Text | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
-| Text | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
-| Document | — | None (no embedder) | N/A |
+| Media type (`type_id`) | Embedder | Model | Embedding dim |
+|------------------------|----------|-------|--------------|
+| Audio (`audio`) | `clap` (default) | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
+| Audio (`audio`) | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
+| Image (`image`) | `clip` (default) | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
+| Image (`image`) | `siglip` | SigLIP (`google/siglip-base-patch16-224`) | 768 |
+| Video (`video`) | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
+| Text (`paragraph`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
+| Text (`paragraph`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
+| Document (`document`) | — | None (no embedder) | N/A |
 
 Audio, image, and text media types each have an **alternative embedder** in addition to the default. Alternative embedders are registered in `vtsearch/media/__init__.py` and live in files like `embedder_clap_music.py`, `embedder_siglip.py`, and `embedder_bge.py` alongside the primary `embedder.py` in each media type directory.
 
