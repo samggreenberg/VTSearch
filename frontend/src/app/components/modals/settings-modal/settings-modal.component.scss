@@ -83,6 +83,29 @@
   background: var(--bg-primary, #1e1e2e);
 }
 
+.view-side-section {
+  h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color, #444);
+    padding-bottom: 0.35rem;
+  }
+}
+
+.radio-group {
+  display: flex;
+  gap: 1rem;
+}
+
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
 .panel-pct-display {
   font-size: 0.85rem;
   color: var(--text-primary);
