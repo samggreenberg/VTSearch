@@ -21,6 +21,7 @@ from vtsearch.models import (
     calculate_safe_threshold,
     compute_labeling_status,
     embed_text_query,
+    inject_live_model,
     train_and_score,
     train_model,
 )
@@ -180,7 +181,7 @@ def learned_sort():
     """Train MLP on voted medias, return all medias sorted by predicted score."""
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
-    results, threshold = train_and_score(
+    results, threshold, model = train_and_score(
         snapshot_medias(),
         good_votes,
         bad_votes,
@@ -191,6 +192,11 @@ def learned_sort():
     )
     # Store scores so the /api/votes endpoint can provide confidence info.
     update_learned_scores({r["id"]: r["score"] for r in results})
+    # Inject the live model into the progress cache so indicators and the
+    # progress line-graph use the actual model that guided sorting, rather
+    # than retraining an independent model from scratch.
+    if model is not None:
+        inject_live_model(good_votes, bad_votes, model, threshold)
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 

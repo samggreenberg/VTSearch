@@ -91,7 +91,7 @@ class TestTrainAndScoreWithSafeThresholds:
         """With safe_thresholds=True, threshold is still in [0, 1]."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold = train_and_score(
+        results, threshold, _model = train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
         )
         assert 0.0 <= threshold <= 1.0
@@ -105,10 +105,10 @@ class TestTrainAndScoreWithSafeThresholds:
         """
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        _, thresh_off = train_and_score(
+        _, thresh_off, _m1 = train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=False
         )
-        _, thresh_on = train_and_score(
+        _, thresh_on, _m2 = train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
         )
         # They CAN be equal but with 6 labels, safe thresholds should blend
@@ -329,7 +329,7 @@ class TestCalibrationFractionTrainAndScore:
     def test_custom_fraction_returns_valid_results(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold = train_and_score(
+        results, threshold, _model = train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,

@@ -5,6 +5,8 @@ from vtsearch.models.progress import (
     _cached_steps,
     _compute_stable_status,
     _ensure_cache,
+    _live_models,
+    inject_live_model,
 )
 from vtsearch.utils import medias, label_history
 
@@ -445,3 +447,159 @@ class TestStabilitySkipsUnchangedModel:
             assert _cached_steps[i]["stability"] is not None, (
                 f"Step {i} changed training data and should have stability"
             )
+
+
+class TestLiveModelReuse:
+    """Progress cache should reuse models injected by train_and_score."""
+
+    def test_injected_model_is_used(self, client):
+        """When a live model matches the label set, _ensure_cache should use it."""
+        import numpy as np
+        import torch
+
+        from vtsearch.models.progress import clear_progress_cache
+        from vtsearch.models.training import train_model
+
+        clear_progress_cache()
+
+        rng = np.random.RandomState(99)
+        clips = {}
+        for i in range(10):
+            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+
+        # Train a live model for good={0,2}, bad={1}
+        good = {0: None, 2: None}
+        bad = {1: None}
+        X = torch.tensor(np.array([clips[0]["embedding"], clips[2]["embedding"], clips[1]["embedding"]]), dtype=torch.float32)
+        y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
+        live_model = train_model(X, y, 8)
+        live_threshold = 0.42
+
+        inject_live_model(good, bad, live_model, live_threshold)
+
+        # Now run _ensure_cache with a history that leads to {0,2} good, {1} bad
+        history = [
+            (0, "good", 1.0),
+            (1, "bad", 2.0),
+            (2, "good", 3.0),
+        ]
+
+        _ensure_cache(clips, history, inclusion_value=0)
+
+        # Step 2 should have used the injected model (same label set)
+        step = _cached_steps[2]
+        assert step["model"] is live_model, "Should reuse the injected live model"
+        assert step["threshold"] == live_threshold, "Should use the injected threshold"
+
+    def test_non_matching_label_set_retrains(self, client):
+        """When no live model matches, _ensure_cache should train normally."""
+        import numpy as np
+        import torch
+
+        from vtsearch.models.progress import clear_progress_cache
+        from vtsearch.models.training import train_model
+
+        clear_progress_cache()
+
+        rng = np.random.RandomState(99)
+        clips = {}
+        for i in range(10):
+            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+
+        # Inject a live model for a DIFFERENT label set
+        good = {5: None, 6: None}
+        bad = {7: None}
+        X = torch.tensor(np.array([clips[5]["embedding"], clips[6]["embedding"], clips[7]["embedding"]]), dtype=torch.float32)
+        y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
+        live_model = train_model(X, y, 8)
+        inject_live_model(good, bad, live_model, 0.5)
+
+        # Ensure cache for a different label set
+        history = [
+            (0, "good", 1.0),
+            (1, "bad", 2.0),
+        ]
+
+        _ensure_cache(clips, history, inclusion_value=0)
+
+        # Step 1 should NOT use the injected model (different label set)
+        step = _cached_steps[1]
+        assert step["model"] is not live_model, "Should not use a live model with mismatched labels"
+
+    def test_clear_cache_removes_live_models(self, client):
+        """clear_progress_cache should also clear injected live models."""
+        import numpy as np
+        import torch
+
+        from vtsearch.models.progress import clear_progress_cache
+        from vtsearch.models.training import train_model
+
+        X = torch.tensor(np.random.randn(2, 8).astype(np.float32))
+        y = torch.tensor([1.0, 0.0]).unsqueeze(1)
+        model = train_model(X, y, 8)
+
+        inject_live_model({0: None}, {1: None}, model, 0.5)
+        assert len(_live_models) == 1
+
+        clear_progress_cache()
+        assert len(_live_models) == 0
+
+    def test_learned_sort_injects_model(self, client):
+        """The /api/learned-sort endpoint should inject the trained model."""
+        from vtsearch.models.progress import clear_progress_cache
+
+        clear_progress_cache()
+
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+
+        # A live model should have been injected for the current vote set
+        key = (frozenset(app_module.good_votes), frozenset(app_module.bad_votes))
+        assert key in _live_models, "learned-sort should inject the live model"
+        model, threshold = _live_models[key]
+        assert model is not None
+        assert isinstance(threshold, float)
+
+    def test_live_model_stability_computed(self, client):
+        """When a live model is reused, stability should still be computed."""
+        import numpy as np
+        import torch
+
+        from vtsearch.models.progress import clear_progress_cache
+        from vtsearch.models.training import train_model
+
+        clear_progress_cache()
+
+        rng = np.random.RandomState(42)
+        clips = {}
+        for i in range(20):
+            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+
+        # Build a history with enough steps to have prior predictions
+        history = [
+            (0, "good", 1.0),
+            (1, "bad", 2.0),
+            (2, "good", 3.0),
+            (3, "bad", 4.0),
+            (4, "good", 5.0),  # step 4: good={0,2,4}, bad={1,3}
+        ]
+
+        # Inject a live model for step 4's label set
+        good = {0: None, 2: None, 4: None}
+        bad = {1: None, 3: None}
+        embs = [clips[i]["embedding"] for i in [0, 2, 4, 1, 3]]
+        X = torch.tensor(np.array(embs), dtype=torch.float32)
+        y = torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0]).unsqueeze(1)
+        live_model = train_model(X, y, 8)
+        inject_live_model(good, bad, live_model, 0.55)
+
+        _ensure_cache(clips, history, inclusion_value=0)
+
+        # Step 4 should use the live model
+        step4 = _cached_steps[4]
+        assert step4["model"] is live_model
+        # Stability should still be computed (not None) since prior predictions exist
+        assert step4["stability"] is not None, "Stability should be computed even with live model"

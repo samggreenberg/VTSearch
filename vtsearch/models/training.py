@@ -461,7 +461,7 @@ def train_and_score(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
-) -> tuple[list[dict[str, Any]], float]:
+) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train a small MLP on voted media embeddings and score every media.
 
     Uses k-fold calibration to determine an appropriate decision threshold,
@@ -484,12 +484,14 @@ def train_and_score(
             20% Calibrate.
 
     Returns:
-        A tuple ``(results, threshold)`` where:
+        A tuple ``(results, threshold, model)`` where:
 
         - ``results`` is a list of ``{"id": int, "score": float}`` dicts, sorted
           by score in descending order (highest confidence first).
         - ``threshold`` is the decision boundary as a float (cross-calibrated,
           or blended with GMM when ``safe_thresholds`` is ``True``).
+        - ``model`` is the trained ``nn.Sequential`` model (``None`` when
+          training was not possible).
     """
     import torch  # noqa: PLC0415
 
@@ -508,7 +510,7 @@ def train_and_score(
     num_good = sum(1 for v in y_list if v == 1.0)
     num_bad = len(y_list) - num_good
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
-        return [], 0.5
+        return [], 0.5, None
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -550,4 +552,4 @@ def train_and_score(
     # affect ordering.  Round only for the JSON response values.
     paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
     results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
-    return results, threshold
+    return results, threshold, model

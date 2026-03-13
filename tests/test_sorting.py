@@ -57,7 +57,7 @@ class TestTrainAndScore:
     def test_returns_list_of_scored_clips(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         assert len(results) == app_module.NUM_MEDIAS
         assert isinstance(threshold, float)
         for entry in results:
@@ -67,21 +67,21 @@ class TestTrainAndScore:
     def test_scores_between_zero_and_one(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         for entry in results:
             assert 0.0 <= entry["score"] <= 1.0
 
     def test_results_sorted_descending(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         scores = [e["score"] for e in results]
         assert scores == sorted(scores, reverse=True)
 
     def test_good_clips_scored_higher_than_bad(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         score_map = {e["id"]: e["score"] for e in results}
         avg_good = np.mean([score_map[i] for i in app_module.good_votes])
         avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
@@ -91,14 +91,14 @@ class TestTrainAndScore:
         """After adding a vote and retraining, the sort order should change."""
         app_module.good_votes.update({k: None for k in [1, 2, 3, 4, 5]})
         app_module.bad_votes.update({k: None for k in [16, 17, 18, 19, 20]})
-        results_before, _ = app_module.train_and_score(
+        results_before, _, _m = app_module.train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes
         )
         order_before = [e["id"] for e in results_before]
 
         # Add a new good vote on a media that was in the middle
         app_module.good_votes[10] = None
-        results_after, _ = app_module.train_and_score(
+        results_after, _, _m = app_module.train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes
         )
         order_after = [e["id"] for e in results_after]
