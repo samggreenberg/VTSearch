@@ -300,7 +300,9 @@ class TestResolverUsesSource:
 
 class TestIngestViaSource:
     def test_ingest_fetches_individually(self, tmp_path):
-        """When a source is available, ingest fetches files individually."""
+        """When a source is available and embedding works, ingest fetches individually."""
+        import numpy as np
+
         folder = tmp_path / "audio"
         folder.mkdir()
         (folder / "good.wav").write_bytes(b"good_audio")
@@ -323,7 +325,8 @@ class TestIngestViaSource:
         def track_progress(status, msg, current, total):
             progress_calls.append((status, msg, current, total))
 
-        with patch("vtsearch.models.resolver.embed_file", return_value=None):
+        fake_emb = np.zeros(512, dtype=np.float32)
+        with patch("vtsearch.models.resolver.embed_file", return_value=fake_emb):
             result = _ingest_via_source(origin, entries, medias, track_progress)
 
         assert result == 2
@@ -333,6 +336,27 @@ class TestIngestViaSource:
             assert media["origin"] == origin
             assert "md5" in media
             assert "media_bytes" in media
+            assert media["embedding"] is not None
+
+    def test_ingest_falls_back_when_embed_fails(self, tmp_path):
+        """When embedding fails, fast path returns -1 to trigger legacy fallback."""
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        (folder / "clip.wav").write_bytes(b"audio")
+
+        from vtsearch.datasets.ingest import _ingest_via_source
+
+        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "sounds"}}
+        entries = [
+            {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
+        ]
+
+        medias: dict = {}
+        with patch("vtsearch.models.resolver.embed_file", return_value=None):
+            result = _ingest_via_source(origin, entries, medias, lambda *a: None)
+
+        assert result == -1
+        assert len(medias) == 0  # Nothing ingested, caller should use legacy
 
     def test_ingest_returns_negative_one_for_pickle(self):
         """Non-file-based origins return -1 (fallback to full importer)."""

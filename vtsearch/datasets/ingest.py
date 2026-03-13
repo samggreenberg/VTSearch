@@ -71,6 +71,18 @@ def _ingest_via_source(
     if source is None:
         return -1
 
+    # Resolve the media type from the folder_import_name (e.g. "sounds" → "audio").
+    folder_import_name = origin_dict.get("params", {}).get("media_type", "")
+    media_type_id = ""
+    if folder_import_name:
+        try:
+            from vtsearch.media import get_by_folder_name
+
+            mt = get_by_folder_name(folder_import_name)
+            media_type_id = mt.type_id
+        except (KeyError, ValueError):
+            pass
+
     from vtsearch.models.resolver import embed_file
 
     ingested = 0
@@ -85,13 +97,16 @@ def _ingest_via_source(
             if file_path is None:
                 continue
 
+            # Embed the file — if embedding fails, fall back to legacy path
+            # so we don't produce medias without embeddings.
+            embedding = embed_file(file_path, media_type_id) if media_type_id else None
+            if embedding is None:
+                source.cleanup()
+                return -1  # Signal caller to use legacy full-import path
+
             # Read file bytes and compute MD5
             file_bytes = file_path.read_bytes()
             md5 = hashlib.md5(file_bytes).hexdigest()
-
-            # Embed the file
-            media_type = origin_dict.get("params", {}).get("media_type", "")
-            embedding = embed_file(file_path, media_type) if media_type else None
 
             media_data: dict[str, Any] = {
                 "id": cid,
@@ -99,11 +114,10 @@ def _ingest_via_source(
                 "origin": origin_dict,
                 "origin_name": origin_name or file_path.name,
                 "md5": md5,
+                "embedding": embedding,
                 "media_bytes": file_bytes,
                 "media_path": str(file_path),
             }
-            if embedding is not None:
-                media_data["embedding"] = embedding
 
             medias[cid] = media_data
             cid += 1
