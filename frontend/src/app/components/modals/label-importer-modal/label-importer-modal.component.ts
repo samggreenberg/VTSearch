@@ -5,13 +5,14 @@ import { ModalComponent } from '../../modal/modal.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { ImporterField } from '../../../models/api.models';
 
-interface LabelImporter {
+interface LabelImporterInfo {
   name: string;
-  label?: string;
   display_name?: string;
   description?: string;
   icon?: string;
   fields?: ImporterField[];
+  ui_mode?: string;
+  hidden_from_picker?: boolean;
 }
 
 type ModalView = 'picker' | 'form';
@@ -28,8 +29,9 @@ export class LabelImporterModalComponent implements OnInit {
   @Output() imported = new EventEmitter<void>();
 
   view: ModalView = 'picker';
-  importers: LabelImporter[] = [];
-  selectedImporter: LabelImporter | null = null;
+  importers: LabelImporterInfo[] = [];
+  loading = true;
+  selectedImporter: LabelImporterInfo | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
@@ -39,17 +41,31 @@ export class LabelImporterModalComponent implements OnInit {
 
   constructor(private labelImportersApi: LabelImportersApiService) {}
 
+  get modalTitle(): string {
+    if (this.view === 'form' && this.selectedImporter) {
+      return this.selectedImporter.display_name || this.selectedImporter.name;
+    }
+    return 'Import Labels';
+  }
+
   ngOnInit(): void {
     this.labelImportersApi.list().subscribe({
       next: (list: any[]) => {
-        this.importers = list;
+        this.importers = list.filter((imp) => !imp.hidden_from_picker);
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+        this.error = 'Failed to load label importers';
       },
     });
   }
 
-  selectImporter(importer: LabelImporter): void {
+  selectImporter(importer: LabelImporterInfo): void {
     this.selectedImporter = importer;
     this.formValues = {};
+    this.selectedFile = null;
+    this.selectedFileFieldKey = null;
     this.error = '';
     this.successMessage = '';
     if (importer.fields) {
