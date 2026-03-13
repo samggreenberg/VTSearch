@@ -10,6 +10,26 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def get_file_access_base_dir() -> Path | None:
+    """Return the base directory for file-access validation.
+
+    In single-user mode (:class:`~vtsearch.auth.DefaultLoginProvider`) this
+    returns ``None``, which causes :func:`validate_server_filepath` to fall
+    back to ``Path.cwd()`` — giving the single user full access to any path
+    under the working directory.
+
+    In multi-user mode (any non-default provider) this returns the current
+    user's data directory so that each user is confined to their own
+    ``data/<username>/`` subtree.
+    """
+    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
+
+    provider = get_login_provider()
+    if isinstance(provider, DefaultLoginProvider):
+        return None  # single-user: unrestricted (CWD)
+    return get_user_data_dir()
+
+
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
     """Validate that *filepath_str* resolves within *base_dir*.
 

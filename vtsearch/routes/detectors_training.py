@@ -276,6 +276,7 @@ def import_detector_labels():
         loaded_count = 0
         skipped_count = 0
         detected_media_type: str | None = media_type_hint or None
+        _file_base = _paths.get_file_access_base_dir()
 
         for entry in labels:
             label = entry.get("label")
@@ -289,9 +290,9 @@ def import_detector_labels():
                 continue
 
             file_path = Path(file_path_str)
-            # Ensure the path doesn't escape the data directory
+            # Ensure the path doesn't escape the allowed directory
             try:
-                _paths.validate_server_filepath(file_path_str)
+                _paths.validate_server_filepath(file_path_str, base_dir=_file_base)
             except ValueError:
                 skipped_count += 1
                 continue
@@ -429,7 +430,7 @@ def train_from_label_import(importer_name: str):
     # Validate server file paths to prevent path traversal
     if "filepath" in field_values and str(field_values["filepath"]).strip():
         try:
-            _paths.validate_server_filepath(str(field_values["filepath"]))
+            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
