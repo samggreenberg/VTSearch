@@ -148,6 +148,10 @@ export class DatasetsApiService {
     return this.http.put(`/api/datasets/registry/${datasetId}/rename`, { name: newName });
   }
 
+  updateReaders(datasetId: string, readers: string[]): Observable<unknown> {
+    return this.http.put(`/api/datasets/registry/${datasetId}/readers`, { readers });
+  }
+
   loadSource(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/dataset/load-source', params);
   }

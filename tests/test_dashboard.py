@@ -331,6 +331,49 @@ class TestDashboardDatasetEmbedderColumn:
         assert ds["embedder"] == "clip"
 
 
+class TestDashboardSecurityIcon:
+    """Tests that the dataset registry API returns fields needed by the security icon."""
+
+    def test_dataset_registry_includes_created_by(self, client):
+        """Registered datasets include a created_by string for ownership checks."""
+        register_dataset(name="sec-ds", media_type="audio", num_items=5, pkl_path="/tmp/sec.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "created_by" in ds
+        assert isinstance(ds["created_by"], str)
+        assert len(ds["created_by"]) > 0
+
+    def test_dataset_registry_includes_readers(self, client):
+        """Registered datasets include a readers list for the access control UI."""
+        register_dataset(name="readers-ds", media_type="image", num_items=10, pkl_path="/tmp/readers.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "readers" in ds
+        assert isinstance(ds["readers"], list)
+
+    def test_security_icon_in_frontend_bundle(self, client):
+        """The Angular bundle should contain the security icon shield path."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        # The shield SVG path used for the security icon
+        assert "Edit access list" in combined or "security-btn" in combined
+
+    def test_dataset_registry_created_by_defaults_to_current_user(self, client):
+        """Datasets created without explicit created_by use the current user."""
+        register_dataset(name="default-owner", media_type="text", num_items=3, pkl_path="/tmp/defown.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        # In single-user mode, created_by defaults to "default"
+        assert ds["created_by"] == "default"
+
+
 class TestEmbeddersApiEndpoint:
     """Tests for the /api/embedders endpoint with optional media_type filtering."""
 
