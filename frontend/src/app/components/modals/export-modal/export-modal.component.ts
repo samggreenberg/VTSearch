@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -9,7 +10,7 @@ import { ExporterInfo } from '../../../models/api.models';
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -23,6 +24,12 @@ export class ExportModalComponent implements OnInit {
   error = '';
   status = '';
 
+  /** Current view: picker list or field form for a selected exporter. */
+  view: 'picker' | 'form' = 'picker';
+  selectedExporter: ExporterInfo | null = null;
+  formValues: Record<string, string> = {};
+  submitting = false;
+
   constructor(
     private detectorsApi: DetectorsApiService,
     private exportersApi: ExportersApiService,
@@ -32,7 +39,7 @@ export class ExportModalComponent implements OnInit {
   ngOnInit(): void {
     this.exportersApi.getExporters().subscribe({
       next: (list) => {
-        this.exporters = list;
+        this.exporters = list.filter((e) => !e.hidden_from_picker);
         this.loading = false;
       },
       error: () => {
@@ -42,30 +49,72 @@ export class ExportModalComponent implements OnInit {
     });
   }
 
-  exportLabelsWith(exporter: ExporterInfo): void {
+  get modalTitle(): string {
+    if (this.view === 'form' && this.selectedExporter) {
+      return this.selectedExporter.display_name || this.selectedExporter.name;
+    }
+    return 'Export';
+  }
+
+  selectExporter(exporter: ExporterInfo): void {
+    const fields = exporter.fields || [];
+    if (fields.length === 0) {
+      // No fields needed — export immediately
+      this.exportLabelsWith(exporter, {});
+      return;
+    }
+    // Show form for this exporter
+    this.selectedExporter = exporter;
+    this.formValues = {};
+    for (const f of fields) {
+      this.formValues[f.key] = f.default || '';
+    }
+    this.view = 'form';
+    this.error = '';
+    this.status = '';
+  }
+
+  back(): void {
+    this.view = 'picker';
+    this.selectedExporter = null;
+    this.error = '';
+    this.status = '';
+  }
+
+  submitForm(): void {
+    if (!this.selectedExporter) return;
+    this.exportLabelsWith(this.selectedExporter, { ...this.formValues });
+  }
+
+  exportLabelsWith(exporter: ExporterInfo, fieldValues: Record<string, string>): void {
     this.status = 'Exporting labels...';
     this.error = '';
+    this.submitting = true;
     this.sortingApi.exportLabels().subscribe({
       next: (labelsData) => {
         this.exportersApi
           .runExport({
             exporter_name: exporter.name,
+            field_values: fieldValues,
             results: labelsData,
           })
           .subscribe({
             next: () => {
               this.status = 'Labels exported.';
+              this.submitting = false;
               this.exported.emit();
             },
             error: () => {
               this.status = '';
               this.error = 'Label export failed';
+              this.submitting = false;
             },
           });
       },
       error: () => {
         this.status = '';
         this.error = 'Failed to fetch labels';
+        this.submitting = false;
       },
     });
   }

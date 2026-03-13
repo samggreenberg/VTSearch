@@ -279,9 +279,12 @@ export interface AutorunProcessor {
 
 export interface ExporterInfo {
   name: string;
-  label?: string;
+  display_name?: string;
   description?: string;
+  icon?: string;
   fields?: ImporterField[];
+  ui_mode?: string;
+  hidden_from_picker?: boolean;
   [key: string]: unknown;
 }
 
