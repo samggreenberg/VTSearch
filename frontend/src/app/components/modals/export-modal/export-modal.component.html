@@ -1,36 +1,120 @@
-<vt-modal title="Export" [open]="true" (closed)="close()">
-  <div class="export-section">
-    <h3>Export Labels</h3>
-    @if (loading) {
-      <p class="empty-state">Loading exporters...</p>
-    } @else if (exporters.length === 0) {
-      <p class="empty-state">No exporters available.</p>
-    } @else {
-      <div class="exporter-picker">
-        @for (exp of exporters; track exp.name) {
-          <button class="exporter-card" (click)="exportLabelsWith(exp)">
-            <span class="exporter-name">{{ exp.label || exp.name }}</span>
-            @if (exp.description) {
-              <span class="exporter-desc">{{ exp.description }}</span>
-            }
-          </button>
-        }
-      </div>
-    }
-  </div>
-
-  <div class="export-section">
-    <h3>Export Detector Weights</h3>
-    <div class="export-options">
-      <button class="btn btn--primary" (click)="exportDetectorBrowser()">Browser Download</button>
-      <button class="btn btn--secondary" (click)="exportDetectorServer()">Save to Server</button>
+<vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
+  @if (view === 'picker') {
+    <div class="export-section">
+      <h3>Export Labels</h3>
+      @if (loading) {
+        <p class="empty-state">Loading exporters...</p>
+      } @else if (exporters.length === 0) {
+        <p class="empty-state">No exporters available.</p>
+      } @else {
+        <div class="exporter-picker">
+          @for (exp of exporters; track exp.name) {
+            <button class="exporter-card" (click)="selectExporter(exp)">
+              <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon">{{ exp.icon }}</span> }{{ exp.display_name || exp.name }}</span>
+              @if (exp.description) {
+                <span class="exporter-desc">{{ exp.description }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
     </div>
-  </div>
 
-  @if (status) {
-    <p class="status-text">{{ status }}</p>
+    <div class="export-section">
+      <h3>Export Detector Weights</h3>
+      <div class="export-options">
+        <button class="btn btn--primary" (click)="exportDetectorBrowser()">Browser Download</button>
+        <button class="btn btn--secondary" (click)="exportDetectorServer()">Save to Server</button>
+      </div>
+    </div>
   }
-  @if (error) {
-    <p class="error-text">{{ error }}</p>
+
+  @if (view === 'form' && selectedExporter) {
+    <div class="exporter-form">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+
+      @if (selectedExporter.fields && selectedExporter.fields.length > 0) {
+        @for (field of selectedExporter.fields; track field.key) {
+          <div class="form-group">
+            <label class="form-label" [for]="'field-' + field.key">
+              {{ field.label || field.key }}
+              @if (field.required) {
+                <span class="required">*</span>
+              }
+            </label>
+
+            @if (field.field_type === 'password') {
+              <input
+                [id]="'field-' + field.key"
+                type="password"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+              />
+            } @else if (field.field_type === 'email') {
+              <input
+                [id]="'field-' + field.key"
+                type="email"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+              />
+            } @else if (field.field_type === 'url') {
+              <input
+                [id]="'field-' + field.key"
+                type="url"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+              />
+            } @else if (field.field_type === 'select') {
+              <select
+                [id]="'field-' + field.key"
+                class="form-select"
+                [(ngModel)]="formValues[field.key]"
+              >
+                @for (opt of field.options || []; track opt) {
+                  <option [value]="opt">{{ opt }}</option>
+                }
+              </select>
+            } @else {
+              <input
+                [id]="'field-' + field.key"
+                type="text"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+              />
+            }
+          </div>
+        }
+      } @else {
+        <p class="info-text">This exporter requires no additional configuration.</p>
+      }
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+
+      <div class="form-actions" modal-footer>
+        <button class="btn btn--secondary" (click)="back()">Cancel</button>
+        <button class="btn btn--primary" (click)="submitForm()" [disabled]="submitting">
+          @if (submitting) {
+            Exporting...
+          } @else {
+            Export
+          }
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (view === 'picker') {
+    @if (status) {
+      <p class="status-text">{{ status }}</p>
+    }
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
   }
 </vt-modal>
