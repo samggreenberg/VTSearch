@@ -10,11 +10,14 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 from uuid import uuid4
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.sources.base import MediaItem, MediaSource
+
+if TYPE_CHECKING:
+    from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
 __all__ = ["HttpArchiveSource"]
 
@@ -36,7 +39,7 @@ class HttpArchiveSource(MediaSource):
     def __init__(self, url: str) -> None:
         self._url = url
         self._extract_dir: Path | None = None
-        self._inner: "LocalFolderSource | None" = None
+        self._inner: LocalFolderSource | None = None
 
     @property
     def url(self) -> str:
@@ -46,7 +49,7 @@ class HttpArchiveSource(MediaSource):
     # Lazy materialisation
     # ------------------------------------------------------------------
 
-    def _ensure_extracted(self) -> "LocalFolderSource":
+    def _ensure_extracted(self) -> LocalFolderSource:
         """Download and extract the archive if not already done."""
         if self._inner is not None:
             return self._inner

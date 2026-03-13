@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.utils.state import next_media_id

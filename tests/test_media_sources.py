@@ -1,13 +1,12 @@
 """Tests for vtsearch.datasets.sources — MediaSource abstraction."""
 
 import zipfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from vtsearch.datasets.sources import get_source_for_origin
-from vtsearch.datasets.sources.base import MediaItem, MediaSource
+from vtsearch.datasets.sources.base import MediaItem
 from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
 
@@ -412,7 +411,6 @@ class TestExampleSortOriginEndpoint:
 
     def test_success(self, client, tmp_path):
         """A valid origin+key returns sorted results when medias are loaded."""
-        import numpy as np
         from vtsearch.utils import medias
 
         folder = tmp_path / "audio"
