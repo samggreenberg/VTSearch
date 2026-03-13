@@ -32,6 +32,12 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_diversity_tree: Any = None  # DiversityTree | None
 
+# Live models injected by `train_and_score` during sorting.  Keyed by
+# ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
+# can look up the actual model that was used at each label step instead
+# of retraining from scratch.
+_live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {}
+
 # Reentrant lock protecting all module-level cache variables.
 # RLock is used because public functions call _ensure_cache which may
 # call clear_progress_cache internally when the inclusion value changes.
@@ -52,6 +58,24 @@ def clear_progress_cache() -> None:
         _cache_prev_predictions = None
         _cache_inclusion = None
         _cache_diversity_tree = None
+        _live_models.clear()
+
+
+def inject_live_model(
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    model: nn.Sequential,
+    threshold: float,
+) -> None:
+    """Register a live model from ``train_and_score`` for progress-cache reuse.
+
+    Called by the learned-sort route after each live training run.  The model
+    is stored keyed by its label set so ``_ensure_cache`` can look it up
+    instead of retraining from scratch.
+    """
+    key = (frozenset(good_votes), frozenset(bad_votes))
+    with _progress_lock:
+        _live_models[key] = (model, threshold)
 
 
 def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
@@ -259,7 +283,16 @@ def _ensure_cache(
         training_data_changed = prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
 
         if training_data_changed:
-            model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+            # Check whether train_and_score already produced a model for
+            # this exact label set during live sorting.  If so, reuse it
+            # (correct cross-calibrated threshold, zero compute cost).
+            live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
+            live = _live_models.get(live_key)
+            if live is not None:
+                model, threshold = live
+                stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+            else:
+                model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
         else:
             # Reuse previous model — no new training or stability entry.
             model = prev["model"] if prev else None

@@ -23,6 +23,7 @@ from vtsearch.models.progress import (
     calculate_prediction_stability_over_time,
     clear_progress_cache,
     compute_labeling_status,
+    inject_live_model,
 )
 from vtsearch.models.training import (
     build_model,
@@ -67,4 +68,5 @@ __all__ = [
     "calculate_prediction_stability_over_time",
     "clear_progress_cache",
     "compute_labeling_status",
+    "inject_live_model",
 ]

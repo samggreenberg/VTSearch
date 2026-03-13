@@ -174,7 +174,7 @@ def eval_learned_sort(
         bad_votes: dict[int, None] = {cid: None for cid in train_bad}
 
         # Run train_and_score
-        scored, threshold = train_and_score(
+        scored, threshold, _model = train_and_score(
             medias,
             good_votes,
             bad_votes,
