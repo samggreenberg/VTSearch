@@ -10,8 +10,7 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
-import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
-import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
+import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 
 export interface TrainModeContext {
@@ -26,8 +25,7 @@ export interface TrainModeContext {
     LabelSortComponent,
     LabelListComponent,
     DetectorContextBarComponent,
-    DetectorExportModalComponent,
-    LabelExporterModalComponent,
+    ExportModalComponent,
     LabelImporterModalComponent,
   ],
   templateUrl: './right-panel.component.html',
@@ -48,8 +46,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   viewMode: 'grid' | 'list' = 'grid';
   gridColumns: number = 2;
   showLabelImport = false;
-  showLabelExport = false;
-  showDetectorExport = false;
+  showExport = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridColumnsRightDict: Record<string, number> = {};
@@ -101,12 +98,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.showLabelImport = true;
   }
 
-  onExportLabels(): void {
-    this.showLabelExport = true;
-  }
-
-  onExportDetector(): void {
-    this.showDetectorExport = true;
+  onExport(): void {
+    this.showExport = true;
   }
 
   onDetectorRenamed(newName: string): void {
