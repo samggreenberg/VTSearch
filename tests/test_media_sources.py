@@ -323,7 +323,7 @@ class TestIngestViaSource:
         def track_progress(status, msg, current, total):
             progress_calls.append((status, msg, current, total))
 
-        with patch("vtsearch.datasets.ingest.embed_file", return_value=None):
+        with patch("vtsearch.models.resolver.embed_file", return_value=None):
             result = _ingest_via_source(origin, entries, medias, track_progress)
 
         assert result == 2
