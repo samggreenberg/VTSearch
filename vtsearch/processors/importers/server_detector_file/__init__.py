@@ -110,7 +110,8 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     legacy_weights = data.get("weights")
 
     weights = None
-    threshold = data.get("threshold", 0.5)
+    file_threshold = data.get("threshold", 0.5)
+    threshold = file_threshold
     result: dict[str, Any] = {"media_type": media_type}
 
     if good_origins and bad_origins:
@@ -132,6 +133,7 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     if weights is None and legacy_weights:
         # Fallback to serialised weights (legacy or unresolvable origins)
         weights = legacy_weights
+        threshold = file_threshold
 
     if weights is None:
         raise ValueError("Detector file missing 'weights' or origin fields.")

@@ -52,7 +52,8 @@ def _score_clips_with_detector(
     legacy_weights = detector_data.get("weights")
 
     weights = None
-    threshold = detector_data.get("threshold", 0.5)
+    file_threshold = detector_data.get("threshold", 0.5)
+    threshold = file_threshold
 
     if good_origins and bad_origins:
         # Origin-based format: re-derive weights from origins
@@ -70,6 +71,7 @@ def _score_clips_with_detector(
     if weights is None and legacy_weights:
         # Fallback to serialised weights (legacy or unresolvable origins)
         weights = legacy_weights
+        threshold = file_threshold
 
     if weights is None:
         raise ValueError("Detector file missing 'weights' or origin fields")

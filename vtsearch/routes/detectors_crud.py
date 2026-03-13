@@ -349,7 +349,8 @@ def import_detector_pkl():
         legacy_weights = detector_data.get("weights")
 
         weights = None
-        threshold = detector_data.get("threshold", 0.5)
+        file_threshold = detector_data.get("threshold", 0.5)
+        threshold = file_threshold
         det_inclusion = detector_data.get("inclusion", 0)
 
         if good_origins and bad_origins:
@@ -366,6 +367,7 @@ def import_detector_pkl():
         if weights is None and legacy_weights:
             # Fallback to serialised weights (legacy or unresolvable origins)
             weights = legacy_weights
+            threshold = file_threshold
             good_origins = None
             bad_origins = None
 
