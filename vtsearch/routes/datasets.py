@@ -259,9 +259,10 @@ def combine_datasets_route():
     if not isinstance(dataset_paths, list) or len(dataset_paths) < 2:
         return jsonify({"error": "Provide at least two dataset file paths."}), 400
 
+    _base = _paths.get_file_access_base_dir()
     for p in dataset_paths:
         try:
-            _paths.validate_server_filepath(str(p))
+            _paths.validate_server_filepath(str(p), base_dir=_base)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         if not Path(p).exists():
@@ -537,7 +538,7 @@ def load_dataset_folder():
         return jsonify({"error": "No folder path provided"}), 400
 
     try:
-        _paths.validate_server_filepath(str(folder_path))
+        _paths.validate_server_filepath(str(folder_path), base_dir=_paths.get_file_access_base_dir())
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -750,10 +751,11 @@ def _load_from_origin(source: dict):
         return jsonify({"error": f"Cannot reload from {importer_name} origin"}), 400
 
     # Validate any server file paths in the field values
+    _base = _paths.get_file_access_base_dir()
     for key, val in field_values.items():
         if isinstance(val, str) and ("/" in val or "\\" in val):
             try:
-                _paths.validate_server_filepath(val)
+                _paths.validate_server_filepath(val, base_dir=_base)
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
 

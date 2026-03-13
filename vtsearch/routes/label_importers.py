@@ -145,7 +145,7 @@ def run_label_import(importer_name: str):
     # Validate server file paths to prevent path traversal
     if "filepath" in field_values and str(field_values["filepath"]).strip():
         try:
-            _paths.validate_server_filepath(str(field_values["filepath"]))
+            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 

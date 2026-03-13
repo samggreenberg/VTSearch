@@ -610,6 +610,7 @@ def label_file_sort():
         y_list = []
         loaded_count = 0
         skipped_count = 0
+        _file_base = _paths.get_file_access_base_dir()
 
         for entry in labels:
             label = entry.get("label")
@@ -624,9 +625,9 @@ def label_file_sort():
                 continue
 
             media_path = Path(media_path)
-            # Ensure the path doesn't escape the data directory
+            # Ensure the path doesn't escape the allowed directory
             try:
-                _paths.validate_server_filepath(str(media_path))
+                _paths.validate_server_filepath(str(media_path), base_dir=_file_base)
             except ValueError:
                 skipped_count += 1
                 continue

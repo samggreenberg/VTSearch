@@ -196,6 +196,9 @@ def update_settings():
             return jsonify({"error": str(exc)}), 400
 
     # Directory path settings
+    import vtsearch.utils.paths as _paths
+
+    _dir_base = _paths.get_file_access_base_dir()
     for dir_key, setter in (
         ("saved_datasets_dir", settings.set_saved_datasets_dir),
         ("detectors_dir", settings.set_detectors_dir),
@@ -205,6 +208,12 @@ def update_settings():
             val = body[dir_key]
             if not isinstance(val, str) or not val.strip():
                 return jsonify({"error": f"{dir_key} must be a non-empty string"}), 400
+            # In multi-user mode, restrict directory paths to user's data dir
+            if _dir_base is not None:
+                try:
+                    _paths.validate_server_filepath(val.strip(), base_dir=_dir_base)
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
             setter(val.strip())
 
     return jsonify(settings.get_all())
