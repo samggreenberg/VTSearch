@@ -3,10 +3,22 @@
 This importer reads a VTSearch detector JSON file from the server filesystem
 (the machine where the Python process is running), as opposed to the local
 (browser-upload) importer which receives files uploaded from the user's
-browser.  The file format is identical::
+browser.
+
+**Current format** (origin-based, no serialised weights)::
 
     {
-        "weights": {"0.weight": [...], "0.bias": [...], "2.weight": [...], "2.bias": [...]},
+        "good_origins": [{"origin": {...}, "origin_name": "...", "filename": "...", "md5": "..."}],
+        "bad_origins":  [{"origin": {...}, "origin_name": "...", "filename": "...", "md5": "..."}],
+        "inclusion": 0,
+        "media_type": "audio",
+        "name": "my detector"
+    }
+
+**Legacy format** (weights-based, still accepted for backward compatibility)::
+
+    {
+        "weights": {"0.weight": [...], "0.bias": [...], "3.weight": [...], "3.bias": [...]},
         "threshold": 0.5,
         "media_type": "audio",
         "name": "my detector"
@@ -43,10 +55,7 @@ class ServerFileProcessorImporter(ProcessorImporter):
             key="filepath",
             label="Server File Path",
             field_type="text",
-            description=(
-                "Absolute or relative path to a VTSearch detector JSON file "
-                "on the server filesystem."
-            ),
+            description=("Absolute or relative path to a VTSearch detector JSON file on the server filesystem."),
             placeholder="data/detectors/my_detector.json",
         ),
     ]
@@ -80,25 +89,58 @@ class ServerFileProcessorImporter(ProcessorImporter):
 
 
 def _parse_detector_json(raw: bytes) -> dict[str, Any]:
-    """Decode *raw* bytes as JSON and extract detector data."""
+    """Decode *raw* bytes as JSON and extract detector data.
+
+    Supports two formats:
+    - **New format**: ``good_origins`` / ``bad_origins`` / ``inclusion`` —
+      re-derives weights by resolving the original media, embedding, and
+      training.
+    - **Legacy format**: ``weights`` / ``threshold`` — used directly.
+    """
     try:
         data = json.loads(raw.decode("utf-8"))
     except Exception as exc:
         raise ValueError(f"Invalid JSON: {exc}") from exc
 
-    weights = data.get("weights")
-    if not weights:
-        raise ValueError("Detector file missing 'weights' field.")
-
-    threshold = data.get("threshold", 0.5)
     media_type = data.get("media_type", "audio")
     suggested_name = data.get("name", "")
 
-    result: dict[str, Any] = {
-        "media_type": media_type,
-        "weights": weights,
-        "threshold": threshold,
-    }
+    good_origins = data.get("good_origins")
+    bad_origins = data.get("bad_origins")
+    legacy_weights = data.get("weights")
+
+    weights = None
+    file_threshold = data.get("threshold", 0.5)
+    threshold = file_threshold
+    result: dict[str, Any] = {"media_type": media_type}
+
+    if good_origins and bad_origins:
+        # Origin-based format: re-derive weights from origins
+        from vtsearch.models.training import train_detector_from_origins
+
+        inclusion = data.get("inclusion", 0)
+        weights, threshold = train_detector_from_origins(
+            good_origins,
+            bad_origins,
+            inclusion,
+            media_type,
+        )
+        if weights is not None:
+            result["good_origins"] = good_origins
+            result["bad_origins"] = bad_origins
+            result["inclusion"] = inclusion
+
+    if weights is None and legacy_weights:
+        # Fallback to serialised weights (legacy or unresolvable origins)
+        weights = legacy_weights
+        threshold = file_threshold
+
+    if weights is None:
+        raise ValueError("Detector file missing 'weights' or origin fields.")
+
+    result["weights"] = weights
+    result["threshold"] = threshold
+
     if suggested_name:
         result["name"] = suggested_name
     return result

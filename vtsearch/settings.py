@@ -758,6 +758,9 @@ def ensure_autorun_processors_imported() -> list[str]:
                 result["weights"],
                 result.get("threshold", 0.5),
                 autodetect=True,
+                good_origins=result.get("good_origins"),
+                bad_origins=result.get("bad_origins"),
+                inclusion=result.get("inclusion", 0),
             )
             imported.append(name)
         except Exception as exc:

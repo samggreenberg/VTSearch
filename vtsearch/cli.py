@@ -47,13 +47,34 @@ def _score_clips_with_detector(
     with open(detector_file, "r") as f:
         detector_data = json.load(f)
 
-    if "weights" not in detector_data:
-        raise ValueError("Detector file missing 'weights' field")
-    if "threshold" not in detector_data:
-        raise ValueError("Detector file missing 'threshold' field")
+    good_origins = detector_data.get("good_origins")
+    bad_origins = detector_data.get("bad_origins")
+    legacy_weights = detector_data.get("weights")
 
-    weights = detector_data["weights"]
-    threshold = detector_data["threshold"]
+    weights = None
+    file_threshold = detector_data.get("threshold", 0.5)
+    threshold = file_threshold
+
+    if good_origins and bad_origins:
+        # Origin-based format: re-derive weights from origins
+        from vtsearch.models.training import train_detector_from_origins
+
+        media_type = detector_data.get("media_type", "audio")
+        inclusion = detector_data.get("inclusion", 0)
+        weights, threshold = train_detector_from_origins(
+            good_origins,
+            bad_origins,
+            inclusion,
+            media_type,
+        )
+
+    if weights is None and legacy_weights:
+        # Fallback to serialised weights (legacy or unresolvable origins)
+        weights = legacy_weights
+        threshold = file_threshold
+
+    if weights is None:
+        raise ValueError("Detector file missing 'weights' or origin fields")
 
     # Reconstruct the MLP model from weights
     import torch  # noqa: PLC0415

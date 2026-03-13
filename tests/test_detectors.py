@@ -18,6 +18,12 @@ class TestDetectorExport:
         assert "threshold" in data
         assert isinstance(data["weights"], dict)
         assert isinstance(data["threshold"], (int, float))
+        # Origin info for weight-free serialisation
+        assert "good_origins" in data
+        assert "bad_origins" in data
+        assert "inclusion" in data
+        assert len(data["good_origins"]) == 3
+        assert len(data["bad_origins"]) == 3
 
     def test_export_requires_good_votes(self, client):
         app_module.bad_votes.update({k: None for k in [1, 2]})
@@ -347,6 +353,9 @@ class TestAutorunDetectors:
         assert "weights" in stored
         assert "threshold" in stored
         assert "created_at" in stored
+        assert "good_origins" in stored
+        assert "bad_origins" in stored
+        assert "inclusion" in stored
 
 
 class TestAutoDetect:
@@ -569,10 +578,14 @@ class TestServerDetectorExport:
         self._vote()
         client.post("/api/detector/export-server", json={"name": "valid_json"})
         content = json.loads((self._det_dir / "valid_json.json").read_text())
-        assert "weights" in content
-        assert "threshold" in content
+        # New format: origins instead of weights
+        assert "good_origins" in content
+        assert "bad_origins" in content
+        assert "inclusion" in content
         assert "media_type" in content
         assert "name" in content
+        # Weights must NOT be serialised to disk
+        assert "weights" not in content
 
     def test_export_server_returns_path(self, client):
         self._vote()
