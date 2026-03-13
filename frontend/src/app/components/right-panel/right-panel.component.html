@@ -42,8 +42,7 @@
   />
 
   <div class="export-row">
-    <button class="panel-btn export-btn" (click)="onExportLabels()">Export Labels</button>
-    <button class="panel-btn export-btn" (click)="onExportDetector()">Export Detector</button>
+    <button class="panel-btn export-btn" (click)="onExport()">Export</button>
   </div>
 </aside>
 
@@ -51,10 +50,10 @@
   <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="showLabelImport = false" />
 }
 
-@if (showLabelExport) {
-  <vt-label-exporter-modal (closed)="showLabelExport = false" (exportComplete)="showLabelExport = false" />
-}
-
-@if (showDetectorExport) {
-  <vt-detector-export-modal (closed)="showDetectorExport = false" (exported)="showDetectorExport = false" />
+@if (showExport) {
+  <vt-export-modal
+    [detectorName]="trainMode?.model?.name ?? ''"
+    (closed)="showExport = false"
+    (exported)="showExport = false"
+  />
 }
