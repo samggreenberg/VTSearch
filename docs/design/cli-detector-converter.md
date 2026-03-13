@@ -111,10 +111,11 @@ The `clipper` field describes what the detector *expects*, not a user preference
 ### 2. Training captures the input spec
 
 When `export_detector` or `export_detector_server` trains a detector, record:
-- The active converter (if the current dataset was loaded via conversion)
 - The active clipper (if the current dataset was loaded with clipping)
 
-This is already implicit in the current training flow — the embeddings come from whatever pipeline produced the loaded medias. We just need to make it explicit by storing the names.
+The converter is NOT recorded — it's handled automatically by the registry at inference time. Only the clipper matters because it affects the granularity of the embeddings the detector was trained on.
+
+This is already implicit in the current training flow — the embeddings come from whatever pipeline produced the loaded medias. We just need to make the clipper explicit by storing its name.
 
 ### 3. CLI autodetect pipeline applies input specs
 
@@ -191,14 +192,15 @@ When a clipper produces N clips from one media item, we get N scores. We need a 
 For the common case, nothing changes:
 
 ```bash
-# Detector knows it needs video2audio + sound_tiling_2s
+# Dataset has videos — the pipeline auto-converts via video2audio, video2image, etc.
+# based on each detector's media_type. Clipper comes from detector's input_spec.
 python app.py --autodetect \
   --importer http_archive --url https://example.com/videos.zip --media-type video \
   --settings settings.json \
   --exporter server_json_file --filepath results.json
 ```
 
-The pipeline reads each detector's `input_spec`, applies the right converter+clipper, scores, and exports. The user doesn't think about converters or clippers at the CLI level.
+The pipeline uses the converter registry to bridge source types to each detector's `media_type`, then applies the detector's `input_spec.clipper`. The user doesn't think about converters or clippers at the CLI level.
 
 For power users who want to override:
 
