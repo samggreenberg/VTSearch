@@ -303,13 +303,10 @@ class FolderDatasetImporter(DatasetImporter):
         folder = origin.get("params", {}).get("path", "")
         if not folder:
             return None
-        folder_path = Path(folder)
-        for name in [origin_name, filename]:
-            if name:
-                candidate = folder_path / name
-                if candidate.is_file():
-                    return candidate
-        return None
+        from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
+        source = LocalFolderSource(folder)
+        return source.resolve_path(origin_name, filename)
 
 
 IMPORTER = FolderDatasetImporter()

@@ -574,6 +574,56 @@ def example_sort_server():
         return jsonify({"error": str(e)}), 500
 
 
+@sorting_bp.route("/api/example-sort-origin", methods=["POST"])
+def example_sort_origin():
+    """Sort medias by similarity to a media file resolved from an origin.
+
+    Accepts a JSON body with ``origin`` (an origin dict as stored on medias)
+    and ``key`` (the item key / relative path within the source).  The file
+    is fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`
+    abstraction, embedded, and used for cosine-similarity sorting.
+
+    Example request::
+
+        {
+            "origin": {"importer": "folder", "params": {"path": "/data/sounds"}},
+            "key": "subdir/audio123.wav"
+        }
+    """
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    origin = data.get("origin")
+    if not isinstance(origin, dict):
+        return jsonify({"error": "origin dict is required"}), 400
+
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"error": "key is required"}), 400
+
+    if not snapshot_medias():
+        return jsonify({"error": "No medias loaded"}), 400
+
+    from vtsearch.datasets.sources import get_source_for_origin
+
+    source = get_source_for_origin(origin)
+    if source is None:
+        return jsonify({"error": f"No media source available for origin type: {origin.get('importer', '')}"}), 400
+
+    try:
+        file_path = source.fetch_item(key)
+        if file_path is None:
+            return jsonify({"error": f"File not found: {key}"}), 404
+
+        results, thresh = _example_sort_from_path(file_path)
+        return jsonify({"results": results, "threshold": thresh})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        source.cleanup()
+
+
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 def label_file_sort():
     """Train MLP on external media files from a label file, then sort all medias."""

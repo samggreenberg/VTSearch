@@ -7,11 +7,18 @@ dataset importer for each origin, and cherry-picks only the medias that
 match the missing entries (by ``origin_name``).  The recovered medias are
 assigned fresh IDs that do not collide with existing medias and are
 appended to the in-memory dataset.
+
+When a :class:`~vtsearch.datasets.sources.base.MediaSource` is available
+for an origin (e.g. folder, http_archive), individual files are fetched
+directly via :meth:`~MediaSource.fetch_item` instead of re-running the
+full importer — this is much faster when only a few medias are missing.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.utils.state import next_media_id
@@ -46,6 +53,74 @@ def _group_by_origin(
     return groups
 
 
+def _ingest_via_source(
+    origin_dict: dict[str, Any],
+    entries: list[dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
+    on_progress: ProgressCallback,
+) -> int:
+    """Try to ingest missing entries using a MediaSource (item-by-item).
+
+    Returns the number of successfully ingested medias, or -1 if no
+    MediaSource is available for this origin (caller should fall back to
+    the full-importer path).
+    """
+    from vtsearch.datasets.sources import get_source_for_origin
+
+    source = get_source_for_origin(origin_dict)
+    if source is None:
+        return -1
+
+    from vtsearch.models.resolver import embed_file
+
+    ingested = 0
+    cid = next_media_id(medias)
+
+    try:
+        for entry in entries:
+            origin_name = entry.get("origin_name", "")
+            filename = entry.get("filename", "")
+
+            file_path = source.resolve_path(origin_name, filename)
+            if file_path is None:
+                continue
+
+            # Read file bytes and compute MD5
+            file_bytes = file_path.read_bytes()
+            md5 = hashlib.md5(file_bytes).hexdigest()
+
+            # Embed the file
+            media_type = origin_dict.get("params", {}).get("media_type", "")
+            embedding = embed_file(file_path, media_type) if media_type else None
+
+            media_data: dict[str, Any] = {
+                "id": cid,
+                "filename": origin_name or file_path.name,
+                "origin": origin_dict,
+                "origin_name": origin_name or file_path.name,
+                "md5": md5,
+                "media_bytes": file_bytes,
+                "media_path": str(file_path),
+            }
+            if embedding is not None:
+                media_data["embedding"] = embedding
+
+            medias[cid] = media_data
+            cid += 1
+            ingested += 1
+
+            on_progress(
+                "ingesting",
+                f"Fetched {origin_name or filename} ({ingested}/{len(entries)})...",
+                ingested,
+                len(entries),
+            )
+    finally:
+        source.cleanup()
+
+    return ingested
+
+
 def ingest_missing_medias(
     missing_entries: list[dict[str, Any]],
     medias: dict[int, dict[str, Any]],
@@ -53,9 +128,12 @@ def ingest_missing_medias(
 ) -> int:
     """Re-ingest missing medias from their origins into *medias*.
 
-    Groups *missing_entries* by origin, runs each origin's dataset importer
-    to recover the full media data (media bytes + embedding), then appends
-    the matched medias to *medias* with fresh, non-colliding IDs.
+    Groups *missing_entries* by origin, then for each origin group:
+
+    1. If a :class:`~vtsearch.datasets.sources.base.MediaSource` is
+       available, fetch only the needed files individually (fast path).
+    2. Otherwise, fall back to running the full dataset importer and
+       cherry-picking matching medias (legacy path).
 
     Args:
         missing_entries: Label entries (dicts with ``origin``,
@@ -80,6 +158,21 @@ def ingest_missing_medias(
 
     for origin_key, (origin_dict, entries) in groups.items():
         importer_name = origin_dict.get("importer", "")
+
+        on_progress(
+            "ingesting",
+            f"Re-ingesting from {importer_name} ({len(entries)} medias)...",
+            0,
+            0,
+        )
+
+        # Fast path: use MediaSource for item-by-item fetching
+        source_result = _ingest_via_source(origin_dict, entries, medias, on_progress)
+        if source_result >= 0:
+            total_ingested += source_result
+            continue
+
+        # Legacy path: run the full importer
         importer = get_importer(importer_name)
         if importer is None:
             continue
@@ -96,13 +189,6 @@ def ingest_missing_medias(
             md5 = entry.get("md5", "")
             if md5:
                 wanted_md5s.add(md5)
-
-        on_progress(
-            "ingesting",
-            f"Re-ingesting from {importer_name} ({len(wanted_names)} medias)...",
-            0,
-            0,
-        )
 
         # Run the importer into a temporary medias dict
         temp_medias: dict[int, dict[str, Any]] = {}
