@@ -28,10 +28,10 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, autoload_media_types, autorun_processors, hide_autopilot, autopilot_top_greens, autopilot_hard_reds); auto-saves to `data/settings.json`
-- `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_columns_left, grid_columns_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, saved_datasets_dir, detectors_dir, trainable_models_dir); auto-saves to `data/settings.json`
+- `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`; shared utilities in `helpers.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
-- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
+- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets/demo); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
 - `vtsearch/exporters/` — Results exporters (server_json_file/server_csv_file/email_smtp/webhook/gui); auto-discovered via `EXPORTER` sentinel
 - `vtsearch/labels/importers/` — Label importers (server_json_file/server_csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
@@ -41,10 +41,12 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/utils/` — Global state (`medias` dict, votes), progress utilities
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md)
+- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md, plan-media-embedders.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
+  - `test_ssrf_validation.py` — SSRF URL validation: blocking private/internal network addresses, public URL allowlisting, integration with HTTP archive importer and webhook exporter
+  - `test_path_validation.py` — Server file-path validation: path traversal prevention
   - `test_audio.py` — WAV generation
   - `test_medias.py` — Media init, listing, audio endpoint, MD5
   - `test_votes.py` — Voting and vote retrieval
@@ -54,6 +56,8 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_inclusion.py` — Inclusion GET/POST
   - `test_detectors.py` — Detector export, detector sort, autorun detectors, auto-detect
   - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
+  - `test_new_embedders.py` — Alternative embedder class properties and registration (SigLIP, CLAP Music, BGE) without downloading model weights
+  - `test_resolver.py` — Media file resolution from origin trails: ResolvedLabels and resolve_file_from_origin
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
   - `test_datasets.py` — Dataset endpoints, startup state, importers
   - `test_dataset_split.py` — Train/test dataset splitting
@@ -67,6 +71,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_origin_labelset.py` — Origin class, LabeledElement, LabelSet, build_origin(), label export/import with origins, integration
   - `test_combine_datasets.py` — Combine-datasets importer: metadata, dedup, media type validation, CLI, API routes
   - `test_creation_info.py` — Legacy creation_info handling in pickle datasets
+  - `test_pickle_safety.py` — Restricted pickle unpickler: RCE prevention while allowing legitimate VTSearch dataset pickles
   - `test_duplicates.py` — Duplicate-content collapsing: collapse_duplicates function, dupe counting, label export/import integration
   - `test_enrich_descriptions.py` — Enriched text-sort description embedding
   - `test_error_recovery.py` — Error handling and edge cases: invalid requests, missing fields, type mismatches, empty state, nonexistent resources
@@ -82,6 +87,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_diversity_tree.py` — DiversityTree: hierarchical k-means clustering, seen tracking, diversity level, next sample
   - `test_diversity_tree_integration.py` — DiversityTree integration with Flask app: build, rebuild, voting, diversity-level endpoint
   - `test_document_and_converters.py` — Document media type and media converters (document→image, document→text, video→audio, video→image)
+  - `test_converter_selection.py` — ConverterChooser: converter registry, API, importer integration, run_converters_on_folder
   - `test_download_and_extract.py` — Generic _download_and_extract() helper: tar.gz, zip, nested archives
   - `test_tqdm_progress.py` — tqdm-based progress bar tracking
   - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
@@ -109,15 +115,15 @@ Tests are auto-grouped by area. Run a focused subset instead of the full suite:
 | Group | Files | Description |
 |-------|-------|-------------|
 | `core` | audio, medias, votes, inclusion, settings, frontend | Basic app functionality |
-| `api` | api_contracts, error_recovery, dashboard | API contracts and error handling |
+| `api` | api_contracts, error_recovery, dashboard, path_validation, multi_user_security, ssrf_validation | API contracts, error handling, security |
 | `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
-| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors | Dataset loading and management |
+| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety | Dataset loading and management |
 | `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import | Import/export |
-| `models` | detectors, extractors, processors, trainable_models, clippers, eval* | ML models and evaluation |
+| `models` | detectors, extractors, processors, trainable_models, clippers, eval*, resolver, new_embedders | ML models and evaluation |
 | `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract | Demo dataset downloads |
 | `integration` | integration, slow_integration, thread_safety | End-to-end workflows |
 | `cli` | cli_autodetect, load_sort_window, preload_progress, tqdm_progress | CLI and progress |
-| `converters` | document_and_converters | Media converters |
+| `converters` | document_and_converters, converter_selection | Media converters |
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
 
@@ -181,7 +187,7 @@ All mutable global state is reset automatically before each test via two autouse
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `autorun_extractors`, `autorun_localizers`, `_dataset_display_name`, `_diversity_tree` are module-level dicts/lists; all protected by `_state_lock` (RLock)
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, autoload_media_types, autorun_processors, hide_autopilot, autopilot_top_greens, autopilot_hard_reds
+- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_columns_left, grid_columns_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, saved_datasets_dir, detectors_dir, trainable_models_dir
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)

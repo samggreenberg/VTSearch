@@ -14,7 +14,8 @@ which pieces you need and how to pull them out.
 5. [How to extract specific components](#how-to-extract-specific-components)
 6. [Plugin architecture details](#plugin-architecture-details)
 7. [State management](#state-management)
-8. [Element-level origin tracking](#element-level-origin-tracking)
+8. [Authentication and multi-user support](#authentication-and-multi-user-support)
+9. [Element-level origin tracking](#element-level-origin-tracking)
 
 ---
 
@@ -46,6 +47,9 @@ VTSearch/
 │   ├── medias.py                   Test media generation & embedding cache
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── settings.py                 Persistent settings & autorun processors
+│   │
+│   ├── auth/                       Authentication & user management
+│   │   └── __init__.py             LoginProvider ABC, DefaultLoginProvider, get_current_user(), get_user_data_dir()
 │   │
 │   ├── media/                      Media type, embedder, and clipper registries + plugins
 │   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper, Processor, Detector, Localizer, Extractor ABCs
@@ -95,7 +99,8 @@ VTSearch/
 │   │       ├── folder/             Local directory importer
 │   │       ├── pickle/             .pkl file importer
 │   │       ├── http_zip/           HTTP archive importer (API name: http_archive)
-│   │       └── combine_datasets/   Merge multiple pickle datasets
+│   │       ├── combine_datasets/   Merge multiple pickle datasets
+│   │       └── demo/              Demo dataset importer (pre-configured catalogues)
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
@@ -123,6 +128,8 @@ VTSearch/
 │   │   └── voting_iterations.py    Voting-iteration simulation
 │   │
 │   ├── routes/                     Flask blueprints (HTTP layer)
+│   │   ├── auth.py                 Authentication status endpoint (/api/auth/status)
+│   │   ├── helpers.py              Shared route helpers (get_json_or_400)
 │   │   ├── main.py                 Root route, favicon, logo
 │   │   ├── medias.py               Media listing, serving, voting
 │   │   ├── sorting.py              Text/learned/example sort, labels, diversity
@@ -161,7 +168,7 @@ modules on the right.
 ┌──────────────────────────────────────────────────────────┐
 │                    Flask / HTTP layer                      │
 │                                                          │
-│  app.py ──► routes/* ──► utils/state, utils/progress     │
+│  app.py ──► auth, routes/* ──► utils/state, utils/progress │
 │                │                                          │
 │                ├──► models/embeddings, models/training    │
 │                ├──► datasets/loader                       │
@@ -238,6 +245,7 @@ modules on the right.
 | `utils/progress.py` | No | No | **Yes** — threading only |
 | `utils/state.py` | No | N/A (IS the state) | **Yes** — plain Python dicts |
 | `config.py` | No | No | **Yes** — just constants |
+| `auth/` | No | No | **Yes** — ABC + default provider |
 | `routes/*` | **Yes** | **Yes** | No — Flask-specific |
 | `app.py` | **Yes** | **Yes** | No — application entry point |
 
@@ -400,11 +408,15 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 
 Persistent settings (volume, theme, inclusion, `enrich_descriptions`,
 `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-`swipe_animation`, `show_metadata`, `view_mode_left`,
-`view_mode_right`, `autopilot_top_greens`, `autopilot_hard_reds`,
-`autoload_media_types`, autorun processor recipes) live
-separately in `vtsearch/settings.py` and are auto-saved to
-`data/settings.json`.
+`audio_playing`, `swipe_animation`, `show_metadata`,
+`view_mode_left`, `view_mode_right`, `focus_mode_left`,
+`focus_mode_right`, `grid_columns_left`, `grid_columns_right`,
+`panel_pct_left`, `panel_pct_right`, `autoload_media_types`,
+`autoload_media_embedders`, `autopilot_enabled`, `hide_autopilot`,
+`autopilot_top_greens`, `autopilot_hard_reds`, autorun processor
+recipes, and infrastructure directories `saved_datasets_dir`,
+`detectors_dir`, `trainable_models_dir`) live separately in
+`vtsearch/settings.py` and are auto-saved to `data/settings.json`.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
 Trainable models are persisted as JSON files in `data/trainable_models/`
@@ -415,6 +427,64 @@ text query, media type, examples list, and labelset.
 accept state as parameters — they never import it directly.  This means
 you can use the ML code in a script or notebook by passing your own
 dicts.
+
+### State submodule organisation
+
+`state.py` is a re-export facade over split-out submodules:
+
+| Submodule | Responsibility |
+|-----------|----------------|
+| `state_core.py` | Core variables (medias, votes, inclusion, diversity tree, display name) and `_state_lock` |
+| `state_votes.py` | Vote operations, label history, text-sort suggestions, learned scores |
+| `state_clicks.py` | Click-time tracking for vote sequence analysis |
+| `state_processors.py` | Autorun detector/extractor/localizer configuration CRUD |
+| `state_diversity.py` | Diversity tree construction and sampling |
+| `state_media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking |
+
+All are imported and re-exported by `state.py` so call-sites remain unchanged.
+
+---
+
+## Authentication and multi-user support
+
+VTSearch uses a pluggable authentication system to support both single-user
+and multi-user deployments.
+
+### LoginProvider abstraction (`vtsearch/auth/`)
+
+The `LoginProvider` ABC defines the interface:
+
+| Method | Purpose |
+|--------|---------|
+| `get_user(request)` | Return the username for the current request |
+| `is_authenticated(request)` | Check if the request carries valid credentials |
+| `login_required()` | Whether the frontend should show a login screen |
+| `get_user_data_dir(username, base)` | Return per-user data directory |
+| `status_dict(request)` | JSON dict for `/api/auth/status` |
+
+`DefaultLoginProvider` is the built-in default: single-user, always
+authenticated, shared data directory. Custom providers can implement PKI,
+OAuth, LDAP, or any auth scheme without modifying route code.
+
+### Per-request user context
+
+The `before_request` middleware in `app.py` populates `g.user` on every
+request via the active provider's `get_user()`. Routes access the current
+user via `get_current_user()`. Outside a Flask request context (CLI,
+background threads) it falls back to `"default"`.
+
+### Ownership tracking
+
+Routes that create detectors, datasets, or trainable models record
+`created_by = get_current_user()` for provenance. The auth endpoint
+`GET /api/auth/status` returns the provider name, current user,
+authentication state, and login-required flag.
+
+### Current limitations
+
+In-memory state (votes, medias, labels, settings) is still global — the
+auth infrastructure enables metadata tracking and per-user data
+directories, but runtime state isolation is not yet implemented.
 
 ---
 

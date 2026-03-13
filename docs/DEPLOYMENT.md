@@ -228,13 +228,27 @@ and auto-saved on every change. Schema:
   "safe_thresholds": false,
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
+  "audio_playing": true,
   "swipe_animation": true,
-  "view_mode_left": "list",
-  "view_mode_right": "grid",
+  "show_metadata": true,
+  "view_mode_left": {},
+  "view_mode_right": {},
+  "focus_mode_left": {},
+  "focus_mode_right": {},
+  "grid_columns_left": {},
+  "grid_columns_right": {},
+  "panel_pct_left": {},
+  "panel_pct_right": {},
+  "autoload_media_types": [],
+  "autoload_media_embedders": [],
+  "autorun_processors": [],
+  "autopilot_enabled": true,
+  "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
-  "autoload_media_types": [],
-  "autorun_processors": []
+  "saved_datasets_dir": "data/saved_datasets",
+  "detectors_dir": "data/detectors",
+  "trainable_models_dir": "data/trainable_models"
 }
 ```
 
@@ -242,8 +256,12 @@ Notable fields:
 
 - `autoload_media_types` — media types to preload at startup (triggers
   model downloads if models aren't cached)
+- `autoload_media_embedders` — specific embedders to preload (e.g.
+  `["clap_music", "siglip"]`)
 - `autorun_processors` — saved detector/extractor configurations with
   importer name, processor name, and field values
+- `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
+  infrastructure directories (overridable for custom data layouts)
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
 
 ---
@@ -290,7 +308,7 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
   and media files vary by dataset size.
 - **CPU**: `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set to reduce
   per-operation memory. This trades single-operation throughput for lower
-  memory usage — appropriate for a single-user application.
+  memory usage.
 - **GPU (optional)**: GPU mode accelerates embedding computation and model
   training. Not required for basic operation.
 
