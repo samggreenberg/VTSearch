@@ -821,9 +821,21 @@ media type may have multiple embedders.
 
 ```
 vtsearch/media/<type>/
-├── embedder.py      # Your MediaEmbedder subclass (required)
-└── requirements.txt # Dependencies (already exists for the media type)
+├── embedder.py              # Default embedder (required for new media types)
+├── embedder_<variant>.py    # Alternative embedder (optional, e.g. embedder_siglip.py)
+└── requirements.txt         # Dependencies (already exists for the media type)
 ```
+
+Each media type has one default embedder in `embedder.py`. To add an
+**alternative** embedder for an existing media type, create a new file named
+`embedder_<variant>.py` (e.g. `embedder_clap_music.py`, `embedder_siglip.py`,
+`embedder_bge.py`) and register it the same way. Existing alternatives:
+
+| File | Embedder | Media type |
+|------|----------|-----------|
+| `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio |
+| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image |
+| `text/embedder_bge.py` | `TextBGEEmbedder` | paragraph |
 
 ### What to implement
 
