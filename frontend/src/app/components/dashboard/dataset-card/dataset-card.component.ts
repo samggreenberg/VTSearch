@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 export class DatasetCardComponent {
   @Input() dataset: any;
   @Input() currentUser = '';
+  @Input() isDefaultLogin = true;
   @Input() @HostBinding('class.selected') selected = false;
   @Output() rowClick = new EventEmitter<MouseEvent>();
 
