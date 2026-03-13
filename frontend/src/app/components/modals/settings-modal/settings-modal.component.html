@@ -12,12 +12,6 @@
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'media'"
-          (click)="activeSettingsTab = 'media'">
-          Media Types
-        </button>
-        <button
-          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'sorting'"
           (click)="activeSettingsTab = 'sorting'">
           Sorting
@@ -50,12 +44,9 @@
             <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
-        }
 
-        <!-- Media Type Settings (per-media-type) -->
-        @if (activeSettingsTab === 'media') {
-          <h3>Media Type Settings</h3>
           @if (mediaTypes.length > 0) {
+            <h4>Per-Media-Type</h4>
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
                 <button

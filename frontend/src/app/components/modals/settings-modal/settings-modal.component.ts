@@ -51,7 +51,7 @@ export class SettingsModalComponent implements OnInit {
           const preselected = this.preselectedViewTab;
           if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
             this.activeViewTab = preselected;
-            this.activeSettingsTab = 'media';
+            this.activeSettingsTab = 'appearance';
           } else {
             this.activeViewTab = this.mediaTypes[0].type_id;
           }
