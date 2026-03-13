@@ -23,6 +23,7 @@ export class SettingsModalComponent implements OnInit {
   settings: AppSettings = { volume: 50 };
   embedders: EmbedderInfo[] = [];
   mediaTypes: MediaTypeInfo[] = [];
+  activeSettingsTab = 'appearance';
   activeViewTab = '';
   loading = true;
   error = '';
@@ -50,6 +51,7 @@ export class SettingsModalComponent implements OnInit {
           const preselected = this.preselectedViewTab;
           if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
             this.activeViewTab = preselected;
+            this.activeSettingsTab = 'media';
           } else {
             this.activeViewTab = this.mediaTypes[0].type_id;
           }
