@@ -80,7 +80,17 @@ def resolve_file_from_origin(
     if importer_name == "converter":
         return _resolve_converter(origin.get("params", {}))
 
-    # -- Registry-based dispatch --
+    # -- Source-based dispatch (preferred) --
+
+    from vtsearch.datasets.sources import get_source_for_origin
+
+    source = get_source_for_origin(origin)
+    if source is not None:
+        result = source.resolve_path(origin_name, filename)
+        if result is not None:
+            return result
+
+    # -- Registry-based dispatch (fallback for importers without a source) --
 
     from vtsearch.datasets.importers import get_importer
 
