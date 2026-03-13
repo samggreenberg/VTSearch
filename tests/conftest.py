@@ -225,7 +225,12 @@ def _allow_test_tmp_paths(monkeypatch):
         try:
             return _original(filepath_str, base_dir)
         except ValueError:
-            # Also allow the system temp directory (where pytest tmp_path lives).
+            # Also allow the system temp directory (where pytest tmp_path lives),
+            # but only when base_dir was not explicitly set (i.e. only for the
+            # default CWD fallback).  When a specific base_dir is given (e.g. in
+            # multi-user mode) we must honour that restriction.
+            if base_dir is not None:
+                raise
             return _original(filepath_str, Path(tempfile.gettempdir()))
 
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
