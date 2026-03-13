@@ -18,6 +18,7 @@ import pytest
 from vtsearch.auth import (
     DefaultLoginProvider,
     LoginProvider,
+    TrivialLoginProvider,
     get_current_user,
     get_login_provider,
     get_user_data_dir,
@@ -350,3 +351,137 @@ class TestProviderSwapSafety:
 
         # Restore default
         set_login_provider(DefaultLoginProvider())
+
+
+# ---------------------------------------------------------------------------
+# TrivialLoginProvider
+# ---------------------------------------------------------------------------
+
+
+class TestTrivialLoginProvider:
+    """Test the cookie-based trivial login provider."""
+
+    def test_provider_properties(self):
+        provider = TrivialLoginProvider()
+        assert provider.name == "trivial"
+        assert provider.login_required() is True
+
+    def test_unauthenticated_outside_flask(self):
+        provider = TrivialLoginProvider()
+        assert provider.get_user(None) == "anonymous"
+        assert provider.is_authenticated(None) is False
+
+    def test_data_dir_uses_subdirectory(self):
+        provider = TrivialLoginProvider()
+        base = Path("/data")
+        assert provider.get_user_data_dir("alice", base) == Path("/data/alice")
+
+    def test_status_dict_unauthenticated(self):
+        provider = TrivialLoginProvider()
+        status = provider.status_dict(None)
+        assert status["provider"] == "trivial"
+        assert status["user"] == "anonymous"
+        assert status["authenticated"] is False
+        assert status["login_required"] is True
+
+
+class TestTrivialLoginEndpoints:
+    """Test the /api/auth/login and /api/auth/logout endpoints."""
+
+    def test_login_rejected_with_default_provider(self, client):
+        """Login endpoint returns 400 when the trivial provider is not active."""
+        resp = client.post("/api/auth/login", json={"username": "alice"})
+        assert resp.status_code == 400
+        assert "not supported" in resp.get_json()["error"]
+
+    def test_logout_rejected_with_default_provider(self, client):
+        """Logout endpoint returns 400 when the trivial provider is not active."""
+        resp = client.post("/api/auth/logout", json={})
+        assert resp.status_code == 400
+
+    def test_login_and_logout_flow(self, client):
+        """Full login → status → logout → status cycle."""
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+
+            # Initially unauthenticated
+            resp = client.get("/api/auth/status")
+            data = resp.get_json()
+            assert data["authenticated"] is False
+            assert data["user"] == "anonymous"
+            assert data["login_required"] is True
+
+            # Log in
+            resp = client.post("/api/auth/login", json={"username": "alice"})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["user"] == "alice"
+            assert data["authenticated"] is True
+
+            # Status reflects login
+            resp = client.get("/api/auth/status")
+            data = resp.get_json()
+            assert data["user"] == "alice"
+            assert data["authenticated"] is True
+
+            # Log out
+            resp = client.post("/api/auth/logout", json={})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["authenticated"] is False
+            assert data["user"] == "anonymous"
+
+        finally:
+            set_login_provider(original)
+
+    def test_login_empty_username_rejected(self, client):
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+            resp = client.post("/api/auth/login", json={"username": ""})
+            assert resp.status_code == 400
+        finally:
+            set_login_provider(original)
+
+    def test_login_invalid_username_rejected(self, client):
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+            resp = client.post("/api/auth/login", json={"username": "alice bob"})
+            assert resp.status_code == 400
+        finally:
+            set_login_provider(original)
+
+    def test_login_special_chars_rejected(self, client):
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+            resp = client.post("/api/auth/login", json={"username": "../etc"})
+            assert resp.status_code == 400
+        finally:
+            set_login_provider(original)
+
+    def test_login_valid_usernames_accepted(self, client):
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+            for name in ["alice", "Bob_123", "user-1", "A"]:
+                resp = client.post("/api/auth/login", json={"username": name})
+                assert resp.status_code == 200, f"Failed for {name!r}"
+                assert resp.get_json()["user"] == name
+        finally:
+            set_login_provider(original)
+
+    def test_g_user_reflects_trivial_login(self, client):
+        """After trivial login, g.user (and thus get_current_user) returns the logged-in name."""
+        original = get_login_provider()
+        try:
+            set_login_provider(TrivialLoginProvider())
+            client.post("/api/auth/login", json={"username": "carol"})
+
+            # Any subsequent request should see g.user = "carol"
+            resp = client.get("/api/auth/status")
+            assert resp.get_json()["user"] == "carol"
+        finally:
+            set_login_provider(original)

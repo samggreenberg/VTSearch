@@ -1,3 +1,6 @@
+@if (auth.needsLogin) {
+  <vt-login (loggedIn)="auth.checkStatus()" />
+} @else {
 <header>
   <nav class="burger-menu" aria-label="Main menu">
     <button
@@ -43,3 +46,4 @@
   <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="showSettings = false" />
 }
 <vt-dialog-host />
+}

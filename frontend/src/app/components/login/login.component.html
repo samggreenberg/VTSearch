@@ -1,0 +1,25 @@
+<div class="login-backdrop">
+  <div class="login-card">
+    <img src="logo.png" alt="VTSearch logo" class="login-logo">
+    <h2>VTSearch</h2>
+    <p class="login-subtitle">Enter your name to get started</p>
+    <form (ngSubmit)="submit()" class="login-form">
+      <input
+        type="text"
+        [(ngModel)]="username"
+        name="username"
+        placeholder="Username"
+        autofocus
+        autocomplete="username"
+        maxlength="64"
+        [disabled]="busy"
+      >
+      @if (error) {
+        <p class="login-error">{{ error }}</p>
+      }
+      <button type="submit" [disabled]="busy">
+        {{ busy ? 'Logging in...' : 'Log in' }}
+      </button>
+    </form>
+  </div>
+</div>
