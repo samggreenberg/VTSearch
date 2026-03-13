@@ -33,6 +33,10 @@
               <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
               <th (click)="sortDatasets('clipper')" class="sortable text-center" title="MediaClipper used at creation (click to sort)">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span></th>
               <th (click)="sortDatasets('embedder')" class="sortable text-center" title="MediaEmbedder used for embedding (click to sort)">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span></th>
+              @if (!isDefaultLogin) {
+                <th (click)="sortDatasets('created_by')" class="sortable text-center" title="User who created this dataset (click to sort)">Creator<span class="sort-indicator" [class.active]="isDatasetSortActive('created_by')">{{ datasetSortIndicator('created_by') }}</span></th>
+                <th (click)="sortDatasets('readers')" class="sortable text-center" title="Users with access to this dataset (click to sort)">Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span></th>
+              }
               <th class="text-center" title="Whether this dataset is currently loaded into memory">Loaded</th>
               <th class="text-center" title="Available operations for this dataset">Actions</th>
             </tr>
@@ -42,6 +46,7 @@
               <vt-dataset-card
                 [dataset]="dataset"
                 [currentUser]="currentUser"
+                [isDefaultLogin]="isDefaultLogin"
                 [selected]="isDatasetSelected(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"

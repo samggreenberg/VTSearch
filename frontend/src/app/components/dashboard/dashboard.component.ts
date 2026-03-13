@@ -57,6 +57,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private knownModelIds = new Set<string>();
 
   currentUser = '';
+  isDefaultLogin = true;
 
   constructor(
     private router: Router,
@@ -74,6 +75,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((status) => {
         this.currentUser = status?.user || '';
+        this.isDefaultLogin = status?.provider === 'default';
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$
