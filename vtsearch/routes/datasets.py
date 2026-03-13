@@ -22,10 +22,13 @@ from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
+    can_user_access as _reg_can_access,
     get_loaded_id as _reg_loaded_id,
-    list_datasets as _reg_list_datasets,
+    is_owner as _reg_is_owner,
+    list_datasets_for_user as _reg_list_for_user,
     rename_dataset as _reg_rename,
     set_loaded_id as _reg_set_loaded,
+    set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
     get_dataset as _reg_get,
@@ -590,8 +593,10 @@ def clear_dataset_route():
 
 @datasets_bp.route("/api/datasets/registry")
 def list_registered_datasets():
-    """Return all registered datasets with their loaded state."""
-    entries = _reg_list_datasets()
+    """Return registered datasets visible to the current user."""
+    from vtsearch.auth import get_current_user
+
+    entries = _reg_list_for_user(get_current_user())
     loaded_id = _reg_loaded_id()
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
@@ -600,15 +605,21 @@ def list_registered_datasets():
         else:
             entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
+        entry.setdefault("readers", [])
     return jsonify({"datasets": entries})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
 def load_registered_dataset(dataset_id: str):
     """Load a registered dataset from its saved pkl file."""
+    from vtsearch.auth import get_current_user
+
     entry = _reg_get(dataset_id)
     if entry is None:
         return jsonify({"error": "Dataset not found in registry"}), 404
+
+    if not _reg_can_access(dataset_id, get_current_user()):
+        return jsonify({"error": "Access denied"}), 403
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
@@ -682,6 +693,11 @@ def unload_registered_dataset(dataset_id: str):
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
 def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can delete it"}), 403
+
     loaded = _reg_loaded_id()
     if loaded == dataset_id:
         clear_dataset()
@@ -695,6 +711,11 @@ def delete_registered_dataset(dataset_id: str):
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
 def rename_registered_dataset(dataset_id: str):
     """Rename a registered dataset."""
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can rename it"}), 403
+
     data = request.get_json(force=True, silent=True) or {}
     new_name = data.get("name", "").strip()
     if not new_name:
@@ -706,6 +727,27 @@ def rename_registered_dataset(dataset_id: str):
     if _reg_loaded_id() == dataset_id:
         set_dataset_display_name(new_name)
     return jsonify({"ok": True, "name": new_name})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/readers", methods=["PUT"])
+def update_dataset_readers(dataset_id: str):
+    """Update the readers list for a dataset.  Only the creator may call this.
+
+    Body: ``{"readers": ["alice", "bob"]}``
+    Use ``["*"]`` to make the dataset public to all users.
+    """
+    from vtsearch.auth import get_current_user
+
+    data = request.get_json(force=True, silent=True) or {}
+    readers = data.get("readers")
+    if not isinstance(readers, list) or not all(isinstance(r, str) for r in readers):
+        return jsonify({"error": "readers must be a list of strings"}), 400
+
+    ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
+    if not ok:
+        status = 403 if "creator" in err else 404
+        return jsonify({"error": err}), status
+    return jsonify({"ok": True, "readers": readers})
 
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
