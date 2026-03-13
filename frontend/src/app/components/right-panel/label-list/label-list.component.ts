@@ -89,13 +89,16 @@ export class LabelListComponent implements OnInit, OnChanges {
 
   metaText(entry: LabelEntry): string {
     const parts: string[] = [];
-    if (entry.time >= 0) {
-      parts.push(`#${entry.time}`);
-    } else {
-      parts.push('imported');
-    }
-    if (entry.confidence >= 0) {
-      parts.push(`${(entry.confidence * 100).toFixed(0)}%`);
+    if (this.sortMode === 'time-desc' || this.sortMode === 'time-asc') {
+      if (entry.time >= 0) {
+        parts.push(`#${entry.time}`);
+      } else {
+        parts.push('imported');
+      }
+    } else if (this.sortMode === 'confidence-desc' || this.sortMode === 'confidence-asc') {
+      if (entry.confidence >= 0) {
+        parts.push(`${(entry.confidence * 100).toFixed(0)}%`);
+      }
     }
     return parts.join(' \u00B7 ');
   }

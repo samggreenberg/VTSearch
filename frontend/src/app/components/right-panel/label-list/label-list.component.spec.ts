@@ -138,19 +138,46 @@ describe('LabelListComponent', () => {
   });
 
   describe('meta text', () => {
-    it('should show click time index', () => {
+    it('should show click time when sorting by time', () => {
+      component.sortMode = 'time-desc';
       const entry: LabelEntry = { id: 1, name: 'test', time: 5, score: -1, confidence: -1 };
       expect(component.metaText(entry)).toBe('#5');
     });
 
-    it('should show imported when no click time', () => {
+    it('should show imported when sorting by time with no click time', () => {
+      component.sortMode = 'time-asc';
       const entry: LabelEntry = { id: 1, name: 'test', time: -1, score: -1, confidence: -1 };
       expect(component.metaText(entry)).toBe('imported');
     });
 
-    it('should show confidence percentage', () => {
+    it('should show confidence when sorting by confidence', () => {
+      component.sortMode = 'confidence-desc';
       const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
-      expect(component.metaText(entry)).toBe('#3 \u00B7 80%');
+      expect(component.metaText(entry)).toBe('80%');
+    });
+
+    it('should show empty text when sorting by name', () => {
+      component.sortMode = 'name-asc';
+      const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
+      expect(component.metaText(entry)).toBe('');
+    });
+
+    it('should show empty text when sorting by id', () => {
+      component.sortMode = 'id-asc';
+      const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
+      expect(component.metaText(entry)).toBe('');
+    });
+
+    it('should not show confidence when sorting by time', () => {
+      component.sortMode = 'time-desc';
+      const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
+      expect(component.metaText(entry)).toBe('#3');
+    });
+
+    it('should not show click time when sorting by confidence', () => {
+      component.sortMode = 'confidence-asc';
+      const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
+      expect(component.metaText(entry)).toBe('80%');
     });
   });
 
