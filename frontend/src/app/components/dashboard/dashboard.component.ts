@@ -9,6 +9,7 @@ import { TrainableModelsApiService } from '../../services/trainable-models-api.s
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
+import { AuthService } from '../../services/auth.service';
 import { AutoDetectResultsData } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
@@ -55,6 +56,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
 
+  currentUser = '';
+
   constructor(
     private router: Router,
     private datasetsApi: DatasetsApiService,
@@ -63,9 +66,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
+    private authService: AuthService,
   ) {}
 
   ngOnInit(): void {
+    this.authService.status$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((status) => {
+        this.currentUser = status?.user || '';
+      });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$
       .pipe(takeUntil(this.destroy$))
@@ -191,6 +200,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedDatasetIds.delete(dataset.id);
         this.datasetState.refresh();
       },
+    });
+  }
+
+  async editDatasetSecurity(dataset: any): Promise<void> {
+    const current = (dataset.readers || []).join(', ');
+    const result = await this.dialog.prompt(
+      `Edit access list for "${dataset.name}".\nEnter usernames separated by commas, or * for public:`,
+      current,
+    );
+    if (result === null) return;
+    const readers = result
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+    this.datasetsApi.updateReaders(dataset.id, readers).subscribe({
+      next: () => this.datasetState.refresh(),
     });
   }
 

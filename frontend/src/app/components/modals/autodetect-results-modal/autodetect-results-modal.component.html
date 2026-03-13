@@ -51,7 +51,7 @@
     <div class="export-row">
       <select class="form-select" [(ngModel)]="selectedExporter" (ngModelChange)="onExporterChange()">
         @for (exp of exporters; track exp.name) {
-          <option [value]="exp.name">{{ exp.label || exp.name }}</option>
+          <option [value]="exp.name">{{ exp['label'] || exp.name }}</option>
         }
       </select>
     </div>

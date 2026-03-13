@@ -41,10 +41,12 @@
             @for (dataset of sortedDatasets; track dataset.id) {
               <vt-dataset-card
                 [dataset]="dataset"
+                [currentUser]="currentUser"
                 [selected]="isDatasetSelected(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
                 (delete)="deleteDataset(dataset)"
+                (security)="editDatasetSecurity(dataset)"
               />
             }
           </tbody>
