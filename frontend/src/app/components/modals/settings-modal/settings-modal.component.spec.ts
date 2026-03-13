@@ -164,6 +164,7 @@ describe('SettingsModalComponent', () => {
     component.preselectedViewTab = 'image';
     flushInit();
     expect(component.activeViewTab).toBe('image');
+    expect(component.activeSettingsTab).toBe('appearance');
   });
 
   it('should ignore preselectedViewTab when not in mediaTypes', () => {
