@@ -27,6 +27,7 @@ _TEST_GROUPS = {
         "test_dashboard",
         "test_path_validation",
         "test_multi_user_security",
+        "test_ssrf_validation",
     ],
     "sorting": [
         "test_sorting",
@@ -68,6 +69,7 @@ _TEST_GROUPS = {
         "test_eval_visualize",
         "test_eval_voting_iterations",
         "test_resolver",
+        "test_new_embedders",
     ],
     "downloads": [
         "test_ag_news_download",
@@ -91,6 +93,7 @@ _TEST_GROUPS = {
     ],
     "converters": [
         "test_document_and_converters",
+        "test_converter_selection",
     ],
 }
 
