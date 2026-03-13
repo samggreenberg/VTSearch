@@ -11,11 +11,7 @@ Verifies that:
 
 from __future__ import annotations
 
-import pytest
-
 from vtsearch.auth import (
-    DefaultLoginProvider,
-    LoginProvider,
     get_login_provider,
     set_login_provider,
     TrivialLoginProvider,
