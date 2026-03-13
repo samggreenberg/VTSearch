@@ -50,6 +50,10 @@ from vtsearch.utils import update_progress  # noqa: E402
 set_progress_callback(update_progress)
 
 app = Flask(__name__)
+# Secret key for session cookies.  Only the TrivialLoginProvider uses
+# sessions; the key is intentionally non-secret because this provider
+# is for local testing only.
+app.secret_key = "vtsearch-dev-key-not-for-production"
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +96,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app")
     parser.add_argument("--local", action="store_true", help="Run in local development mode")
+    parser.add_argument(
+        "--login",
+        type=str,
+        choices=["trivial"],
+        default=None,
+        help="Login provider: 'trivial' shows a username prompt (no password, cookie-based)",
+    )
     parser.add_argument(
         "--autodetect",
         action="store_true",
@@ -205,23 +216,31 @@ if __name__ == "__main__":
         else:
             parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
 
-    elif args.local:
-        # Local development mode
-        print("\U0001f680 Running in LOCAL mode (accessible from other devices)", flush=True)
-        initialize_models()
-        preloaded = preload_autoload_media_types()
-        if preloaded:
-            print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
-        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
-    else:
-        # Production mode \u2014 models load lazily when the first dataset is loaded
-        print("\U0001f680 Running in PRODUCTION mode", flush=True)
-        initialize_models()
-        preloaded = preload_autoload_media_types()
-        if preloaded:
-            print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+    elif args.local or not args.autodetect:
+        # Activate the chosen login provider before starting the server.
+        if getattr(args, "login", None) == "trivial":
+            from vtsearch.auth import TrivialLoginProvider, set_login_provider
 
-        print("\u2705 VTSearch is ready!", flush=True)
-        print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
+            set_login_provider(TrivialLoginProvider())
+            print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
 
-        app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+        if args.local:
+            # Local development mode
+            print("\U0001f680 Running in LOCAL mode (accessible from other devices)", flush=True)
+            initialize_models()
+            preloaded = preload_autoload_media_types()
+            if preloaded:
+                print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+            app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+        else:
+            # Production mode \u2014 models load lazily when the first dataset is loaded
+            print("\U0001f680 Running in PRODUCTION mode", flush=True)
+            initialize_models()
+            preloaded = preload_autoload_media_types()
+            if preloaded:
+                print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+
+            print("\u2705 VTSearch is ready!", flush=True)
+            print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
+
+            app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

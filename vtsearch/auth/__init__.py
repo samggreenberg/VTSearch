@@ -110,6 +110,47 @@ class DefaultLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
+# TrivialLoginProvider — cookie-based, no password
+# ---------------------------------------------------------------------------
+
+
+class TrivialLoginProvider(LoginProvider):
+    """Cookie-based login with no password.
+
+    The frontend prompts for a username and sends it via
+    ``POST /api/auth/login``.  The server stores the name in a
+    signed Flask session cookie.  Completely insecure — useful only
+    for testing multi-user features locally.
+    """
+
+    name = "trivial"
+
+    _COOKIE_KEY = "vtsearch_user"
+
+    def get_user(self, request: Any) -> str:
+        try:
+            from flask import session
+
+            return session.get(self._COOKIE_KEY, "anonymous")
+        except RuntimeError:
+            return "anonymous"
+
+    def is_authenticated(self, request: Any) -> bool:
+        try:
+            from flask import session
+
+            return self._COOKIE_KEY in session
+        except RuntimeError:
+            return False
+
+    def login_required(self) -> bool:
+        return True
+
+    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
+        return base_data_dir / username
+
+
+# ---------------------------------------------------------------------------
 # Module-level state
 # ---------------------------------------------------------------------------
 
