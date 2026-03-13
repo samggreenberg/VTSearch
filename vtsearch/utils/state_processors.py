@@ -27,6 +27,9 @@ def add_autorun_detector(
     examples: list[dict[str, str]] | None = None,
     num_labels: int = 0,
     created_by: str = "default",
+    good_origins: list[dict[str, Any]] | None = None,
+    bad_origins: list[dict[str, Any]] | None = None,
+    inclusion: int = 0,
 ) -> None:
     """Add or overwrite a named autorun detector in the global store.
 
@@ -48,6 +51,11 @@ def add_autorun_detector(
         num_labels: Number of training labels used when this detector was last
             trained.  Defaults to ``0`` for untrained stubs.
         created_by: Username of the user who created this detector.
+        good_origins: List of origin dicts for media voted Good, each with
+            ``"origin"``, ``"origin_name"``, ``"filename"``, ``"md5"`` keys.
+            Used to re-derive weights without serialising them to disk.
+        bad_origins: List of origin dicts for media voted Bad (same shape).
+        inclusion: The inclusion value used when training this detector.
     """
     import time
 
@@ -62,6 +70,9 @@ def add_autorun_detector(
             "examples": examples or [],
             "num_labels": num_labels,
             "created_by": created_by,
+            "good_origins": good_origins or [],
+            "bad_origins": bad_origins or [],
+            "inclusion": inclusion,
         }
 
 

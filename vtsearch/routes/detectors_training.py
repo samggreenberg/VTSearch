@@ -14,6 +14,7 @@ from vtsearch.models import (
     build_model_from_weights,
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
+    collect_media_origins,
     train_model,
 )
 from vtsearch.utils import (
@@ -102,12 +103,29 @@ def export_detector():
     for key, value in state_dict.items():
         weights[key] = value.tolist()
 
-    return jsonify({"weights": weights, "threshold": round(threshold, 4)})
+    # Collect origin info so the client can forward it when saving
+    good_origins = collect_media_origins(good_votes, snap)
+    bad_origins = collect_media_origins(bad_votes, snap)
+
+    return jsonify(
+        {
+            "weights": weights,
+            "threshold": round(threshold, 4),
+            "good_origins": good_origins,
+            "bad_origins": bad_origins,
+            "inclusion": get_inclusion(),
+        }
+    )
 
 
 @detectors_training_bp.route("/api/detector/export-server", methods=["POST"])
 def export_detector_server():
-    """Train MLP on current votes and save to a file on the server filesystem.
+    """Save current votes as a detector file on the server filesystem.
+
+    Stores the origin information of voted medias and the inclusion
+    setting, rather than serialised MLP weights.  When the detector is
+    later loaded, the weights are re-derived by resolving the original
+    media files, embedding them, and training an MLP.
 
     Expects JSON body with ``name`` (required) and optionally ``overwrite``
     (bool, default false).  The detector is saved as
@@ -115,8 +133,6 @@ def export_detector_server():
     ``overwrite`` is false, returns ``{"exists": true, "path": ...}`` with
     status 409 so the client can ask the user whether to overwrite.
     """
-    import torch  # noqa: PLC0415
-
     from vtsearch.utils import bad_votes, good_votes
 
     data = get_json_or_400()
@@ -147,61 +163,24 @@ def export_detector_server():
 
     snap = snapshot_medias()
 
-    # Train the model (same logic as export_detector)
-    X_list = []
-    y_list = []
-    for cid in good_votes:
-        if cid in snap:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(1.0)
-    for cid in bad_votes:
-        if cid in snap:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(0.0)
+    # Collect origin info from voted medias
+    good_origins = collect_media_origins(good_votes, snap)
+    bad_origins = collect_media_origins(bad_votes, snap)
 
-    if not X_list:
+    if not good_origins or not bad_origins:
         return jsonify({"error": "voted medias no longer loaded — reload the dataset"}), 400
-
-    num_good = sum(1 for y_val in y_list if y_val == 1.0)
-    num_bad = len(y_list) - num_good
-    if num_good == 0 or num_bad == 0:
-        return jsonify({"error": "need at least one good and one bad vote with loaded medias"}), 400
-
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
-
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        get_inclusion(),
-        calibrate_count=get_calibrate_count(),
-        calibration_fraction=get_calibration_fraction(),
-    )
-    model = train_model(X, y, input_dim, get_inclusion())
-
-    if get_safe_thresholds():
-        all_ids = sorted(snap.keys())
-        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
-        with torch.no_grad():
-            all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-        threshold = calculate_safe_threshold(threshold, all_scores, len(X_list))
-
-    state_dict = model.state_dict()
-    weights = {}
-    for key, value in state_dict.items():
-        weights[key] = value.tolist()
 
     # Determine media type from current medias
     media_type = "audio"
     if snap:
         media_type = next(iter(snap.values())).get("type", "audio")
 
+    inclusion = get_inclusion()
+
     detector_data = {
-        "weights": weights,
-        "threshold": round(threshold, 4),
+        "good_origins": good_origins,
+        "bad_origins": bad_origins,
+        "inclusion": inclusion,
         "media_type": media_type,
         "name": safe_name,
     }
@@ -213,7 +192,6 @@ def export_detector_server():
             "success": True,
             "name": safe_name,
             "path": str(filepath.resolve()),
-            "threshold": round(threshold, 4),
             "media_type": media_type,
         }
     )
@@ -451,6 +429,8 @@ def train_from_label_import(importer_name: str):
 
     X_list: list = []
     y_list: list = []
+    good_cids: list[int] = []
+    bad_cids: list[int] = []
     loaded_count = 0
     skipped_count = 0
 
@@ -474,6 +454,10 @@ def train_from_label_import(importer_name: str):
 
         X_list.append(embedding)
         y_list.append(1.0 if label == "good" else 0.0)
+        if label == "good":
+            good_cids.append(cid)
+        else:
+            bad_cids.append(cid)
         loaded_count += 1
 
     if loaded_count < 2:
@@ -502,7 +486,19 @@ def train_from_label_import(importer_name: str):
         weights[key] = value.tolist()
 
     media_type = next(iter(snap.values())).get("type", "audio")
-    add_autorun_detector(name, media_type, weights, threshold, created_by=get_current_user())
+    good_origins = collect_media_origins(good_cids, snap)
+    bad_origins = collect_media_origins(bad_cids, snap)
+    inclusion = get_inclusion()
+    add_autorun_detector(
+        name,
+        media_type,
+        weights,
+        threshold,
+        created_by=get_current_user(),
+        good_origins=good_origins,
+        bad_origins=bad_origins,
+        inclusion=inclusion,
+    )
 
     # Register in the persistent model registry for the dashboard grid.
     from vtsearch.models.registry import find_by_detector_name, register_model

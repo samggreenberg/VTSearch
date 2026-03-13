@@ -553,3 +553,126 @@ def train_and_score(
     paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
     results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
     return results, threshold, model
+
+
+# ---------------------------------------------------------------------------
+# Origin-based helpers (for weight-free detector serialisation)
+# ---------------------------------------------------------------------------
+
+
+def collect_media_origins(
+    media_ids: dict[int, None] | list[int],
+    snap: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collect origin info for a set of media IDs from a medias snapshot.
+
+    Each returned dict contains ``origin``, ``origin_name``, ``filename``,
+    and ``md5`` — enough to re-resolve the original file later.
+
+    Args:
+        media_ids: Media IDs (keys of a votes dict, or a plain list).
+        snap: Snapshot of all loaded medias (from :func:`snapshot_medias`).
+
+    Returns:
+        A list of origin dicts, one per matched media.
+    """
+    origins: list[dict[str, Any]] = []
+    for cid in media_ids:
+        if cid not in snap:
+            continue
+        media = snap[cid]
+        origins.append(
+            {
+                "origin": media.get("origin"),
+                "origin_name": media.get("origin_name", ""),
+                "filename": media.get("filename", ""),
+                "md5": media.get("md5", ""),
+            }
+        )
+    return origins
+
+
+def train_detector_from_origins(
+    good_origins: list[dict[str, Any]],
+    bad_origins: list[dict[str, Any]],
+    inclusion: int,
+    media_type: str,
+    calibrate_count: int = 2,
+    calibration_fraction: float = 0.5,
+) -> tuple[dict[str, list] | None, float]:
+    """Resolve origin entries to files, embed them, and train a detector MLP.
+
+    This is the load-time counterpart of file-based detector export: given
+    the origin lists that were saved to disk, it re-derives the MLP weights
+    by resolving the original media files, embedding them, and training.
+
+    Args:
+        good_origins: Origin dicts for media labelled Good.
+        bad_origins: Origin dicts for media labelled Bad.
+        inclusion: The inclusion value to use for training.
+        media_type: Media type string (e.g. ``"audio"``, ``"image"``).
+        calibrate_count: Number of k-fold calibration splits.
+        calibration_fraction: Fraction reserved for calibration.
+
+    Returns:
+        A ``(weights, threshold)`` tuple.  ``weights`` is ``None`` if
+        resolution/embedding failed for too many entries (need at least
+        one good and one bad).
+    """
+    import torch  # noqa: PLC0415
+
+    from vtsearch.models.resolver import embed_file, resolve_file_from_origin
+
+    X_list: list = []
+    y_list: list[float] = []
+
+    for entry in good_origins:
+        file_path = resolve_file_from_origin(
+            entry.get("origin"),
+            entry.get("origin_name", ""),
+            entry.get("filename", ""),
+        )
+        if file_path is None:
+            continue
+        emb = embed_file(file_path, media_type)
+        if emb is None:
+            continue
+        X_list.append(emb)
+        y_list.append(1.0)
+
+    for entry in bad_origins:
+        file_path = resolve_file_from_origin(
+            entry.get("origin"),
+            entry.get("origin_name", ""),
+            entry.get("filename", ""),
+        )
+        if file_path is None:
+            continue
+        emb = embed_file(file_path, media_type)
+        if emb is None:
+            continue
+        X_list.append(emb)
+        y_list.append(0.0)
+
+    num_good = sum(1 for v in y_list if v == 1.0)
+    num_bad = len(y_list) - num_good
+    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
+        return None, 0.5
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    input_dim = X.shape[1]
+
+    threshold = calculate_cross_calibration_threshold(
+        X_list,
+        y_list,
+        input_dim,
+        inclusion,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+    )
+    model = train_model(X, y, input_dim, inclusion)
+
+    state_dict = model.state_dict()
+    weights = {k: v.tolist() for k, v in state_dict.items()}
+    return weights, threshold

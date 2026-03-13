@@ -31,8 +31,10 @@ from vtsearch.models.training import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
+    collect_media_origins,
     find_optimal_threshold,
     train_and_score,
+    train_detector_from_origins,
     train_model,
 )
 
@@ -55,8 +57,10 @@ __all__ = [
     # Training
     "build_model",
     "build_model_from_weights",
+    "collect_media_origins",
     "train_model",
     "train_and_score",
+    "train_detector_from_origins",
     "calculate_gmm_threshold",
     "calculate_safe_threshold",
     "find_optimal_threshold",
