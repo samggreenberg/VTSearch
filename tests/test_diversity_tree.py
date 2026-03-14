@@ -576,3 +576,75 @@ class TestWorkflow:
     def test_depth_empty_tree(self):
         tree = DiversityTree({})
         assert tree.depth() == -1
+
+
+# ---------------------------------------------------------------------------
+# Progress callback
+# ---------------------------------------------------------------------------
+
+
+class TestKmeansProgress:
+    """Progress should advance after each k-means call, not only at leaf placement."""
+
+    def test_progress_called_during_build(self):
+        """on_progress should fire multiple times, not just at the end."""
+        vecs = _make_vectors(200)
+        calls = []
+        DiversityTree(vecs, k=3, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        assert len(calls) >= 3, f"Expected multiple progress calls, got {len(calls)}"
+
+    def test_progress_starts_at_zero(self):
+        vecs = _make_vectors(100)
+        calls = []
+        DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        assert calls[0][0] == 0, "First progress call should have current=0"
+
+    def test_progress_ends_at_total(self):
+        vecs = _make_vectors(100)
+        calls = []
+        DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        last_current, last_total = calls[-1]
+        assert last_current == last_total, "Final progress call should have current == total"
+
+    def test_progress_monotonically_increases(self):
+        vecs = _make_vectors(300)
+        calls = []
+        DiversityTree(vecs, k=3, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        currents = [c for c, _ in calls]
+        for i in range(1, len(currents)):
+            assert currents[i] >= currents[i - 1], (
+                f"Progress went backwards at index {i}: {currents[i - 1]} -> {currents[i]}"
+            )
+
+    def test_progress_advances_after_root_kmeans(self):
+        """After the first (most expensive) k-means, progress should be > 0."""
+        vecs = _make_vectors(200)
+        calls = []
+        DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        # calls[0] is (0, total), calls[1] should be after root k-means
+        assert len(calls) >= 2
+        assert calls[1][0] > 0, "Progress should advance after root k-means"
+
+    def test_progress_total_reflects_estimated_work(self):
+        """Total should be based on N * num_levels, not just N."""
+        vecs = _make_vectors(200)
+        calls = []
+        DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
+        total = calls[0][1]
+        n = len(vecs)
+        assert total > n, f"Estimated total work ({total}) should exceed vector count ({n})"
+
+    def test_no_progress_for_small_input(self):
+        """Vectors below min_node_size should not trigger k-means progress."""
+        vecs = _make_vectors(5)
+        calls = []
+        DiversityTree(vecs, k=2, min_node_size=20, on_progress=lambda c, t: calls.append((c, t)))
+        # Should still get start (0) and end (total) calls
+        assert len(calls) >= 2
+        assert calls[-1][0] == calls[-1][1]
+
+    def test_progress_not_called_without_callback(self):
+        """Building without on_progress should not raise."""
+        vecs = _make_vectors(100)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+        assert tree.depth() >= 1
