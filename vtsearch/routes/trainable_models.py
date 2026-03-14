@@ -122,6 +122,7 @@ def _list_all() -> list[dict]:
         models.append({
             "name": data["name"],
             "text_query": data.get("text_query", ""),
+            "media_example": data.get("media_example", ""),
             "media_type": data.get("media_type", ""),
             "examples": data.get("examples", []),
             "num_labels": len(labels),
@@ -157,13 +158,14 @@ def create_trainable_model():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("name", "").strip()
     text_query = data.get("text_query", "").strip()
+    media_example = data.get("media_example", "").strip()
     media_type = data.get("media_type", "").strip()
     examples = data.get("examples")
 
     if not name:
         return jsonify({"error": "name is required"}), 400
-    if not text_query and not examples:
-        return jsonify({"error": "text_query or examples is required"}), 400
+    if not text_query and not media_example and not examples:
+        return jsonify({"error": "text_query, media_example, or examples is required"}), 400
     if not media_type or media_type == "any":
         return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
@@ -171,14 +173,17 @@ def create_trainable_model():
     if path.exists():
         return jsonify({"error": f"A trainable model named '{name}' already exists"}), 409
 
-    # Build examples list; if text_query provided without explicit examples,
-    # create a single text example from it for backward compatibility.
+    # Build examples list; if text_query/media_example provided without
+    # explicit examples, create a single example from it for backward compat.
     if examples is None and text_query:
         examples = [{"type": "text", "value": text_query}]
+    elif examples is None and media_example:
+        examples = [{"type": "media", "value": media_example}]
 
     model_data = {
         "name": name,
         "text_query": text_query,
+        "media_example": media_example,
         "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
@@ -190,6 +195,7 @@ def create_trainable_model():
         "success": True,
         "name": name,
         "text_query": text_query,
+        "media_example": media_example,
         "media_type": media_type,
         "examples": examples or [],
         "num_labels": 0,
@@ -385,6 +391,7 @@ def register_model_route():
     media_type = data.get("media_type", "").strip()
     trainable = data.get("trainable", True)
     text_query = data.get("text_query", "")
+    media_example = data.get("media_example", "")
     detector_name = data.get("detector_name", "")
     trainable_model_name = data.get("trainable_model_name", "")
 
@@ -398,12 +405,15 @@ def register_model_route():
         trainable_model_name = name
         tm_path = _model_path(name)
         if not tm_path.exists():
-            examples = []
-            if text_query:
+            examples = data.get("examples", [])
+            if not examples and text_query:
                 examples = [{"type": "text", "value": text_query}]
+            if not examples and media_example:
+                examples = [{"type": "media", "value": media_example}]
             model_data = {
                 "name": name,
                 "text_query": text_query,
+                "media_example": media_example,
                 "media_type": media_type,
                 "examples": examples,
                 "created_at": time.time(),
@@ -416,6 +426,7 @@ def register_model_route():
         media_type=media_type,
         trainable=trainable,
         text_query=text_query,
+        media_example=media_example,
         detector_name=detector_name,
         trainable_model_name=trainable_model_name,
         created_by=get_current_user(),

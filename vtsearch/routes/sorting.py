@@ -530,6 +530,27 @@ def example_sort():
 SERVER_MEDIA_DIR = DATA_DIR / "example_media"
 
 
+@sorting_bp.route("/api/server-media-files/upload", methods=["POST"])
+def upload_server_media_file():
+    """Upload a media file to data/example_media/ and return its filename."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    import uuid
+
+    suffix = Path(file.filename).suffix or ".bin"
+    safe_name = f"{uuid.uuid4().hex}{suffix}"
+    SERVER_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    dest = SERVER_MEDIA_DIR / safe_name
+    file.save(dest)
+
+    return jsonify({"filename": safe_name, "original_name": file.filename}), 201
+
+
 @sorting_bp.route("/api/server-media-files", methods=["GET"])
 def list_server_media_files():
     """List media files saved on the server in data/example_media/."""

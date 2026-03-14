@@ -457,6 +457,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private storeSelectedModelTextQuery(): void {
     const model = this.models.find((m) => this.selectedModelIds.has(m.id));
     this.labelSession.textQuery = model?.text_query || '';
+    this.labelSession.mediaExample = model?.media_example || '';
   }
 
   onLabel(): void {

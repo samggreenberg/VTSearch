@@ -1,48 +1,120 @@
-<vt-modal [open]="true" title="New Model" [showCloseButton]="false" (closed)="close()">
-  <form class="new-model-form" (ngSubmit)="submit()">
-    <div class="form-group">
-      <label for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
-      <input
-        id="model-name"
-        class="form-input"
-        [(ngModel)]="name"
-        name="name"
-        placeholder="e.g. Dog Barks"
-        title="A short name to identify this model"
-        autofocus
-      />
+<vt-modal [open]="true" [title]="view === 'main' ? 'New Model' : 'Select Media Example'" [showCloseButton]="false" (closed)="close()">
+  @if (view === 'main') {
+    <form class="new-model-form" (ngSubmit)="submit()">
+      <div class="form-group">
+        <label for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
+        <input
+          id="model-name"
+          class="form-input"
+          [(ngModel)]="name"
+          name="name"
+          placeholder="e.g. Dog Barks"
+          title="A short name to identify this model"
+          autofocus
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="model-media-type" title="The type of media this model will process">Media Type</label>
+        <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
+          @for (mt of mediaTypes; track mt) {
+            <option [value]="mt">{{ mt }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="example-columns">
+        <div class="example-col">
+          <label class="col-label">Add Text Example</label>
+          <div class="text-input-row">
+            <input
+              class="form-input"
+              [(ngModel)]="pendingText"
+              name="pendingText"
+              placeholder="e.g. dog barking sounds"
+              title="A text description of what this model should find"
+              (keydown.enter)="$event.preventDefault(); addTextExample()"
+            />
+            <button type="button" class="btn btn--primary btn--sm" (click)="addTextExample()" [disabled]="!pendingText.trim()">Add</button>
+          </div>
+        </div>
+        <div class="example-col">
+          <label class="col-label">Add Media Example</label>
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()">Browse Media...</button>
+          <input
+            #fileInput
+            type="file"
+            class="hidden-file-input"
+            (change)="onLocalFileSelected($event)"
+          />
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()">Upload File...</button>
+        </div>
+      </div>
+
+      @if (examples.length > 0) {
+        <div class="examples-section">
+          <label class="col-label">Examples</label>
+          <div class="examples-grid">
+            @for (ex of examples; track $index) {
+              <div class="example-chip" [class.text-chip]="ex.type === 'text'" [class.media-chip]="ex.type === 'media'">
+                <span class="chip-icon">{{ ex.type === 'text' ? 'T' : 'M' }}</span>
+                <span class="chip-label" [title]="ex.display">{{ ex.display }}</span>
+                <button type="button" class="chip-remove" (click)="removeExample($index)" title="Remove">&times;</button>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+    </form>
+
+    <div modal-footer>
+      <button class="btn btn--secondary" (click)="close()">Cancel</button>
+      <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
+        {{ submitting ? 'Creating...' : 'Create' }}
+      </button>
     </div>
+  }
 
-    <div class="form-group">
-      <label for="model-media-type" title="The type of media this model will process">Media Type</label>
-      <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
-        @for (mt of mediaTypes; track mt) {
-          <option [value]="mt">{{ mt }}</option>
-        }
-      </select>
+  @if (view === 'media-picker') {
+    <div class="media-picker">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()">&larr; Back</button>
+
+      @if (!selectedSource) {
+        <p class="picker-instructions">Choose a source to browse media from:</p>
+        <div class="source-list">
+          @for (src of mediaSources; track src.name) {
+            <button class="importer-card" (click)="selectSource(src)">
+              <span class="importer-name">@if (src.icon) {<span class="importer-icon">{{ src.icon }}</span> }{{ src.display_name || src.name }}</span>
+              @if (src.description) {
+                <span class="importer-desc">{{ src.description }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
+
+      @if (selectedSource && !browseLoading && browseItems.length > 0) {
+        <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
+        <div class="browse-list">
+          @for (item of browseItems; track item.key) {
+            <button class="browse-item" (click)="selectBrowseItem(item)" [title]="item.key">
+              {{ item.display || item.key }}
+            </button>
+          }
+        </div>
+      }
+
+      @if (browseLoading) {
+        <p class="empty-state">Loading items...</p>
+      }
+
+      @if (selectedSource && !browseLoading && browseItems.length === 0) {
+        <p class="empty-state">No items found in this source.</p>
+      }
     </div>
-
-    <div class="form-group">
-      <label for="model-query" title="A text description or example of what this model should find">Text Query / Example <span class="required">*</span></label>
-      <input
-        id="model-query"
-        class="form-input"
-        [(ngModel)]="textQuery"
-        name="textQuery"
-        placeholder="e.g. dog barking sounds"
-        title="A text description or example of what this model should find"
-      />
-    </div>
-
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
-    }
-  </form>
-
-  <div modal-footer>
-    <button class="btn btn--secondary" (click)="close()">Cancel</button>
-    <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
-      {{ submitting ? 'Creating...' : 'Create' }}
-    </button>
-  </div>
+  }
 </vt-modal>
