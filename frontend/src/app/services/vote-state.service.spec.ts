@@ -88,6 +88,52 @@ describe('VoteStateService', () => {
     expect(service.learnedScores).toEqual({});
   });
 
+  it('applyOptimisticVote should add to good and set click time', () => {
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeTrue();
+    expect(service.badVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote should add to bad and set click time', () => {
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.badVotes.has(5)).toBeTrue();
+    expect(service.goodVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote click time should exceed existing max', () => {
+    // Load votes with existing click times
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush(mockVotes);
+    // mockVotes has click_times: { '1': 100, '2': 200 }
+
+    service.applyOptimisticVote(7, 'good');
+    expect(service.clickTimes['7']).toBe(201);
+  });
+
+  it('applyOptimisticVote toggle-off should not set click time', () => {
+    service.applyOptimisticVote(5, 'good');
+    const timeAfterAdd = service.clickTimes['5'];
+    expect(timeAfterAdd).toBe(1);
+
+    // Toggle off
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeFalse();
+    // Click time should remain unchanged (no new time set on removal)
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote should move from bad to good with new click time', () => {
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.clickTimes['5']).toBe(1);
+
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeTrue();
+    expect(service.badVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(2);
+  });
+
   it('goodVotes$ should emit on load', (done) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));
