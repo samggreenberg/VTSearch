@@ -352,6 +352,8 @@ def fill_labels_from_sort():
         score = entry.get("score", entry.get("similarity"))
         if cid is None or score is None:
             continue
+        if not isinstance(score, (int, float)):
+            continue
         if cid in good_votes or cid in bad_votes:
             continue
         if get_media(cid) is None:
@@ -368,10 +370,12 @@ def fill_labels_from_sort():
     # "both" keeps both lists
 
     if not confirm:
-        return jsonify({
-            "good_count": len(good_candidates),
-            "bad_count": len(bad_candidates),
-        })
+        return jsonify(
+            {
+                "good_count": len(good_candidates),
+                "bad_count": len(bad_candidates),
+            }
+        )
 
     # Apply labels
     for entry in good_candidates:
@@ -382,14 +386,8 @@ def fill_labels_from_sort():
 
     # Build a results dict compatible with exporters
     snap = snapshot_medias()
-    good_hits = [
-        build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good")
-        for e in good_candidates
-    ]
-    bad_hits = [
-        build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="bad")
-        for e in bad_candidates
-    ]
+    good_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good") for e in good_candidates]
+    bad_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates]
 
     media_type = "unknown"
     for media in snap.values():
@@ -414,11 +412,13 @@ def fill_labels_from_sort():
 
     sync_labels_to_loaded_model()
 
-    return jsonify({
-        "good_applied": len(good_candidates),
-        "bad_applied": len(bad_candidates),
-        "results": results_dict,
-    })
+    return jsonify(
+        {
+            "good_applied": len(good_candidates),
+            "bad_applied": len(bad_candidates),
+            "results": results_dict,
+        }
+    )
 
 
 @sorting_bp.route("/api/inclusion")
@@ -436,7 +436,7 @@ def set_inclusion_route():
 
     new_inclusion = data.get("inclusion")
 
-    if not isinstance(new_inclusion, (int, float)):
+    if isinstance(new_inclusion, bool) or not isinstance(new_inclusion, (int, float)):
         return jsonify({"error": "inclusion must be a number"}), 400
 
     # Clamp to -10 to +10 range
@@ -519,8 +519,11 @@ def example_sort():
 
         return jsonify({"results": results, "threshold": thresh})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("example-sort failed")
+        return jsonify({"error": "Example sort failed"}), 500
 
 
 #: Default directory for server-side example media files.
@@ -536,12 +539,13 @@ def list_server_media_files():
     files = []
     for p in sorted(SERVER_MEDIA_DIR.iterdir()):
         if p.is_file() and not p.name.startswith("."):
-            files.append({
-                "name": p.stem,
-                "filename": p.name,
-                "path": str(p.resolve()),
-                "size_bytes": p.stat().st_size,
-            })
+            files.append(
+                {
+                    "name": p.stem,
+                    "filename": p.name,
+                    "size_bytes": p.stat().st_size,
+                }
+            )
     return jsonify({"files": files})
 
 
@@ -570,8 +574,11 @@ def example_sort_server():
     try:
         results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("example-sort-server failed")
+        return jsonify({"error": "Example sort failed"}), 500
 
 
 @sorting_bp.route("/api/example-sort-origin", methods=["POST"])
@@ -618,8 +625,11 @@ def example_sort_origin():
 
         results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("example-sort-origin failed")
+        return jsonify({"error": "Example sort failed"}), 500
     finally:
         source.cleanup()
 
@@ -758,8 +768,11 @@ def label_file_sort():
             }
         )
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("label-file-sort failed")
+        return jsonify({"error": "Label file sort failed"}), 500
 
 
 @sorting_bp.route("/api/labeling-progress", methods=["POST"])
@@ -774,8 +787,11 @@ def labeling_progress():
     try:
         analysis = analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
         return jsonify(analysis)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("labeling-progress failed")
+        return jsonify({"error": "Labeling progress computation failed"}), 500
 
 
 @sorting_bp.route("/api/labeling-status", methods=["GET"])
@@ -788,10 +804,15 @@ def labeling_status_indicator():
     try:
         tree = get_diversity_tree()
         span = tree.span_info() if tree is not None else None
-        status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span)
+        status = compute_labeling_status(
+            snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span
+        )
         return jsonify(status)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("labeling-status failed")
+        return jsonify({"error": "Labeling status computation failed"}), 500
 
 
 @sorting_bp.route("/api/indicator-score-history", methods=["GET"])
@@ -820,8 +841,11 @@ def indicator_score_history():
         else:
             data = calculate_diversity_level_over_time(clips, label_history)
             return jsonify({"metric": "diverse", "history": data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("indicator-score-history failed")
+        return jsonify({"error": "Score history computation failed"}), 500
 
 
 @sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
@@ -910,9 +934,12 @@ def eval_train_and_score():
             result_data = calculate_diversity_level_over_time(clips, history)
             update_eval_progress("idle", "Done", n_total, n_total)
             return jsonify({"diversity": result_data})
-    except Exception as e:
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("eval train-and-score failed")
         update_eval_progress("idle", "Error", 0, 0)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Evaluation computation failed"}), 500
 
 
 @sorting_bp.route("/api/eval/voting-iterations", methods=["GET"])
@@ -925,8 +952,10 @@ def eval_voting_iterations():
     """
     prog = get_eval_progress()
     done = prog["status"] == "idle" and prog["total"] > 0 and prog["current"] >= prog["total"]
-    return jsonify({
-        "progress": prog["current"],
-        "total": prog["total"],
-        "done": done,
-    })
+    return jsonify(
+        {
+            "progress": prog["current"],
+            "total": prog["total"],
+            "done": done,
+        }
+    )

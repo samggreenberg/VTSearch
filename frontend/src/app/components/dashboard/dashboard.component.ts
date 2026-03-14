@@ -10,7 +10,7 @@ import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { AuthService } from '../../services/auth.service';
-import { AutoDetectResultsData } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -81,7 +81,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.datasets$
       .pipe(takeUntil(this.destroy$))
       .subscribe((datasets) => {
-        const currentIds = new Set(datasets.map((d: any) => d.id));
+        const currentIds = new Set(datasets.map((d) => d.id));
         const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
         if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
           // Items were added after initial load — select the new ones
@@ -97,7 +97,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.models$
       .pipe(takeUntil(this.destroy$))
       .subscribe((models) => {
-        const currentIds = new Set(models.map((m: any) => m.id));
+        const currentIds = new Set(models.map((m) => m.id));
         const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
         if (newIds.length > 0 && this.knownModelIds.size > 0) {
           // Items were added after initial load — select the new ones
@@ -120,11 +120,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.polling$.complete();
   }
 
-  get datasets(): any[] {
+  get datasets(): DatasetRegistryEntry[] {
     return this.datasetState.datasets;
   }
 
-  get models(): any[] {
+  get models(): ModelRegistryEntry[] {
     return this.datasetState.models;
   }
 
@@ -188,13 +188,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Dataset actions ---
 
-  renameDataset(dataset: any, newName: string): void {
+  renameDataset(dataset: DatasetRegistryEntry, newName: string): void {
     this.datasetsApi.renameRegistered(dataset.id, newName).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
-  async deleteDataset(dataset: any): Promise<void> {
+  async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
     const ok = await this.dialog.confirm(`Delete dataset "${dataset.name}"?`);
     if (!ok) return;
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
@@ -205,7 +205,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  async editDatasetSecurity(dataset: any): Promise<void> {
+  async editDatasetSecurity(dataset: DatasetRegistryEntry): Promise<void> {
     const current = (dataset.readers || []).join(', ');
     const result = await this.dialog.prompt(
       `Edit access list for "${dataset.name}".\nEnter usernames separated by commas, or * for public:`,
@@ -223,13 +223,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Model actions ---
 
-  renameModel(model: any, newName: string): void {
+  renameModel(model: ModelRegistryEntry, newName: string): void {
     this.modelsApi.renameInRegistry(model.id, newName).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
-  async deleteModel(model: any): Promise<void> {
+  async deleteModel(model: ModelRegistryEntry): Promise<void> {
     const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
     if (!ok) return;
     this.modelsApi.deleteFromRegistry(model.id).subscribe({
@@ -255,7 +255,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: any): void {
+  onDemoSelected(demo: { label: string; name: string; embedder?: string }): void {
     this.importerModalOpen = false;
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
@@ -348,7 +348,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  get sortedDatasets(): any[] {
+  get sortedDatasets(): DatasetRegistryEntry[] {
     const col = this.datasetSortColumn;
     const asc = this.datasetSortAsc ? 1 : -1;
     return [...this.datasets].sort((a, b) => {
@@ -368,7 +368,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  get sortedModels(): any[] {
+  get sortedModels(): ModelRegistryEntry[] {
     const col = this.modelSortColumn;
     const asc = this.modelSortAsc ? 1 : -1;
     return [...this.models].sort((a, b) => {

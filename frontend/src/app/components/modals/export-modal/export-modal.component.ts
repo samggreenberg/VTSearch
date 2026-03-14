@@ -1,6 +1,8 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -14,7 +16,7 @@ import { ExporterInfo } from '../../../models/api.models';
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
-export class ExportModalComponent implements OnInit {
+export class ExportModalComponent implements OnInit, OnDestroy {
   @Input() detectorName = '';
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
@@ -29,6 +31,8 @@ export class ExportModalComponent implements OnInit {
   selectedExporter: ExporterInfo | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
+
+  private destroy$ = new Subject<void>();
 
   constructor(
     private detectorsApi: DetectorsApiService,
@@ -86,37 +90,39 @@ export class ExportModalComponent implements OnInit {
     this.exportLabelsWith(this.selectedExporter, { ...this.formValues });
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
   exportLabelsWith(exporter: ExporterInfo, fieldValues: Record<string, string>): void {
     this.status = 'Exporting labels...';
     this.error = '';
     this.submitting = true;
-    this.sortingApi.exportLabels().subscribe({
-      next: (labelsData) => {
-        this.exportersApi
-          .runExport({
+    this.sortingApi
+      .exportLabels()
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap((labelsData) =>
+          this.exportersApi.runExport({
             exporter_name: exporter.name,
             field_values: fieldValues,
             results: labelsData,
-          })
-          .subscribe({
-            next: () => {
-              this.status = 'Labels exported.';
-              this.submitting = false;
-              this.exported.emit();
-            },
-            error: () => {
-              this.status = '';
-              this.error = 'Label export failed';
-              this.submitting = false;
-            },
-          });
-      },
-      error: () => {
-        this.status = '';
-        this.error = 'Failed to fetch labels';
-        this.submitting = false;
-      },
-    });
+          }),
+        ),
+      )
+      .subscribe({
+        next: () => {
+          this.status = 'Labels exported.';
+          this.submitting = false;
+          this.exported.emit();
+        },
+        error: () => {
+          this.status = '';
+          this.error = 'Label export failed';
+          this.submitting = false;
+        },
+      });
   }
 
   exportDetectorBrowser(): void {

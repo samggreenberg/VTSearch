@@ -44,8 +44,11 @@ def _score_clips_with_detector(
         raise ValueError("No medias loaded from dataset")
 
     # Load detector
-    with open(detector_file, "r") as f:
-        detector_data = json.load(f)
+    try:
+        with open(detector_file, "r") as f:
+            detector_data = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in detector file: {detector_path}") from exc
 
     good_origins = detector_data.get("good_origins")
     bad_origins = detector_data.get("bad_origins")
@@ -325,7 +328,7 @@ def _import_autorun_processors(settings_path: str | None = None) -> None:
         imported = ensure_autorun_processors_imported()
         if imported:
             print(f"Imported {len(imported)} autorun processor(s) from settings: {', '.join(imported)}")
-    except Exception as exc:
+    except (FileNotFoundError, ValueError, json.JSONDecodeError, KeyError) as exc:
         print(f"Warning: could not load autorun processors from settings: {exc}", file=sys.stderr)
 
 

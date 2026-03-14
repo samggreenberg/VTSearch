@@ -268,7 +268,7 @@ def export_autorun_detector_server_route(name):
     filepath = det_dir / f"{safe_name}.json"
 
     if filepath.exists() and not overwrite:
-        return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
+        return jsonify({"exists": True, "name": safe_name}), 409
 
     detector_data = {
         "good_origins": det["good_origins"],
@@ -283,7 +283,6 @@ def export_autorun_detector_server_route(name):
         {
             "success": True,
             "name": safe_name,
-            "path": str(filepath.resolve()),
         }
     )
 
@@ -387,8 +386,11 @@ def import_detector_pkl():
 
         return jsonify({"success": True, "name": name, "media_type": media_type})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Failed to import detector")
+        return jsonify({"error": "Failed to import detector file"}), 500
 
 
 @detectors_crud_bp.route("/api/detector/server-files", methods=["GET"])
@@ -403,7 +405,7 @@ def list_server_detector_files():
         files.append(
             {
                 "name": p.stem,
-                "path": str(p.resolve()),
+                "filename": p.name,
                 "size_bytes": p.stat().st_size,
             }
         )
@@ -430,8 +432,11 @@ def get_server_detector_file(name: str):
     try:
         data = json.loads(filepath.read_text(encoding="utf-8"))
         return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Failed to read detector file: %s", safe_name)
+        return jsonify({"error": "Failed to read detector file"}), 500
 
 
 # ---------------------------------------------------------------------------

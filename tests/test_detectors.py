@@ -587,12 +587,12 @@ class TestServerDetectorExport:
         # Weights must NOT be serialised to disk
         assert "weights" not in content
 
-    def test_export_server_returns_path(self, client):
+    def test_export_server_returns_name(self, client):
         self._vote()
         resp = client.post("/api/detector/export-server", json={"name": "path_check"})
         data = resp.get_json()
-        assert "path" in data
-        assert "path_check.json" in data["path"]
+        assert data["success"] is True
+        assert data["name"] == "path_check"
 
     # -- name validation --
 
@@ -651,12 +651,12 @@ class TestServerDetectorExport:
         names = [f["name"] for f in data["files"]]
         assert "listed" in names
 
-    def test_list_server_files_has_path_and_size(self, client):
+    def test_list_server_files_has_filename_and_size(self, client):
         self._vote()
         client.post("/api/detector/export-server", json={"name": "sized"})
         resp = client.get("/api/detector/server-files")
         entry = resp.get_json()["files"][0]
-        assert "path" in entry
+        assert "filename" in entry
         assert "size_bytes" in entry
         assert entry["size_bytes"] > 0
 
