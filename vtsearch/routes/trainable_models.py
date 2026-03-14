@@ -107,20 +107,32 @@ def sync_labels_to_loaded_model() -> None:
 
 
 def _seed_good_votes_from_examples(examples: list[dict]) -> int:
-    """Add loaded media items that match media-example files to good_votes.
+    """Seed good votes from a model's media examples.
 
     For each ``type: "media"`` example, reads the file from
-    ``data/example_media/``, computes its MD5, and calls
-    :func:`~vtsearch.utils.apply_label` for every loaded media whose
-    MD5 matches.  The media items keep their original dataset origins.
+    ``data/example_media/`` and adds it to ``good_votes``:
 
-    Returns the number of example entries that matched at least one
-    loaded media item.
+    * **Match by MD5** — if a loaded media has the same content hash,
+      that media is voted good (keeping its original dataset origin).
+    * **No match** — the example file is embedded using the dataset's
+      embedder, inserted into the ``medias`` dict as a new item with
+      an ``example_media`` origin, and voted good.  This makes it
+      available for training (its embedding is in the medias snapshot)
+      and for label export (LabelSet picks it up from medias + votes).
+
+    Returns the number of example entries successfully seeded.
     """
     import hashlib
 
     from vtsearch.config import DATA_DIR
-    from vtsearch.utils import apply_label, build_media_lookup, snapshot_medias
+    from vtsearch.utils import (
+        _state_lock,
+        apply_label,
+        build_media_lookup,
+        medias,
+        next_media_id,
+        snapshot_medias,
+    )
 
     media_examples = [
         ex
@@ -137,6 +149,13 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     _, md5_lookup = build_media_lookup(snap)
     server_media_dir = DATA_DIR / "example_media"
 
+    # Determine the embedder and media type from the loaded dataset so we
+    # can embed example files that aren't already in the dataset.
+    first_media = next(iter(snap.values()))
+    dataset_media_type = first_media.get("type", "audio")
+    dataset_embedder_name = first_media.get("embedder", "")
+    embedder = None  # lazily loaded only when needed
+
     seeded = 0
     for ex in media_examples:
         filename = ex["value"].strip()
@@ -149,14 +168,57 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
         if not file_path.is_file():
             continue
 
-        file_md5 = hashlib.md5(file_path.read_bytes()).hexdigest()
+        file_bytes = file_path.read_bytes()
+        file_md5 = hashlib.md5(file_bytes).hexdigest()
         cids = md5_lookup.get(file_md5, [])
-        if not cids:
-            continue
 
-        for cid in cids:
-            apply_label(cid, "good")
-        seeded += 1
+        if cids:
+            # Example matches existing dataset media — just vote good.
+            for cid in cids:
+                apply_label(cid, "good")
+            seeded += 1
+        else:
+            # Example is NOT in the dataset — embed and insert as new media.
+            if embedder is None:
+                from vtsearch.media import embedders_for_type, get_embedder
+
+                if dataset_embedder_name:
+                    try:
+                        embedder = get_embedder(dataset_embedder_name)
+                    except KeyError:
+                        pass
+                if embedder is None:
+                    avail = embedders_for_type(dataset_media_type)
+                    embedder = avail[0] if avail else None
+                if embedder is None:
+                    # No embedder available; skip remaining examples.
+                    continue
+
+            embedding = embedder.embed_media(file_path)
+            if embedding is None:
+                continue
+
+            with _state_lock:
+                new_id = next_media_id(medias)
+                medias[new_id] = {
+                    "id": new_id,
+                    "type": dataset_media_type,
+                    "embedder": dataset_embedder_name,
+                    "md5": file_md5,
+                    "embedding": embedding,
+                    "media_bytes": file_bytes,
+                    "filename": filename,
+                    "file_size": len(file_bytes),
+                    "category": "",
+                    "origin": {
+                        "importer": "example_media",
+                        "params": {"filename": filename},
+                    },
+                    "origin_name": filename,
+                }
+
+            apply_label(new_id, "good")
+            seeded += 1
 
     return seeded
 
