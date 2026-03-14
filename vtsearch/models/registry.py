@@ -99,6 +99,7 @@ def register_model(
     detector_name: str = "",
     trainable_model_name: str = "",
     text_query: str = "",
+    media_example: str = "",
     created_by: str = "default",
 ) -> dict[str, Any]:
     """Add a new model to the registry and persist.
@@ -127,6 +128,7 @@ def register_model(
         "detector_name": detector_name,
         "trainable_model_name": trainable_model_name,
         "text_query": text_query,
+        "media_example": media_example,
         "created_by": created_by,
         "created_at": time.time(),
     }

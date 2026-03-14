@@ -55,6 +55,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
   private autopilotTextSortPending = false;
+  private autopilotMediaSortPending = false;
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -100,6 +101,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (this.autopilotTextSortPending && medias.length > 0) {
           this.autopilotTextSortPending = false;
           this.triggerAutopilotTextSort();
+        }
+        if (this.autopilotMediaSortPending && medias.length > 0) {
+          this.autopilotMediaSortPending = false;
+          this.triggerAutopilotMediaSort();
         }
       });
 
@@ -417,11 +422,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onAutopilotStart(): void {
     this.sortState.setSelectMode('top');
     const textQuery = this.labelSession.textQuery;
+    const mediaExample = this.labelSession.mediaExample;
     if (textQuery) {
       if (this.mediaState.medias.length > 0) {
         this.triggerAutopilotTextSort();
       } else {
         this.autopilotTextSortPending = true;
+      }
+    } else if (mediaExample) {
+      if (this.mediaState.medias.length > 0) {
+        this.triggerAutopilotMediaSort();
+      } else {
+        this.autopilotMediaSortPending = true;
       }
     }
   }
@@ -430,6 +442,30 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const textQuery = this.labelSession.textQuery;
     if (textQuery) {
       this.onTextSort(textQuery);
+    }
+  }
+
+  private triggerAutopilotMediaSort(): void {
+    const mediaExample = this.labelSession.mediaExample;
+    if (mediaExample) {
+      this.sortState.setSortBusy(true);
+      this.sortState.setSortStatus('Sorting by example...');
+      this.sortingApi.exampleSortServer({ filename: mediaExample }).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (response) => {
+          this.sortState.setSortResults(
+            response.results.map((r) => ({ id: r.id, score: r.similarity })),
+            response.threshold,
+          );
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('');
+          this.sortState.setSortMode('load');
+          this.autoSelectNext();
+        },
+        error: () => {
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('Example sort failed');
+        },
+      });
     }
   }
 
@@ -457,13 +493,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onAutopilotStop(): void {
     const phase = this.autopilotStateService.state.phase;
+    const isMediaBased = !!this.labelSession.mediaExample && !this.labelSession.textQuery;
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
     if (phase === 'good') {
-      this.sortState.setSortMode('text');
+      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {
-      this.sortState.setSortMode('text');
+      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
       this.sortState.setSelectMode('hard');
     } else if (phase === 'hard') {
       this.sortState.setSortMode('learned');

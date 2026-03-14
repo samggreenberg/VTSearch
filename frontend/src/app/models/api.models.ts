@@ -311,6 +311,7 @@ export interface ModelRegistryEntry {
   trainable?: boolean;
   num_training?: number;
   text_query?: string;
+  media_example?: string;
   detector_name?: string;
   [key: string]: unknown;
 }
