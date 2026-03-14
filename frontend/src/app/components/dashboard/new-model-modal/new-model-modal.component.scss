@@ -84,8 +84,9 @@
   border-radius: 12px;
   font-size: 0.82rem;
   max-width: 240px;
-  border: 1px solid var(--border-color, #ccc);
-  background: var(--bg-secondary, #f5f5f5);
+  border: 1px solid var(--border, #ccc);
+  background: var(--bg-secondary-btn, #f5f5f5);
+  color: var(--text-primary, #e0e0e0);
 }
 
 .text-chip .chip-icon {
@@ -95,7 +96,7 @@
 }
 
 .media-chip .chip-icon {
-  color: var(--color-primary, #2196f3);
+  color: var(--accent, #2196f3);
   font-weight: 700;
   font-size: 0.75rem;
 }
@@ -147,15 +148,15 @@
   flex-direction: column;
   gap: 2px;
   padding: 10px 14px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--border, #ccc);
   border-radius: 6px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--bg-secondary-btn, #f5f5f5);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s;
 
   &:hover {
-    border-color: var(--color-primary, #2196f3);
+    border-color: var(--accent, #2196f3);
   }
 }
 
@@ -185,9 +186,9 @@
   display: block;
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--border, #ccc);
   border-radius: 4px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--bg-secondary-btn, #f5f5f5);
   cursor: pointer;
   text-align: left;
   font-size: 0.85rem;
@@ -197,7 +198,7 @@
   text-overflow: ellipsis;
 
   &:hover {
-    border-color: var(--color-primary, #2196f3);
+    border-color: var(--accent, #2196f3);
     background: var(--bg-hover, #e8e8e8);
   }
 }
