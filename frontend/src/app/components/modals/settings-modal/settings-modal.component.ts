@@ -116,27 +116,14 @@ export class SettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'click';
   }
 
-  onPanelPctChange(side: 'panel_pct_left' | 'panel_pct_right', typeId: string, value: number | null): void {
-    const dict = (this.settings[side] as Record<string, number | null>) || {};
-    dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[side] = { ...dict };
-    this.save();
-  }
-
-  getPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): number | null {
+  getPanelPx(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): number {
     const dict = this.settings[side];
-    if (!dict) return null;
-    return dict[typeId] ?? null;
+    if (!dict) return side === 'panel_pct_left' ? 260 : 300;
+    return dict[typeId] ?? (side === 'panel_pct_left' ? 260 : 300);
   }
 
-  getPanelPctDisplay(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): string {
-    const pct = this.getPanelPct(side, typeId);
-    if (pct == null) return '—';
-    return Math.round(pct * 100) + '%';
-  }
-
-  clearPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): void {
-    this.onPanelPctChange(side, typeId, null);
+  getPanelPxDisplay(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): string {
+    return this.getPanelPx(side, typeId) + 'px';
   }
 
   onNumberChange(key: string, value: number): void {

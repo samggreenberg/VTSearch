@@ -422,62 +422,57 @@ class TestSettingsModule:
         result = settings_mod.get_panel_pct_left()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v is None
+            assert v == 260
 
     def test_get_panel_pct_right_default(self):
         result = settings_mod.get_panel_pct_right()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v is None
+            assert v == 300
 
     def test_set_panel_pct_left_per_type(self, isolated_settings):
-        settings_mod.set_panel_pct_left({"audio": 0.25, "image": 0.3})
+        settings_mod.set_panel_pct_left({"audio": 200, "image": 350})
         result = settings_mod.get_panel_pct_left()
-        assert result["audio"] == pytest.approx(0.25)
-        assert result["image"] == pytest.approx(0.3)
+        assert result["audio"] == 200
+        assert result["image"] == 350
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["panel_pct_left"]["audio"] == pytest.approx(0.25)
-        assert raw["panel_pct_left"]["image"] == pytest.approx(0.3)
+        assert raw["panel_pct_left"]["audio"] == 200
+        assert raw["panel_pct_left"]["image"] == 350
 
     def test_set_panel_pct_right_per_type(self, isolated_settings):
-        settings_mod.set_panel_pct_right({"audio": 0.2, "video": 0.35})
+        settings_mod.set_panel_pct_right({"audio": 250, "video": 400})
         result = settings_mod.get_panel_pct_right()
-        assert result["audio"] == pytest.approx(0.2)
-        assert result["video"] == pytest.approx(0.35)
+        assert result["audio"] == 250
+        assert result["video"] == 400
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["panel_pct_right"]["audio"] == pytest.approx(0.2)
+        assert raw["panel_pct_right"]["audio"] == 250
 
     def test_set_panel_pct_left_scalar(self, isolated_settings):
-        settings_mod.set_panel_pct_left(0.3)
+        settings_mod.set_panel_pct_left(300)
         result = settings_mod.get_panel_pct_left()
         for v in result.values():
-            assert v == pytest.approx(0.3)
-
-    def test_set_panel_pct_null_clears(self, isolated_settings):
-        settings_mod.set_panel_pct_left({"audio": 0.25})
-        settings_mod.set_panel_pct_left({"audio": None})
-        assert settings_mod.get_panel_pct_left()["audio"] is None
+            assert v == 300
 
     def test_panel_pct_persists_across_reset(self, isolated_settings):
-        settings_mod.set_panel_pct_left({"audio": 0.25})
+        settings_mod.set_panel_pct_left({"audio": 200})
         settings_mod.reset()
-        assert settings_mod.get_panel_pct_left()["audio"] == pytest.approx(0.25)
+        assert settings_mod.get_panel_pct_left()["audio"] == 200
 
     def test_panel_pct_out_of_range(self):
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"audio": 0.01})
+            settings_mod.set_panel_pct_left({"audio": 100})
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"audio": 0.95})
+            settings_mod.set_panel_pct_left({"audio": 600})
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left(0.01)
+            settings_mod.set_panel_pct_left(100)
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left(0.95)
+            settings_mod.set_panel_pct_left(600)
 
     def test_panel_pct_invalid_media_type(self):
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"nonexistent_type": 0.25})
+            settings_mod.set_panel_pct_left({"nonexistent_type": 250})
 
     def test_panel_pct_invalid_value(self):
         with pytest.raises(ValueError):
@@ -485,14 +480,24 @@ class TestSettingsModule:
 
     def test_panel_pct_clamped_on_read(self, isolated_settings):
         """Out-of-range values stored on disk are clamped when read."""
-        settings_mod.set_panel_pct_left({"audio": 0.5})
+        settings_mod.set_panel_pct_left({"audio": 300})
         # Manually write an out-of-range value to disk
         raw = json.loads(isolated_settings.read_text())
-        raw["panel_pct_left"]["audio"] = 0.99
+        raw["panel_pct_left"]["audio"] = 700
         isolated_settings.write_text(json.dumps(raw))
         settings_mod.reset()
         result = settings_mod.get_panel_pct_left()
-        assert result["audio"] == pytest.approx(0.80)
+        assert result["audio"] == 500
+
+    def test_panel_pct_legacy_percentage_replaced_with_default(self, isolated_settings):
+        """Legacy percentage values (< 2.0) are replaced with defaults on read."""
+        settings_mod.set_panel_pct_left({"audio": 300})
+        raw = json.loads(isolated_settings.read_text())
+        raw["panel_pct_left"]["audio"] = 0.25  # legacy percentage
+        isolated_settings.write_text(json.dumps(raw))
+        settings_mod.reset()
+        result = settings_mod.get_panel_pct_left()
+        assert result["audio"] == 260  # default for left
 
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
@@ -522,10 +527,10 @@ class TestSettingsModule:
             assert v == "click"
         assert isinstance(defaults["panel_pct_left"], dict)
         for v in defaults["panel_pct_left"].values():
-            assert v is None
+            assert v == 260
         assert isinstance(defaults["panel_pct_right"], dict)
         for v in defaults["panel_pct_right"].values():
-            assert v is None
+            assert v == 300
         assert defaults["autoload_media_types"] == []
         assert defaults["autopilot_enabled"] is True
         assert defaults["autopilot_top_greens"] == 3
@@ -1092,41 +1097,36 @@ class TestSettingsAPI:
     # --- Panel percentage API tests ---
 
     def test_update_panel_pct_left_per_type(self, client):
-        res = client.put("/api/settings", json={"panel_pct_left": {"audio": 0.25, "image": 0.3}})
+        res = client.put("/api/settings", json={"panel_pct_left": {"audio": 200, "image": 350}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["panel_pct_left"]["audio"] == pytest.approx(0.25)
-        assert data["panel_pct_left"]["image"] == pytest.approx(0.3)
+        assert data["panel_pct_left"]["audio"] == 200
+        assert data["panel_pct_left"]["image"] == 350
 
         res2 = client.get("/api/settings")
-        assert res2.get_json()["panel_pct_left"]["audio"] == pytest.approx(0.25)
+        assert res2.get_json()["panel_pct_left"]["audio"] == 200
 
     def test_update_panel_pct_right_per_type(self, client):
-        res = client.put("/api/settings", json={"panel_pct_right": {"audio": 0.2, "video": 0.35}})
+        res = client.put("/api/settings", json={"panel_pct_right": {"audio": 250, "video": 400}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["panel_pct_right"]["audio"] == pytest.approx(0.2)
-        assert data["panel_pct_right"]["video"] == pytest.approx(0.35)
+        assert data["panel_pct_right"]["audio"] == 250
+        assert data["panel_pct_right"]["video"] == 400
 
     def test_update_panel_pct_left_scalar(self, client):
-        res = client.put("/api/settings", json={"panel_pct_left": 0.3})
+        res = client.put("/api/settings", json={"panel_pct_left": 300})
         assert res.status_code == 200
         for v in res.get_json()["panel_pct_left"].values():
-            assert v == pytest.approx(0.3)
-
-    def test_update_panel_pct_left_null(self, client):
-        res = client.put("/api/settings", json={"panel_pct_left": {"audio": None}})
-        assert res.status_code == 200
-        assert res.get_json()["panel_pct_left"]["audio"] is None
+            assert v == 300
 
     def test_update_panel_pct_left_invalid(self, client):
         res = client.put("/api/settings", json={"panel_pct_left": {"audio": "invalid"}})
         assert res.status_code == 400
 
     def test_update_panel_pct_left_out_of_range(self, client):
-        res = client.put("/api/settings", json={"panel_pct_left": 0.01})
+        res = client.put("/api/settings", json={"panel_pct_left": 100})
         assert res.status_code == 400
-        res = client.put("/api/settings", json={"panel_pct_left": 0.95})
+        res = client.put("/api/settings", json={"panel_pct_left": 600})
         assert res.status_code == 400
 
     def test_get_settings_includes_panel_pct(self, client):
