@@ -227,6 +227,44 @@ def clear_votes_route():
     return jsonify({"ok": True})
 
 
+@sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
+def seed_votes_from_examples():
+    """Seed good votes from a model's media examples.
+
+    For each ``type: "media"`` example, reads the file from
+    ``data/example_media/``, computes its MD5, and either marks the
+    matching loaded media as Good, or — if the example is new —
+    embeds it, inserts it into the ``medias`` dict, and votes it Good.
+
+    Expects JSON::
+
+        {"examples": [{"type": "media", "value": "abc123.wav"}, ...]}
+
+    Returns::
+
+        {"seeded": 2, "skipped": 1}
+    """
+    from vtsearch.routes.trainable_models import _seed_good_votes_from_examples
+
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    examples = data.get("examples")
+    if not isinstance(examples, list):
+        return jsonify({"error": "examples must be a list"}), 400
+
+    seeded = _seed_good_votes_from_examples(examples)
+    skipped = len(examples) - seeded
+
+    if seeded > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
+
+    return jsonify({"seeded": seeded, "skipped": skipped})
+
+
 @sorting_bp.route("/api/textsort-suggestions")
 def get_textsort_suggestions_route():
     """Return stored text-sort suggestions (most recent last)."""

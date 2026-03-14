@@ -13,6 +13,7 @@ The tree supports:
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from collections.abc import Callable
 
@@ -71,12 +72,24 @@ class DiversityTree:
             ids = list(vectors.keys())
             total = len(ids)
             vecs = np.array([vectors[i] for i in ids], dtype=np.float32)
-            self._leaves_placed = 0
             self._on_progress = on_progress
-            self._total_vectors = total
+            # Estimate total k-means work: each tree level clusters ~N vectors
+            # total.  Number of levels ≈ log_k(N / min_node_size), capped at
+            # max_depth.  Progress is reported after each k-means call, weighted
+            # by the number of vectors in that call.
+            if total >= min_node_size and total >= 2 * k:
+                num_levels = max(1, math.ceil(math.log(total / min_node_size, k)))
+                num_levels = min(num_levels, max_depth)
+            else:
+                num_levels = 0
+            self._estimated_total_work = max(total * num_levels, 1)
+            self._work_done = 0
             if on_progress:
-                on_progress(0, total)
+                on_progress(0, self._estimated_total_work)
             self._build_node("0", ids, vecs, depth=0, parent=None)
+            # Ensure we hit 100% at the end
+            if on_progress:
+                on_progress(self._estimated_total_work, self._estimated_total_work)
             self._on_progress = None
 
     def _build_node(
@@ -100,14 +113,12 @@ class DiversityTree:
         if len(ids) < self.min_node_size or depth >= self.max_depth:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
             return
 
         actual_k = min(self.k, len(ids))
         if actual_k < 2:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
             return
 
         # Run k-means
@@ -115,6 +126,14 @@ class DiversityTree:
 
         kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=10)
         labels = kmeans.fit_predict(vecs)
+
+        # Report progress proportional to the number of vectors clustered
+        self._work_done += len(ids)
+        if self._on_progress:
+            self._on_progress(
+                min(self._work_done, self._estimated_total_work),
+                self._estimated_total_work,
+            )
 
         children = []
         for ci in range(actual_k):
@@ -133,13 +152,6 @@ class DiversityTree:
         if not children:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
-
-    def _report_leaf_progress(self, count: int) -> None:
-        """Report progress when vectors are assigned to a leaf node."""
-        self._leaves_placed += count
-        if self._on_progress:
-            self._on_progress(self._leaves_placed, self._total_vectors)
 
     def lookup(self, vector_id: int) -> str:
         """Return the name of the deepest (leaf) node containing this vector."""
