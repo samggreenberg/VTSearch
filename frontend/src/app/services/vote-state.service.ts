@@ -55,6 +55,8 @@ export class VoteStateService implements OnDestroy {
     const good = new Set(this.goodVotesSubject.value);
     const bad = new Set(this.badVotesSubject.value);
 
+    const isAdd = vote === 'good' ? !good.has(id) : !bad.has(id);
+
     if (vote === 'good') {
       if (good.has(id)) {
         good.delete(id);
@@ -73,6 +75,15 @@ export class VoteStateService implements OnDestroy {
 
     this.goodVotesSubject.next(good);
     this.badVotesSubject.next(bad);
+
+    // Set an optimistic click time so the item sorts correctly immediately,
+    // rather than appearing with time=-1 and then jumping when the server responds.
+    if (isAdd) {
+      const times = { ...this.clickTimesSubject.value };
+      const maxTime = Object.values(times).reduce((m, t) => Math.max(m, t), 0);
+      times[String(id)] = maxTime + 1;
+      this.clickTimesSubject.next(times);
+    }
   }
 
   loadVotes(): void {
