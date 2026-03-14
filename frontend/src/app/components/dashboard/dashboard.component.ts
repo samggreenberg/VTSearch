@@ -458,6 +458,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.models.find((m) => this.selectedModelIds.has(m.id));
     this.labelSession.textQuery = model?.text_query || '';
     this.labelSession.mediaExample = model?.media_example || '';
+    this.labelSession.examples = (model?.['examples'] as { type: string; value: string }[]) || [];
   }
 
   onLabel(): void {

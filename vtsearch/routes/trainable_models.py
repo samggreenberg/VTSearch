@@ -106,6 +106,61 @@ def sync_labels_to_loaded_model() -> None:
     update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
+def _seed_good_votes_from_examples(examples: list[dict]) -> int:
+    """Add loaded media items that match media-example files to good_votes.
+
+    For each ``type: "media"`` example, reads the file from
+    ``data/example_media/``, computes its MD5, and calls
+    :func:`~vtsearch.utils.apply_label` for every loaded media whose
+    MD5 matches.  The media items keep their original dataset origins.
+
+    Returns the number of example entries that matched at least one
+    loaded media item.
+    """
+    import hashlib
+
+    from vtsearch.config import DATA_DIR
+    from vtsearch.utils import apply_label, build_media_lookup, snapshot_medias
+
+    media_examples = [
+        ex
+        for ex in examples
+        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
+    ]
+    if not media_examples:
+        return 0
+
+    snap = snapshot_medias()
+    if not snap:
+        return 0
+
+    _, md5_lookup = build_media_lookup(snap)
+    server_media_dir = DATA_DIR / "example_media"
+
+    seeded = 0
+    for ex in media_examples:
+        filename = ex["value"].strip()
+        file_path = server_media_dir / filename
+        # Prevent directory traversal
+        try:
+            file_path.resolve().relative_to(server_media_dir.resolve())
+        except ValueError:
+            continue
+        if not file_path.is_file():
+            continue
+
+        file_md5 = hashlib.md5(file_path.read_bytes()).hexdigest()
+        cids = md5_lookup.get(file_md5, [])
+        if not cids:
+            continue
+
+        for cid in cids:
+            apply_label(cid, "good")
+        seeded += 1
+
+    return seeded
+
+
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
     tm_dir = get_trainable_models_dir()
@@ -443,6 +498,11 @@ def load_model_route():
         {"model_id": "abc123"}
 
     Pass ``model_id: null`` to unload.
+
+    When loading a model that has media examples, any example files whose
+    MD5 matches a loaded media item are automatically added to
+    ``good_votes`` so that the labeling session starts with those examples
+    pre-labeled as Good.
     """
     from vtsearch.models.registry import get_model, set_loaded_id
 
@@ -455,7 +515,19 @@ def load_model_route():
             return jsonify({"error": "Model not found"}), 404
 
     set_loaded_id(model_id)
-    return jsonify({"ok": True})
+
+    # Seed good votes from media examples on the loaded model.
+    examples_seeded = 0
+    if model_id is not None and entry is not None:
+        tm_name = entry.get("trainable_model_name", "")
+        if tm_name:
+            tm_data = _read_model(_model_path(tm_name))
+            if tm_data:
+                examples_seeded = _seed_good_votes_from_examples(
+                    tm_data.get("examples", [])
+                )
+
+    return jsonify({"ok": True, "examples_seeded": examples_seeded})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

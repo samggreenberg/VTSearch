@@ -227,6 +227,83 @@ def clear_votes_route():
     return jsonify({"ok": True})
 
 
+@sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
+def seed_votes_from_examples():
+    """Seed good votes from a model's media examples.
+
+    For each ``type: "media"`` example, reads the file from
+    ``data/example_media/``, computes its MD5, and adds any matching
+    loaded media items to ``good_votes``.  This lets a detector that
+    was created with media examples start a labeling session with
+    those examples already counted as Good labels (preserving the
+    original dataset origins on each media item).
+
+    Expects JSON::
+
+        {"examples": [{"type": "media", "value": "abc123.wav"}, ...]}
+
+    Returns::
+
+        {"seeded": 2, "skipped": 1}
+    """
+    import hashlib
+
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    examples = data.get("examples")
+    if not isinstance(examples, list):
+        return jsonify({"error": "examples must be a list"}), 400
+
+    snap = snapshot_medias()
+    if not snap:
+        return jsonify({"seeded": 0, "skipped": len(examples)})
+
+    _, md5_lookup = build_media_lookup(snap)
+
+    seeded = 0
+    skipped = 0
+    for ex in examples:
+        if not isinstance(ex, dict) or ex.get("type") != "media":
+            skipped += 1
+            continue
+
+        filename = ex.get("value", "").strip()
+        if not filename:
+            skipped += 1
+            continue
+
+        file_path = SERVER_MEDIA_DIR / filename
+        # Prevent directory traversal
+        try:
+            file_path.resolve().relative_to(SERVER_MEDIA_DIR.resolve())
+        except ValueError:
+            skipped += 1
+            continue
+
+        if not file_path.is_file():
+            skipped += 1
+            continue
+
+        file_md5 = hashlib.md5(file_path.read_bytes()).hexdigest()
+        cids = md5_lookup.get(file_md5, [])
+        if not cids:
+            skipped += 1
+            continue
+
+        for cid in cids:
+            apply_label(cid, "good")
+        seeded += 1
+
+    if seeded > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
+
+    return jsonify({"seeded": seeded, "skipped": skipped})
+
+
 @sorting_bp.route("/api/textsort-suggestions")
 def get_textsort_suggestions_route():
     """Return stored text-sort suggestions (most recent last)."""
