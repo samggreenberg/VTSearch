@@ -70,7 +70,9 @@
         <p class="error-text">{{ error }}</p>
       }
     </form>
+  }
 
+  @if (view === 'main') {
     <div modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
