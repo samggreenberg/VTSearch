@@ -44,10 +44,11 @@ h3 {
   &.grid-layout {
     display: grid;
     grid-template-columns: repeat(var(--grid-columns, 2), minmax(0, 1fr));
-    grid-auto-rows: 1fr;
     gap: 4px;
+    overflow-y: auto;
     flex: 1;
     min-height: 0;
+    align-content: start;
   }
 }
 
@@ -86,8 +87,7 @@ h3 {
 
 .vote-thumbnail {
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  aspect-ratio: 1;
   object-fit: contain;
   border-radius: 3px;
   background: var(--bg-surface);
@@ -98,8 +98,7 @@ h3 {
   align-items: center;
   justify-content: center;
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  aspect-ratio: 1;
   border-radius: 3px;
   background: var(--bg-surface);
   color: var(--text-muted);
