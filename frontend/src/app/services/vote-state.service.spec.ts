@@ -134,6 +134,68 @@ describe('VoteStateService', () => {
     expect(service.clickTimes['5']).toBe(2);
   });
 
+  it('applyVotes should preserve optimistic vote when server has not caught up', () => {
+    // Simulate optimistic vote
+    service.applyOptimisticVote(10, 'good');
+    expect(service.goodVotes.has(10)).toBeTrue();
+    expect(service.clickTimes['10']).toBe(1);
+
+    // Server response arrives WITHOUT the new vote (stale data)
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush({
+      good: [1, 2],
+      bad: [3],
+      click_times: { '1': 100, '2': 200 },
+      learned_scores: {},
+    });
+
+    // Optimistic vote should be preserved
+    expect(service.goodVotes.has(10)).toBeTrue();
+    expect(service.clickTimes['10']).toBe(1);
+    // Server data should also be present
+    expect(service.goodVotes.has(1)).toBeTrue();
+    expect(service.goodVotes.has(2)).toBeTrue();
+  });
+
+  it('applyVotes should clear optimistic tracking once server confirms', () => {
+    // Simulate optimistic vote
+    service.applyOptimisticVote(10, 'good');
+
+    // Server response now includes the voted item
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush({
+      good: [1, 2, 10],
+      bad: [3],
+      click_times: { '1': 100, '2': 200, '10': 300 },
+      learned_scores: {},
+    });
+
+    expect(service.goodVotes.has(10)).toBeTrue();
+    // Server's click time should be used now (not the optimistic one)
+    expect(service.clickTimes['10']).toBe(300);
+  });
+
+  it('stale polling should not remove optimistic bad vote', fakeAsync(() => {
+    service.startPolling(1000);
+    // Initial poll
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // User votes bad optimistically
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.badVotes.has(5)).toBeTrue();
+
+    // Next poll arrives with stale data (no vote for 5)
+    tick(1000);
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // Optimistic bad vote should still be preserved
+    expect(service.badVotes.has(5)).toBeTrue();
+    expect(service.clickTimes['5']).toBe(1);
+
+    service.stopPolling();
+    discardPeriodicTasks();
+  }));
+
   it('goodVotes$ should emit on load', (done) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));
