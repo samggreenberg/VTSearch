@@ -318,17 +318,27 @@ class TestInterceptWeightLoadingProgress:
 
     def test_set_module_tensor_to_device_tracking(self):
         """set_module_tensor_to_device interception should count dispatched tensors."""
-        calls = []
+        try:
+            import transformers.modeling_utils as tm
+
+            orig = tm.set_module_tensor_to_device
+        except (ImportError, AttributeError):
+            # accelerate not installed — patch it onto transformers.modeling_utils
+            # so the interceptor can find it
+            import transformers.modeling_utils as tm
+
+            call_log: list[tuple] = []
+
+            def fake_set_module(model, name, device, value=None, **kw):
+                call_log.append((name, device))
+
+            tm.set_module_tensor_to_device = fake_set_module
+            orig = None
+
+        calls: list[tuple] = []
 
         def cb(status, message, current, total):
             calls.append((status, message, current, total))
-
-        try:
-            import transformers.modeling_utils as tm
-        except ImportError:
-            return  # skip if transformers not installed
-
-        orig = tm.set_module_tensor_to_device
 
         # Simulate: load_file sets total, then set_module_tensor_to_device is called per tensor
         import safetensors.torch as st
@@ -350,7 +360,10 @@ class TestInterceptWeightLoadingProgress:
                     tm.set_module_tensor_to_device(model, "weight", "cpu", torch.zeros(2, 2))
         finally:
             st.load_file = original_lf
-            tm.set_module_tensor_to_device = orig
+            if orig is not None:
+                tm.set_module_tensor_to_device = orig
+            else:
+                delattr(tm, "set_module_tensor_to_device")
 
         # Should have 5 progress reports
         weight_calls = [c for c in calls if c[1] == "Loading weights…"]
