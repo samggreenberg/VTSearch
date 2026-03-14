@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 from uuid import uuid4
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
 __all__ = ["HttpArchiveSource"]
 
 log = logging.getLogger(__name__)
+
+_extract_lock = threading.Lock()
 
 
 class HttpArchiveSource(MediaSource):
@@ -56,37 +59,44 @@ class HttpArchiveSource(MediaSource):
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
-        # Check for a previously-cached extraction for this URL.
         url_filename = self._url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
         cached_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
-        if cached_dir.is_dir():
-            self._extract_dir = cached_dir
-            self._inner = LocalFolderSource(cached_dir)
+
+        # Serialise cache checks so concurrent requests don't both download.
+        with _extract_lock:
+            # Re-check after acquiring the lock (another thread may have finished).
+            if self._inner is not None:
+                return self._inner
+
+            # Check for a previously-cached extraction for this URL.
+            if cached_dir.is_dir():
+                self._extract_dir = cached_dir
+                self._inner = LocalFolderSource(cached_dir)
+                return self._inner
+
+            # Download and extract to a unique temp directory.
+            from vtsearch.datasets.downloader import download_file_with_progress
+            from vtsearch.datasets.importers.http_zip import _extract_archive
+            from vtsearch.utils.url_validation import validate_url
+
+            validate_url(self._url)
+            DATA_DIR.mkdir(exist_ok=True)
+
+            run_id = uuid4().hex[:12]
+            archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
+            extract_dir = DATA_DIR / f"http_archive_source_{run_id}"
+
+            try:
+                log.info("Downloading %s for media source...", self._url)
+                download_file_with_progress(self._url, archive_path)
+                extract_dir.mkdir(exist_ok=True)
+                _extract_archive(archive_path, extract_dir)
+            finally:
+                archive_path.unlink(missing_ok=True)
+
+            self._extract_dir = extract_dir
+            self._inner = LocalFolderSource(extract_dir)
             return self._inner
-
-        # Download and extract to a unique temp directory.
-        from vtsearch.datasets.downloader import download_file_with_progress
-        from vtsearch.datasets.importers.http_zip import _extract_archive
-        from vtsearch.utils.url_validation import validate_url
-
-        validate_url(self._url)
-        DATA_DIR.mkdir(exist_ok=True)
-
-        run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
-        extract_dir = DATA_DIR / f"http_archive_source_{run_id}"
-
-        try:
-            log.info("Downloading %s for media source...", self._url)
-            download_file_with_progress(self._url, archive_path)
-            extract_dir.mkdir(exist_ok=True)
-            _extract_archive(archive_path, extract_dir)
-        finally:
-            archive_path.unlink(missing_ok=True)
-
-        self._extract_dir = extract_dir
-        self._inner = LocalFolderSource(extract_dir)
-        return self._inner
 
     # ------------------------------------------------------------------
     # MediaSource interface

@@ -50,10 +50,10 @@ from vtsearch.utils import update_progress  # noqa: E402
 set_progress_callback(update_progress)
 
 app = Flask(__name__)
-# Secret key for session cookies.  Only the TrivialLoginProvider uses
-# sessions; the key is intentionally non-secret because this provider
-# is for local testing only.
-app.secret_key = "vtsearch-dev-key-not-for-production"
+# Secret key for session cookies.  Read from VTSEARCH_SECRET_KEY env var
+# if set; otherwise fall back to a dev-only default.  Production
+# deployments should always set the env var.
+app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
 
 
 # ---------------------------------------------------------------------------
@@ -205,9 +205,7 @@ if __name__ == "__main__":
             if chunk_size:
                 from vtsearch.cli import autodetect_main_chunked
 
-                autodetect_main_chunked(
-                    args.dataset, chunk_size, settings_path, args.exporter, exporter_field_values
-                )
+                autodetect_main_chunked(args.dataset, chunk_size, settings_path, args.exporter, exporter_field_values)
             else:
                 from vtsearch.cli import autodetect_main
 

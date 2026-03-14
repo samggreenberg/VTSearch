@@ -196,6 +196,11 @@ export interface MediaTypesResponse {
 }
 
 export interface DatasetRegistryEntry {
+  id: string;
+  name: string;
+  media_type: string;
+  loaded?: boolean;
+  readers?: string[];
   [key: string]: unknown;
 }
 
@@ -299,8 +304,19 @@ export interface TrainableModelsResponse {
   models: TrainableModel[];
 }
 
+export interface ModelRegistryEntry {
+  id: string;
+  name: string;
+  media_type: string;
+  trainable?: boolean;
+  num_training?: number;
+  text_query?: string;
+  detector_name?: string;
+  [key: string]: unknown;
+}
+
 export interface ModelsRegistryResponse {
-  models: unknown[];
+  models: ModelRegistryEntry[];
 }
 
 // --- Label Importers ---

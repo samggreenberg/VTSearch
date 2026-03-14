@@ -190,6 +190,12 @@ export class SettingsModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
+    // Reject files larger than 1 MB to prevent browser memory issues.
+    const MAX_SETTINGS_SIZE = 1024 * 1024;
+    if (file.size > MAX_SETTINGS_SIZE) {
+      this.error = 'Settings file is too large (max 1 MB)';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {

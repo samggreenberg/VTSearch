@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
 
 @Component({
   selector: 'vt-voting-overlay',
@@ -6,7 +6,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
   templateUrl: './voting-overlay.component.html',
   styleUrl: './voting-overlay.component.scss',
 })
-export class VotingOverlayComponent {
+export class VotingOverlayComponent implements OnDestroy {
   @Input() isGood = false;
   @Input() isBad = false;
   @Input() disabled = false;
@@ -15,17 +15,27 @@ export class VotingOverlayComponent {
   goodFlash = false;
   badFlash = false;
 
+  private goodTimer: ReturnType<typeof setTimeout> | null = null;
+  private badTimer: ReturnType<typeof setTimeout> | null = null;
+
   onVoteGood(): void {
     if (this.disabled) return;
     this.goodFlash = true;
     this.voted.emit('good');
-    setTimeout(() => (this.goodFlash = false), 300);
+    if (this.goodTimer) clearTimeout(this.goodTimer);
+    this.goodTimer = setTimeout(() => (this.goodFlash = false), 300);
   }
 
   onVoteBad(): void {
     if (this.disabled) return;
     this.badFlash = true;
     this.voted.emit('bad');
-    setTimeout(() => (this.badFlash = false), 300);
+    if (this.badTimer) clearTimeout(this.badTimer);
+    this.badTimer = setTimeout(() => (this.badFlash = false), 300);
+  }
+
+  ngOnDestroy(): void {
+    if (this.goodTimer) clearTimeout(this.goodTimer);
+    if (this.badTimer) clearTimeout(this.badTimer);
   }
 }

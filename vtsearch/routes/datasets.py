@@ -69,7 +69,6 @@ datasets_bp = Blueprint("datasets", __name__)
 datasets_bp.register_blueprint(datasets_ui_bp)
 
 
-
 # ---------------------------------------------------------------------------
 # Media types
 # ---------------------------------------------------------------------------
@@ -574,8 +573,11 @@ def export_dataset():
             download_name="vtsearch_dataset.pkl",
             as_attachment=True,
         )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Dataset export failed")
+        return jsonify({"error": "Dataset export failed"}), 500
 
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
@@ -637,23 +639,35 @@ def load_registered_dataset(dataset_id: str):
     def load_task():
         try:
             update_progress(
-                "loading", "Clearing previous dataset…", 0, 0,
-                step=1, total_steps=_LOAD_STEPS,
+                "loading",
+                "Clearing previous dataset…",
+                0,
+                0,
+                step=1,
+                total_steps=_LOAD_STEPS,
             )
             clear_dataset()
             _reg_set_loaded(None)
             gc.collect()
             load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
             update_progress(
-                "loading", "Removing duplicates…", 0, 0,
-                step=3, total_steps=_LOAD_STEPS,
+                "loading",
+                "Removing duplicates…",
+                0,
+                0,
+                step=3,
+                total_steps=_LOAD_STEPS,
             )
             collapse_duplicates(medias)
+
             def _diversity_progress(current: int, total: int) -> None:
                 update_progress(
-                    "loading", "Building diversity index…",
-                    current=current, total=total,
-                    step=3, total_steps=_LOAD_STEPS,
+                    "loading",
+                    "Building diversity index…",
+                    current=current,
+                    total=total,
+                    step=3,
+                    total_steps=_LOAD_STEPS,
                 )
 
             _diversity_progress(0, 0)

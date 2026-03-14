@@ -170,7 +170,7 @@ def _download_and_extract(
                 # Guard against path traversal in zip entries
                 member_path = Path(extract_to) / member
                 if not str(member_path.resolve()).startswith(str(Path(extract_to).resolve())):
-                    continue
+                    raise ValueError(f"Path traversal detected in archive: {member}")
                 zip_ref.extract(member, extract_to)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")
@@ -495,9 +495,7 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
     if not labels_path.exists():
         DATA_DIR.mkdir(exist_ok=True)
         on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
-        download_file_with_progress(
-            OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress
-        )
+        download_file_with_progress(OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
 
     return extract_dir
 
@@ -1060,11 +1058,7 @@ def download_ucsf_documents(
                 on_progress("downloading", f"Cached {doc_id}.pdf ({downloaded}/{total_docs})", downloaded, total_docs)
                 continue
 
-            url = (
-                f"{UCSF_IDL_DOWNLOAD_URL}/"
-                f"{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}/"
-                f"{doc_id}/{doc_id}.pdf"
-            )
+            url = f"{UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}/{doc_id}/{doc_id}.pdf"
 
             try:
                 download_file_with_progress(url, pdf_path, 0, on_progress)

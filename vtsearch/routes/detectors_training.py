@@ -156,7 +156,7 @@ def export_detector_server():
 
     # Check for existing file before doing expensive training
     if filepath.exists() and not overwrite:
-        return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
+        return jsonify({"exists": True, "name": safe_name}), 409
 
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
@@ -191,7 +191,6 @@ def export_detector_server():
         {
             "success": True,
             "name": safe_name,
-            "path": str(filepath.resolve()),
             "media_type": media_type,
         }
     )
@@ -359,8 +358,11 @@ def import_detector_labels():
             }
         )
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Detector training from file failed")
+        return jsonify({"error": "Detector training from file failed"}), 500
 
 
 @detectors_training_bp.route("/api/autorun-detectors/from-label-import/<importer_name>", methods=["POST"])

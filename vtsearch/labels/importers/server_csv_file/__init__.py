@@ -38,8 +38,7 @@ class ServerCsvLabelImporter(LabelImporter):
             label="Server File Path",
             field_type="text",
             description=(
-                "Absolute or relative path to a CSV file with md5 and "
-                "label columns on the server filesystem."
+                "Absolute or relative path to a CSV file with md5 and label columns on the server filesystem."
             ),
             placeholder="data/labels/my_labels.csv",
         ),
@@ -78,6 +77,11 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
     try:
         text = raw.decode("utf-8-sig")  # strip BOM if present
     except UnicodeDecodeError:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "CSV file is not valid UTF-8; falling back to latin-1 encoding. Non-Latin characters may be corrupted."
+        )
         text = raw.decode("latin-1")
 
     reader = csv.DictReader(io.StringIO(text))
