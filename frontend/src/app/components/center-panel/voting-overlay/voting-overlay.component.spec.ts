@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { VotingOverlayComponent } from './voting-overlay.component';
 
 describe('VotingOverlayComponent', () => {
@@ -8,6 +10,7 @@ describe('VotingOverlayComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [VotingOverlayComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(VotingOverlayComponent);
     component = fixture.componentInstance;
@@ -18,11 +21,18 @@ describe('VotingOverlayComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should render Good and Bad buttons', () => {
-    const buttons = fixture.nativeElement.querySelectorAll('button');
-    expect(buttons.length).toBe(2);
-    expect(buttons[0].textContent.trim()).toBe('Bad');
-    expect(buttons[1].textContent.trim()).toBe('Good');
+  it('should render Good and Bad vote buttons', () => {
+    const voteButtons = fixture.nativeElement.querySelectorAll('.vote-buttons button');
+    expect(voteButtons.length).toBe(2);
+    expect(voteButtons[0].textContent.trim()).toBe('Bad');
+    expect(voteButtons[1].textContent.trim()).toBe('Good');
+  });
+
+  it('should render Add media to Good and Add media to Bad buttons', () => {
+    const addButtons = fixture.nativeElement.querySelectorAll('.add-media-buttons button');
+    expect(addButtons.length).toBe(2);
+    expect(addButtons[0].textContent.trim()).toBe('Add media to Bad');
+    expect(addButtons[1].textContent.trim()).toBe('Add media to Good');
   });
 
   it('should emit good on Good click', () => {
@@ -58,5 +68,10 @@ describe('VotingOverlayComponent', () => {
     component.voted.subscribe(() => (emitted = true));
     fixture.nativeElement.querySelector('.btn-good').click();
     expect(emitted).toBeFalse();
+  });
+
+  it('should have hidden file inputs for add-to-pile', () => {
+    const hiddenInputs = fixture.nativeElement.querySelectorAll('.hidden-file-input');
+    expect(hiddenInputs.length).toBe(2);
   });
 });

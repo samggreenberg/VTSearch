@@ -38,4 +38,11 @@ export class MediasApiService {
   vote(id: number, label: 'good' | 'bad'): Observable<VoteResponse> {
     return this.http.post<VoteResponse>(`/api/medias/${id}/vote`, { vote: label });
   }
+
+  addToPile(file: File, label: 'good' | 'bad'): Observable<{ ok: boolean; media_id: number; is_new: boolean }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('label', label);
+    return this.http.post<{ ok: boolean; media_id: number; is_new: boolean }>('/api/medias/add-to-pile', formData);
+  }
 }

@@ -129,3 +129,132 @@ class TestMediaAudio:
     def test_returns_404_for_zero_id(self, client):
         resp = client.get("/api/medias/0/audio")
         assert resp.status_code == 404
+
+
+class TestAddToPile:
+    """Tests for POST /api/medias/add-to-pile."""
+
+    def test_add_existing_media_to_good(self, client):
+        """Uploading a file whose MD5 matches an existing media votes it good."""
+        media = app_module.medias[1]
+        data = {"label": "good"}
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={**data, "file": (io.BytesIO(media["media_bytes"]), "test.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        result = resp.get_json()
+        assert result["ok"] is True
+        assert result["is_new"] is False
+        assert result["media_id"] == 1
+        assert 1 in app_module.good_votes
+
+    def test_add_existing_media_to_bad(self, client):
+        """Uploading a file whose MD5 matches an existing media votes it bad."""
+        media = app_module.medias[2]
+        data = {"label": "bad"}
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={**data, "file": (io.BytesIO(media["media_bytes"]), "test.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        result = resp.get_json()
+        assert result["ok"] is True
+        assert result["is_new"] is False
+        assert result["media_id"] == 2
+        assert 2 in app_module.bad_votes
+
+    def test_add_new_media_to_good(self, client):
+        """Uploading a file with new MD5 embeds it, inserts it, and votes good."""
+        # Generate a unique WAV that doesn't match any existing media
+        wav_bytes = app_module.generate_wav(12345, 0.3)
+        initial_count = len(app_module.medias)
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(wav_bytes), "new_sound.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 201
+        result = resp.get_json()
+        assert result["ok"] is True
+        assert result["is_new"] is True
+        new_id = result["media_id"]
+        assert new_id in app_module.medias
+        assert len(app_module.medias) == initial_count + 1
+        assert new_id in app_module.good_votes
+        # Verify the new media has proper fields
+        new_media = app_module.medias[new_id]
+        assert new_media["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert new_media["filename"] == "new_sound.wav"
+        assert new_media["origin"]["importer"] == "add_to_pile"
+        assert isinstance(new_media["embedding"], np.ndarray)
+
+    def test_add_new_media_to_bad(self, client):
+        """Uploading a new file and voting it bad."""
+        wav_bytes = app_module.generate_wav(54321, 0.2)
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "bad", "file": (io.BytesIO(wav_bytes), "bad_sound.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 201
+        result = resp.get_json()
+        assert result["ok"] is True
+        assert result["is_new"] is True
+        assert result["media_id"] in app_module.bad_votes
+
+    def test_missing_file(self, client):
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good"},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "No file" in resp.get_json()["error"]
+
+    def test_missing_label(self, client):
+        wav_bytes = app_module.generate_wav(999, 0.1)
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"file": (io.BytesIO(wav_bytes), "test.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "label" in resp.get_json()["error"]
+
+    def test_invalid_label(self, client):
+        wav_bytes = app_module.generate_wav(999, 0.1)
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "maybe", "file": (io.BytesIO(wav_bytes), "test.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "label" in resp.get_json()["error"]
+
+    def test_empty_file(self, client):
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(b""), "empty.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "Empty" in resp.get_json()["error"]
+
+    def test_no_dataset_loaded(self, client):
+        """When no dataset is loaded, adding new media fails gracefully."""
+        saved = dict(app_module.medias)
+        app_module.medias.clear()
+        try:
+            wav_bytes = app_module.generate_wav(999, 0.1)
+            resp = client.post(
+                "/api/medias/add-to-pile",
+                data={"label": "good", "file": (io.BytesIO(wav_bytes), "test.wav")},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 400
+            assert "No dataset" in resp.get_json()["error"]
+        finally:
+            app_module.medias.update(saved)

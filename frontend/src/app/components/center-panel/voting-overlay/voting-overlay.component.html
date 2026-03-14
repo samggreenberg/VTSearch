@@ -20,3 +20,33 @@
     Good
   </button>
 </div>
+<div class="add-media-buttons">
+  <input
+    #addBadInput
+    type="file"
+    class="hidden-file-input"
+    (change)="onFileSelected($event, 'bad')"
+  />
+  <button
+    class="btn-add-bad"
+    [disabled]="addingBad"
+    (click)="triggerAddBad()"
+    title="Upload a media file and add it to the Bad pile."
+  >
+    {{ addingBad ? 'Adding...' : 'Add media to Bad' }}
+  </button>
+  <input
+    #addGoodInput
+    type="file"
+    class="hidden-file-input"
+    (change)="onFileSelected($event, 'good')"
+  />
+  <button
+    class="btn-add-good"
+    [disabled]="addingGood"
+    (click)="triggerAddGood()"
+    title="Upload a media file and add it to the Good pile."
+  >
+    {{ addingGood ? 'Adding...' : 'Add media to Good' }}
+  </button>
+</div>

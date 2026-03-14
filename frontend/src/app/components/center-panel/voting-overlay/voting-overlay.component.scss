@@ -57,3 +57,39 @@ button {
     color: #fff;
   }
 }
+
+.hidden-file-input {
+  display: none;
+}
+
+.add-media-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 4px 0 2px;
+  flex-shrink: 0;
+}
+
+.btn-add-good {
+  color: var(--color-good);
+  border-color: var(--color-good);
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  border-width: 1px;
+
+  &:hover:not(:disabled) {
+    font-weight: 700;
+  }
+}
+
+.btn-add-bad {
+  color: var(--color-bad);
+  border-color: var(--color-bad);
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  border-width: 1px;
+
+  &:hover:not(:disabled) {
+    font-weight: 700;
+  }
+}
