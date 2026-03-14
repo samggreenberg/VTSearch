@@ -92,7 +92,9 @@ export class NewModelModalComponent implements OnInit {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaSources = (res.importers || []).filter(
-          (imp) => !imp['hidden_from_picker'],
+          (imp) =>
+            imp.name === 'demo' ||
+            (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
         );
       },
     });
