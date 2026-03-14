@@ -105,7 +105,7 @@ def _load_embedder_for_clips() -> None:
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
     """
-    from vtsearch.media.base import intercept_tqdm_progress
+    from vtsearch.media.base import intercept_tqdm_progress, intercept_weight_loading_progress
 
     emb = _get_embedder_for_clips()
     if emb is None:
@@ -115,7 +115,9 @@ def _load_embedder_for_clips() -> None:
     def _model_load_progress(status, message, current, total):
         update_progress(status, message, current, total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
 
-    with intercept_tqdm_progress(_model_load_progress):
+    with intercept_tqdm_progress(_model_load_progress), intercept_weight_loading_progress(
+        _model_load_progress, "Loading model weights…"
+    ):
         emb.load_models()
 
     # Warm up the text encoder so the first text sort is instant.

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import MODELS_CACHE_DIR, SIGLIP_MODEL_ID
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
 
 if TYPE_CHECKING:
     import torch
@@ -76,7 +76,9 @@ class ImageSiglipEmbedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading SigLIP model weights…", 0, 0)
-        with intercept_tqdm_progress(self._on_progress):
+        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
+            self._on_progress, "Loading SigLIP model weights…"
+        ):
             self._model = SiglipModel.from_pretrained(
                 SIGLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )

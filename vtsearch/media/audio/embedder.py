@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLAP_MODEL_ID, MODELS_CACHE_DIR, SAMPLE_RATE
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -55,7 +55,9 @@ class AudioClapEmbedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLAP model weights…", 0, 0)
-        with intercept_tqdm_progress(self._on_progress):
+        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
+            self._on_progress, "Loading CLAP model weights…"
+        ):
             self._model = ClapModel.from_pretrained(
                 CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
