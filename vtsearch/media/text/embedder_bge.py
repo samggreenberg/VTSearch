@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import BGE_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -55,7 +55,9 @@ class TextBGEEmbedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading BGE model…", 0, 0)
-        with intercept_tqdm_progress(self._on_progress):
+        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
+            self._on_progress, "Loading BGE model…"
+        ):
             self._model = SentenceTransformer(BGE_MODEL_ID, cache_folder=cache_dir, token=False)
 
     # ------------------------------------------------------------------
