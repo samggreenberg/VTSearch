@@ -31,7 +31,6 @@ import { VotingOverlayComponent } from './voting-overlay/voting-overlay.componen
 export class CenterPanelComponent implements OnChanges, OnDestroy {
   @Input() media: MediaItem | null = null;
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
-  @Output() mediaAddedToPile = new EventEmitter<{ media_id: number; label: 'good' | 'bad'; is_new: boolean }>();
 
   @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
   @ViewChild(ImageViewerComponent) imageViewer?: ImageViewerComponent;
@@ -144,10 +143,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         this.isVoting = false;
       },
     });
-  }
-
-  onMediaAdded(event: { media_id: number; label: 'good' | 'bad'; is_new: boolean }): void {
-    this.mediaAddedToPile.emit(event);
   }
 
   private loadSettings(): void {

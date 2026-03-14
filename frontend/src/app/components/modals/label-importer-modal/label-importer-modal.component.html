@@ -16,6 +16,47 @@
         }
       }
     </div>
+
+    <div class="add-media-section">
+      <p class="add-media-heading">Add media directly</p>
+      <div class="add-media-buttons">
+        <input
+          #addBadInput
+          type="file"
+          class="hidden-file-input"
+          (change)="onAddToPile($event, 'bad')"
+        />
+        <button
+          class="btn btn-add-bad"
+          [disabled]="addingBad"
+          (click)="triggerAddBad()"
+          title="Upload a media file and add it to the Bad pile."
+        >
+          {{ addingBad ? 'Adding...' : 'Add media to Bad' }}
+        </button>
+        <input
+          #addGoodInput
+          type="file"
+          class="hidden-file-input"
+          (change)="onAddToPile($event, 'good')"
+        />
+        <button
+          class="btn btn-add-good"
+          [disabled]="addingGood"
+          (click)="triggerAddGood()"
+          title="Upload a media file and add it to the Good pile."
+        >
+          {{ addingGood ? 'Adding...' : 'Add media to Good' }}
+        </button>
+      </div>
+    </div>
+
+    @if (error) {
+      <p class="error-text">{{ error }}</p>
+    }
+    @if (successMessage) {
+      <p class="success-text">{{ successMessage }}</p>
+    }
   }
 
   @if (view === 'form' && selectedImporter) {
