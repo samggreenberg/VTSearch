@@ -36,8 +36,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private gridColumnsLeftDict: Record<string, number> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
-  private panelPctLeftDict: Record<string, number | null> = {};
-  private panelPctRightDict: Record<string, number | null> = {};
+  private panelPxLeftDict: Record<string, number> = {};
+  private panelPxRightDict: Record<string, number> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
@@ -95,7 +95,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPct(newType);
+            this.applyPanelPx(newType);
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -168,7 +168,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    this.savePanelPct('left');
+    this.savePanelPx('left');
   }
 
   // --- Right divider drag ---
@@ -197,7 +197,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
-    this.savePanelPct('right');
+    this.savePanelPx('right');
   }
 
   // --- Data loading ---
@@ -238,16 +238,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         const pplDict = settings.panel_pct_left;
         if (pplDict && typeof pplDict === 'object') {
-          this.panelPctLeftDict = pplDict as Record<string, number | null>;
+          this.panelPxLeftDict = pplDict as Record<string, number>;
           if (this.currentMediaType) {
-            this.applyPanelPct(this.currentMediaType);
+            this.applyPanelPx(this.currentMediaType);
           }
         }
         const pprDict = settings.panel_pct_right;
         if (pprDict && typeof pprDict === 'object') {
-          this.panelPctRightDict = pprDict as Record<string, number | null>;
+          this.panelPxRightDict = pprDict as Record<string, number>;
           if (this.currentMediaType) {
-            this.applyPanelPct(this.currentMediaType);
+            this.applyPanelPx(this.currentMediaType);
           }
         }
         if (settings.autopilot_enabled != null) {
@@ -513,31 +513,24 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Panel percentage helpers ---
 
-  private savePanelPct(side: 'left' | 'right'): void {
+  private savePanelPx(side: 'left' | 'right'): void {
     if (!this.currentMediaType) return;
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-    if (layoutWidth <= 0) return;
     const px = side === 'left' ? this.leftWidth : this.rightWidth;
-    const pct = Math.round((px / layoutWidth) * 1000) / 1000; // 3 decimal places
     const key = side === 'left' ? 'panel_pct_left' : 'panel_pct_right';
-    const dict = side === 'left' ? this.panelPctLeftDict : this.panelPctRightDict;
-    dict[this.currentMediaType] = pct;
+    const dict = side === 'left' ? this.panelPxLeftDict : this.panelPxRightDict;
+    dict[this.currentMediaType] = px;
     this.settingsState.update({ [key]: { ...dict } }).subscribe();
   }
 
-  private applyPanelPct(mediaType: string): void {
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-    if (layoutWidth <= 0) return;
-    const leftPct = this.panelPctLeftDict[mediaType];
-    if (leftPct != null && !this.autopilotCollapsed) {
-      const px = Math.round(leftPct * layoutWidth);
-      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, px));
+  private applyPanelPx(mediaType: string): void {
+    const leftPx = this.panelPxLeftDict[mediaType];
+    if (leftPx != null && !this.autopilotCollapsed) {
+      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, leftPx));
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
-    const rightPct = this.panelPctRightDict[mediaType];
-    if (rightPct != null) {
-      const px = Math.round(rightPct * layoutWidth);
-      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, px));
+    const rightPx = this.panelPxRightDict[mediaType];
+    if (rightPx != null) {
+      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, rightPx));
       this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }
   }
