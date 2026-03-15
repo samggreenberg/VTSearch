@@ -24,8 +24,8 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
+from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
 from vtsearch.utils import add_autorun_detector
-import vtsearch.utils.paths as _paths
 
 processor_importers_bp = Blueprint("processor_importers", __name__)
 
@@ -68,52 +68,29 @@ def run_processor_import(importer_name: str):
             404,
         )
 
-    # Build field_values from either multipart or JSON body
-    has_file_fields = any(f.field_type == "file" for f in importer.fields)
-    field_values: dict = {}
+    field_values = extract_plugin_fields(importer)
 
+    # name comes from form data or JSON body (not a plugin field)
+    has_file_fields = any(f.field_type == "file" for f in importer.fields)
     if has_file_fields:
-        for f in importer.fields:
-            if f.field_type == "file":
-                field_values[f.key] = request.files.get(f.key)
-            else:
-                field_values[f.key] = request.form.get(f.key, f.default if f.default is not None else "")
-        # name comes from form data
         name = request.form.get("name", "").strip()
     else:
-        body = request.get_json(force=True, silent=True) or {}
-        for f in importer.fields:
-            field_values[f.key] = body.get(f.key, f.default if f.default is not None else "")
-        name = body.get("name", "").strip()
+        name = (request.get_json(force=True, silent=True) or {}).get("name", "").strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400
 
-    # Validate required fields (skip file fields — presence checked by importer)
-    missing = [
-        f.key
-        for f in importer.fields
-        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
-    ]
-    if missing:
-        return (
-            jsonify({"error": f"Missing required field(s): {missing}", "missing_fields": missing}),
-            400,
-        )
+    err = validate_required_fields(importer, field_values)
+    if err:
+        return err
 
-    # Validate server file paths to prevent path traversal
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
 
-    try:
-        result = importer.run(field_values)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:  # pragma: no cover
-        return jsonify({"error": f"Import failed: {exc}"}), 500
+    result, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
 
     if not isinstance(result, dict):
         return jsonify({"error": "Importer did not return a dict."}), 500

@@ -18,7 +18,7 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_request_field
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
@@ -65,6 +65,19 @@ from vtsearch.routes.datasets_ui import datasets_ui_bp  # noqa: F401
 
 datasets_bp = Blueprint("datasets", __name__)
 
+
+def _normalize_media_type_param(value: str) -> str:
+    """Accept both ``type_id`` (``"image"``) and ``folder_import_name`` (``"images"``)."""
+    value = value.strip()
+    if not value:
+        return ""
+    from vtsearch.media import get_by_folder_name
+
+    try:
+        return get_by_folder_name(value).type_id
+    except KeyError:
+        return value  # assume it is already a type_id
+
 # Register the UI sub-blueprint.
 datasets_bp.register_blueprint(datasets_ui_bp)
 
@@ -91,16 +104,10 @@ def embedders_list():
             (e.g. ``"images"``).  When provided, only embedders whose
             ``media_type_id`` matches are returned.
     """
-    from vtsearch.media import all_embedders_dict, embedders_for_type, get_by_folder_name
+    from vtsearch.media import all_embedders_dict, embedders_for_type
 
-    media_type = request.args.get("media_type", "").strip()
+    media_type = _normalize_media_type_param(request.args.get("media_type", ""))
     if media_type:
-        # Accept both type_id ("image") and folder_import_name ("images").
-        try:
-            mt = get_by_folder_name(media_type)
-            media_type = mt.type_id
-        except KeyError:
-            pass  # assume it is already a type_id
         embedders = [e.to_dict() for e in embedders_for_type(media_type)]
     else:
         embedders = all_embedders_dict()
@@ -122,16 +129,10 @@ def clippers_list():
             (e.g. ``"images"``).  When provided, only clippers whose
             ``media_type`` matches are returned.
     """
-    from vtsearch.media import all_clippers_dict, clippers_for_type, get_by_folder_name
+    from vtsearch.media import all_clippers_dict, clippers_for_type
 
-    media_type = request.args.get("media_type", "").strip()
+    media_type = _normalize_media_type_param(request.args.get("media_type", ""))
     if media_type:
-        # Accept both type_id ("image") and folder_import_name ("images").
-        try:
-            mt = get_by_folder_name(media_type)
-            media_type = mt.type_id
-        except KeyError:
-            pass  # assume it is already a type_id
         clippers = [c.to_dict() for c in clippers_for_type(media_type)]
     else:
         clippers = all_clippers_dict()
@@ -157,24 +158,13 @@ def converters_list():
             ``source_type`` matches are returned.
     """
     from vtsearch.converters import list_converters, list_converters_for_source, list_converters_for_target
-    from vtsearch.media import get_by_folder_name
 
-    target = request.args.get("target", "").strip()
-    source = request.args.get("source", "").strip()
+    target = _normalize_media_type_param(request.args.get("target", ""))
+    source = _normalize_media_type_param(request.args.get("source", ""))
 
     if target:
-        try:
-            mt = get_by_folder_name(target)
-            target = mt.type_id
-        except KeyError:
-            pass
         converters = list_converters_for_target(target)
     elif source:
-        try:
-            mt = get_by_folder_name(source)
-            source = mt.type_id
-        except KeyError:
-            pass
         converters = list_converters_for_source(source)
     else:
         converters = list_converters()
@@ -350,13 +340,11 @@ def stage_import(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
-    # Pass through the optional "converters" key.
-    if file_keys:
-        conv = request.form.get("converters", "")
-    else:
-        conv = (request.get_json(force=True) or {}).get("converters", "")
-    if conv:
-        field_values["converters"] = conv
+    # Pass through optional keys not declared as plugin fields.
+    for key in ("converters",):
+        val = get_request_field(key, bool(file_keys))
+        if val:
+            field_values[key] = val
 
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
@@ -430,30 +418,11 @@ def import_dataset(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
-    # Pass through the optional "converters" key for importers that support
-    # converter selection (e.g. folder, http_archive).
-    if file_keys:
-        converters_val = request.form.get("converters", "")
-    else:
-        converters_val = (request.get_json(force=True) or {}).get("converters", "")
-    if converters_val:
-        field_values["converters"] = converters_val
-
-    # Pass through the optional "clipper" key for post-import clipping.
-    if file_keys:
-        clipper_val = request.form.get("clipper", "")
-    else:
-        clipper_val = (request.get_json(force=True) or {}).get("clipper", "")
-    if clipper_val:
-        field_values["clipper"] = clipper_val
-
-    # Pass through the optional "embedder" key for embedder selection.
-    if file_keys:
-        embedder_val = request.form.get("embedder", "")
-    else:
-        embedder_val = (request.get_json(force=True) or {}).get("embedder", "")
-    if embedder_val:
-        field_values["embedder"] = embedder_val
+    # Pass through optional keys not declared as plugin fields.
+    for key in ("converters", "clipper", "embedder"):
+        val = get_request_field(key, bool(file_keys))
+        if val:
+            field_values[key] = val
 
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
