@@ -146,7 +146,8 @@ class TestDemoDatasetReadiness:
         """Video pkl exists but UCF-101 dir is absent → needs_download (stale pkl)."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR, VIDEO_DIR
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets.downloader import VIDEO_DIR
 
         ucf101_dir = VIDEO_DIR / "ucf101"
         if ucf101_dir.exists():
@@ -726,7 +727,7 @@ class TestUCF101SubsetDownload:
 
     def test_demo_list_shows_video_download_size(self, client):
         """Video demo datasets should report a non-zero download size."""
-        from vtsearch.config import UCF101_SUBSET_DOWNLOAD_SIZE_MB
+        from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB
 
         resp = client.get("/api/dataset/demo-list")
         data = resp.get_json()

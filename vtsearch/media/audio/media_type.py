@@ -7,11 +7,10 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.config import (
-    DATA_DIR,
+from vtsearch.config import DATA_DIR, SAMPLE_RATE
+from vtsearch.datasets.downloader import (
     ESC50_DOWNLOAD_SIZE_MB,
     GTZAN_DOWNLOAD_SIZE_MB,
-    SAMPLE_RATE,
     SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
     URBANSOUND8K_DOWNLOAD_SIZE_MB,
 )

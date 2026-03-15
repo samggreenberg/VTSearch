@@ -7,7 +7,7 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.config import (
+from vtsearch.datasets.downloader import (
     CALTECH101_DOWNLOAD_SIZE_MB,
     CALTECH256_DOWNLOAD_SIZE_MB,
     EUROSAT_DOWNLOAD_SIZE_MB,
