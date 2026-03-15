@@ -172,12 +172,15 @@ def _origin_to_str(origin: dict | None) -> str:
     return importer_name
 
 
-def _apply_clipper(clips_dict: dict, clipper_name: str) -> None:
+def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
     """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
 
     Each media is run through the clipper's ``clip()`` method.  The resulting
     clips are assigned fresh sequential IDs and their origins are annotated
     with the clipper name and clip index.
+
+    If *clipper_params* is provided, the registered clipper is customised via
+    its :meth:`~MediaClipper.with_params` method before clipping.
     """
     if not clipper_name:
         return
@@ -187,6 +190,9 @@ def _apply_clipper(clips_dict: dict, clipper_name: str) -> None:
         clipper = get_clipper(clipper_name)
     except KeyError:
         return
+
+    if clipper_params:
+        clipper = clipper.with_params(clipper_params)
 
     all_clipped: list[dict] = []
     for media in list(clips_dict.values()):
@@ -268,7 +274,8 @@ def _auto_register_dataset(
 
 
 def _run_origin_load_in_background(
-    load_fn, origin: dict, *, name: str = "", clipper: str = "", embedder: str = "",
+    load_fn, origin: dict, *, name: str = "", clipper: str = "",
+    clipper_params: dict | None = None, embedder: str = "",
     created_by: str = "",
 ) -> None:
     """Run a dataset load in a background thread with standard error handling.
@@ -289,6 +296,9 @@ def _run_origin_load_in_background(
     clipper:
         Name of the clipper to apply after loading.  Empty string means
         no clipping.
+    clipper_params:
+        Optional dict of parameter overrides for the clipper (e.g.
+        ``{"duration": 5.0}``).
     embedder:
         Name of the embedder used.  When empty, derived from the medias
         at registration time.
@@ -320,7 +330,7 @@ def _run_origin_load_in_background(
             )
             _set_clip_origins(medias, origin)
             if clipper:
-                _apply_clipper(medias, clipper)
+                _apply_clipper(medias, clipper, clipper_params)
             collapse_duplicates(medias)
             def _diversity_progress(current: int, total: int) -> None:
                 update_progress(
@@ -372,6 +382,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "")
+    clipper_params = field_values.pop("clipper_params", None)
     embedder_name = field_values.get("embedder", "")
 
     def _load():
@@ -397,6 +408,7 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         origin,
         name=importer.resolve_display_name(field_values),
         clipper=clipper_name,
+        clipper_params=clipper_params,
         embedder=embedder_name,
         created_by=created_by,
     )

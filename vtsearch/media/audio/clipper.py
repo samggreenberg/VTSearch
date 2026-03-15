@@ -119,6 +119,24 @@ class SoundTilingClipper(MediaClipper):
             results.append(tile)
         return results
 
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "duration",
+                "label": "Clip length (seconds)",
+                "type": "number",
+                "default": self._duration,
+                "min": 0.1,
+                "max": 300,
+                "step": 0.1,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundTilingClipper":
+        duration = float(params.get("duration", self._duration))
+        return SoundTilingClipper(duration)
+
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["duration"] = self._duration

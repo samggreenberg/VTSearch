@@ -82,6 +82,24 @@ class VideoTilingClipper(MediaClipper):
             results.append(tile)
         return results
 
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "duration",
+                "label": "Clip length (seconds)",
+                "type": "number",
+                "default": self._duration,
+                "min": 0.1,
+                "max": 300,
+                "step": 0.1,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "VideoTilingClipper":
+        duration = float(params.get("duration", self._duration))
+        return VideoTilingClipper(duration)
+
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["duration"] = self._duration
@@ -269,6 +287,34 @@ class VideoSceneClipper(MediaClipper):
         finally:
             if tmp_file is not None:
                 os.unlink(tmp_file.name)
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "threshold",
+                "label": "Sensitivity (0\u20131)",
+                "type": "number",
+                "default": self._threshold,
+                "min": 0,
+                "max": 1,
+                "step": 0.05,
+            },
+            {
+                "key": "min_scene_duration",
+                "label": "Min scene length (seconds)",
+                "type": "number",
+                "default": self._min_scene_duration,
+                "min": 0.1,
+                "max": 60,
+                "step": 0.1,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "VideoSceneClipper":
+        threshold = float(params.get("threshold", self._threshold))
+        min_scene_duration = float(params.get("min_scene_duration", self._min_scene_duration))
+        return VideoSceneClipper(threshold=threshold, min_scene_duration=min_scene_duration)
 
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()

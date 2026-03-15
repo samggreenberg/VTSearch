@@ -258,7 +258,7 @@ from vtsearch.media.audio.clipper import SoundDefaultClipper, SoundTilingClipper
 from vtsearch.media.document.clipper import DocumentDefaultClipper  # noqa: E402
 from vtsearch.media.image.clipper import ImageDefaultClipper, ImageTilingClipper  # noqa: E402
 from vtsearch.media.text.clipper import TextDefaultClipper, TextSentenceClipper  # noqa: E402
-from vtsearch.media.video.clipper import VideoDefaultClipper, VideoTilingClipper  # noqa: E402
+from vtsearch.media.video.clipper import VideoDefaultClipper, VideoSceneClipper, VideoTilingClipper  # noqa: E402
 
 register_clipper(SoundDefaultClipper())
 register_clipper(SoundTilingClipper(2.0))
@@ -268,6 +268,7 @@ register_clipper(TextDefaultClipper())
 register_clipper(TextSentenceClipper())
 register_clipper(VideoDefaultClipper())
 register_clipper(VideoTilingClipper(2.0))
+register_clipper(VideoSceneClipper())
 register_clipper(DocumentDefaultClipper())
 
 

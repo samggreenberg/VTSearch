@@ -830,3 +830,206 @@ class TestDatasetRegistryClipperColumn:
         data = resp.get_json()
         ds = data["datasets"][0]
         assert ds["clipper"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Clipper parameters
+# ---------------------------------------------------------------------------
+
+
+class TestClipperParameters:
+    """Test the parameters property and with_params method on clippers."""
+
+    def test_default_clipper_has_no_parameters(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        assert c.parameters == []
+
+    def test_default_clipper_with_params_returns_self(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        assert c.with_params({"anything": 42}) is c
+
+    def test_sound_tiling_parameters(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        params = c.parameters
+        assert len(params) == 1
+        assert params[0]["key"] == "duration"
+        assert params[0]["type"] == "number"
+        assert params[0]["default"] == 2.0
+        assert params[0]["min"] == 0.1
+
+    def test_sound_tiling_with_params(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        c2 = c.with_params({"duration": 5.0})
+        assert isinstance(c2, SoundTilingClipper)
+        assert c2.duration == 5.0
+        assert c2 is not c
+        assert c.duration == 2.0  # original unchanged
+
+    def test_sound_tiling_with_params_ignores_unknown_keys(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        c2 = c.with_params({"unknown_key": 99})
+        assert c2.duration == 2.0  # falls back to current value
+
+    def test_video_tiling_parameters(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        c = VideoTilingClipper(2.0)
+        params = c.parameters
+        assert len(params) == 1
+        assert params[0]["key"] == "duration"
+        assert params[0]["default"] == 2.0
+
+    def test_video_tiling_with_params(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        c = VideoTilingClipper(2.0)
+        c2 = c.with_params({"duration": 10.0})
+        assert isinstance(c2, VideoTilingClipper)
+        assert c2.duration == 10.0
+        assert c.duration == 2.0
+
+    def test_video_scene_parameters(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper()
+        params = c.parameters
+        assert len(params) == 2
+        keys = [p["key"] for p in params]
+        assert "threshold" in keys
+        assert "min_scene_duration" in keys
+        # Check defaults match constructor defaults
+        thresh_param = next(p for p in params if p["key"] == "threshold")
+        assert thresh_param["default"] == 0.3
+        min_dur_param = next(p for p in params if p["key"] == "min_scene_duration")
+        assert min_dur_param["default"] == 1.0
+
+    def test_video_scene_with_params(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper()
+        c2 = c.with_params({"threshold": 0.5, "min_scene_duration": 2.5})
+        assert isinstance(c2, VideoSceneClipper)
+        assert c2.threshold == 0.5
+        assert c2.min_scene_duration == 2.5
+        assert c.threshold == 0.3  # original unchanged
+
+    def test_video_scene_with_partial_params(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper(threshold=0.4, min_scene_duration=1.5)
+        c2 = c.with_params({"threshold": 0.6})
+        assert c2.threshold == 0.6
+        assert c2.min_scene_duration == 1.5  # kept from original
+
+    def test_to_dict_includes_parameters(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        d = c.to_dict()
+        assert "parameters" in d
+        assert len(d["parameters"]) == 1
+        assert d["parameters"][0]["key"] == "duration"
+
+    def test_to_dict_no_parameters_for_default_clipper(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        d = c.to_dict()
+        assert "parameters" not in d
+
+
+class TestClipperParametersApi:
+    """Test that the /api/clippers endpoint returns parameter info."""
+
+    def test_clippers_api_includes_parameters(self, client):
+        resp = client.get("/api/clippers?media_type=audio")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        # sound_tiling should have parameters
+        tiling = next(c for c in clippers if c["name"].startswith("sound_tiling"))
+        assert "parameters" in tiling
+        assert len(tiling["parameters"]) == 1
+        assert tiling["parameters"][0]["key"] == "duration"
+
+    def test_default_clipper_has_no_parameters_in_api(self, client):
+        resp = client.get("/api/clippers?media_type=audio")
+        data = resp.get_json()
+        default = next(c for c in data["clippers"] if c["name"] == "sound_default")
+        assert "parameters" not in default
+
+    def test_video_scene_clipper_in_registry(self, client):
+        resp = client.get("/api/clippers?media_type=video")
+        data = resp.get_json()
+        names = [c["name"] for c in data["clippers"]]
+        assert "video_scene" in names
+        scene = next(c for c in data["clippers"] if c["name"] == "video_scene")
+        assert "parameters" in scene
+        keys = [p["key"] for p in scene["parameters"]]
+        assert "threshold" in keys
+        assert "min_scene_duration" in keys
+
+
+class TestApplyClipperWithParams:
+    """Test _apply_clipper with custom clipper_params."""
+
+    def test_apply_clipper_with_custom_duration(self):
+        from vtsearch.audio import generate_wav
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        # Generate a 10s audio clip
+        wav = generate_wav(440, 10.0)
+        media = {
+            "id": 1,
+            "type": "audio",
+            "media_bytes": wav,
+            "duration": 10.0,
+            "origin": {"importer": "test", "params": {}},
+        }
+        clips = {1: media}
+        # With default 2s duration: ceil(10/2) = 5 tiles
+        _apply_clipper(clips, "sound_tiling_2.0s")
+        assert len(clips) == 5
+
+    def test_apply_clipper_with_overridden_duration(self):
+        from vtsearch.audio import generate_wav
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        wav = generate_wav(440, 10.0)
+        media = {
+            "id": 1,
+            "type": "audio",
+            "media_bytes": wav,
+            "duration": 10.0,
+            "origin": {"importer": "test", "params": {}},
+        }
+        clips = {1: media}
+        # Override to 5s duration: ceil(10/5) = 2 tiles
+        _apply_clipper(clips, "sound_tiling_2.0s", {"duration": 5.0})
+        assert len(clips) == 2
+
+    def test_apply_clipper_params_none_uses_defaults(self):
+        from vtsearch.audio import generate_wav
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        wav = generate_wav(440, 10.0)
+        media = {
+            "id": 1,
+            "type": "audio",
+            "media_bytes": wav,
+            "duration": 10.0,
+            "origin": {"importer": "test", "params": {}},
+        }
+        clips = {1: media}
+        _apply_clipper(clips, "sound_tiling_2.0s", None)
+        assert len(clips) == 5  # default 2s → 5 tiles

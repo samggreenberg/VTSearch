@@ -336,9 +336,20 @@ export interface ProcessorImporterInfo {
 
 // --- Clippers ---
 
+export interface ClipperParameter {
+  key: string;
+  label: string;
+  type: 'number' | 'string';
+  default: number | string;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
 export interface ClipperInfo {
   name: string;
   media_type: string;
+  parameters?: ClipperParameter[];
   [key: string]: unknown;
 }
 

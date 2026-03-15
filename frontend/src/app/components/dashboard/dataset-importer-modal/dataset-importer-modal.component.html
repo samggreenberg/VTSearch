@@ -171,13 +171,43 @@
           <select
             id="field-clipper"
             class="form-select"
-            [(ngModel)]="selectedClipper"
+            [ngModel]="selectedClipper"
+            (ngModelChange)="onClipperChange($event)"
           >
             @for (clipper of availableClippers; track clipper.name) {
               <option [value]="clipper.name">{{ clipper.name }}</option>
             }
           </select>
         </div>
+        @if (selectedClipperParams.length > 0) {
+          <div class="clipper-params">
+            @for (param of selectedClipperParams; track param.key) {
+              <div class="form-group">
+                <label class="form-label" [for]="'clipper-param-' + param.key">{{ param.label }}</label>
+                @if (param.type === 'number') {
+                  <input
+                    [id]="'clipper-param-' + param.key"
+                    type="number"
+                    class="form-input"
+                    [min]="param.min"
+                    [max]="param.max"
+                    [step]="param.step"
+                    [ngModel]="clipperParamValues[param.key]"
+                    (ngModelChange)="clipperParamValues[param.key] = $event"
+                  />
+                } @else {
+                  <input
+                    [id]="'clipper-param-' + param.key"
+                    type="text"
+                    class="form-input"
+                    [ngModel]="clipperParamValues[param.key]"
+                    (ngModelChange)="clipperParamValues[param.key] = $event"
+                  />
+                }
+              </div>
+            }
+          </div>
+        }
       }
 
       @if (error) {
