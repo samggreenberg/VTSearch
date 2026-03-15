@@ -25,7 +25,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.exporters import get_exporter, list_exporters
-import vtsearch.utils.paths as _paths
+from vtsearch.routes.helpers import validate_filepath_field
 
 exporters_bp = Blueprint("exporters", __name__)
 
@@ -97,12 +97,9 @@ def run_export():
             400,
         )
 
-    # Validate server file paths to prevent path traversal
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
 
     try:
         outcome = exporter.export(results, field_values)

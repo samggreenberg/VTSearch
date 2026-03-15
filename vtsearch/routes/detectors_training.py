@@ -9,21 +9,16 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.detectors_helpers import serialize_weights, train_and_threshold, validate_good_bad_split
+from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, validate_filepath_field
 from vtsearch.models import (
     build_model_from_weights,
-    calculate_cross_calibration_threshold,
-    calculate_safe_threshold,
     collect_media_origins,
-    train_model,
 )
 from vtsearch.utils import (
     add_autorun_detector,
     get_autorun_detectors,
-    get_calibrate_count,
-    get_calibration_fraction,
     get_inclusion,
-    get_safe_thresholds,
     snapshot_medias,
 )
 import vtsearch.utils.paths as _paths
@@ -41,8 +36,6 @@ detectors_training_bp = Blueprint("detectors_training", __name__)
 @detectors_training_bp.route("/api/detector/export", methods=["POST"])
 def export_detector():
     """Train MLP on current votes and export the model weights."""
-    import torch  # noqa: PLC0415
-
     from vtsearch.utils import bad_votes, good_votes
 
     if not good_votes or not bad_votes:
@@ -65,43 +58,13 @@ def export_detector():
     if not X_list:
         return jsonify({"error": "voted medias no longer loaded — reload the dataset"}), 400
 
-    num_good = sum(1 for y_val in y_list if y_val == 1.0)
-    num_bad = len(y_list) - num_good
-    if num_good == 0 or num_bad == 0:
-        return jsonify({"error": "need at least one good and one bad vote with loaded medias"}), 400
+    try:
+        validate_good_bad_split(y_list)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-
-    input_dim = X.shape[1]
-
-    # Calculate threshold using k-fold calibration with inclusion
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        get_inclusion(),
-        calibrate_count=get_calibrate_count(),
-        calibration_fraction=get_calibration_fraction(),
-    )
-
-    # Train final model on all data with inclusion
-    model = train_model(X, y, input_dim, get_inclusion())
-
-    # Apply safe thresholds blending if enabled
-    if get_safe_thresholds():
-        all_ids = sorted(snap.keys())
-        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
-        with torch.no_grad():
-            all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-        threshold = calculate_safe_threshold(threshold, all_scores, len(X_list))
-
-    # Extract model weights
-    state_dict = model.state_dict()
-    weights = {}
-    for key, value in state_dict.items():
-        weights[key] = value.tolist()
+    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
+    weights = serialize_weights(model)
 
     # Collect origin info so the client can forward it when saving
     good_origins = collect_media_origins(good_votes, snap)
@@ -307,44 +270,14 @@ def import_detector_labels():
                 400,
             )
 
-        num_good = sum(1 for y in y_list if y == 1.0)
-        num_bad = len(y_list) - num_good
-        if num_good == 0 or num_bad == 0:
-            return (
-                jsonify({"error": "Need at least one good and one bad labeled example"}),
-                400,
-            )
+        try:
+            validate_good_bad_split(y_list)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
-        import torch  # noqa: PLC0415
-
-        X = torch.tensor(np.array(X_list), dtype=torch.float32)
-        y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-        input_dim = X.shape[1]
-
-        threshold = calculate_cross_calibration_threshold(
-            X_list,
-            y_list,
-            input_dim,
-            get_inclusion(),
-            calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
-        )
-        model = train_model(X, y, input_dim, get_inclusion())
-
-        # Apply safe thresholds blending if enabled
         snap = snapshot_medias()
-        if get_safe_thresholds() and snap:
-            all_ids = sorted(snap.keys())
-            all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-            X_all = torch.tensor(all_embs, dtype=torch.float32)
-            with torch.no_grad():
-                all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-            threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
-
-        state_dict = model.state_dict()
-        weights = {}
-        for key, value in state_dict.items():
-            weights[key] = value.tolist()
+        model, threshold = train_and_threshold(X_list, y_list, snap=snap)
+        weights = serialize_weights(model)
 
         final_media_type = detected_media_type or "audio"
         add_autorun_detector(name, final_media_type, weights, threshold, created_by=get_current_user())
@@ -387,32 +320,21 @@ def train_from_label_import(importer_name: str):
     if not snap:
         return jsonify({"error": "No medias loaded. Load a dataset first."}), 400
 
-    # Build field_values from multipart form data
-    has_file_fields = any(f.field_type == "file" for f in importer.fields)
-    field_values: dict = {}
+    field_values = extract_plugin_fields(importer)
 
+    # name comes from form data or JSON body (not a plugin field)
+    has_file_fields = any(f.field_type == "file" for f in importer.fields)
     if has_file_fields:
-        for f in importer.fields:
-            if f.field_type == "file":
-                field_values[f.key] = request.files.get(f.key)
-            else:
-                field_values[f.key] = request.form.get(f.key, f.default if f.default is not None else "")
         name = request.form.get("name", "").strip()
     else:
-        body = request.get_json(force=True, silent=True) or {}
-        for f in importer.fields:
-            field_values[f.key] = body.get(f.key, f.default if f.default is not None else "")
-        name = body.get("name", "").strip()
+        name = (request.get_json(force=True, silent=True) or {}).get("name", "").strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400
 
-    # Validate server file paths to prevent path traversal
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
 
     try:
         label_entries = importer.run(field_values)
@@ -468,24 +390,13 @@ def train_from_label_import(importer_name: str):
             400,
         )
 
-    num_good = sum(1 for y in y_list if y == 1.0)
-    num_bad = len(y_list) - num_good
-    if num_good == 0 or num_bad == 0:
-        return jsonify({"error": "Need at least one good and one bad labeled example"}), 400
+    try:
+        validate_good_bad_split(y_list)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    import torch  # noqa: PLC0415
-
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
-
-    threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, get_inclusion())
-    model = train_model(X, y, input_dim, get_inclusion())
-
-    state_dict = model.state_dict()
-    weights = {}
-    for key, value in state_dict.items():
-        weights[key] = value.tolist()
+    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
+    weights = serialize_weights(model)
 
     media_type = next(iter(snap.values())).get("type", "audio")
     good_origins = collect_media_origins(good_cids, snap)
@@ -727,12 +638,7 @@ def multi_find():
                             y_list = []
 
                     if X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list):
-                        input_dim = X_list[0].shape[0]
-                        threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, get_inclusion())
-
-                        X_train = torch.tensor(np.array(X_list), dtype=torch.float32)
-                        y_train = torch.tensor([[v] for v in y_list], dtype=torch.float32)
-                        model = train_model(X_train, y_train, input_dim, get_inclusion())
+                        model, threshold = train_and_threshold(X_list, y_list)
 
                         with torch.no_grad():
                             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
