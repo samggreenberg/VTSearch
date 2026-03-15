@@ -90,7 +90,7 @@ def _get_embedder_for_clips():
     return avail[0] if avail else None
 
 
-def _load_embedder_for_clips() -> None:
+def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
     """Eagerly load the embedder for the current dataset's media type.
 
     Called right after a dataset finishes loading so the first text sort
@@ -104,7 +104,18 @@ def _load_embedder_for_clips() -> None:
     media branch, leaving the text branch cold.  Without this warmup the
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
+
+    Args:
+        step: The step number to report for this phase.  Defaults to
+            ``_TOTAL_LOAD_STEPS`` (the last step of the demo/importer flow).
+        total_steps: The total number of steps to report.  Defaults to
+            ``_TOTAL_LOAD_STEPS``.
     """
+    if step is None:
+        step = _TOTAL_LOAD_STEPS
+    if total_steps is None:
+        total_steps = _TOTAL_LOAD_STEPS
+
     from vtsearch.media.base import intercept_tqdm_progress, intercept_weight_loading_progress
 
     emb = _get_embedder_for_clips()
@@ -113,7 +124,7 @@ def _load_embedder_for_clips() -> None:
         return
 
     def _model_load_progress(status, message, current, total):
-        update_progress(status, message, current, total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+        update_progress(status, message, current, total, step=step, total_steps=total_steps)
 
     with intercept_tqdm_progress(_model_load_progress), intercept_weight_loading_progress(
         _model_load_progress, "Loading model weights…"
@@ -123,7 +134,7 @@ def _load_embedder_for_clips() -> None:
     # Warm up the text encoder so the first text sort is instant.
     update_progress(
         "loading", "Warming up text encoder…", 0, 0,
-        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+        step=step, total_steps=total_steps,
     )
     try:
         emb.embed_text("warmup")
