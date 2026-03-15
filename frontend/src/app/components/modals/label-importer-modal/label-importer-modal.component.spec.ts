@@ -115,4 +115,23 @@ describe('LabelImporterModalComponent', () => {
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
+
+  it('should render Add media to Good and Add media to Bad buttons in picker view', () => {
+    flushInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const addGoodBtn = el.querySelector('.btn-add-good');
+    const addBadBtn = el.querySelector('.btn-add-bad');
+    expect(addGoodBtn).toBeTruthy();
+    expect(addBadBtn).toBeTruthy();
+    expect(addGoodBtn!.textContent!.trim()).toBe('Add media to Good');
+    expect(addBadBtn!.textContent!.trim()).toBe('Add media to Bad');
+  });
+
+  it('should have hidden file inputs for add-to-pile', () => {
+    flushInit();
+    fixture.detectChanges();
+    const hiddenInputs = fixture.nativeElement.querySelectorAll('.hidden-file-input');
+    expect(hiddenInputs.length).toBe(2);
+  });
 });
