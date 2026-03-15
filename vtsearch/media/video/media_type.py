@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -108,6 +107,8 @@ class VideoMediaType(MediaType):
 
     @property
     def demo_datasets(self) -> list:
+        from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR  # noqa: PLC0415
+
         cats = self._DEMO_CATEGORIES
         folder = VIDEO_DIR / "ucf101"
         return [

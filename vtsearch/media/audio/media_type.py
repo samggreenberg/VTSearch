@@ -8,12 +8,6 @@ from typing import Optional
 import numpy as np
 
 from vtsearch.config import DATA_DIR, SAMPLE_RATE
-from vtsearch.datasets.downloader import (
-    ESC50_DOWNLOAD_SIZE_MB,
-    GTZAN_DOWNLOAD_SIZE_MB,
-    SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
-    URBANSOUND8K_DOWNLOAD_SIZE_MB,
-)
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -137,6 +131,13 @@ class AudioMediaType(MediaType):
 
     @property
     def demo_datasets(self) -> list:
+        from vtsearch.datasets.downloader import (  # noqa: PLC0415
+            ESC50_DOWNLOAD_SIZE_MB,
+            GTZAN_DOWNLOAD_SIZE_MB,
+            SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            URBANSOUND8K_DOWNLOAD_SIZE_MB,
+        )
+
         cats = self._DEMO_CATEGORIES
         folder = DATA_DIR / "ESC-50-master" / "audio"
         return [

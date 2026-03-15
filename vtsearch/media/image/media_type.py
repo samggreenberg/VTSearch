@@ -7,15 +7,6 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.datasets.downloader import (
-    CALTECH101_DOWNLOAD_SIZE_MB,
-    CALTECH256_DOWNLOAD_SIZE_MB,
-    EUROSAT_DOWNLOAD_SIZE_MB,
-    FOOD101_DOWNLOAD_SIZE_MB,
-    OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
-    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-    UCSF_IDL_DOWNLOAD_SIZE_MB,
-)
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -220,6 +211,16 @@ class ImageMediaType(MediaType):
 
     @property
     def demo_datasets(self) -> list:
+        from vtsearch.datasets.downloader import (  # noqa: PLC0415
+            CALTECH101_DOWNLOAD_SIZE_MB,
+            CALTECH256_DOWNLOAD_SIZE_MB,
+            EUROSAT_DOWNLOAD_SIZE_MB,
+            FOOD101_DOWNLOAD_SIZE_MB,
+            OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+            STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+            UCSF_IDL_DOWNLOAD_SIZE_MB,
+        )
+
         cats101 = self._DEMO_CATEGORIES_CALTECH101
         cats256 = self._DEMO_CATEGORIES_CALTECH256
         return [
