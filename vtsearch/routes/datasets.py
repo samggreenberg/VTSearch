@@ -596,20 +596,20 @@ def load_registered_dataset(dataset_id: str):
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
-    _LOAD_STEPS = 4  # read pickle, process items, build diversity index, warm up embedder
+    _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
 
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
     update_progress("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
-        update_progress(status, message, current, total, step=2, total_steps=_LOAD_STEPS)
+        update_progress(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
 
     def load_task():
         try:
             update_progress(
                 "loading",
-                "Clearing previous dataset…",
+                "Preparing…",
                 0,
                 0,
                 step=1,
@@ -624,7 +624,7 @@ def load_registered_dataset(dataset_id: str):
                 "Removing duplicates…",
                 0,
                 0,
-                step=3,
+                step=2,
                 total_steps=_LOAD_STEPS,
             )
             collapse_duplicates(medias)
@@ -635,7 +635,7 @@ def load_registered_dataset(dataset_id: str):
                     "Building diversity index…",
                     current=current,
                     total=total,
-                    step=3,
+                    step=2,
                     total_steps=_LOAD_STEPS,
                 )
 
@@ -645,7 +645,7 @@ def load_registered_dataset(dataset_id: str):
             # Update item count and dupe count in case they changed
             _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
             set_dataset_display_name(entry.get("name", ""))
-            _load_embedder_for_clips()
+            _load_embedder_for_clips(step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
         except MemoryError:
             medias.clear()
             gc.collect()

@@ -157,10 +157,10 @@ def sort_clips():
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
     embedder_name = first.get("embedder", "")
-    total_steps = 1 + len(snap) + 1
+    total_steps = 3  # load embedder, embed query, compute similarities
 
     _load_embedder_with_progress(media_type, total_steps)
-    update_sort_progress("sorting", "Embedding text query…", 0, total_steps)
+    update_sort_progress("sorting", "Embedding text query…", 1, total_steps)
 
     from vtsearch import settings
 
@@ -170,7 +170,7 @@ def sort_clips():
         update_sort_progress("idle")
         return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
 
-    update_sort_progress("sorting", "Computing similarities…", 1, total_steps)
+    update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
     results, threshold = _cosine_sort(text_vec)
     update_sort_progress("idle")
     return jsonify({"results": results, "threshold": threshold})
