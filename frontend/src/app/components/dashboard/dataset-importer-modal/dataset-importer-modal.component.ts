@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo';
 
@@ -30,6 +30,7 @@ export class DatasetImporterModalComponent implements OnInit {
   // Clipper state
   availableClippers: ClipperInfo[] = [];
   selectedClipper = '';
+  clipperParamValues: Record<string, number | string> = {};
 
   // Embedder state
   allEmbedders: EmbedderInfo[] = [];
@@ -76,6 +77,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.error = '';
     this.selectedClipper = '';
     this.availableClippers = [];
+    this.clipperParamValues = {};
     this.selectedEmbedder = '';
     this.availableEmbedders = [];
 
@@ -116,8 +118,26 @@ export class DatasetImporterModalComponent implements OnInit {
         this.availableClippers = clippers;
         // Default to the first clipper (the default/null clipper)
         this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
+        this.resetClipperParams();
       },
     });
+  }
+
+  onClipperChange(clipperName: string): void {
+    this.selectedClipper = clipperName;
+    this.resetClipperParams();
+  }
+
+  get selectedClipperParams(): ClipperParameter[] {
+    const clipper = this.availableClippers.find((c) => c.name === this.selectedClipper);
+    return clipper?.parameters || [];
+  }
+
+  private resetClipperParams(): void {
+    this.clipperParamValues = {};
+    for (const param of this.selectedClipperParams) {
+      this.clipperParamValues[param.key] = param.default;
+    }
   }
 
   private loadEmbedders(mediaType: string): void {
@@ -361,6 +381,9 @@ export class DatasetImporterModalComponent implements OnInit {
     const submitValues = { ...this.formValues };
     if (this.selectedClipper) {
       submitValues['clipper'] = this.selectedClipper;
+      if (this.selectedClipperParams.length > 0 && Object.keys(this.clipperParamValues).length > 0) {
+        submitValues['clipper_params'] = { ...this.clipperParamValues };
+      }
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;

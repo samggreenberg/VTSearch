@@ -1019,6 +1019,37 @@ class MediaClipper(ABC):
         """The media ``type_id`` this clipper operates on (e.g. ``"audio"``)."""
 
     # ------------------------------------------------------------------
+    # Parameters
+    # ------------------------------------------------------------------
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        """Return a list of user-configurable parameter descriptors.
+
+        Each descriptor is a dict with keys:
+
+        * ``key`` — parameter name (used in :meth:`with_params`).
+        * ``label`` — human-readable label for the UI.
+        * ``type`` — ``"number"`` or ``"string"``.
+        * ``default`` — current/default value.
+        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+
+        Clippers with no configurable parameters return ``[]`` (the default).
+        """
+        return []
+
+    def with_params(self, params: dict[str, Any]) -> "MediaClipper":
+        """Return a **new** clipper of the same type with overridden parameters.
+
+        *params* is a dict mapping parameter keys (as declared by
+        :attr:`parameters`) to their new values.  Unknown keys are ignored.
+
+        The default implementation returns ``self`` unchanged (suitable for
+        clippers that have no parameters).
+        """
+        return self
+
+    # ------------------------------------------------------------------
     # Clipping
     # ------------------------------------------------------------------
 
@@ -1042,7 +1073,11 @@ class MediaClipper(ABC):
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable summary of this clipper's metadata."""
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "media_type": self.media_type,
         }
+        params = self.parameters
+        if params:
+            d["parameters"] = params
+        return d
