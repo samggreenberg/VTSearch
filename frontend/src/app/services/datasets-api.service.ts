@@ -46,6 +46,33 @@ export class DatasetsApiService {
     return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
   }
 
+  getDemoCategories(name: string): Observable<{ categories: string[] }> {
+    return this.http.get<{ categories: string[] }>(`/api/dataset/demo-categories/${name}`);
+  }
+
+  browseMediaFiles(
+    source: string,
+    path: string,
+  ): Observable<{
+    directories: { name: string; path: string }[];
+    files: { name: string; path: string; size_bytes: number }[];
+  }> {
+    return this.http.get<{
+      directories: { name: string; path: string }[];
+      files: { name: string; path: string; size_bytes: number }[];
+    }>('/api/browse-media-files', { params: { source, path } });
+  }
+
+  selectBrowsedFile(
+    source: string,
+    path: string,
+  ): Observable<{ filename: string; original_name: string }> {
+    return this.http.post<{ filename: string; original_name: string }>(
+      '/api/browse-media-files/select',
+      { source, path },
+    );
+  }
+
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
   }
