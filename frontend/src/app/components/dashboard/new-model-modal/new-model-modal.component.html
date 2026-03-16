@@ -18,7 +18,7 @@
         <label for="model-media-type" title="The type of media this model will process">Media Type</label>
         <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
           @for (mt of mediaTypes; track mt) {
-            <option [value]="mt">{{ mt }}</option>
+            <option [value]="mt">{{ getMediaTypeLabel(mt) }}</option>
           }
         </select>
       </div>
