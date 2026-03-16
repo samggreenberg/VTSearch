@@ -193,7 +193,7 @@ export class ChartsService {
     const treeDepth = data[0].depth;
 
     const maxLabels = Math.max(...numLabels);
-    const greenLevel = Math.ceil(0.75 * treeDepth);
+    const greenLevel = Math.min(40, treeDepth);
     const maxLevel = Math.max(greenLevel, Math.max(...levels), 1);
     const minLevel = Math.min(0, Math.min(...levels));
 

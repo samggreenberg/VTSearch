@@ -7,7 +7,6 @@ models that have already been computed.
 
 from __future__ import annotations
 
-import math
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -640,6 +639,12 @@ def compute_labeling_status(
     # Span status from diversity tree info (passed in from the route).
     # ``level`` is the number of consecutive BFS-order seen nodes and
     # ``depth`` is the total number of nodes (the maximum diversity level).
+    #
+    # The old metric required 4 full tree levels for green, which in a k=3
+    # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
+    # nodes (capped at total), yellow at 10, red below 10.
+    SPAN_GREEN = 40
+    SPAN_YELLOW = 10
     if span_info is None:
         span = {
             "status": "red",
@@ -650,26 +655,26 @@ def compute_labeling_status(
     else:
         level = span_info["level"]
         total = span_info["depth"]  # total nodes
+        green_at = min(SPAN_GREEN, total)
+        yellow_at = min(SPAN_YELLOW, green_at)
         if total <= 0:
             span = {"status": "green", "reason": "Degenerate tree.", **span_info}
-        elif level >= total:
-            span = {"status": "green", "reason": "All tree nodes covered.", **span_info}
-        elif level >= math.ceil(total * 0.75):
+        elif level >= green_at:
             span = {
                 "status": "green",
-                "reason": f"{level}/{total} nodes covered.",
+                "reason": "All tree nodes covered." if level >= total else f"{level}/{total} nodes covered.",
                 **span_info,
             }
-        elif level < math.ceil(total * 0.25):
+        elif level >= yellow_at:
             span = {
-                "status": "red",
-                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
+                "status": "yellow",
+                "reason": f"{level}/{total} nodes covered.",
                 **span_info,
             }
         else:
             span = {
-                "status": "yellow",
-                "reason": f"{level}/{total} nodes covered.",
+                "status": "red",
+                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
                 **span_info,
             }
 

@@ -435,13 +435,13 @@ class TestDiversityLevelOverTime:
         for i in range(1, len(levels)):
             assert levels[i] >= levels[i - 1], f"Diversity level decreased at step {i}: {levels[i - 1]} -> {levels[i]}"
 
-    def test_labeling_status_includes_fractional_level(self, client):
-        """The /api/labeling-status span info should include fractional_level."""
+    def test_labeling_status_includes_diversity_level(self, client):
+        """The /api/labeling-status span info should include diversity_level."""
         _build_tree()
         diversity_tree_label(1)
         good_votes[1] = None
 
         resp = client.get("/api/labeling-status")
         data = resp.get_json()
-        assert "fractional_level" in data["span"]
-        assert isinstance(data["span"]["fractional_level"], (int, float))
+        assert "diversity_level" in data["span"]
+        assert isinstance(data["span"]["diversity_level"], (int, float))

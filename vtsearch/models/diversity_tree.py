@@ -287,8 +287,7 @@ class DiversityTree:
 
         Returns a dict with:
         - level: number of consecutive BFS-order seen nodes
-        - fractional_level: same as level (float)
-        - diversity_level: alias for level (float)
+        - diversity_level: same as level
         - depth: total number of nodes (the maximum diversity level)
         - max_level: alias for depth
         """
@@ -297,8 +296,7 @@ class DiversityTree:
 
         return {
             "level": level,
-            "fractional_level": float(level),
-            "diversity_level": float(level),
+            "diversity_level": level,
             "depth": total,
             "max_level": total,
         }

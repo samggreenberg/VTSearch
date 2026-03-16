@@ -329,22 +329,20 @@ class TestDiversityLevel:
 
 
 class TestSpanInfo:
-    def test_span_info_includes_fractional_level(self):
-        vecs = _make_clustered_vectors([30, 30], dim=32)
-        tree = DiversityTree(vecs, k=2, min_node_size=10)
-        tree.label(1)
-        info = tree.span_info()
-        assert "fractional_level" in info
-        assert isinstance(info["fractional_level"], float)
-        assert info["fractional_level"] > 0.0
-
     def test_span_info_diversity_matches_level(self):
         vecs = _make_clustered_vectors([30, 30], dim=32)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
         tree.label(1)
         info = tree.span_info()
-        assert info["diversity_level"] == float(tree.diversity_level())
+        assert info["diversity_level"] == tree.diversity_level()
         assert info["max_level"] == tree.total_nodes
+
+    def test_span_info_has_expected_keys(self):
+        vecs = _make_clustered_vectors([30, 30], dim=32)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+        tree.label(1)
+        info = tree.span_info()
+        assert set(info.keys()) == {"level", "diversity_level", "depth", "max_level"}
 
 
 # ---------------------------------------------------------------------------
