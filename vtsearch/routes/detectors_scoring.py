@@ -63,8 +63,10 @@ def detector_sort():
     all_ids = sorted(snap.keys())
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
+
     with torch.no_grad():
-        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+        raw_logits = model(X_all)
+        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)

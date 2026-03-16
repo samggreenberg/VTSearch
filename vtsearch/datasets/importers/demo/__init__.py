@@ -12,6 +12,7 @@ embedding model and applying a media-type converter respectively.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
@@ -123,6 +124,74 @@ class DemoDatasetImporter(DatasetImporter):
         if converter:
             field_values["converter"] = converter
         return field_values
+
+    def resolve_file(self, origin: dict[str, Any], origin_name: str = "", filename: str = "") -> Path | None:
+        """Resolve a media file from a demo dataset origin.
+
+        Maps the demo dataset name to its source, then resolves the file
+        within the expected download directory on disk.
+        """
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        params = origin.get("params", {})
+        demo_name = params.get("name", "")
+        if not demo_name:
+            return None
+
+        entry = DEMO_DATASETS.get(demo_name)
+        if not entry:
+            return None
+
+        source = entry.get("source", "")
+        root = _source_directory(source)
+        # Fall back to required_folder (e.g. ESC-50 has no explicit source)
+        if root is None:
+            rf = entry.get("required_folder")
+            if rf is not None:
+                root = Path(rf)
+            else:
+                return None
+
+        # Try origin_name first (e.g. "kangaroo/image_0017.jpg"), then filename
+        for name in (origin_name, filename):
+            if name:
+                candidate = root / name
+                if candidate.is_file():
+                    return candidate
+
+        return None
+
+
+# Source name → expected download directory (without triggering downloads).
+_SOURCE_DIRS: dict[str, Path] | None = None
+
+
+def _source_directory(source: str) -> Path | None:
+    """Return the on-disk root directory for a demo dataset *source*."""
+    global _SOURCE_DIRS  # noqa: PLW0603
+    if _SOURCE_DIRS is None:
+        from vtsearch.config import DATA_DIR
+
+        video_dir = DATA_DIR / "video"
+        _SOURCE_DIRS = {
+            # Image sources
+            "caltech101": DATA_DIR / "caltech-101" / "101_ObjectCategories",
+            "caltech256": DATA_DIR / "caltech-256" / "256_ObjectCategories",
+            "oxford_flowers_102": DATA_DIR / "oxford_flowers",
+            "food101": DATA_DIR / "food-101" / "images",
+            "eurosat": DATA_DIR / "EuroSAT_RGB",
+            "stanford_dogs": DATA_DIR / "stanford_dogs" / "Images",
+            "ucsf_documents": DATA_DIR / "ucsf_documents",
+            "cifar10_sample": DATA_DIR / "cifar-10-batches-py",
+            # Audio sources
+            "esc50": DATA_DIR / "ESC-50-master" / "audio",
+            "gtzan": DATA_DIR / "gtzan" / "genres",
+            "speech_commands_v2": DATA_DIR / "speech_commands_v2",
+            "urbansound8k": DATA_DIR / "UrbanSound8K",
+            # Video sources
+            "ucf101": video_dir / "ucf101",
+        }
+    return _SOURCE_DIRS.get(source)
 
 
 IMPORTER = DemoDatasetImporter()

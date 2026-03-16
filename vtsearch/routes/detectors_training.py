@@ -442,6 +442,113 @@ def train_from_label_import(importer_name: str):
 # ---------------------------------------------------------------------------
 
 
+@detectors_training_bp.route("/api/find/check-labels", methods=["POST"])
+def find_check_labels():
+    """Pre-flight check: report how many trainable-model labels can be resolved.
+
+    Takes the same ``model_ids`` / ``dataset_ids`` payload as ``/api/find``
+    and returns per-model resolution statistics so the frontend can warn the
+    user before starting the (potentially expensive) Find operation.
+
+    Returns JSON::
+
+        {
+            "warnings": [
+                {
+                    "model_name": "Mammals",
+                    "total_labels": 82,
+                    "resolved_labels": 60,
+                    "failed_labels": 22
+                }
+            ]
+        }
+
+    ``warnings`` only contains entries for models that have at least one
+    unresolved label.  An empty ``warnings`` list means everything is fine.
+    """
+    from vtsearch.datasets.loader import safe_pickle_load
+    from vtsearch.datasets.registry import get_dataset as reg_get_ds
+    from vtsearch.models.registry import get_model as reg_get_model
+    from vtsearch.routes.trainable_models import _model_path, _read_model
+
+    body = request.get_json(force=True, silent=True) or {}
+    dataset_ids = body.get("dataset_ids", [])
+    model_ids = body.get("model_ids", [])
+
+    if not dataset_ids or not model_ids:
+        return jsonify({"warnings": []})
+
+    # Collect trainable models that need label resolution
+    warnings: list[dict] = []
+    for m_id in model_ids:
+        m = reg_get_model(m_id)
+        if m is None:
+            continue
+        tm_name = m.get("trainable_model_name", "")
+        if not tm_name:
+            continue
+
+        tm_path = _model_path(tm_name)
+        tm_data = _read_model(tm_path)
+        if not tm_data:
+            continue
+        labels = tm_data.get("labelset", {}).get("labels", [])
+        if not labels:
+            continue
+
+        # Check if labels match any of the selected datasets directly
+        any_direct_match = False
+        for ds_id in dataset_ids:
+            ds = reg_get_ds(ds_id)
+            if ds is None:
+                continue
+            pkl_path = ds.get("pkl_path", "")
+            if not pkl_path or not Path(pkl_path).is_file():
+                continue
+            try:
+                with open(pkl_path, "rb") as f:
+                    pkl_data = safe_pickle_load(f)
+                raw_medias = pkl_data["medias"] if isinstance(pkl_data, dict) and "medias" in pkl_data else pkl_data
+                temp_medias = {}
+                for cid, mdata in raw_medias.items():
+                    mid = int(cid) if not isinstance(cid, int) else cid
+                    temp_medias[mid] = {**mdata, "id": mid}
+            except Exception:
+                continue
+
+            from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+            origin_lookup, md5_lookup = build_media_lookup(temp_medias)
+            matched = 0
+            for lbl in labels:
+                if resolve_media_ids(lbl, origin_lookup, md5_lookup):
+                    matched += 1
+            if matched > 0:
+                any_direct_match = True
+                break
+
+        if any_direct_match:
+            # Labels matched the dataset directly — no resolution needed
+            continue
+
+        # Cross-dataset scenario: try the resolver
+        from vtsearch.models.resolver import resolve_label_embeddings
+
+        media_type = tm_data.get("media_type", "audio")
+        resolved = resolve_label_embeddings(labels, media_type)
+
+        failed = resolved.total_count - resolved.resolved_count
+        if failed > 0:
+            warnings.append({
+                "model_name": m.get("name", tm_name),
+                "total_labels": resolved.total_count,
+                "resolved_labels": resolved.resolved_count,
+                "failed_labels": failed,
+            })
+
+    return jsonify({"warnings": warnings})
+
+
 @detectors_training_bp.route("/api/find", methods=["POST"])
 def multi_find():
     """Run selected models on selected datasets and return merged results.
@@ -501,7 +608,8 @@ def multi_find():
         # Try autorun detector first (has weights)
         if det_name:
             det = get_autorun_detectors().get(det_name)
-            if det and det.get("weights"):
+            has_weights = det and det.get("weights")
+            if has_weights:
                 model_configs.append(
                     {
                         "name": m["name"],
@@ -591,8 +699,10 @@ def multi_find():
                 try:
                     model = build_model_from_weights(mc["weights"])
                     with torch.no_grad():
-                        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+                        raw_logits = model(X_all)
+                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
                     threshold = mc.get("threshold", 0.5)
+
                     for cid, score in zip(all_ids, scores):
                         verdict = "Good" if score >= threshold else "Bad"
                         media_results[cid]["model_verdicts"][mc["name"]] = {
