@@ -95,5 +95,5 @@
 </div>
 
 @if (showLeftViewSettings) {
-  <vt-left-view-settings-modal (closed)="showLeftViewSettings = false" />
+  <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
 }
