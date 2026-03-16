@@ -65,18 +65,26 @@ class SoundTilingClipper(MediaClipper):
     last ends at 9.5 s (with a little overlap between neighbours when the
     total duration is not an exact multiple of the segment size).
 
+    If *min_overlap* is set, the clipper ensures that consecutive segments
+    overlap by at least that many seconds (producing more tiles when needed).
+
     If the audio is shorter than or equal to *duration*, a single segment
     covering the full audio is returned.
     """
 
-    def __init__(self, duration: float) -> None:
+    def __init__(self, duration: float, min_overlap: float = 0.0) -> None:
         if duration <= 0:
             raise ValueError("duration must be positive")
+        if min_overlap < 0:
+            raise ValueError("min_overlap must be non-negative")
+        if min_overlap >= duration:
+            raise ValueError("min_overlap must be less than duration")
         self._duration = duration
+        self._min_overlap = min_overlap
 
     @property
     def name(self) -> str:
-        return f"sound_tiling_{self._duration}s"
+        return "sound_tiling"
 
     @property
     def media_type(self) -> str:
@@ -85,6 +93,10 @@ class SoundTilingClipper(MediaClipper):
     @property
     def duration(self) -> float:
         return self._duration
+
+    @property
+    def min_overlap(self) -> float:
+        return self._min_overlap
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         wav_bytes = media.get("media_bytes")
@@ -97,7 +109,8 @@ class SoundTilingClipper(MediaClipper):
         if total <= seg:
             return [media]
 
-        n_tiles = max(1, math.ceil(total / seg))
+        max_stride = seg - self._min_overlap
+        n_tiles = max(1, math.ceil((total - seg) / max_stride) + 1)
         # Space n_tiles segments so that the first starts at 0 and the last
         # ends at *total*.  When n_tiles == 1 this degenerates to [0, seg).
         if n_tiles == 1:
@@ -131,13 +144,24 @@ class SoundTilingClipper(MediaClipper):
                 "max": 300,
                 "step": 0.1,
             },
+            {
+                "key": "min_overlap",
+                "label": "Minimum overlap (seconds)",
+                "type": "number",
+                "default": self._min_overlap,
+                "min": 0,
+                "max": 299.9,
+                "step": 0.1,
+            },
         ]
 
     def with_params(self, params: dict[str, Any]) -> "SoundTilingClipper":
         duration = float(params.get("duration", self._duration))
-        return SoundTilingClipper(duration)
+        min_overlap = float(params.get("min_overlap", self._min_overlap))
+        return SoundTilingClipper(duration, min_overlap)
 
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["duration"] = self._duration
+        d["min_overlap"] = self._min_overlap
         return d

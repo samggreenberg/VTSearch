@@ -31,6 +31,9 @@ class VideoTilingClipper(MediaClipper):
     last ends at 9.5 s (with a little overlap between neighbours when the
     total duration is not an exact multiple of the segment size).
 
+    If *min_overlap* is set, the clipper ensures that consecutive segments
+    overlap by at least that many seconds (producing more tiles when needed).
+
     If the video is shorter than or equal to *duration*, a single segment
     covering the full video is returned.
 
@@ -41,14 +44,19 @@ class VideoTilingClipper(MediaClipper):
     trim on playback.
     """
 
-    def __init__(self, duration: float) -> None:
+    def __init__(self, duration: float, min_overlap: float = 0.0) -> None:
         if duration <= 0:
             raise ValueError("duration must be positive")
+        if min_overlap < 0:
+            raise ValueError("min_overlap must be non-negative")
+        if min_overlap >= duration:
+            raise ValueError("min_overlap must be less than duration")
         self._duration = duration
+        self._min_overlap = min_overlap
 
     @property
     def name(self) -> str:
-        return f"video_tiling_{self._duration}s"
+        return "video_tiling"
 
     @property
     def media_type(self) -> str:
@@ -58,6 +66,10 @@ class VideoTilingClipper(MediaClipper):
     def duration(self) -> float:
         return self._duration
 
+    @property
+    def min_overlap(self) -> float:
+        return self._min_overlap
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         total = media.get("duration", 0)
         seg = self._duration
@@ -65,7 +77,8 @@ class VideoTilingClipper(MediaClipper):
         if total <= seg:
             return [media]
 
-        n_tiles = max(1, math.ceil(total / seg))
+        max_stride = seg - self._min_overlap
+        n_tiles = max(1, math.ceil((total - seg) / max_stride) + 1)
         if n_tiles == 1:
             starts = [0.0]
         else:
@@ -94,15 +107,26 @@ class VideoTilingClipper(MediaClipper):
                 "max": 300,
                 "step": 0.1,
             },
+            {
+                "key": "min_overlap",
+                "label": "Minimum overlap (seconds)",
+                "type": "number",
+                "default": self._min_overlap,
+                "min": 0,
+                "max": 299.9,
+                "step": 0.1,
+            },
         ]
 
     def with_params(self, params: dict[str, Any]) -> "VideoTilingClipper":
         duration = float(params.get("duration", self._duration))
-        return VideoTilingClipper(duration)
+        min_overlap = float(params.get("min_overlap", self._min_overlap))
+        return VideoTilingClipper(duration, min_overlap)
 
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["duration"] = self._duration
+        d["min_overlap"] = self._min_overlap
         return d
 
 

@@ -1011,12 +1011,22 @@ class MediaClipper(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Unique identifier for this clipper, e.g. ``"video_tiling_2s"``."""
+        """Unique identifier for this clipper, e.g. ``"video_tiling"``."""
 
     @property
     @abstractmethod
     def media_type(self) -> str:
         """The media ``type_id`` this clipper operates on (e.g. ``"audio"``)."""
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable name for UI dropdowns.
+
+        Defaults to title-casing the :attr:`name` with underscores replaced
+        by spaces (e.g. ``"sound_tiling"`` → ``"Sound Tiling"``).  Subclasses
+        may override for a custom label.
+        """
+        return self.name.replace("_", " ").title()
 
     # ------------------------------------------------------------------
     # Parameters
@@ -1075,6 +1085,7 @@ class MediaClipper(ABC):
         """Return a JSON-serialisable summary of this clipper's metadata."""
         d: dict[str, Any] = {
             "name": self.name,
+            "display_name": self.display_name,
             "media_type": self.media_type,
         }
         params = self.parameters

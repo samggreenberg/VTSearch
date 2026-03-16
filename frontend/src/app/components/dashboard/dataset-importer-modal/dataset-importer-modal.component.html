@@ -175,7 +175,7 @@
             (ngModelChange)="onClipperChange($event)"
           >
             @for (clipper of availableClippers; track clipper.name) {
-              <option [value]="clipper.name">{{ clipper.name }}</option>
+              <option [value]="clipper.name">{{ clipper.display_name || clipper.name }}</option>
             }
           </select>
         </div>
