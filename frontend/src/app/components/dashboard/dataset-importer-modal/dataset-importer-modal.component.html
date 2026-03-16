@@ -84,7 +84,7 @@
                   <td class="col-name">{{ demo.label }}</td>
                   <td class="col-num">{{ demo.num_files }}</td>
                   <td class="col-num">{{ demo.num_categories }}</td>
-                  <td class="col-desc" [title]="demo.description">{{ demo.description.length > 60 ? demo.description.slice(0, 57) + '...' : demo.description }}</td>
+                  <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
                   <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
                 </tr>
               }
