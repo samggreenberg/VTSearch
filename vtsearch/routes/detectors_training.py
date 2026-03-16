@@ -508,7 +508,6 @@ def multi_find():
                         "model_id": m["id"],
                         "weights": det["weights"],
                         "threshold": det.get("threshold", 0.5),
-                        "num_labels": det.get("num_labels", 0),
                     }
                 )
                 continue
@@ -594,19 +593,6 @@ def multi_find():
                     with torch.no_grad():
                         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
                     threshold = mc.get("threshold", 0.5)
-
-                    # Recalibrate threshold for the target dataset's score
-                    # distribution.  The stored threshold was calibrated on the
-                    # training data; on a different dataset the MLP produces a
-                    # shifted score distribution so the original threshold may
-                    # be too high (or low).  Blend with a GMM-derived threshold
-                    # from the target scores — with many training labels the
-                    # stored threshold dominates; with few the GMM adapts.
-                    from vtsearch.models import calculate_safe_threshold
-
-                    n_labels = mc.get("num_labels", 0)
-                    threshold = calculate_safe_threshold(threshold, scores, n_labels)
-
                     for cid, score in zip(all_ids, scores):
                         verdict = "Good" if score >= threshold else "Bad"
                         media_results[cid]["model_verdicts"][mc["name"]] = {
@@ -663,12 +649,6 @@ def multi_find():
 
                         with torch.no_grad():
                             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-
-                        # Recalibrate threshold for the target dataset's
-                        # score distribution (same logic as pre-trained path).
-                        from vtsearch.models import calculate_safe_threshold
-
-                        threshold = calculate_safe_threshold(threshold, scores, len(y_list))
 
                         for cid, score in zip(all_ids, scores):
                             verdict = "Good" if score >= threshold else "Bad"
