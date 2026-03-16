@@ -530,6 +530,8 @@ def multi_find():
 
     # Run Find across all datasets × models
     all_results = []
+    all_negative_results = []
+    detected_media_type = ""
     multiple_datasets = len(datasets) > 1
     multiple_models = len(model_configs) > 1
     model_names = [mc["name"] for mc in model_configs]
@@ -557,6 +559,11 @@ def multi_find():
 
         if not temp_medias:
             continue
+
+        # Detect media type from loaded dataset
+        if not detected_media_type:
+            first_media = next(iter(temp_medias.values()), {})
+            detected_media_type = first_media.get("type", "")
 
         # Build embeddings tensor
         all_ids = sorted(temp_medias.keys())
@@ -663,11 +670,13 @@ def multi_find():
                             "score": 0,
                         }
 
-        # Collect positive hits (Good for at least one model)
+        # Collect positive and negative hits
         for cid, mr in media_results.items():
             verdicts = mr["model_verdicts"]
             if any(v["verdict"] == "Good" for v in verdicts.values()):
                 all_results.append(mr)
+            elif any(v["verdict"] in ("Bad", "Error", "N/A") for v in verdicts.values()):
+                all_negative_results.append(mr)
 
         # Free memory
         del temp_medias, X_all
@@ -676,8 +685,10 @@ def multi_find():
     return jsonify(
         {
             "results": all_results,
+            "negative_results": all_negative_results,
             "datasets": [ds["name"] for ds in datasets],
             "models": model_names,
+            "media_type": detected_media_type,
             "multiple_datasets": multiple_datasets,
             "multiple_models": multiple_models,
             "total_hits": len(all_results),

@@ -514,14 +514,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.progressIndeterminate = false;
 
         // Convert /api/find response to AutoDetectResultsData format
-        const hits = (response.results || []).map((r: any) => ({
+        const mapHit = (r: any) => ({
           md5: r.md5 || '',
           filename: r.filename || '',
           origin_name: r.origin_name || '',
           origin: r.origin,
           dataset_name: r.dataset_name || '',
           model_verdicts: r.model_verdicts || {},
-        }));
+        });
+
+        const hits = (response.results || []).map(mapHit);
+        const negativeHits = (response.negative_results || []).map(mapHit);
 
         const modelNames: string[] = response.models || [];
         const detectorResults: Record<string, any> = {};
@@ -533,6 +536,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             detector_name: label,
             total_hits: hits.length,
             hits,
+            negative_hits: negativeHits,
           };
         } else {
           // Multiple models: group hits by model
@@ -540,16 +544,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
             const modelHits = hits.filter(
               (h: any) => h.model_verdicts?.[name]?.verdict === 'Good',
             );
+            const modelNegHits = negativeHits.filter(
+              (h: any) => h.model_verdicts?.[name]?.verdict !== 'Good',
+            );
             detectorResults[name] = {
               detector_name: name,
               total_hits: modelHits.length,
               hits: modelHits,
+              negative_hits: modelNegHits,
             };
           }
         }
 
         this.findResultsData = {
-          media_type: `Find (${response.total_hits || 0} hits)`,
+          media_type: response.media_type || 'unknown',
           detectors_run: modelNames.length,
           results: detectorResults,
           models: modelNames,

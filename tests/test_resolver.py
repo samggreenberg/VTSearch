@@ -296,7 +296,6 @@ class TestMultiFindCrossDatasetFallback:
 
         from vtsearch.datasets.registry import register_dataset
         from vtsearch.models.registry import register_model
-        from vtsearch.utils import medias, snapshot_medias
 
         # Create a folder with media files for the trainable model's labels
         label_folder = tmp_path / "label_audio"
@@ -404,3 +403,171 @@ class TestMultiFindCrossDatasetFallback:
             verdicts = r["model_verdicts"]
             assert "Test Cross Detector" in verdicts
             assert verdicts["Test Cross Detector"]["verdict"] in ("Good", "Bad")
+
+    def test_find_returns_media_type(self, client, tmp_path):
+        """The /api/find response should include the media_type from the dataset."""
+        import json
+        import pickle
+        import time
+
+        from vtsearch.datasets.registry import register_dataset
+        from vtsearch.models.registry import register_model
+
+        # Create a target dataset pkl
+        target_medias = {}
+        for i in range(5):
+            emb = np.random.RandomState(i).randn(512).astype(np.float32)
+            target_medias[i] = {
+                "id": i,
+                "type": "audio",
+                "embedding": emb,
+                "md5": f"mt_md5_{i}",
+                "filename": f"mt_{i}.wav",
+                "origin_name": f"mt_{i}.wav",
+                "origin": {"importer": "folder", "params": {"path": "/mt/folder"}},
+            }
+
+        pkl_path = tmp_path / "mt_target.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": target_medias}, f)
+
+        ds = register_dataset(name="mt_ds", media_type="audio", num_items=5, pkl_path=str(pkl_path))
+
+        # Create a trainable model with labels
+        label_folder = tmp_path / "mt_label_audio"
+        label_folder.mkdir()
+        (label_folder / "good.wav").write_bytes(b"good_content")
+        (label_folder / "bad.wav").write_bytes(b"bad_content")
+
+        label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
+        from vtsearch.routes.trainable_models import _model_path, _write_model
+
+        tm_name = "test_mt_detector"
+        tm_data = {
+            "name": "Test MT Detector",
+            "text_query": "",
+            "media_type": "audio",
+            "examples": [],
+            "created_at": time.time(),
+            "labelset": {
+                "labels": [
+                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
+                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                ]
+            },
+        }
+        _write_model(_model_path(tm_name), tm_data)
+
+        model_entry = register_model(
+            name="Test MT Detector",
+            media_type="audio",
+            trainable=True,
+            num_training=2,
+            trainable_model_name=tm_name,
+        )
+
+        good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
+        bad_emb = np.random.RandomState(200).randn(512).astype(np.float32)
+
+        def fake_embed(path, media_type):
+            return good_emb if "good" in Path(path).name else bad_emb
+
+        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+            resp = client.post(
+                "/api/find",
+                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                content_type="application/json",
+            )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["media_type"] == "audio"
+
+    def test_find_returns_negative_results(self, client, tmp_path):
+        """The /api/find response should include negative_results for Bad verdicts."""
+        import json
+        import pickle
+        import time
+
+        from vtsearch.datasets.registry import register_dataset
+        from vtsearch.models.registry import register_model
+
+        # Create a target dataset pkl
+        target_medias = {}
+        for i in range(5):
+            emb = np.random.RandomState(i).randn(512).astype(np.float32)
+            target_medias[i] = {
+                "id": i,
+                "type": "image",
+                "embedding": emb,
+                "md5": f"nr_md5_{i}",
+                "filename": f"nr_{i}.jpg",
+                "origin_name": f"nr_{i}.jpg",
+                "origin": {"importer": "folder", "params": {"path": "/nr/folder"}},
+            }
+
+        pkl_path = tmp_path / "nr_target.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": target_medias}, f)
+
+        ds = register_dataset(name="nr_ds", media_type="image", num_items=5, pkl_path=str(pkl_path))
+
+        # Create a trainable model with labels
+        label_folder = tmp_path / "nr_label"
+        label_folder.mkdir()
+        (label_folder / "good.jpg").write_bytes(b"good_content")
+        (label_folder / "bad.jpg").write_bytes(b"bad_content")
+
+        label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
+        from vtsearch.routes.trainable_models import _model_path, _write_model
+
+        tm_name = "test_nr_detector"
+        tm_data = {
+            "name": "Test NR Detector",
+            "text_query": "",
+            "media_type": "image",
+            "examples": [],
+            "created_at": time.time(),
+            "labelset": {
+                "labels": [
+                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.jpg", "filename": "good.jpg"},
+                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.jpg", "filename": "bad.jpg"},
+                ]
+            },
+        }
+        _write_model(_model_path(tm_name), tm_data)
+
+        model_entry = register_model(
+            name="Test NR Detector",
+            media_type="image",
+            trainable=True,
+            num_training=2,
+            trainable_model_name=tm_name,
+        )
+
+        good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
+        bad_emb = np.random.RandomState(200).randn(512).astype(np.float32)
+
+        def fake_embed(path, media_type):
+            return good_emb if "good" in Path(path).name else bad_emb
+
+        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+            resp = client.post(
+                "/api/find",
+                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                content_type="application/json",
+            )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        # Should have both results and negative_results
+        assert "negative_results" in data
+        assert isinstance(data["negative_results"], list)
+
+        # Total of results + negative_results should equal the dataset size
+        total = len(data["results"]) + len(data["negative_results"])
+        assert total == 5
+
+        # media_type should be set correctly from the dataset
+        assert data["media_type"] == "image"
