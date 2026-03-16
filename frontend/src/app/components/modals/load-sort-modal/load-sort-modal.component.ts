@@ -88,23 +88,6 @@ export class LoadSortModalComponent implements OnInit {
 
   // --- Detector loading ---
 
-  onDetectorFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string);
-        this.detectorLoaded.emit(data);
-        this.closed.emit();
-      } catch {
-        this.error = 'Invalid detector file';
-      }
-    };
-    reader.readAsText(file);
-  }
-
   loadServerDetector(name: string): void {
     this.status = 'Loading server detector...';
     this.detectorsApi.getServerFile(name).subscribe({
