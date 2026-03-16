@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
@@ -16,6 +16,7 @@ import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
   styleUrl: './left-view-settings-modal.component.scss',
 })
 export class LeftViewSettingsModalComponent implements OnInit {
+  @Input() currentMediaType = '';
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
@@ -38,6 +39,9 @@ export class LeftViewSettingsModalComponent implements OnInit {
       next: (res) => {
         this.settings = res.settings;
         this.mediaTypes = res.mediaTypes.media_types || [];
+        if (this.currentMediaType) {
+          this.mediaTypes = this.mediaTypes.filter(mt => mt.type_id === this.currentMediaType);
+        }
         if (this.mediaTypes.length > 0) {
           this.activeViewTab = this.mediaTypes[0].type_id;
         }

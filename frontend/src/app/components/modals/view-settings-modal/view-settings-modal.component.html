@@ -3,16 +3,18 @@
     <p class="empty-state">Loading...</p>
   } @else {
     @if (mediaTypes.length > 0) {
-      <div class="view-tabs">
-        @for (mt of mediaTypes; track mt.type_id) {
-          <button
-            class="view-tab"
-            [class.view-tab--active]="activeViewTab === mt.type_id"
-            (click)="activeViewTab = mt.type_id">
-            {{ mt.name }}
-          </button>
-        }
-      </div>
+      @if (mediaTypes.length > 1) {
+        <div class="view-tabs">
+          @for (mt of mediaTypes; track mt.type_id) {
+            <button
+              class="view-tab"
+              [class.view-tab--active]="activeViewTab === mt.type_id"
+              (click)="activeViewTab = mt.type_id">
+              {{ mt.name }}
+            </button>
+          }
+        </div>
+      }
       <div class="view-tab-content">
         <div class="form-group">
           <label class="form-label">View</label>

@@ -64,5 +64,5 @@
 }
 
 @if (showViewSettings) {
-  <vt-view-settings-modal (closed)="showViewSettings = false" />
+  <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
 }
