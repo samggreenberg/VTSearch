@@ -61,6 +61,58 @@ def clear_progress_cache() -> None:
         _live_models.clear()
 
 
+def invalidate_progress_cache_from(media_id: int) -> None:
+    """Truncate the progress cache to just before *media_id* first appeared.
+
+    Called when a vote switches polarity (good→bad or bad→good).  Steps
+    before the media was first labeled are still valid — their models never
+    included this media in training data.  Only steps from the first
+    appearance onward are discarded so they can be retrained and their
+    stability/evaluation metrics recomputed.
+    """
+    global _cache_prev_predictions, _cache_diversity_tree
+    with _progress_lock:
+        # Find the first cached step that includes media_id in its training data.
+        truncate_at = None
+        for i, step in enumerate(_cached_steps):
+            if media_id in step["good_ids"] or media_id in step["bad_ids"]:
+                truncate_at = i
+                break
+
+        if truncate_at is None:
+            # Media never appeared in any cached step.  Still need to clear
+            # live models — they may have been injected by learned-sort
+            # without building the progress cache.
+            _live_models.clear()
+            return
+
+        if truncate_at == 0:
+            # Media was present from the very first step — full clear.
+            clear_progress_cache()
+            return
+
+        # Keep steps [0, truncate_at); discard the rest.
+        del _cached_steps[truncate_at:]
+
+        # Restore running ID sets from the last kept step.
+        last = _cached_steps[-1]
+        _cache_good_ids.clear()
+        _cache_good_ids.update(last["good_ids"])
+        _cache_bad_ids.clear()
+        _cache_bad_ids.update(last["bad_ids"])
+
+        # Reset the stability prediction chain — it will restart from the
+        # truncation point when _ensure_cache replays the remaining history.
+        _cache_prev_predictions = None
+
+        # Rebuild the diversity tree on next _ensure_cache call so its label
+        # state is re-synced from the truncation point forward.
+        _cache_diversity_tree = None
+
+        # Clear live models — some may have been trained with the old label.
+        _live_models.clear()
+
+
 def inject_live_model(
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
