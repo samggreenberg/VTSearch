@@ -61,7 +61,7 @@
               <div class="view-side-section">
                 <h4>Left Side</h4>
                 <div class="form-group">
-                  <label class="form-label">View</label>
+                  <label class="form-label">View Mode:</label>
                   <div class="radio-group">
                     <label class="radio-row">
                       <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_left', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'list')" />
@@ -74,7 +74,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Focus mode</label>
+                  <label class="form-label">Focus Mode:</label>
                   <div class="radio-group">
                     <label class="radio-row">
                       <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" />
@@ -87,8 +87,8 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Grid columns</label>
-                  <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
+                  <label class="form-label"># Grid Columns:</label>
+                  <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Panel px</label>
@@ -98,7 +98,7 @@
               <div class="view-side-section">
                 <h4>Right Side</h4>
                 <div class="form-group">
-                  <label class="form-label">View</label>
+                  <label class="form-label">View Mode:</label>
                   <div class="radio-group">
                     <label class="radio-row">
                       <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_right', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'list')" />
@@ -111,7 +111,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Focus mode</label>
+                  <label class="form-label">Focus Mode:</label>
                   <div class="radio-group">
                     <label class="radio-row">
                       <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" />
@@ -124,8 +124,8 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Grid columns</label>
-                  <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
+                  <label class="form-label"># Grid Columns:</label>
+                  <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Panel px</label>
