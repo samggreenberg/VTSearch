@@ -50,8 +50,15 @@
       <vt-inclusion-slider
         [value]="inclusion"
         (valueChange)="inclusionChange.emit($event)"
-        (viewClicked)="showLeftViewSettings = true"
       />
+
+      <div class="images-header">
+        <h3 class="images-header-title">
+          {{ mediaTypeName }}
+          <span class="images-header-count">({{ medias.length }})</span>
+        </h3>
+        <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+      </div>
 
       <div class="media-list-container">
         <vt-media-list
