@@ -7,6 +7,7 @@ from vtsearch.models.progress import (
     _ensure_cache,
     _live_models,
     inject_live_model,
+    invalidate_progress_cache_from,
 )
 from vtsearch.utils import medias, label_history
 
@@ -272,33 +273,50 @@ class TestProgressCacheWithLabelChanges:
 
 
 class TestProgressCacheInvalidatedOnVoteSwitch:
-    """Progress cache must be cleared when a vote switches polarity (good→bad or bad→good).
+    """Progress cache is partially invalidated when a vote switches polarity.
 
-    Old cached models were trained with the now-incorrect label, and their
-    stability/evaluation metrics are stale.
+    Only cached steps from the point where the affected media first appeared
+    in the training data are discarded.  Earlier steps are preserved.
     """
 
-    def test_good_to_bad_clears_cache(self, client):
-        """Switching a vote from good to bad should clear the progress cache."""
+    def test_good_to_bad_truncates_from_first_appearance(self, client):
+        """Switching good→bad should keep steps before the media first appeared."""
+        # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad)
+        # Media 1 first appears at step 2.
+        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/4/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 4
+
+        # Switch media 1 from good to bad — steps 0-1 preserved, 2-3 discarded
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
+
+    def test_bad_to_good_truncates_from_first_appearance(self, client):
+        """Switching bad→good should keep steps before the media first appeared."""
+        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/4/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/2/vote", json={"vote": "good"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 4
+
+        # Switch media 1 from bad to good — steps 0-1 preserved, 2-3 discarded
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
+
+    def test_first_vote_switch_clears_entire_cache(self, client):
+        """If the switched media was in the very first step, full clear occurs."""
         client.post("/api/medias/1/vote", json={"vote": "good"})
         client.post("/api/medias/2/vote", json={"vote": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
-        # Switch media 1 from good to bad — cache should be cleared
+        # Switch media 1 (present from step 0) — full clear
         client.post("/api/medias/1/vote", json={"vote": "bad"})
-        assert len(_cached_steps) == 0, "Cache should be cleared on good→bad switch"
-
-    def test_bad_to_good_clears_cache(self, client):
-        """Switching a vote from bad to good should clear the progress cache."""
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
-        client.post("/api/medias/2/vote", json={"vote": "good"})
-        _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
-
-        # Switch media 1 from bad to good — cache should be cleared
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        assert len(_cached_steps) == 0, "Cache should be cleared on bad→good switch"
+        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_toggle_off_does_not_clear_cache(self, client):
         """Toggling a vote OFF (unlabeling) should NOT clear the progress cache."""
@@ -334,18 +352,37 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/1/vote", json={"vote": "bad"})
         assert len(_live_models) == 0, "Live models should be cleared on vote switch"
 
-    def test_cache_rebuilds_correctly_after_switch(self, client):
-        """After a cache invalidation from a vote switch, rebuilding should work."""
+    def test_running_ids_restored_after_truncation(self, client):
+        """After partial truncation, _cache_good_ids/_cache_bad_ids match the last kept step."""
+        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/4/vote", json={"vote": "bad"})
         client.post("/api/medias/1/vote", json={"vote": "good"})
         client.post("/api/medias/2/vote", json={"vote": "bad"})
         _ensure_cache(medias, label_history, 0)
+
+        # Switch media 1 — truncates to 2 steps (steps 0-1)
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        assert len(_cached_steps) == 2
+        # Running ID sets should match step 1's state: good={3}, bad={4}
+        assert 3 in _cache_good_ids
+        assert 4 in _cache_bad_ids
+        assert 1 not in _cache_good_ids
+        assert 1 not in _cache_bad_ids
+
+    def test_cache_rebuilds_correctly_after_partial_truncation(self, client):
+        """After partial invalidation, _ensure_cache replays from the truncation point."""
+        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/4/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 4
+
+        # Switch media 1 from good to bad — truncates to 2 steps
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
         assert len(_cached_steps) == 2
 
-        # Switch media 1 from good to bad (clears cache)
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
-        assert len(_cached_steps) == 0
-
-        # Rebuild cache — should process entire label_history from scratch
+        # Rebuild cache — should replay from step 2 onward
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == len(label_history)
         # After replay, media 1 should be in bad_ids (final state)
@@ -367,6 +404,17 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
 
         resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
+
+    def test_invalidate_noop_when_media_not_in_cache(self, client):
+        """invalidate_progress_cache_from should be a no-op for unknown media."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Invalidate a media that never appeared in the cache
+        invalidate_progress_cache_from(999)
+        assert len(_cached_steps) == 2, "Cache should not change for unknown media"
 
 
 class TestStableIndicatorThresholds:

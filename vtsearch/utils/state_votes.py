@@ -104,8 +104,9 @@ def toggle_vote(media_id: int, vote: str) -> None:
     opposite vote).
 
     When a vote switches polarity (good→bad or bad→good), the progress
-    cache is invalidated because old cached models were trained with the
-    now-incorrect label and their stability/evaluation metrics are stale.
+    cache is partially invalidated: only cached steps from the point where
+    the media first appeared in the training data are discarded.  Earlier
+    steps (whose models never included this media) are preserved.
 
     This function acquires ``_state_lock`` so that the entire check-then-modify
     sequence is atomic with respect to concurrent requests.
@@ -114,7 +115,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
         media_id: Integer ID of the media to vote on.
         vote: ``"good"`` or ``"bad"``.
     """
-    from vtsearch.models.progress import clear_progress_cache
+    from vtsearch.models.progress import invalidate_progress_cache_from
 
     with _state_lock:
         if vote == "good":
@@ -132,7 +133,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 add_label_to_history(media_id, "good")
                 diversity_tree_label(media_id)
                 if was_opposite:
-                    clear_progress_cache()
+                    invalidate_progress_cache_from(media_id)
         else:
             if media_id in bad_votes:
                 bad_votes.pop(media_id, None)
@@ -148,7 +149,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 add_label_to_history(media_id, "bad")
                 diversity_tree_label(media_id)
                 if was_opposite:
-                    clear_progress_cache()
+                    invalidate_progress_cache_from(media_id)
 
 
 def apply_label(media_id: int, label: str) -> None:
