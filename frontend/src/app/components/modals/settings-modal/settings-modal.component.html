@@ -90,10 +90,6 @@
                   <label class="form-label"># Grid Columns:</label>
                   <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Panel px</label>
-                  <span class="panel-pct-display">{{ getPanelPxDisplay('panel_pct_left', activeViewTab) }}</span>
-                </div>
               </div>
               <div class="view-side-section">
                 <h4>Right Side</h4>
@@ -126,10 +122,6 @@
                 <div class="form-group">
                   <label class="form-label"># Grid Columns:</label>
                   <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Panel px</label>
-                  <span class="panel-pct-display">{{ getPanelPxDisplay('panel_pct_right', activeViewTab) }}</span>
                 </div>
               </div>
             </div>
