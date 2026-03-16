@@ -56,10 +56,12 @@ export class DatasetsApiService {
   ): Observable<{
     directories: { name: string; path: string }[];
     files: { name: string; path: string; size_bytes: number }[];
+    root_path: string;
   }> {
     return this.http.get<{
       directories: { name: string; path: string }[];
       files: { name: string; path: string; size_bytes: number }[];
+      root_path: string;
     }>('/api/browse-media-files', { params: { source, path } });
   }
 
