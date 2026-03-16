@@ -51,6 +51,22 @@
   vt-progress-bar {
     flex: 1;
   }
+
+  .btn--cancel {
+    flex-shrink: 0;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
 }
 
 .dashboard-section-actions {

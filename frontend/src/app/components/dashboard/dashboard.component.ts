@@ -293,6 +293,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.refresh();
   }
 
+  // --- Cancel ---
+
+  onCancelIngest(): void {
+    this.datasetsApi.cancelIngest().subscribe();
+  }
+
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {

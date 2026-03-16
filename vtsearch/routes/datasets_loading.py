@@ -25,6 +25,7 @@ from vtsearch.utils import (
     snapshot_medias,
     update_progress,
 )
+from vtsearch.utils.progress import CancelledError, dataset_progress
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +58,11 @@ def _stepped_progress(status: str, message: str = "", current: int = 0, total: i
     ``"idle"`` before the wrapper overrides it, and a frontend poll during
     that window would stop polling prematurely — leaving the UI stuck on
     the progress overlay.
+
+    Also checks the cancellation flag on each callback so that long-running
+    loops (embedding, downloading) abort promptly when the user cancels.
     """
+    dataset_progress.check_cancelled()
     if status == "idle":
         return
     step = _STATUS_TO_STEP.get(status)
@@ -336,6 +341,10 @@ def _run_origin_load_in_background(
         the background thread starts (no Flask request context in thread).
     """
 
+    # Reset the cancellation flag so a previous cancel does not immediately
+    # abort this new operation.
+    dataset_progress.reset_cancel()
+
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
     # Clear the error field so stale errors from previous loads don't persist.
@@ -354,6 +363,7 @@ def _run_origin_load_in_background(
             clear_dataset()
             gc.collect()
             load_fn()
+            dataset_progress.check_cancelled()
             # _stepped_progress (the progress callback injected by
             # _run_importer_in_background) filters out "idle" so that
             # inner functions like load_demo_dataset cannot prematurely
@@ -370,6 +380,7 @@ def _run_origin_load_in_background(
             collapse_duplicates(medias)
 
             def _diversity_progress(current: int, total: int) -> None:
+                dataset_progress.check_cancelled()
                 update_progress(
                     "loading",
                     "Building diversity index…",
@@ -381,6 +392,7 @@ def _run_origin_load_in_background(
 
             _diversity_progress(0, 0)
             build_diversity_tree(on_progress=_diversity_progress)
+            dataset_progress.check_cancelled()
             update_progress(
                 "loading",
                 "Saving to registry…",
@@ -397,6 +409,18 @@ def _run_origin_load_in_background(
                 created_by=created_by,
             )
             _load_embedder_for_clips()
+        except CancelledError:
+            medias.clear()
+            gc.collect()
+            update_progress(
+                "idle",
+                "",
+                0,
+                0,
+                error="Cancelled",
+                step=None,
+                total_steps=None,
+            )
         except MemoryError:
             medias.clear()
             gc.collect()

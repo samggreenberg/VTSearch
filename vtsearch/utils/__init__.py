@@ -1,7 +1,16 @@
 """Utility modules for progress tracking and state management."""
 
 from vtsearch.utils.hits import build_media_hit
-from vtsearch.utils.progress import get_eval_progress, get_progress, get_sort_progress, update_eval_progress, update_progress, update_sort_progress
+from vtsearch.utils.progress import (
+    cancel_dataset_progress,
+    check_dataset_cancelled,
+    get_eval_progress,
+    get_progress,
+    get_sort_progress,
+    update_eval_progress,
+    update_progress,
+    update_sort_progress,
+)
 from vtsearch.utils.state import (
     _state_lock,
     add_autorun_detector,
@@ -79,6 +88,10 @@ __all__ = [
     "get_progress",
     "update_sort_progress",
     "get_sort_progress",
+    "update_eval_progress",
+    "get_eval_progress",
+    "cancel_dataset_progress",
+    "check_dataset_cancelled",
     # State lock
     "_state_lock",
     # State
