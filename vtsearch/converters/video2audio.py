@@ -88,9 +88,7 @@ class Video2AudioMediaConverter(MediaConverter):
             try:
                 import librosa  # noqa: PLC0415
 
-                from vtsearch.config import SAMPLE_RATE  # noqa: PLC0415
-
-                audio_data, sr = librosa.load(wav_path, sr=SAMPLE_RATE, mono=True)
+                audio_data, sr = librosa.load(wav_path, sr=None, mono=True)
                 duration = len(audio_data) / sr
             except Exception:
                 pass

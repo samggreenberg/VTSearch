@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MUSIC_MODEL_ID, MODELS_CACHE_DIR, SAMPLE_RATE
+from vtsearch.config import CLAP_MUSIC_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
 from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
 
 if TYPE_CHECKING:
@@ -74,10 +74,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         import torch  # noqa: PLC0415
 
         self._on_progress("loading", "Warming up CLAP Music pipeline: preprocessing…", 2, 3)
-        dummy_audio = np.zeros(SAMPLE_RATE, dtype=np.float32)
+        dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
-            sampling_rate=SAMPLE_RATE,
+            sampling_rate=CLAP_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
             max_length=480000,
@@ -113,10 +113,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
+            audio_data, _sr = librosa.load(file_path, sr=CLAP_SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,
-                sampling_rate=SAMPLE_RATE,
+                sampling_rate=CLAP_SAMPLE_RATE,
                 return_tensors="pt",
                 padding="max_length",
                 max_length=480000,

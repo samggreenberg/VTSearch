@@ -11,7 +11,6 @@ from vtsearch.config import (
     DATA_DIR,
     ESC50_DOWNLOAD_SIZE_MB,
     GTZAN_DOWNLOAD_SIZE_MB,
-    SAMPLE_RATE,
     SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
     URBANSOUND8K_DOWNLOAD_SIZE_MB,
 )
@@ -325,7 +324,7 @@ class AudioMediaType(MediaType):
         with open(file_path, "rb") as f:
             media_bytes = f.read()
         try:
-            audio_data, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
+            audio_data, sr = librosa.load(file_path, sr=None, mono=True)
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0

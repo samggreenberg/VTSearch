@@ -3,10 +3,6 @@
 import os
 from pathlib import Path
 
-# Audio settings
-SAMPLE_RATE = 48000
-NUM_MEDIAS = 20
-
 # Dataset paths
 DATA_DIR = Path("data")
 AUDIO_DIR = DATA_DIR / "audio"
@@ -72,6 +68,7 @@ MLP_DROPOUT = 0.5
 
 # Model IDs
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"
+CLAP_SAMPLE_RATE = 48000  # CLAP model expected input sample rate
 XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
 CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
