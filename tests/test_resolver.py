@@ -156,6 +156,80 @@ class TestResolveConverterOrigin:
         assert result == folder / "clip.mp4"
 
 
+class TestResolveDemoOrigin:
+    """Verify that resolve_file_from_origin handles demo dataset origins."""
+
+    def test_resolves_demo_file(self, tmp_path):
+        """Demo importer resolve_file finds files in the expected download dir."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        # Create a fake download directory structure
+        img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
+        (img_dir / "kangaroo").mkdir(parents=True)
+        target = img_dir / "kangaroo" / "image_0017.jpg"
+        target.write_bytes(b"fake_image")
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
+
+        # Patch _SOURCE_DIRS to use our tmp_path
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
+        try:
+            result = importer.resolve_file(origin, origin_name="kangaroo/image_0017.jpg")
+            assert result == target
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        """resolve_file returns None when the file doesn't exist on disk."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
+        img_dir.mkdir(parents=True)
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
+
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
+        try:
+            result = importer.resolve_file(origin, origin_name="kangaroo/no_such_file.jpg")
+            assert result is None
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
+    def test_returns_none_for_unknown_demo(self):
+        """resolve_file returns None for an unrecognized demo dataset name."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "nonexistent_dataset"}}
+        assert importer.resolve_file(origin, origin_name="foo.jpg") is None
+
+    def test_dispatches_through_resolver(self, tmp_path):
+        """resolve_file_from_origin dispatches to DemoDatasetImporter.resolve_file."""
+        img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
+        (img_dir / "elephant").mkdir(parents=True)
+        target = img_dir / "elephant" / "image_0012.jpg"
+        target.write_bytes(b"fake_image")
+
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
+        try:
+            origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
+            result = resolve_file_from_origin(origin, origin_name="elephant/image_0012.jpg")
+            assert result == target
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
+
 class TestResolveNoneOrigin:
     def test_none_origin(self):
         assert resolve_file_from_origin(None) is None

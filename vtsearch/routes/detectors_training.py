@@ -66,34 +66,6 @@ def export_detector():
     model, threshold = train_and_threshold(X_list, y_list, snap=snap)
     weights = serialize_weights(model)
 
-    # --- DEBUG: training diagnostics ---
-    import logging as _log
-    import torch  # noqa: PLC0415
-
-    _dbg = _log.getLogger("vtsearch.debug.export_detector")
-    num_good = sum(1 for v in y_list if v == 1.0)
-    num_bad = len(y_list) - num_good
-    input_dim = len(weights["0.weight"][0])
-    _dbg.warning(
-        "[export_detector] trained: %d good + %d bad = %d labels, "
-        "input_dim=%d, threshold=%.4f",
-        num_good, num_bad, len(y_list), input_dim, threshold,
-    )
-
-    # Score training data to show what the model produces on its own data
-    X_train = torch.tensor(np.array(X_list), dtype=torch.float32)
-    with torch.no_grad():
-        train_scores = torch.sigmoid(model(X_train)).squeeze(1).tolist()
-    good_scores = train_scores[:num_good]
-    bad_scores = train_scores[num_good:]
-    _dbg.warning(
-        "[export_detector] training scores: good=[%.4f..%.4f] avg=%.4f, "
-        "bad=[%.4f..%.4f] avg=%.4f",
-        min(good_scores), max(good_scores), np.mean(good_scores),
-        min(bad_scores), max(bad_scores), np.mean(bad_scores),
-    )
-    # --- END DEBUG ---
-
     # Collect origin info so the client can forward it when saving
     good_origins = collect_media_origins(good_votes, snap)
     bad_origins = collect_media_origins(bad_votes, snap)
@@ -521,37 +493,16 @@ def multi_find():
         models.append(m)
 
     # Build the list of detector configs (weights+threshold) for each model
-    import logging as _log
-
-    _dbg = _log.getLogger("vtsearch.debug.multi_find")
-
     model_configs = []
     for m in models:
         det_name = m.get("detector_name", "")
         tm_name = m.get("trainable_model_name", "")
 
-        _dbg.warning(
-            "[multi_find] model '%s': det_name=%r, tm_name=%r, "
-            "trainable=%s",
-            m.get("name"), det_name, tm_name, m.get("trainable"),
-        )
-
         # Try autorun detector first (has weights)
         if det_name:
             det = get_autorun_detectors().get(det_name)
             has_weights = det and det.get("weights")
-            _dbg.warning(
-                "[multi_find]   autorun detector '%s': found=%s, has_weights=%s",
-                det_name, det is not None, has_weights,
-            )
             if has_weights:
-                input_dim = len(det["weights"]["0.weight"][0])
-                _dbg.warning(
-                    "[multi_find]   USING PRE-TRAINED WEIGHTS path "
-                    "(input_dim=%d, threshold=%.4f, num_labels=%d)",
-                    input_dim, det.get("threshold", 0.5),
-                    det.get("num_labels", 0),
-                )
                 model_configs.append(
                     {
                         "name": m["name"],
@@ -620,20 +571,6 @@ def multi_find():
         all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
 
-        # --- DEBUG: dataset diagnostics ---
-        _dbg.warning(
-            "[multi_find] dataset '%s': %d medias, emb_dim=%s, "
-            "media_type=%s, embedder=%s",
-            ds["name"], len(all_ids),
-            all_embs.shape[1] if all_embs.ndim == 2 else "??",
-            detected_media_type,
-            next(iter(temp_medias.values()), {}).get("embedder", "??"),
-        )
-        nan_count = int(np.isnan(all_embs).any(axis=1).sum()) if all_embs.ndim == 2 else -1
-        if nan_count:
-            _dbg.warning("[multi_find]   WARNING: %d embeddings contain NaN!", nan_count)
-        # --- END DEBUG ---
-
         # Per-media result: {media_id -> {info, per_model_scores}}
         media_results: dict[int, dict] = {}
         for cid in all_ids:
@@ -659,45 +596,13 @@ def multi_find():
                         scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
                     threshold = mc.get("threshold", 0.5)
 
-                    # --- DEBUG: scoring diagnostics ---
-                    scores_arr = np.array(scores)
-                    above = int((scores_arr >= threshold).sum())
-                    _dbg.warning(
-                        "[multi_find] model '%s' on '%s': "
-                        "scores min=%.4f max=%.4f mean=%.4f median=%.4f std=%.4f | "
-                        "threshold=%.4f | above=%d/%d",
-                        mc["name"], ds["name"],
-                        scores_arr.min(), scores_arr.max(), scores_arr.mean(),
-                        float(np.median(scores_arr)), scores_arr.std(),
-                        threshold, above, len(scores),
-                    )
-                    logits_arr = raw_logits.squeeze(1).detach().numpy()
-                    _dbg.warning(
-                        "[multi_find]   raw logits: min=%.4f max=%.4f mean=%.4f",
-                        logits_arr.min(), logits_arr.max(), logits_arr.mean(),
-                    )
-                    # Top-5 and bottom-5 scores
-                    sorted_scores = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
-                    top5 = [(cid, f"{s:.4f}", temp_medias[cid].get("filename", "?")[:40])
-                            for cid, s in sorted_scores[:5]]
-                    bot5 = [(cid, f"{s:.4f}", temp_medias[cid].get("filename", "?")[:40])
-                            for cid, s in sorted_scores[-5:]]
-                    _dbg.warning("[multi_find]   top-5: %s", top5)
-                    _dbg.warning("[multi_find]   bot-5: %s", bot5)
-                    # --- END DEBUG ---
-
                     for cid, score in zip(all_ids, scores):
                         verdict = "Good" if score >= threshold else "Bad"
                         media_results[cid]["model_verdicts"][mc["name"]] = {
                             "verdict": verdict,
                             "score": round(score, 4),
                         }
-                except Exception as exc:
-                    _dbg.warning(
-                        "[multi_find] model '%s' EXCEPTION on '%s': %s",
-                        mc["name"], ds["name"], exc,
-                        exc_info=True,
-                    )
+                except Exception:
                     for cid in all_ids:
                         media_results[cid]["model_verdicts"][mc["name"]] = {
                             "verdict": "Error",
@@ -707,12 +612,6 @@ def multi_find():
                 # Trainable model — train from labelset, then score
                 tm_data = mc["trainable_model_data"]
                 labels = tm_data.get("labelset", {}).get("labels", [])
-
-                _dbg.warning(
-                    "[multi_find] TRAINABLE MODEL path for '%s': "
-                    "%d labels in labelset, media_type=%s",
-                    mc["name"], len(labels), tm_data.get("media_type"),
-                )
 
                 # Try to match labels to this dataset's medias and train
                 try:
@@ -729,48 +628,18 @@ def multi_find():
                             elif label_val == "bad":
                                 bad_ids.append(mid)
 
-                    _dbg.warning(
-                        "[multi_find]   label matching: %d good_ids, %d bad_ids "
-                        "(from %d labels)",
-                        len(good_ids), len(bad_ids), len(labels),
-                    )
-
                     if good_ids and bad_ids:
                         good_embs = [temp_medias[i]["embedding"] for i in good_ids if i in temp_medias]
                         bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
                         X_list = good_embs + bad_embs
                         y_list = [1.0] * len(good_embs) + [0.0] * len(bad_embs)
-                        _dbg.warning(
-                            "[multi_find]   MATCHED path: %d good_embs, %d bad_embs",
-                            len(good_embs), len(bad_embs),
-                        )
                     else:
                         # Labels didn't match this dataset — resolve from
                         # original sources (cross-dataset scenario).
                         from vtsearch.models.resolver import resolve_label_embeddings
 
                         media_type = tm_data.get("media_type", "audio")
-                        _dbg.warning(
-                            "[multi_find]   RESOLVER path: resolving %d labels "
-                            "for media_type=%s",
-                            len(labels), media_type,
-                        )
                         resolved = resolve_label_embeddings(labels, media_type)
-                        _dbg.warning(
-                            "[multi_find]   resolver result: %d/%d resolved, "
-                            "has_good_and_bad=%s, %d missing",
-                            resolved.resolved_count, resolved.total_count,
-                            resolved.has_good_and_bad,
-                            len(resolved.missing_entries),
-                        )
-                        if resolved.missing_entries:
-                            for me in resolved.missing_entries[:3]:
-                                _dbg.warning(
-                                    "[multi_find]     missing: origin=%s, "
-                                    "origin_name=%s, filename=%s",
-                                    me.get("origin"), me.get("origin_name"),
-                                    me.get("filename"),
-                                )
                         if resolved.has_good_and_bad:
                             X_list = resolved.embeddings
                             y_list = resolved.labels
@@ -784,17 +653,6 @@ def multi_find():
                         with torch.no_grad():
                             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
-                        # --- DEBUG ---
-                        scores_arr = np.array(scores)
-                        above = int((scores_arr >= threshold).sum())
-                        _dbg.warning(
-                            "[multi_find]   trainable scores: min=%.4f max=%.4f "
-                            "mean=%.4f | threshold=%.4f | above=%d/%d",
-                            scores_arr.min(), scores_arr.max(), scores_arr.mean(),
-                            threshold, above, len(scores),
-                        )
-                        # --- END DEBUG ---
-
                         for cid, score in zip(all_ids, scores):
                             verdict = "Good" if score >= threshold else "Bad"
                             media_results[cid]["model_verdicts"][mc["name"]] = {
@@ -802,13 +660,6 @@ def multi_find():
                                 "score": round(score, 4),
                             }
                     else:
-                        _dbg.warning(
-                            "[multi_find]   NOT ENOUGH LABELS: X_list=%d, "
-                            "y_list good=%d bad=%d → all N/A",
-                            len(X_list) if X_list else 0,
-                            sum(1 for v in y_list if v == 1.0) if y_list else 0,
-                            sum(1 for v in y_list if v == 0.0) if y_list else 0,
-                        )
                         # Not enough labels resolved
                         for cid in all_ids:
                             media_results[cid]["model_verdicts"][mc["name"]] = {

@@ -64,44 +64,9 @@ def detector_sort():
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
-    # --- DEBUG: cross-dataset diagnostics ---
-    import logging as _log
-
-    _dbg = _log.getLogger("vtsearch.debug.detector_sort")
-    input_dim = len(weights["0.weight"][0])
-    emb_dim = all_embs.shape[1] if all_embs.ndim == 2 else "??"
-    _dbg.warning(
-        "[detector-sort] model input_dim=%s, dataset emb_dim=%s, "
-        "num_medias=%d, threshold=%.4f",
-        input_dim, emb_dim, len(all_ids), threshold,
-    )
-    # Check for NaN/Inf in embeddings
-    nan_count = int(np.isnan(all_embs).any(axis=1).sum()) if all_embs.ndim == 2 else -1
-    inf_count = int(np.isinf(all_embs).any(axis=1).sum()) if all_embs.ndim == 2 else -1
-    if nan_count or inf_count:
-        _dbg.warning("[detector-sort] BAD EMBEDDINGS: %d with NaN, %d with Inf", nan_count, inf_count)
-    # --- END DEBUG ---
-
     with torch.no_grad():
         raw_logits = model(X_all)
         scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
-
-    # --- DEBUG: score distribution ---
-    scores_arr = np.array(scores)
-    above = int((scores_arr >= threshold).sum())
-    _dbg.warning(
-        "[detector-sort] scores: min=%.4f, max=%.4f, mean=%.4f, median=%.4f, "
-        "std=%.4f | above threshold: %d/%d",
-        scores_arr.min(), scores_arr.max(), scores_arr.mean(),
-        float(np.median(scores_arr)), scores_arr.std(),
-        above, len(scores),
-    )
-    logits_arr = raw_logits.squeeze(1).numpy()
-    _dbg.warning(
-        "[detector-sort] raw logits: min=%.4f, max=%.4f, mean=%.4f",
-        logits_arr.min(), logits_arr.max(), logits_arr.mean(),
-    )
-    # --- END DEBUG ---
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
