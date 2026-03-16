@@ -5,7 +5,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ImporterInfo } from '../../../models/api.models';
+import { ImporterInfo, MediaTypeInfo } from '../../../models/api.models';
 
 interface BrowseItem {
   key: string;
@@ -37,6 +37,7 @@ export class NewModelModalComponent implements OnInit {
   mediaType = 'audio';
   pendingText = '';
   mediaTypes: string[] = [];
+  mediaTypeInfos: MediaTypeInfo[] = [];
   submitting = false;
   error = '';
 
@@ -67,7 +68,8 @@ export class NewModelModalComponent implements OnInit {
   ngOnInit(): void {
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
-        this.mediaTypes = (res.media_types || []).map((t) => t.type_id || t.name);
+        this.mediaTypeInfos = res.media_types || [];
+        this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
     this.datasetsApi.getRegistry().subscribe({
@@ -310,6 +312,14 @@ export class NewModelModalComponent implements OnInit {
           this.error = err.error?.error || 'Failed to create model';
         },
       });
+  }
+
+  getMediaTypeLabel(typeId: string): string {
+    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
+    if (mt) {
+      return `${mt.icon || ''} ${mt.tab_title || mt.name}`.trim();
+    }
+    return typeId;
   }
 
   close(): void {

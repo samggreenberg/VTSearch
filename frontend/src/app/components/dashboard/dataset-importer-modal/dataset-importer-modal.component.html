@@ -125,7 +125,7 @@
                 (ngModelChange)="onMediaTypeChange($event)"
               >
                 @for (opt of field.options || []; track opt) {
-                  <option [value]="opt">{{ opt }}</option>
+                  <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
                 }
               </select>
             } @else if (field.field_type === 'select') {
@@ -246,7 +246,7 @@
           (ngModelChange)="sfOnMediaTypeChange($event)"
         >
           @for (opt of sfMediaTypeOptions; track opt) {
-            <option [value]="opt">{{ opt }}</option>
+            <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
           }
         </select>
       </div>
