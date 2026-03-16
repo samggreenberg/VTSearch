@@ -506,12 +506,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onFind(): void {
     const datasetIds = [...this.selectedDatasetIds];
     const modelIds = [...this.selectedModelIds];
+    const findParams = { dataset_ids: datasetIds, model_ids: modelIds };
 
     this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage('Running Find...');
+    this.datasetState.setProgressMessage('Checking labels...');
     this.progressIndeterminate = true;
 
-    this.detectorsApi.find({ dataset_ids: datasetIds, model_ids: modelIds }).subscribe({
+    // Pre-flight: check if any labels fail to resolve
+    this.detectorsApi.findCheckLabels(findParams).subscribe({
+      next: async (checkResult) => {
+        const warnings = checkResult.warnings || [];
+        if (warnings.length > 0) {
+          // Build warning message
+          const lines = warnings.map(
+            (w) => `${w.failed_labels} of ${w.total_labels} labels failed to resolve for "${w.model_name}".`,
+          );
+          const message = lines.join('\n') + '\n\nDo you want to continue?';
+          const ok = await this.dialog.confirm(message, 'warning');
+          if (!ok) {
+            this.datasetState.setLoading(false);
+            this.progressIndeterminate = false;
+            return;
+          }
+        }
+        this.runFind(findParams);
+      },
+      error: () => {
+        // If check-labels fails, proceed with Find anyway
+        this.runFind(findParams);
+      },
+    });
+  }
+
+  private runFind(findParams: Record<string, unknown>): void {
+    this.datasetState.setProgressMessage('Running Find...');
+
+    this.detectorsApi.find(findParams).subscribe({
       next: (response: any) => {
         this.datasetState.setLoading(false);
         this.progressIndeterminate = false;

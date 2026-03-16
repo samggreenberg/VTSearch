@@ -11,6 +11,13 @@ import {
   DetectorServerFilesResponse,
 } from '../models/api.models';
 
+export interface FindLabelWarning {
+  model_name: string;
+  total_labels: number;
+  resolved_labels: number;
+  failed_labels: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class DetectorsApiService {
   constructor(private http: HttpClient) {}
@@ -148,6 +155,10 @@ export class DetectorsApiService {
 
   importFromLabelImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`/api/autorun-detectors/from-label-import/${importerName}`, params);
+  }
+
+  findCheckLabels(params: Record<string, unknown>): Observable<{ warnings: FindLabelWarning[] }> {
+    return this.http.post<{ warnings: FindLabelWarning[] }>('/api/find/check-labels', params);
   }
 
   find(params: Record<string, unknown>): Observable<unknown> {

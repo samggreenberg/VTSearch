@@ -645,3 +645,228 @@ class TestMultiFindCrossDatasetFallback:
 
         # media_type should be set correctly from the dataset
         assert data["media_type"] == "image"
+
+
+class TestFindCheckLabels:
+    """Tests for /api/find/check-labels pre-flight endpoint."""
+
+    def test_empty_params_returns_no_warnings(self, client):
+        resp = client.post(
+            "/api/find/check-labels",
+            data="{}",
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["warnings"] == []
+
+    def test_no_warnings_when_labels_match_dataset(self, client, tmp_path):
+        """When labels match the target dataset directly, no warnings."""
+        import json
+        import pickle
+        import time
+
+        from vtsearch.datasets.registry import register_dataset
+        from vtsearch.models.registry import register_model
+        from vtsearch.routes.trainable_models import _model_path, _write_model
+
+        # Create a dataset where labels match by md5
+        medias = {}
+        for i in range(3):
+            emb = np.random.RandomState(i).randn(512).astype(np.float32)
+            medias[i] = {
+                "id": i,
+                "type": "audio",
+                "embedding": emb,
+                "md5": f"cl_match_{i}",
+                "filename": f"clip_{i}.wav",
+            }
+
+        pkl_path = tmp_path / "cl_match.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias}, f)
+
+        ds = register_dataset(name="cl_match_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
+
+        # Trainable model with labels that match by md5
+        tm_name = "test_cl_match"
+        tm_data = {
+            "name": "Match Model",
+            "text_query": "",
+            "media_type": "audio",
+            "examples": [],
+            "created_at": time.time(),
+            "labelset": {
+                "labels": [
+                    {"md5": "cl_match_0", "label": "good", "origin_name": "clip_0.wav", "filename": "clip_0.wav"},
+                    {"md5": "cl_match_1", "label": "bad", "origin_name": "clip_1.wav", "filename": "clip_1.wav"},
+                ]
+            },
+        }
+        _write_model(_model_path(tm_name), tm_data)
+
+        model_entry = register_model(
+            name="Match Model",
+            media_type="audio",
+            trainable=True,
+            num_training=2,
+            trainable_model_name=tm_name,
+        )
+
+        resp = client.post(
+            "/api/find/check-labels",
+            data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["warnings"] == []
+
+    def test_warnings_when_labels_fail_to_resolve(self, client, tmp_path):
+        """When labels don't match and can't be resolved, return warnings."""
+        import json
+        import pickle
+        import time
+
+        from vtsearch.datasets.registry import register_dataset
+        from vtsearch.models.registry import register_model
+        from vtsearch.routes.trainable_models import _model_path, _write_model
+
+        # Create a target dataset (no overlap with labels)
+        medias = {}
+        for i in range(3):
+            emb = np.random.RandomState(i).randn(512).astype(np.float32)
+            medias[i] = {
+                "id": i,
+                "type": "audio",
+                "embedding": emb,
+                "md5": f"cl_diff_{i}",
+                "filename": f"other_{i}.wav",
+            }
+
+        pkl_path = tmp_path / "cl_diff.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias}, f)
+
+        ds = register_dataset(name="cl_diff_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
+
+        # Trainable model with labels from a nonexistent folder
+        label_origin = {"importer": "folder", "params": {"path": "/nonexistent/folder"}}
+        tm_name = "test_cl_diff"
+        tm_data = {
+            "name": "Diff Model",
+            "text_query": "",
+            "media_type": "audio",
+            "examples": [],
+            "created_at": time.time(),
+            "labelset": {
+                "labels": [
+                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
+                    {"md5": "no_match_b1", "label": "bad", "origin": label_origin, "origin_name": "bad1.wav", "filename": "bad1.wav"},
+                    {"md5": "no_match_b2", "label": "bad", "origin": label_origin, "origin_name": "bad2.wav", "filename": "bad2.wav"},
+                ]
+            },
+        }
+        _write_model(_model_path(tm_name), tm_data)
+
+        model_entry = register_model(
+            name="Diff Model",
+            media_type="audio",
+            trainable=True,
+            num_training=3,
+            trainable_model_name=tm_name,
+        )
+
+        resp = client.post(
+            "/api/find/check-labels",
+            data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["warnings"]) == 1
+
+        w = data["warnings"][0]
+        assert w["model_name"] == "Diff Model"
+        assert w["total_labels"] == 3
+        assert w["failed_labels"] == 3
+        assert w["resolved_labels"] == 0
+
+    def test_partial_resolution_reports_correct_counts(self, client, tmp_path):
+        """When some labels resolve and some don't, counts are accurate."""
+        import json
+        import pickle
+        import time
+
+        from vtsearch.datasets.registry import register_dataset
+        from vtsearch.models.registry import register_model
+        from vtsearch.routes.trainable_models import _model_path, _write_model
+
+        # Create a target dataset (no overlap with labels)
+        medias = {}
+        for i in range(3):
+            emb = np.random.RandomState(i).randn(512).astype(np.float32)
+            medias[i] = {
+                "id": i,
+                "type": "audio",
+                "embedding": emb,
+                "md5": f"cl_part_{i}",
+                "filename": f"part_{i}.wav",
+            }
+
+        pkl_path = tmp_path / "cl_part.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias}, f)
+
+        ds = register_dataset(name="cl_part_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
+
+        # Label folder — one file exists, one doesn't
+        label_folder = tmp_path / "part_labels"
+        label_folder.mkdir()
+        (label_folder / "good.wav").write_bytes(b"good_audio")
+        # bad.wav does NOT exist
+
+        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "sounds"}}
+        tm_name = "test_cl_part"
+        tm_data = {
+            "name": "Part Model",
+            "text_query": "",
+            "media_type": "audio",
+            "examples": [],
+            "created_at": time.time(),
+            "labelset": {
+                "labels": [
+                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
+                    {"md5": "no_match_b", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                ]
+            },
+        }
+        _write_model(_model_path(tm_name), tm_data)
+
+        model_entry = register_model(
+            name="Part Model",
+            media_type="audio",
+            trainable=True,
+            num_training=2,
+            trainable_model_name=tm_name,
+        )
+
+        good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
+
+        def fake_embed(path, media_type):
+            return good_emb
+
+        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+            resp = client.post(
+                "/api/find/check-labels",
+                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                content_type="application/json",
+            )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["warnings"]) == 1
+
+        w = data["warnings"][0]
+        assert w["model_name"] == "Part Model"
+        assert w["total_labels"] == 2
+        assert w["resolved_labels"] == 1
+        assert w["failed_labels"] == 1
