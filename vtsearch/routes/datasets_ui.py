@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
-from vtsearch.datasets.loader import read_pkl_embedder
+from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtsearch.routes.datasets_loading import _origin_to_str
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
@@ -43,9 +43,11 @@ def demo_dataset_list():
     from vtsearch.converters import list_converters_for_source
     from vtsearch.media import get as media_get
 
-    # Optional embedder filter: when the caller specifies an embedder, a cached
-    # pkl is only considered "ready" if it was produced by that same embedder.
+    # Optional embedder/clipper filters: when the caller specifies an embedder
+    # or clipper, a cached pkl is only considered "ready" if it was produced by
+    # those same values.
     requested_embedder = request.args.get("embedder", "").strip()
+    requested_clipper = request.args.get("clipper", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
@@ -84,6 +86,14 @@ def demo_dataset_list():
             if pkl_embedder is not None and pkl_embedder != requested_embedder:
                 status = "needs_embedding"
 
+        # Same check for clipper: if the pkl was created with a different
+        # clipper, it needs re-clipping (and re-embedding of the clips).
+        pkl_clipper: str | None = None
+        if status == "ready" and requested_clipper:
+            pkl_clipper = read_pkl_clipper(pkl_file)
+            if pkl_clipper is not None and pkl_clipper != requested_clipper:
+                status = "needs_embedding"
+
         # Calculate number of files from slice parameters
         num_categories = len(dataset_info["categories"])
         slice_start = dataset_info.get("slice_start", 0)
@@ -110,6 +120,10 @@ def demo_dataset_list():
         if pkl_embedder is None and has_pkl:
             pkl_embedder = read_pkl_embedder(pkl_file)
 
+        # Resolve pkl_clipper if not already read above.
+        if pkl_clipper is None and has_pkl:
+            pkl_clipper = read_pkl_clipper(pkl_file)
+
         demos.append(
             {
                 "name": name,
@@ -123,6 +137,7 @@ def demo_dataset_list():
                 "num_categories": num_categories,
                 "available_converters": available_converters,
                 "pkl_embedder": pkl_embedder or "",
+                "pkl_clipper": pkl_clipper or "",
             }
         )
     return jsonify({"datasets": demos})
@@ -245,11 +260,13 @@ def browse_media_files():
         if entry.is_dir():
             directories.append({"name": entry.name, "path": rel})
         elif entry.is_file() and entry.suffix.lower() in known_exts:
-            files.append({
-                "name": entry.name,
-                "path": rel,
-                "size_bytes": entry.stat().st_size,
-            })
+            files.append(
+                {
+                    "name": entry.name,
+                    "path": rel,
+                    "size_bytes": entry.stat().st_size,
+                }
+            )
 
     return jsonify({"directories": directories, "files": files, "root_path": str(root)})
 

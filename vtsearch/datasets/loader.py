@@ -68,8 +68,7 @@ class RestrictedUnpickler(pickle.Unpickler):
         if (module, name) in _PICKLE_SAFE_CLASSES:
             return super().find_class(module, name)
         raise pickle.UnpicklingError(
-            f"Forbidden pickle class: {module}.{name}. "
-            "Only plain Python types and numpy arrays are allowed."
+            f"Forbidden pickle class: {module}.{name}. Only plain Python types and numpy arrays are allowed."
         )
 
 
@@ -943,7 +942,9 @@ def load_dataset_from_pickle(
                 medias[media_id] = media_data
                 loaded_count += 1
                 if on_progress is not None and loaded_count % _progress_interval == 0:
-                    on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
+                    on_progress(
+                        "loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count
+                    )
                 continue
 
             # ── Full mode (original behaviour) ──
@@ -1022,7 +1023,9 @@ def load_dataset_from_pickle(
                 medias[media_id] = media_data
                 loaded_count += 1
                 if on_progress is not None and loaded_count % _progress_interval == 0:
-                    on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
+                    on_progress(
+                        "loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count
+                    )
     except MemoryError:
         medias.clear()
         del data
@@ -1256,6 +1259,24 @@ def _write_embedder_sidecar(pkl_path: Path, embedder_name: str) -> None:
     sidecar.write_text(embedder_name, encoding="utf-8")
 
 
+def _write_clipper_sidecar(pkl_path: Path, clipper_name: str) -> None:
+    """Write a small ``<name>.clipper`` file next to *pkl_path*."""
+    sidecar = pkl_path.with_suffix(".clipper")
+    sidecar.write_text(clipper_name, encoding="utf-8")
+
+
+def read_pkl_clipper(pkl_path: Path) -> str | None:
+    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown.
+
+    Checks the lightweight ``.clipper`` sidecar.  Returns ``None`` if the
+    sidecar does not exist (legacy pickles created before clipper tracking).
+    """
+    sidecar = pkl_path.with_suffix(".clipper")
+    if sidecar.exists():
+        return sidecar.read_text(encoding="utf-8").strip()
+    return None
+
+
 def read_pkl_embedder(pkl_path: Path) -> str | None:
     """Return the embedder name stored for *pkl_path*, or ``None`` if unknown.
 
@@ -1292,6 +1313,7 @@ def load_demo_dataset(
     on_progress: Optional[ProgressCallback] = None,
     embedder_name: str = "",
     converter_name: str = "",
+    clipper_name: str = "",
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -1325,6 +1347,8 @@ def load_demo_dataset(
         converter_name: Optional name of a converter (e.g. ``"video2image"``).
             When given, the demo is loaded in its native type and then
             converted.
+        clipper_name: Optional name of a registered clipper.  Recorded in
+            a ``.clipper`` sidecar next to the pickle for status tracking.
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -1354,6 +1378,7 @@ def load_demo_dataset(
             on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
             pkl_file.unlink()
             pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
+            pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
         else:
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
@@ -1437,6 +1462,9 @@ def load_demo_dataset(
     # Write a lightweight sidecar that records which embedder produced this pkl.
     resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
     _write_embedder_sidecar(pkl_file, resolved_name)
+
+    # Write a clipper sidecar so the demo list can check readiness.
+    _write_clipper_sidecar(pkl_file, clipper_name)
 
     on_progress("idle", f"Loaded {dataset_name} dataset")
 

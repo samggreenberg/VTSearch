@@ -86,12 +86,14 @@ class DemoDatasetImporter(DatasetImporter):
 
         embedder_name = field_values.get("embedder", "") or ""
         converter_name = field_values.get("converter", "") or ""
+        clipper_name = field_values.get("clipper", "") or ""
 
         load_demo_dataset(
             dataset_name,
             medias,
             embedder_name=embedder_name,
             converter_name=converter_name,
+            clipper_name=clipper_name,
         )
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:

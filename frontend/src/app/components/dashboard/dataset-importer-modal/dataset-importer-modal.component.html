@@ -42,19 +42,34 @@
           }
         </div>
 
-        @if (demoEmbedders.length > 1) {
+        @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
           <div class="demo-embedder-row">
-            <label class="form-label" for="demo-embedder">Embedder:</label>
-            <select
-              id="demo-embedder"
-              class="form-select form-select--inline"
-              [ngModel]="selectedDemoEmbedder"
-              (ngModelChange)="onDemoEmbedderChange($event)"
-            >
-              @for (embedder of demoEmbedders; track embedder.name) {
-                <option [value]="embedder.name">{{ embedder.name }}</option>
-              }
-            </select>
+            @if (demoEmbedders.length > 1) {
+              <label class="form-label" for="demo-embedder">Embedder:</label>
+              <select
+                id="demo-embedder"
+                class="form-select form-select--inline"
+                [ngModel]="selectedDemoEmbedder"
+                (ngModelChange)="onDemoEmbedderChange($event)"
+              >
+                @for (embedder of demoEmbedders; track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </select>
+            }
+            @if (demoClippers.length > 1) {
+              <label class="form-label" for="demo-clipper">Clipper:</label>
+              <select
+                id="demo-clipper"
+                class="form-select form-select--inline"
+                [ngModel]="selectedDemoClipper"
+                (ngModelChange)="onDemoClipperChange($event)"
+              >
+                @for (clipper of demoClippers; track clipper.name) {
+                  <option [value]="clipper.name">{{ clipper.display_name || clipper.name }}</option>
+                }
+              </select>
+            }
           </div>
         }
 
