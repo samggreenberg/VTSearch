@@ -17,7 +17,7 @@
       }
       <div class="view-tab-content">
         <div class="form-group">
-          <label class="form-label">View</label>
+          <label class="form-label">View Mode:</label>
           <div class="radio-group">
             <label class="radio-row">
               <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode(activeViewTab) === 'list'" (change)="onViewModeChange(activeViewTab, 'list')" />
@@ -30,7 +30,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Focus mode</label>
+          <label class="form-label">Focus Mode:</label>
           <div class="radio-group">
             <label class="radio-row">
               <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode(activeViewTab) === 'click'" (change)="onFocusModeChange(activeViewTab, 'click')" />
@@ -43,8 +43,8 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Grid columns</label>
-          <input type="number" class="form-input" [ngModel]="getGridColumns(activeViewTab)" (ngModelChange)="onGridColumnsChange(activeViewTab, $event)" min="1" max="6" />
+          <label class="form-label"># Grid Columns:</label>
+          <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns(activeViewTab)" (ngModelChange)="onGridColumnsChange(activeViewTab, $event)" min="1" max="6" />
         </div>
       </div>
     } @else {
