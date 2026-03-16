@@ -22,6 +22,21 @@ button {
   background: transparent;
   transition: background 0.15s, color 0.15s;
 
+  // Reserve space for bold text so buttons don't resize on hover.
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    content: attr(data-label);
+    font-weight: 700;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
