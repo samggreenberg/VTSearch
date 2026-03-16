@@ -188,10 +188,10 @@
     }
   }
 
-  thead th:nth-child(1) { width: 22%; }
-  thead th:nth-child(2) { width: 11%; }
-  thead th:nth-child(3) { width: 10%; }
-  thead th:nth-child(5) { width: 14%; }
+  thead th:nth-child(1) { width: 18%; }
+  thead th:nth-child(2) { width: 7%; }
+  thead th:nth-child(3) { width: 6%; }
+  thead th:nth-child(5) { width: 10%; }
 }
 
 .col-num {
@@ -262,4 +262,123 @@
   color: var(--text-muted);
   font-size: 0.7rem;
   border-radius: 3px;
+}
+
+// --- Server folder browser ---
+
+.server-folder-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sf-browse-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sf-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.sf-breadcrumb {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+
+  &:hover {
+    background: var(--bg-subtle);
+  }
+
+  &.active {
+    color: var(--text-primary);
+    font-weight: 600;
+    cursor: default;
+
+    &:hover {
+      background: none;
+    }
+  }
+}
+
+.sf-breadcrumb-sep {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.sf-dir-list {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sf-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: background 0.15s;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--bg-subtle);
+  }
+}
+
+.sf-dir-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.sf-dir-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sf-empty-dir {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 12px;
+  text-align: center;
+}
+
+.sf-selected-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sf-path-display {
+  font-size: 0.8rem;
+  color: var(--text-secondary, var(--text-muted));
+  background: var(--bg-subtle);
+  padding: 3px 8px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }

@@ -116,16 +116,6 @@ export class SettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'click';
   }
 
-  getPanelPx(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): number {
-    const dict = this.settings[side];
-    if (!dict) return side === 'panel_pct_left' ? 260 : 300;
-    return dict[typeId] ?? (side === 'panel_pct_left' ? 260 : 300);
-  }
-
-  getPanelPxDisplay(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): string {
-    return this.getPanelPx(side, typeId) + 'px';
-  }
-
   onNumberChange(key: string, value: number): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();

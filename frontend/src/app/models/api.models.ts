@@ -272,6 +272,7 @@ export interface AppSettings {
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
+  autopilot_resort_interval?: number;
   [key: string]: unknown;
 }
 
@@ -348,6 +349,7 @@ export interface ClipperParameter {
 
 export interface ClipperInfo {
   name: string;
+  display_name?: string;
   media_type: string;
   parameters?: ClipperParameter[];
   [key: string]: unknown;

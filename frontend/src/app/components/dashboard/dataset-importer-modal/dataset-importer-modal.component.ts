@@ -5,7 +5,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
-type ModalView = 'picker' | 'form' | 'demo';
+type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
 
 @Component({
   selector: 'vt-dataset-importer-modal',
@@ -48,6 +48,22 @@ export class DatasetImporterModalComponent implements OnInit {
   demoEmbedders: EmbedderInfo[] = [];
   selectedDemoEmbedder = '';
   demoEmbedder = '';
+
+  // Server folder browser state
+  sfBrowseDirs: { name: string; path: string }[] = [];
+  sfBrowsePath = '';
+  sfBrowseRootPath = '';
+  sfBrowseLoading = false;
+  sfBrowseError = '';
+  sfMediaType = '';
+  sfMediaTypeOptions: string[] = [];
+  sfEmbedders: EmbedderInfo[] = [];
+  sfSelectedEmbedder = '';
+  sfClippers: ClipperInfo[] = [];
+  sfSelectedClipper = '';
+  sfClipperParams: ClipperParameter[] = [];
+  sfClipperParamValues: Record<string, number | string> = {};
+  sfSubmitting = false;
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -370,6 +386,150 @@ export class DatasetImporterModalComponent implements OnInit {
     this.view = 'picker';
     this.selectedImporter = null;
     this.error = '';
+  }
+
+  // --- Server folder browser ---
+
+  openServerFolderBrowser(): void {
+    this.view = 'server_folder';
+    this.sfBrowsePath = '';
+    this.sfBrowseRootPath = '';
+    this.sfBrowseDirs = [];
+    this.sfBrowseError = '';
+    this.sfSubmitting = false;
+
+    // Load media type options from the folder importer's fields
+    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
+    const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
+    this.sfMediaTypeOptions = mtField?.options || [];
+    this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'sounds';
+
+    this.sfLoadEmbedders(this.sfMediaType);
+    this.sfLoadClippers(this.sfMediaType);
+    this.sfLoadDirectory('');
+  }
+
+  sfLoadDirectory(path: string): void {
+    this.sfBrowseLoading = true;
+    this.sfBrowseError = '';
+    this.datasetsApi.browseMediaFiles('folder', path).subscribe({
+      next: (res) => {
+        this.sfBrowseDirs = res.directories;
+        this.sfBrowsePath = path;
+        this.sfBrowseRootPath = res.root_path;
+        this.sfBrowseLoading = false;
+      },
+      error: (err) => {
+        this.sfBrowseError = err.error?.error || 'Could not browse server folders. Is saved_datasets_dir configured?';
+        this.sfBrowseLoading = false;
+      },
+    });
+  }
+
+  sfEnterDirectory(dir: { name: string; path: string }): void {
+    this.sfLoadDirectory(dir.path);
+  }
+
+  sfGoUp(): void {
+    if (!this.sfBrowsePath) return;
+    const parts = this.sfBrowsePath.split('/');
+    parts.pop();
+    this.sfLoadDirectory(parts.join('/'));
+  }
+
+  get sfBreadcrumbs(): string[] {
+    if (!this.sfBrowsePath) return [];
+    return this.sfBrowsePath.split('/');
+  }
+
+  sfNavigateBreadcrumb(index: number): void {
+    const parts = this.sfBrowsePath.split('/');
+    this.sfLoadDirectory(parts.slice(0, index + 1).join('/'));
+  }
+
+  get sfAbsolutePath(): string {
+    if (!this.sfBrowseRootPath) return '';
+    if (!this.sfBrowsePath) return this.sfBrowseRootPath;
+    return this.sfBrowseRootPath + '/' + this.sfBrowsePath;
+  }
+
+  sfOnMediaTypeChange(mediaType: string): void {
+    this.sfMediaType = mediaType;
+    this.sfLoadEmbedders(mediaType);
+    this.sfLoadClippers(mediaType);
+  }
+
+  private sfLoadEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.sfEmbedders = [];
+      this.sfSelectedEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.sfEmbedders = embedders;
+        this.sfSelectedEmbedder = embedders.length > 0 ? embedders[0].name : '';
+      },
+    });
+  }
+
+  private sfLoadClippers(mediaType: string): void {
+    if (!mediaType) {
+      this.sfClippers = [];
+      this.sfSelectedClipper = '';
+      return;
+    }
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.sfClippers = clippers;
+        this.sfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
+        this.sfResetClipperParams();
+      },
+    });
+  }
+
+  sfOnClipperChange(clipperName: string): void {
+    this.sfSelectedClipper = clipperName;
+    this.sfResetClipperParams();
+  }
+
+  private sfResetClipperParams(): void {
+    const clipper = this.sfClippers.find((c) => c.name === this.sfSelectedClipper);
+    this.sfClipperParams = clipper?.parameters || [];
+    this.sfClipperParamValues = {};
+    for (const param of this.sfClipperParams) {
+      this.sfClipperParamValues[param.key] = param.default;
+    }
+  }
+
+  sfSubmit(): void {
+    this.sfSubmitting = true;
+    this.sfBrowseError = '';
+
+    const params: Record<string, unknown> = {
+      path: this.sfAbsolutePath,
+      media_type: this.sfMediaType,
+    };
+    if (this.sfSelectedEmbedder) {
+      params['embedder'] = this.sfSelectedEmbedder;
+    }
+    if (this.sfSelectedClipper) {
+      params['clipper'] = this.sfSelectedClipper;
+      if (this.sfClipperParams.length > 0 && Object.keys(this.sfClipperParamValues).length > 0) {
+        params['clipper_params'] = { ...this.sfClipperParamValues };
+      }
+    }
+
+    this.datasetsApi.runImporter('folder', params).subscribe({
+      next: () => {
+        this.sfSubmitting = false;
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.sfSubmitting = false;
+        this.sfBrowseError = err.error?.error || 'Import failed';
+      },
+    });
   }
 
   onFileSelected(event: Event, fieldName: string): void {

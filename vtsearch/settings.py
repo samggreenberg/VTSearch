@@ -62,6 +62,7 @@ _DEFAULTS: dict[str, Any] = {
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
     "autopilot_hard_reds": 4,
+    "autopilot_resort_interval": 10,
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
     "detectors_dir": str(DATA_DIR / "detectors"),
     "trainable_models_dir": str(DATA_DIR / "trainable_models"),
@@ -231,6 +232,7 @@ _SETTING_SPECS: list[tuple] = [
     ("hide_autopilot", bool, None),
     ("autopilot_top_greens", int, _clamp_min(int, 1)),
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
+    ("autopilot_resort_interval", int, _clamp_min(int, 1)),
 ]
 
 for _key, _cast, _coerce in _SETTING_SPECS:

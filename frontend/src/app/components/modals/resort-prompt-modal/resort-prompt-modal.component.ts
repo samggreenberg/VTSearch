@@ -1,11 +1,10 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ImporterInfo, MediaTypeInfo } from '../../../models/api.models';
+import { ImporterInfo } from '../../../models/api.models';
 
 interface BrowseItem {
   key: string;
@@ -19,40 +18,37 @@ interface BrowseEntry {
   isDir: boolean;
 }
 
-type ModalView = 'main' | 'media-picker';
+export interface ResortResult {
+  action: 'new-example';
+  type: 'text' | 'media';
+  value: string;
+}
+
+type ModalView = 'prompt' | 'media-picker';
 
 @Component({
-  selector: 'vt-new-model-modal',
+  selector: 'vt-resort-prompt-modal',
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent],
-  templateUrl: './new-model-modal.component.html',
-  styleUrl: './new-model-modal.component.scss',
+  templateUrl: './resort-prompt-modal.component.html',
+  styleUrl: './resort-prompt-modal.component.scss',
 })
-export class NewModelModalComponent implements OnInit {
+export class ResortPromptModalComponent {
+  @Input() currentExampleType: 'text' | 'media' = 'text';
+  @Input() currentExampleDisplay = '';
   @Output() closed = new EventEmitter<void>();
-  @Output() created = new EventEmitter<void>();
+  @Output() keepExample = new EventEmitter<void>();
+  @Output() newExample = new EventEmitter<ResortResult>();
 
-  view: ModalView = 'main';
-  name = '';
-  mediaType = 'audio';
+  view: ModalView = 'prompt';
   pendingText = '';
-  mediaTypes: string[] = [];
-  mediaTypeInfos: MediaTypeInfo[] = [];
-  submitting = false;
   error = '';
-
-  // Single example (text or media, not both)
-  exampleType: 'text' | 'media' | null = null;
-  exampleValue = '';
-  exampleDisplay = '';
 
   // Media picker state
   mediaSources: ImporterInfo[] = [];
   selectedSource: ImporterInfo | null = null;
   browseItems: BrowseItem[] = [];
   browseLoading = false;
-
-  // File browser state (for demo & folder drill-down)
   browseSource = '';
   browsePath: string[] = [];
   browseEntries: BrowseEntry[] = [];
@@ -60,45 +56,23 @@ export class NewModelModalComponent implements OnInit {
   fileLoading = false;
 
   constructor(
-    private modelsApi: TrainableModelsApiService,
     private datasetsApi: DatasetsApiService,
     private sortingApi: SortingApiService,
   ) {}
 
-  ngOnInit(): void {
-    this.datasetsApi.getMediaTypes().subscribe({
-      next: (res) => {
-        this.mediaTypeInfos = res.media_types || [];
-        this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
-      },
-    });
-    this.datasetsApi.getRegistry().subscribe({
-      next: (res) => {
-        const types = new Set(
-          (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
-        );
-        if (types.size === 1) {
-          this.mediaType = [...types][0];
-        }
-      },
-    });
-  }
-
-  get hasExample(): boolean {
-    return this.exampleType !== null;
+  onKeep(): void {
+    this.keepExample.emit();
   }
 
   // --- Text example ---
 
-  setTextExample(): void {
+  submitText(): void {
     const text = this.pendingText.trim();
     if (!text) return;
-    this.exampleType = 'text';
-    this.exampleValue = text;
-    this.exampleDisplay = text;
+    this.newExample.emit({ action: 'new-example', type: 'text', value: text });
   }
 
-  // --- Media example ---
+  // --- Media picker ---
 
   openMediaPicker(): void {
     this.view = 'media-picker';
@@ -108,10 +82,6 @@ export class NewModelModalComponent implements OnInit {
     this.browseEntries = [];
     this.browsePath = [];
     this.browseSource = '';
-    this.loadMediaSources();
-  }
-
-  private loadMediaSources(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaSources = (res.importers || []).filter(
@@ -163,15 +133,8 @@ export class NewModelModalComponent implements OnInit {
       this.startFileBrowsing(`demo:${item.key}`, item.display);
       return;
     }
-
-    // For other sources (server media files), selecting sets the example
-    this.exampleType = 'media';
-    this.exampleValue = item.key;
-    this.exampleDisplay = item.display || item.key;
-    this.view = 'main';
+    this.newExample.emit({ action: 'new-example', type: 'media', value: item.key });
   }
-
-  // --- Recursive file browser ---
 
   private startFileBrowsing(source: string, label: string): void {
     this.fileBrowsing = true;
@@ -183,7 +146,6 @@ export class NewModelModalComponent implements OnInit {
   private loadDirectory(relPath: string): void {
     this.fileLoading = true;
     this.browseEntries = [];
-
     this.datasetsApi.browseMediaFiles(this.browseSource, relPath).subscribe({
       next: (res) => {
         const entries: BrowseEntry[] = [];
@@ -196,9 +158,7 @@ export class NewModelModalComponent implements OnInit {
         this.browseEntries = entries;
         this.fileLoading = false;
       },
-      error: () => {
-        this.fileLoading = false;
-      },
+      error: () => { this.fileLoading = false; },
     });
   }
 
@@ -223,17 +183,29 @@ export class NewModelModalComponent implements OnInit {
     this.fileLoading = true;
     this.datasetsApi.selectBrowsedFile(this.browseSource, entry.path).subscribe({
       next: (res) => {
-        this.exampleType = 'media';
-        this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || entry.name;
         this.fileLoading = false;
-        this.view = 'main';
+        this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });
       },
       error: () => {
         this.error = 'Failed to select file';
         this.fileLoading = false;
       },
     });
+  }
+
+  onLocalFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    this.sortingApi.uploadServerMediaFile(file).subscribe({
+      next: (res) => {
+        this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });
+      },
+      error: () => {
+        this.error = 'Failed to upload file';
+      },
+    });
+    input.value = '';
   }
 
   formatSize(bytes?: number): string {
@@ -243,86 +215,7 @@ export class NewModelModalComponent implements OnInit {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  onLocalFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    this.sortingApi.uploadServerMediaFile(file).subscribe({
-      next: (res) => {
-        this.exampleType = 'media';
-        this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || res.filename;
-      },
-      error: () => {
-        this.error = 'Failed to upload file';
-      },
-    });
-    input.value = '';
-  }
-
-  backToMain(): void {
-    this.view = 'main';
-  }
-
-  // --- Clear example ---
-
-  clearExample(): void {
-    this.exampleType = null;
-    this.exampleValue = '';
-    this.exampleDisplay = '';
-    this.pendingText = '';
-  }
-
-  // --- Submit ---
-
-  submit(): void {
-    const trimmedName = this.name.trim();
-    if (!trimmedName) {
-      this.error = 'Name is required';
-      return;
-    }
-    if (!this.hasExample) {
-      this.error = 'An example (text or media) is required';
-      return;
-    }
-
-    this.submitting = true;
-    this.error = '';
-
-    const textQuery = this.exampleType === 'text' ? this.exampleValue : '';
-    const mediaExample = this.exampleType === 'media' ? this.exampleValue : '';
-    const examplesPayload = [{ type: this.exampleType!, value: this.exampleValue }];
-
-    this.modelsApi
-      .registerModel({
-        name: trimmedName,
-        media_type: this.mediaType,
-        trainable: true,
-        text_query: textQuery,
-        media_example: mediaExample,
-        examples: examplesPayload,
-      })
-      .subscribe({
-        next: () => {
-          this.submitting = false;
-          this.created.emit();
-        },
-        error: (err) => {
-          this.submitting = false;
-          this.error = err.error?.error || 'Failed to create model';
-        },
-      });
-  }
-
-  getMediaTypeLabel(typeId: string): string {
-    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
-    if (mt) {
-      return `${mt.icon || ''} ${mt.tab_title || mt.name}`.trim();
-    }
-    return typeId;
-  }
-
-  close(): void {
-    this.closed.emit();
+  backToPrompt(): void {
+    this.view = 'prompt';
   }
 }
