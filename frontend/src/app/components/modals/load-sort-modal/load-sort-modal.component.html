@@ -88,20 +88,18 @@
       <!-- Sort by Detector -->
       <div class="sort-section">
         <h3>Sort by Detector</h3>
-        <label class="btn btn--secondary file-btn">
-          Local detector file
-          <input type="file" accept=".json,.pkl" (change)="onDetectorFileSelected($event)" hidden />
-        </label>
+        <h4>Server Detectors</h4>
         @if (serverDetectors.length > 0) {
-          <h4>Server Detectors</h4>
           <div class="file-list">
             @for (det of serverDetectors; track det.name) {
               <button class="file-item" (click)="loadServerDetector(det.name)">{{ det.name }}</button>
             }
           </div>
+        } @else {
+          <p class="empty-state">No server detector files found.</p>
         }
+        <h4>Dashboard Models</h4>
         @if (registryModels.length > 0) {
-          <h4>Dashboard Models</h4>
           <div class="file-list">
             @for (model of registryModels; track model.id) {
               <button class="file-item" (click)="loadRegistryModel(model)">
@@ -112,6 +110,8 @@
               </button>
             }
           </div>
+        } @else {
+          <p class="empty-state">No trained dashboard models found.</p>
         }
       </div>
 
