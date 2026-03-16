@@ -16,4 +16,10 @@ export class LabelSessionService {
   textQuery = '';
   mediaExample = '';
   examples: ModelExample[] = [];
+
+  /** Total votes cast since the last re-sort prompt. */
+  resortVoteCount = 0;
+
+  /** Next threshold at which to show the re-sort prompt. */
+  resortNextThreshold = 0;
 }

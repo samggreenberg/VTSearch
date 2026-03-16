@@ -1,30 +1,15 @@
-.new-model-form {
+.resort-prompt {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.prompt-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
 }
 
-.required {
-  color: var(--color-bad);
-}
-
-.info-text {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.error-text {
-  color: var(--color-bad);
-  font-size: 0.85rem;
-}
-
-// Two-column layout for text vs media example input
 .example-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -64,39 +49,12 @@
   display: none;
 }
 
-// Single example display
-.example-display {
-  margin-top: 4px;
+.error-text {
+  color: var(--color-bad);
+  font-size: 0.85rem;
 }
 
-.example-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-subtle);
-  margin-top: 4px;
-}
-
-.example-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--accent);
-}
-
-.example-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9rem;
-}
-
-// Media picker view
+// Media picker view (reuses styles from new-model-modal)
 .media-picker {
   min-height: 200px;
 }
@@ -187,7 +145,6 @@
   padding: 16px 0;
 }
 
-// Breadcrumbs for file browser navigation
 .breadcrumbs {
   display: flex;
   align-items: center;
@@ -222,7 +179,6 @@
   padding: 2px 4px;
 }
 
-// File/directory entries
 .browse-dir {
   font-weight: 600;
 }

@@ -68,3 +68,13 @@
     (closed)="onProgressModalClosed()"
   />
 }
+
+@if (showResortPrompt) {
+  <vt-resort-prompt-modal
+    [currentExampleType]="resortCurrentType"
+    [currentExampleDisplay]="resortCurrentDisplay"
+    (keepExample)="onResortKeep()"
+    (newExample)="onResortNewExample($event)"
+    (closed)="onResortClosed()"
+  />
+}
