@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import load_demo_dataset
 
 
 class DemoDatasetImporter(DatasetImporter):
@@ -87,6 +86,8 @@ class DemoDatasetImporter(DatasetImporter):
         embedder_name = field_values.get("embedder", "") or ""
         converter_name = field_values.get("converter", "") or ""
         clipper_name = field_values.get("clipper", "") or ""
+
+        from vtsearch.datasets.loader import load_demo_dataset  # noqa: PLC0415
 
         load_demo_dataset(
             dataset_name,
