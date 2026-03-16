@@ -359,13 +359,13 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         for i in range(6, 11):
             client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
 
-        resp = client.get("/api/labeling-progress")
+        resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
         # Switch a vote
         client.post("/api/medias/1/vote", json={"vote": "bad"})
 
-        resp = client.get("/api/labeling-progress")
+        resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
 
