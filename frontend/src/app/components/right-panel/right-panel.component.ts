@@ -53,7 +53,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridColumnsRightDict: Record<string, number> = {};
-  private currentMediaType = '';
+  protected currentMediaType = '';
   private destroy$ = new Subject<void>();
 
   constructor(
