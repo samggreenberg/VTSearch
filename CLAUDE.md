@@ -18,7 +18,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
-- **Frontend tests**: `cd frontend && ng test --watch=false`
+- **Frontend tests**: `cd frontend && ng test --watch=false` (requires Chrome/Chromium; see Environment Notes below)
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 
@@ -183,6 +183,9 @@ All mutable global state is reset automatically before each test via two autouse
       medias.update(saved)
   ```
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
+
+## Environment Notes (Claude Code on the web)
+- **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `autorun_extractors`, `autorun_localizers`, `_dataset_display_name`, `_diversity_tree` are module-level dicts/lists; all protected by `_state_lock` (RLock)
