@@ -89,6 +89,7 @@
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()">&larr; Back</button>
 
+      <!-- Source selection (top level) -->
       @if (!selectedSource) {
         <p class="picker-instructions">Choose a source to browse media from:</p>
         <div class="source-list">
@@ -103,7 +104,8 @@
         </div>
       }
 
-      @if (selectedSource && !selectedDemo && !browseLoading && browseItems.length > 0) {
+      <!-- Browse items (demo list or server media files) -->
+      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length > 0) {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
         <div class="browse-list">
           @for (item of browseItems; track item.key) {
@@ -114,23 +116,44 @@
         </div>
       }
 
-      @if (selectedDemo) {
-        <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoList()">&larr; Back to datasets</button>
-        @if (demoCategoriesLoading) {
-          <p class="empty-state">Loading categories...</p>
+      <!-- File browser (recursive directory navigation) -->
+      @if (fileBrowsing) {
+        <div class="breadcrumbs">
+          @for (seg of browsePath; track $index) {
+            @if ($index > 0) { <span class="breadcrumb-sep">/</span> }
+            @if ($index < browsePath.length - 1) {
+              <button class="breadcrumb-link" (click)="navigateBreadcrumb($index)">{{ seg }}</button>
+            } @else {
+              <span class="breadcrumb-current">{{ seg }}</span>
+            }
+          }
+        </div>
+
+        @if (fileLoading) {
+          <p class="empty-state">Loading...</p>
         }
-        @if (!demoCategoriesLoading && demoCategories.length > 0) {
-          <p class="picker-instructions">Select a category from <strong>{{ selectedDemo.display }}</strong>:</p>
+
+        @if (!fileLoading && browseEntries.length > 0) {
           <div class="browse-list">
-            @for (cat of demoCategories; track cat.key) {
-              <button class="browse-item" (click)="selectDemoCategory(cat)" [title]="cat.key">
-                {{ cat.display }}
-              </button>
+            @for (entry of browseEntries; track entry.path) {
+              @if (entry.isDir) {
+                <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
+                  <span class="entry-icon">&#128193;</span> {{ entry.name }}
+                </button>
+              } @else {
+                <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
+                  <span class="entry-icon">&#128196;</span> {{ entry.name }}
+                  @if (entry.size_bytes != null) {
+                    <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
+                  }
+                </button>
+              }
             }
           </div>
         }
-        @if (!demoCategoriesLoading && demoCategories.length === 0) {
-          <p class="empty-state">No categories found in this dataset.</p>
+
+        @if (!fileLoading && browseEntries.length === 0) {
+          <p class="empty-state">No media files found in this directory.</p>
         }
       }
 
@@ -138,7 +161,7 @@
         <p class="empty-state">Loading items...</p>
       }
 
-      @if (selectedSource && !selectedDemo && !browseLoading && browseItems.length === 0) {
+      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length === 0) {
         <p class="empty-state">No items found in this source.</p>
       }
     </div>

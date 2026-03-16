@@ -52,6 +52,118 @@ class TestDatasetEndpoints:
         data = resp.get_json()
         assert "error" in data
 
+    def test_browse_media_files_unknown_source(self, client):
+        """GET /api/browse-media-files with unknown source returns 404."""
+        resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_browse_media_files_path_traversal_blocked(self, client):
+        """GET /api/browse-media-files rejects path traversal."""
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        info = DEMO_DATASETS[name]
+        if info.get("required_folder") is None or not info["required_folder"].is_dir():
+            pytest.skip("Demo source directory not present on disk")
+
+        resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=../../etc")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_browse_media_files_demo_source(self, client, tmp_path):
+        """GET /api/browse-media-files lists files and directories for a demo source."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+
+        # Create a temp dir with a subdir and a .wav file
+        sub = tmp_path / "catA"
+        sub.mkdir()
+        (sub / "sound.wav").write_bytes(b"RIFF" + b"\x00" * 100)
+        (tmp_path / "top.wav").write_bytes(b"RIFF" + b"\x00" * 50)
+
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "directories" in data
+            assert "files" in data
+            dir_names = [d["name"] for d in data["directories"]]
+            file_names = [f["name"] for f in data["files"]]
+            assert "catA" in dir_names
+            assert "top.wav" in file_names
+
+            # Drill into subdirectory
+            resp2 = client.get(f"/api/browse-media-files?source=demo:{name}&path=catA")
+            assert resp2.status_code == 200
+            data2 = resp2.get_json()
+            file_names2 = [f["name"] for f in data2["files"]]
+            assert "sound.wav" in file_names2
+
+    def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
+        """POST /api/browse-media-files/select copies the file to example_media."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+
+        # Create a temp file
+        (tmp_path / "pick_me.wav").write_bytes(b"RIFF" + b"\x00" * 80)
+
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.post(
+                "/api/browse-media-files/select",
+                json={"source": f"demo:{name}", "path": "pick_me.wav"},
+            )
+            assert resp.status_code == 201
+            data = resp.get_json()
+            assert "filename" in data
+            assert data["original_name"] == "pick_me.wav"
+            # The file should have been copied to data/example_media/
+            from vtsearch.config import DATA_DIR
+
+            dest = DATA_DIR / "example_media" / data["filename"]
+            assert dest.exists()
+            # Clean up
+            dest.unlink(missing_ok=True)
+
+    def test_select_browsed_file_traversal_blocked(self, client, tmp_path):
+        """POST /api/browse-media-files/select rejects traversal paths."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.post(
+                "/api/browse-media-files/select",
+                json={"source": f"demo:{name}", "path": "../../etc/passwd"},
+            )
+            assert resp.status_code == 400
+
     def test_clear_dataset(self, client):
         saved = dict(app_module.medias)
         try:

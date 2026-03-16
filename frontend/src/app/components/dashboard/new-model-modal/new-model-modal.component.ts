@@ -18,6 +18,13 @@ interface BrowseItem {
   display: string;
 }
 
+interface BrowseEntry {
+  name: string;
+  path: string;
+  size_bytes?: number;
+  isDir: boolean;
+}
+
 type ModalView = 'main' | 'media-picker';
 
 @Component({
@@ -46,10 +53,12 @@ export class NewModelModalComponent implements OnInit {
   browseItems: BrowseItem[] = [];
   browseLoading = false;
 
-  // Demo drill-down state
-  selectedDemo: BrowseItem | null = null;
-  demoCategories: BrowseItem[] = [];
-  demoCategoriesLoading = false;
+  // File browser state (for demo & folder drill-down)
+  browseSource = '';          // e.g. "demo:esc50_s" or "folder"
+  browsePath: string[] = [];  // breadcrumb segments
+  browseEntries: BrowseEntry[] = [];
+  fileBrowsing = false;
+  fileLoading = false;
 
   constructor(
     private modelsApi: TrainableModelsApiService,
@@ -90,8 +99,10 @@ export class NewModelModalComponent implements OnInit {
     this.view = 'media-picker';
     this.selectedSource = null;
     this.browseItems = [];
-    this.selectedDemo = null;
-    this.demoCategories = [];
+    this.fileBrowsing = false;
+    this.browseEntries = [];
+    this.browsePath = [];
+    this.browseSource = '';
     this.loadMediaSources();
   }
 
@@ -101,6 +112,7 @@ export class NewModelModalComponent implements OnInit {
         this.mediaSources = (res.importers || []).filter(
           (imp) =>
             imp.name === 'demo' ||
+            imp.name === 'folder' ||
             (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
         );
       },
@@ -111,9 +123,10 @@ export class NewModelModalComponent implements OnInit {
     this.selectedSource = source;
     this.browseLoading = true;
     this.browseItems = [];
+    this.fileBrowsing = false;
 
-    // For demo importer, list demo datasets
     if (source.name === 'demo') {
+      // List demo datasets — each one becomes a browsable source
       this.datasetsApi.getDemoList().subscribe({
         next: (res) => {
           this.browseItems = (res.datasets || []).map((d) => ({
@@ -125,19 +138,11 @@ export class NewModelModalComponent implements OnInit {
         error: () => { this.browseLoading = false; },
       });
     } else if (source.name === 'folder') {
-      // List available files on the server
-      this.datasetsApi.getAvailableFiles().subscribe({
-        next: (res) => {
-          this.browseItems = (res.files || []).map((f) => ({
-            key: f.path || f.name,
-            display: `${f.name} (${f.size_mb?.toFixed(1) || '?'} MB)`,
-          }));
-          this.browseLoading = false;
-        },
-        error: () => { this.browseLoading = false; },
-      });
+      // Go straight into the file browser for saved_datasets_dir
+      this.browseLoading = false;
+      this.startFileBrowsing('folder', 'Saved Datasets');
     } else {
-      // For other importers, list server media files as a fallback
+      // For other importers, list server media files (already individual files)
       this.sortingApi.getServerMediaFiles().subscribe({
         next: (res) => {
           this.browseItems = (res.files || []).map((f) => ({
@@ -152,26 +157,13 @@ export class NewModelModalComponent implements OnInit {
   }
 
   selectBrowseItem(item: BrowseItem): void {
-    // For demo sources, drill down into categories instead of adding the whole pile
+    // For demo sources, drill down into the demo's files
     if (this.selectedSource?.name === 'demo') {
-      this.selectedDemo = item;
-      this.demoCategoriesLoading = true;
-      this.demoCategories = [];
-      this.datasetsApi.getDemoCategories(item.key).subscribe({
-        next: (res) => {
-          this.demoCategories = (res.categories || []).map((cat) => ({
-            key: cat,
-            display: cat,
-          }));
-          this.demoCategoriesLoading = false;
-        },
-        error: () => {
-          this.demoCategoriesLoading = false;
-        },
-      });
+      this.startFileBrowsing(`demo:${item.key}`, item.display);
       return;
     }
 
+    // For other sources (server media files), selecting adds it directly
     this.examples.push({
       type: 'media',
       value: item.key,
@@ -180,19 +172,81 @@ export class NewModelModalComponent implements OnInit {
     this.view = 'main';
   }
 
-  selectDemoCategory(cat: BrowseItem): void {
-    const demo = this.selectedDemo!;
-    this.examples.push({
-      type: 'media',
-      value: `demo:${demo.key}/${cat.key}`,
-      display: `${demo.display} — ${cat.display}`,
-    });
-    this.view = 'main';
+  // --- Recursive file browser ---
+
+  private startFileBrowsing(source: string, label: string): void {
+    this.fileBrowsing = true;
+    this.browseSource = source;
+    this.browsePath = [label];
+    this.loadDirectory('');
   }
 
-  backToDemoList(): void {
-    this.selectedDemo = null;
-    this.demoCategories = [];
+  private loadDirectory(relPath: string): void {
+    this.fileLoading = true;
+    this.browseEntries = [];
+
+    this.datasetsApi.browseMediaFiles(this.browseSource, relPath).subscribe({
+      next: (res) => {
+        const entries: BrowseEntry[] = [];
+        for (const d of res.directories || []) {
+          entries.push({ name: d.name, path: d.path, isDir: true });
+        }
+        for (const f of res.files || []) {
+          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, isDir: false });
+        }
+        this.browseEntries = entries;
+        this.fileLoading = false;
+      },
+      error: () => {
+        this.fileLoading = false;
+      },
+    });
+  }
+
+  enterDirectory(entry: BrowseEntry): void {
+    this.browsePath.push(entry.name);
+    this.loadDirectory(entry.path);
+  }
+
+  navigateBreadcrumb(index: number): void {
+    if (index === 0) {
+      // Go back to source/demo list
+      this.fileBrowsing = false;
+      this.browseEntries = [];
+      this.browsePath = [];
+      return;
+    }
+    // Rebuild the relative path from breadcrumb segments (skip the root label)
+    this.browsePath = this.browsePath.slice(0, index + 1);
+    const relPath = this.browsePath.slice(1).join('/');
+    this.loadDirectory(relPath);
+  }
+
+  selectFile(entry: BrowseEntry): void {
+    // Copy the file to example_media via the select endpoint
+    this.fileLoading = true;
+    this.datasetsApi.selectBrowsedFile(this.browseSource, entry.path).subscribe({
+      next: (res) => {
+        this.examples.push({
+          type: 'media',
+          value: res.filename,
+          display: res.original_name || entry.name,
+        });
+        this.fileLoading = false;
+        this.view = 'main';
+      },
+      error: () => {
+        this.error = 'Failed to select file';
+        this.fileLoading = false;
+      },
+    });
+  }
+
+  formatSize(bytes?: number): string {
+    if (bytes == null) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   onLocalFileSelected(event: Event): void {
