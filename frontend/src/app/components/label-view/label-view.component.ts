@@ -128,7 +128,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
           this.sortState.setSortMode('learned');
-          this.onLearnedSort();
+          this.onLearnedSort(false);
         }
         else if (curr.phase === 'new') this.sortState.setSelectMode('new');
       });
