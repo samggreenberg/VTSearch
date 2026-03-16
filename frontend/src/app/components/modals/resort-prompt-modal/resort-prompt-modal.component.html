@@ -37,7 +37,9 @@
         <p class="error-text">{{ error }}</p>
       }
     </div>
+  }
 
+  @if (view === 'prompt') {
     <div modal-footer>
       <button class="btn btn--secondary" (click)="onKeep()">Keep Current</button>
     </div>
