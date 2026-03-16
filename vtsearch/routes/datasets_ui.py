@@ -251,7 +251,7 @@ def browse_media_files():
                 "size_bytes": entry.stat().st_size,
             })
 
-    return jsonify({"directories": directories, "files": files})
+    return jsonify({"directories": directories, "files": files, "root_path": str(root)})
 
 
 @datasets_ui_bp.route("/api/browse-media-files/select", methods=["POST"])
