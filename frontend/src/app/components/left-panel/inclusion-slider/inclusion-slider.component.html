@@ -1,15 +1,15 @@
-<div class="inclusion-slider">
-  <label class="inclusion-label" for="inclusion-slider" title="Adjust the inclusion bias. Positive values include more items (favor recall), negative values exclude more (favor precision). Triggers retraining of learned sort.">
+<div class="inclusion-selector">
+  <label class="inclusion-label" for="inclusion-input" title="Adjust the inclusion bias. Positive values include more items (favor recall), negative values exclude more (favor precision). Triggers retraining of learned sort.">
     Inclusion
-    <span class="inclusion-value">{{ displayValue }}</span>
   </label>
   <input
-    id="inclusion-slider"
-    type="range"
+    id="inclusion-input"
+    type="number"
     min="-10"
     max="10"
+    step="1"
     [value]="value"
     (input)="onInput($event)"
-    aria-label="Inclusion slider"
+    aria-label="Inclusion"
   />
 </div>
