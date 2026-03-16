@@ -172,6 +172,10 @@
             <label class="form-label"># Bad to start</label>
             <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
           </div>
+          <div class="form-group">
+            <label class="form-label"># Start to re-sort</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" />
+          </div>
 
           @if (embedders.length > 0) {
             <h4>Autoload Embedders</h4>

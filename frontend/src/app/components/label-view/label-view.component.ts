@@ -15,12 +15,13 @@ import { SortStateService, SortMode, SelectMode, SortedItem } from '../../servic
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
+import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
 
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent, ResortPromptModalComponent],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -45,6 +46,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   autopilotCollapsed = false;
   autopilotEnabled = true;
   progressModalMetric: ProgressMetric | null = null;
+
+  // Re-sort prompt state
+  showResortPrompt = false;
+  resortCurrentType: 'text' | 'media' = 'text';
+  resortCurrentDisplay = '';
+  private resortInterval = 10;
+  private resortVoteCount = 0;
+  private resortNextThreshold = 0;
 
   private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
@@ -263,6 +272,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (settings.inclusion != null) {
           this.sortState.setInclusion(settings.inclusion);
         }
+        if (settings.autopilot_resort_interval != null) {
+          this.resortInterval = settings.autopilot_resort_interval;
+          // Initialize the threshold if not yet set
+          if (this.resortNextThreshold === 0) {
+            this.resortNextThreshold = this.resortInterval;
+          }
+        }
       });
   }
 
@@ -436,6 +452,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
       this.scheduleLearnedSort(false);
     }
+    this.checkResortPrompt();
   }
 
   // --- Indicators ---
@@ -460,6 +477,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onAutopilotStart(): void {
     this.sortState.setSelectMode('top');
+    // Initialize re-sort tracking
+    this.resortVoteCount = 0;
+    this.resortNextThreshold = this.resortInterval;
     const textQuery = this.labelSession.textQuery;
     const mediaExample = this.labelSession.mediaExample;
     if (textQuery) {
@@ -506,6 +526,61 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         },
       });
     }
+  }
+
+  // --- Re-sort prompt ---
+
+  private checkResortPrompt(): void {
+    // Only show during autopilot's "good" phase (sorting by example in top mode)
+    if (!this.autopilotStateService.running) return;
+    const phase = this.autopilotStateService.state.phase;
+    if (phase !== 'good') return;
+
+    this.resortVoteCount++;
+    if (this.resortVoteCount >= this.resortNextThreshold) {
+      // Determine current example info for the prompt
+      if (this.labelSession.textQuery) {
+        this.resortCurrentType = 'text';
+        this.resortCurrentDisplay = this.labelSession.textQuery;
+      } else if (this.labelSession.mediaExample) {
+        this.resortCurrentType = 'media';
+        this.resortCurrentDisplay = this.labelSession.mediaExample;
+      } else {
+        return; // No example to prompt about
+      }
+      this.showResortPrompt = true;
+    }
+  }
+
+  onResortKeep(): void {
+    this.showResortPrompt = false;
+    // Multiply threshold by 1.5 for next prompt
+    this.resortNextThreshold = Math.round(this.resortNextThreshold * 1.5);
+    this.resortVoteCount = 0;
+  }
+
+  onResortNewExample(result: ResortResult): void {
+    this.showResortPrompt = false;
+    this.resortVoteCount = 0;
+    // Reset threshold back to the base interval
+    this.resortNextThreshold = this.resortInterval;
+
+    if (result.type === 'text') {
+      this.labelSession.textQuery = result.value;
+      this.labelSession.mediaExample = '';
+      this.sortState.setSelectMode('top');
+      this.triggerAutopilotTextSort();
+    } else {
+      this.labelSession.mediaExample = result.value;
+      this.labelSession.textQuery = '';
+      this.sortState.setSelectMode('top');
+      this.triggerAutopilotMediaSort();
+    }
+  }
+
+  onResortClosed(): void {
+    // Treat closing the modal as "keep"
+    this.onResortKeep();
   }
 
   onAutopilotToggleCollapse(): void {

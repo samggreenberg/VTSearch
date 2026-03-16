@@ -272,6 +272,7 @@ export interface AppSettings {
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
+  autopilot_resort_interval?: number;
   [key: string]: unknown;
 }
 
