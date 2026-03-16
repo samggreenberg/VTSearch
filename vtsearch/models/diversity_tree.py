@@ -22,6 +22,7 @@ import numpy as np
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
 DIVERSITY_TREE_MIN_NODE_SIZE = 20
+_N_INIT = 10  # number of k-means initialisations per node
 
 
 class DiversityTree:
@@ -82,7 +83,7 @@ class DiversityTree:
                 num_levels = min(num_levels, max_depth)
             else:
                 num_levels = 0
-            self._estimated_total_work = max(total * num_levels, 1)
+            self._estimated_total_work = max(total * num_levels * _N_INIT, 1)
             self._work_done = 0
             if on_progress:
                 on_progress(0, self._estimated_total_work)
@@ -121,19 +122,34 @@ class DiversityTree:
                 self.vector_to_leaf[vid] = name
             return
 
-        # Run k-means
+        # Run k-means in individual inits for granular progress reporting.
+        # Each of the N_INIT runs reports progress separately, so the UI
+        # updates during the expensive root clustering instead of sitting
+        # at 0% until it finishes.
         from sklearn.cluster import KMeans  # noqa: PLC0415
 
-        kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(vecs)
-
-        # Report progress proportional to the number of vectors clustered
-        self._work_done += len(ids)
-        if self._on_progress:
-            self._on_progress(
-                min(self._work_done, self._estimated_total_work),
-                self._estimated_total_work,
+        best_labels = None
+        best_inertia = float("inf")
+        for init_i in range(_N_INIT):
+            km = KMeans(
+                n_clusters=actual_k,
+                random_state=42 + init_i,
+                n_init=1,
             )
+            candidate_labels = km.fit_predict(vecs)
+            if km.inertia_ < best_inertia:
+                best_inertia = km.inertia_
+                best_labels = candidate_labels
+
+            # Report progress after each init
+            self._work_done += len(ids)
+            if self._on_progress:
+                self._on_progress(
+                    min(self._work_done, self._estimated_total_work),
+                    self._estimated_total_work,
+                )
+
+        labels = best_labels
 
         children = []
         for ci in range(actual_k):
