@@ -249,7 +249,7 @@ class TestBackgroundImportMemoryError:
             return thread
 
         with mock.patch(
-            "vtsearch.datasets.importers.demo.load_demo_dataset",
+            "vtsearch.datasets.loader.load_demo_dataset",
             side_effect=MemoryError("simulated"),
         ), mock.patch(
             "vtsearch.routes.datasets_loading.threading.Thread",
