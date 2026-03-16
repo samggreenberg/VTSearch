@@ -271,6 +271,104 @@ class TestProgressCacheWithLabelChanges:
         assert data["bad_count"] == 4  # lost 1
 
 
+class TestProgressCacheInvalidatedOnVoteSwitch:
+    """Progress cache must be cleared when a vote switches polarity (good→bad or bad→good).
+
+    Old cached models were trained with the now-incorrect label, and their
+    stability/evaluation metrics are stale.
+    """
+
+    def test_good_to_bad_clears_cache(self, client):
+        """Switching a vote from good to bad should clear the progress cache."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Switch media 1 from good to bad — cache should be cleared
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        assert len(_cached_steps) == 0, "Cache should be cleared on good→bad switch"
+
+    def test_bad_to_good_clears_cache(self, client):
+        """Switching a vote from bad to good should clear the progress cache."""
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/2/vote", json={"vote": "good"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Switch media 1 from bad to good — cache should be cleared
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        assert len(_cached_steps) == 0, "Cache should be cleared on bad→good switch"
+
+    def test_toggle_off_does_not_clear_cache(self, client):
+        """Toggling a vote OFF (unlabeling) should NOT clear the progress cache."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Toggle off media 1 (good→unlabel) — cache should NOT be cleared
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        assert len(_cached_steps) > 0, "Cache should not be cleared on simple toggle-off"
+
+    def test_new_vote_does_not_clear_cache(self, client):
+        """Adding a brand-new vote (no prior label) should NOT clear the cache."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Add a new good vote on media 3 (no prior label)
+        client.post("/api/medias/3/vote", json={"vote": "good"})
+        assert len(_cached_steps) == 2, "Cache should not be cleared when adding a new vote"
+
+    def test_live_models_cleared_on_switch(self, client):
+        """Live models from learned-sort should also be cleared on a vote switch."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        resp = client.post("/api/learned-sort")
+        assert resp.status_code == 200
+        assert len(_live_models) > 0
+
+        # Switch media 1 from good to bad — live models should be cleared
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        assert len(_live_models) == 0, "Live models should be cleared on vote switch"
+
+    def test_cache_rebuilds_correctly_after_switch(self, client):
+        """After a cache invalidation from a vote switch, rebuilding should work."""
+        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 2
+
+        # Switch media 1 from good to bad (clears cache)
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        assert len(_cached_steps) == 0
+
+        # Rebuild cache — should process entire label_history from scratch
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == len(label_history)
+        # After replay, media 1 should be in bad_ids (final state)
+        assert 1 in _cache_bad_ids
+        assert 1 not in _cache_good_ids
+
+    def test_labeling_progress_works_after_switch(self, client):
+        """The /api/labeling-progress endpoint should work after a vote switch."""
+        for i in range(1, 6):
+            client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
+        for i in range(6, 11):
+            client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
+
+        resp = client.get("/api/labeling-progress")
+        assert resp.status_code == 200
+
+        # Switch a vote
+        client.post("/api/medias/1/vote", json={"vote": "bad"})
+
+        resp = client.get("/api/labeling-progress")
+        assert resp.status_code == 200
+
+
 class TestStableIndicatorThresholds:
     """The Stable indicator should not turn green prematurely."""
 

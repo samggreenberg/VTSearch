@@ -103,6 +103,10 @@ def toggle_vote(media_id: int, vote: str) -> None:
     (unlabelled); otherwise the vote is applied (overriding any existing
     opposite vote).
 
+    When a vote switches polarity (good→bad or bad→good), the progress
+    cache is invalidated because old cached models were trained with the
+    now-incorrect label and their stability/evaluation metrics are stale.
+
     This function acquires ``_state_lock`` so that the entire check-then-modify
     sequence is atomic with respect to concurrent requests.
 
@@ -110,6 +114,8 @@ def toggle_vote(media_id: int, vote: str) -> None:
         media_id: Integer ID of the media to vote on.
         vote: ``"good"`` or ``"bad"``.
     """
+    from vtsearch.models.progress import clear_progress_cache
+
     with _state_lock:
         if vote == "good":
             if media_id in good_votes:
@@ -119,11 +125,14 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 if media_id not in bad_votes:
                     diversity_tree_unlabel(media_id)
             else:
+                was_opposite = media_id in bad_votes
                 bad_votes.pop(media_id, None)
                 good_votes[media_id] = None
                 assign_click_time(media_id)
                 add_label_to_history(media_id, "good")
                 diversity_tree_label(media_id)
+                if was_opposite:
+                    clear_progress_cache()
         else:
             if media_id in bad_votes:
                 bad_votes.pop(media_id, None)
@@ -132,11 +141,14 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 if media_id not in good_votes:
                     diversity_tree_unlabel(media_id)
             else:
+                was_opposite = media_id in good_votes
                 good_votes.pop(media_id, None)
                 bad_votes[media_id] = None
                 assign_click_time(media_id)
                 add_label_to_history(media_id, "bad")
                 diversity_tree_label(media_id)
+                if was_opposite:
+                    clear_progress_cache()
 
 
 def apply_label(media_id: int, label: str) -> None:
