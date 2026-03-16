@@ -14,6 +14,7 @@
       [mode]="sortMode"
       (modeChange)="onSortModeChange($event)"
     />
+    <button class="view-btn" (click)="onViewSettings()">View</button>
   </div>
 
   <vt-label-list
@@ -28,7 +29,6 @@
     [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
     (mediaVote)="onMediaVote($event)"
-    (viewButtonClicked)="onViewSettings()"
   />
 
   <vt-label-list
@@ -43,7 +43,6 @@
     [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
     (mediaVote)="onMediaVote($event)"
-    (viewButtonClicked)="onViewSettings()"
   />
 
   <div class="export-row">
