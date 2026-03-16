@@ -53,20 +53,31 @@
         @if (learnedDisabled) {
           <span class="sort-hint">Need at least 1 good and 1 bad vote</span>
         } @else {
-          <span class="sort-desc">Sorting by trained model</span>
+          <span class="sort-desc">Sorting by trained model.</span>
         }
       </div>
     }
 
     @if (sortMode === 'load') {
       <div class="load-sort-wrap">
-        @if (loadSortLabel) {
-          <span class="sort-desc">{{ loadSortLabel }}</span>
-        } @else {
-          <span class="sort-hint">No sort loaded</span>
-        }
+        <div class="load-sort-row">
+          @if (loadSortLabel) {
+            <span class="sort-desc">{{ loadSortLabel }}</span>
+          } @else {
+            <span class="sort-hint">No sort loaded</span>
+          }
+          <button class="load-sort-add-btn" (click)="onAddLoadSort()" title="Load a detector or example media to sort by">+</button>
+        </div>
       </div>
     }
   </div>
 
 </div>
+
+@if (showLoadSortModal) {
+  <vt-load-sort-modal
+    (closed)="showLoadSortModal = false"
+    (detectorLoaded)="onDetectorLoaded($event)"
+    (exampleSortStarted)="onExampleSortStarted($event)"
+  />
+}

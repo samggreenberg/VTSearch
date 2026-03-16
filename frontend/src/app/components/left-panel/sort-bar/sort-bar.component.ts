@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, takeUntil } from 'rxjs/operators';
 import { SortMode } from '../left-panel.component';
+import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-modal.component';
 
 @Component({
   selector: 'vt-sort-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, LoadSortModalComponent],
   templateUrl: './sort-bar.component.html',
   styleUrl: './sort-bar.component.scss',
 })
@@ -23,8 +24,11 @@ export class SortBarComponent implements OnInit, OnDestroy {
   @Output() textSort = new EventEmitter<string>();
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
+  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() exampleSortStarted = new EventEmitter<unknown>();
 
   textQuery = '';
+  showLoadSortModal = false;
 
   private textInput$ = new Subject<string>();
   private destroy$ = new Subject<void>();
@@ -66,5 +70,19 @@ export class SortBarComponent implements OnInit, OnDestroy {
 
   get learnedDisabled(): boolean {
     return !this.hasGoodVotes || !this.hasBadVotes;
+  }
+
+  onAddLoadSort(): void {
+    this.showLoadSortModal = true;
+  }
+
+  onDetectorLoaded(data: unknown): void {
+    this.showLoadSortModal = false;
+    this.detectorLoaded.emit(data);
+  }
+
+  onExampleSortStarted(data: unknown): void {
+    this.showLoadSortModal = false;
+    this.exampleSortStarted.emit(data);
   }
 }

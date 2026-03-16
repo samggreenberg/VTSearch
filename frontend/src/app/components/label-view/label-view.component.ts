@@ -6,6 +6,7 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { DetectorsApiService } from '../../services/detectors-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
@@ -65,6 +66,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private sortingApi: SortingApiService,
+    private detectorsApi: DetectorsApiService,
     private mediasApi: MediasApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
@@ -329,7 +331,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLoadSort(): void {
-    // Will be fully wired in Phase 7 (modals for loading detectors/examples)
+    // Re-sort using existing load sort results when switching back to load mode
+  }
+
+  onDetectorLoaded(data: unknown): void {
+    const detector = data as Record<string, unknown>;
+    const name = (detector['name'] as string) || 'Detector';
+    this.sortState.setSortMode('load');
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Scoring with detector...');
+    this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (response) => {
+        this.sortState.setSortResults(
+          response.results.map((r) => ({ id: r.id, score: r.score })),
+          response.threshold,
+        );
+        this.sortState.setLoadSortLabel(name);
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
+        this.autoSelectNext();
+      },
+      error: () => {
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('Detector sort failed');
+      },
+    });
+  }
+
+  onExampleSortStarted(data: unknown): void {
+    const response = data as { results: { id: number; similarity: number }[]; threshold: number };
+    this.sortState.setSortMode('load');
+    this.sortState.setSortResults(
+      response.results.map((r) => ({ id: r.id, score: r.similarity })),
+      response.threshold,
+    );
+    this.sortState.setLoadSortLabel('Example media');
+    this.sortState.setSortBusy(false);
+    this.sortState.setSortStatus('');
+    this.autoSelectNext();
   }
 
   // --- Select mode ---

@@ -2,6 +2,7 @@
   <h3 [class]="label">
     {{ label === 'good' ? 'Good' : 'Bad' }}
     <span class="label-count">({{ ids.length }})</span>
+    <button class="view-btn" (click)="viewButtonClicked.emit()">View</button>
   </h3>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-columns]="gridColumns">
     @for (entry of sortedEntries; track trackById($index, entry)) {
