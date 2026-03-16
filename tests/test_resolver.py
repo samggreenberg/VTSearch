@@ -870,3 +870,54 @@ class TestFindCheckLabels:
         assert w["total_labels"] == 2
         assert w["resolved_labels"] == 1
         assert w["failed_labels"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Logging on resolution failure
+# ---------------------------------------------------------------------------
+
+
+class TestResolutionWarningLogs:
+    """Verify that resolve_label_embeddings logs warnings on resolution failure."""
+
+    def test_logs_warning_on_total_failure(self, caplog):
+        """Zero resolved labels out of N should emit a clear warning."""
+        import logging
+
+        labels = [
+            {"label": "good", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "a.wav",
+             "filename": "a.wav"},
+            {"label": "bad", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "b.wav",
+             "filename": "b.wav"},
+        ]
+        with caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"):
+            result = resolve_label_embeddings(labels, "audio")
+
+        assert result.resolved_count == 0
+        assert result.total_count == 2
+        assert any("0 of 2 labels resolved" in m for m in caplog.messages)
+        assert any("resolve_file()" in m or "origin_name=" in m for m in caplog.messages)
+
+    def test_logs_warning_on_partial_failure(self, tmp_path, caplog):
+        """Some resolved, some missing should log partial resolution warning."""
+        import logging
+
+        wav = tmp_path / "found.wav"
+        wav.write_bytes(b"\x00" * 100)
+
+        labels = [
+            {"label": "good", "origin": None, "origin_name": "", "filename": ""},
+            {"label": "bad", "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
+             "origin_name": "found.wav", "filename": "found.wav"},
+        ]
+
+        dummy_emb = np.zeros(10)
+        with (
+            caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"),
+            patch("vtsearch.models.resolver.embed_file", return_value=dummy_emb),
+        ):
+            result = resolve_label_embeddings(labels, "audio")
+
+        assert result.resolved_count == 1
+        assert result.total_count == 2
+        assert any("1 of 2 labels resolved" in m for m in caplog.messages)

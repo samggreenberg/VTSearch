@@ -197,4 +197,27 @@ def resolve_label_embeddings(
         result.labels.append(1.0 if label_val == "good" else 0.0)
         result.resolved_count += 1
 
+    if result.total_count > 0 and result.resolved_count == 0:
+        log.warning(
+            "Label resolution failed: 0 of %d labels resolved. "
+            "This usually means the importer's resolve_file() method is missing or "
+            "the source files are no longer on disk.",
+            result.total_count,
+        )
+        if result.missing_entries:
+            first = result.missing_entries[0]
+            log.warning(
+                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
+                first.get("origin"),
+                first.get("origin_name", ""),
+                first.get("filename", ""),
+            )
+    elif result.missing_entries:
+        log.warning(
+            "Partial label resolution: %d of %d labels resolved (%d missing).",
+            result.resolved_count,
+            result.total_count,
+            len(result.missing_entries),
+        )
+
     return result
