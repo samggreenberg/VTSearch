@@ -7,7 +7,7 @@ The tree supports:
 - Lookup: given a vector ID, return the name of its deepest (leaf) node.
 - Labeling: when a vector is labeled, mark its leaf and all ancestors as seen.
 - Unlabeling: when a label is removed, propagate unseen status upward.
-- Diversity level: the deepest tree level at which every node is seen.
+- Diversity level: the number of consecutive seen nodes in BFS order.
 - Next sample: a surprise-maximising element of the first unseen node in BFS order.
 """
 
@@ -205,57 +205,37 @@ class DiversityTree:
             node = self.nodes[node]["parent"]
 
     def diversity_level(self) -> int:
-        """Return the deepest level where all nodes at that level and above are seen.
+        """Return the number of consecutive seen nodes in BFS order.
 
-        Returns -1 if even the root is unseen.
+        Traverses the tree in breadth-first order and counts how many nodes
+        are seen before hitting the first unseen node.  Returns 0 when nothing
+        is seen or the tree is empty.
         """
         if not self.nodes:
-            return -1
+            return 0
 
-        max_depth = max(self.nodes_by_depth.keys())
-        result = -1
-        for level in range(max_depth + 1):
-            nodes_at_level = self.nodes_by_depth.get(level, [])
-            if not nodes_at_level:
-                continue
-            if all(name in self.seen for name in nodes_at_level):
-                result = level
-            else:
+        queue = deque(["0"])
+        count = 0
+        while queue:
+            name = queue.popleft()
+            if name not in self.seen:
                 break
-        return result
+            count += 1
+            queue.extend(self.nodes[name]["children"])
+        return count
 
     def fractional_diversity_level(self) -> float:
-        """Return the diversity level as a float with fractional progress.
+        """Return the diversity level as a float.
 
-        The integer part is the deepest fully-covered level.  The fractional
-        part represents progress toward the next level: ``seen / total`` at
-        that level.  Returns -1.0 when nothing is seen.  When the tree is
-        fully covered, returns ``depth`` (as a float).
+        With the linear BFS-count metric this is simply the integer
+        diversity level cast to float.
         """
-        level = self.diversity_level()
-        d = self.depth()
+        return float(self.diversity_level())
 
-        if level < 0:
-            # Nothing seen yet — check if any nodes at level 0 are seen
-            nodes_at_zero = self.nodes_by_depth.get(0, [])
-            if not nodes_at_zero:
-                return -1.0
-            seen_count = sum(1 for name in nodes_at_zero if name in self.seen)
-            if seen_count == 0:
-                return -1.0
-            # Partial progress toward level 0
-            return -1.0 + seen_count / len(nodes_at_zero)
-
-        if level >= d:
-            return float(d)
-
-        next_level = level + 1
-        nodes_at_next = self.nodes_by_depth.get(next_level, [])
-        if not nodes_at_next:
-            return float(level)
-
-        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
-        return level + seen_count / len(nodes_at_next)
+    @property
+    def total_nodes(self) -> int:
+        """Return the total number of nodes in the tree."""
+        return len(self.nodes)
 
     def next_sample(
         self,
@@ -314,38 +294,19 @@ class DiversityTree:
         """Return span level details for the labeling progress indicator.
 
         Returns a dict with:
-        - level: deepest fully-seen level (-1 if none)
-        - fractional_level: float diversity level with partial progress
-        - depth: max tree depth
-        - next_level_seen: how many nodes at the next incomplete level are seen
-        - next_level_total: total nodes at the next incomplete level
+        - level: number of consecutive BFS-order seen nodes
+        - fractional_level: same as level (float)
+        - diversity_level: alias for level (float)
+        - depth: total number of nodes (the maximum diversity level)
+        - max_level: alias for depth
         """
         level = self.diversity_level()
-        frac = self.fractional_diversity_level()
-        d = self.depth()
-
-        next_level = level + 1
-        if next_level > d:
-            # All levels fully covered
-            return {
-                "level": level,
-                "fractional_level": round(frac, 4),
-                "diversity_level": round(frac, 4),
-                "depth": d,
-                "max_level": d,
-                "next_level_seen": 0,
-                "next_level_total": 0,
-            }
-
-        nodes_at_next = self.nodes_by_depth.get(next_level, [])
-        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
+        total = self.total_nodes
 
         return {
             "level": level,
-            "fractional_level": round(frac, 4),
-            "diversity_level": round(frac, 4),
-            "depth": d,
-            "max_level": d,
-            "next_level_seen": seen_count,
-            "next_level_total": len(nodes_at_next),
+            "fractional_level": float(level),
+            "diversity_level": float(level),
+            "depth": total,
+            "max_level": total,
         }

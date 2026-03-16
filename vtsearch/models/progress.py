@@ -7,6 +7,7 @@ models that have already been computed.
 
 from __future__ import annotations
 
+import math
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -178,7 +179,7 @@ def _sync_diversity_tree(media_id: int, label: str, was_labeled: bool) -> Option
     return {
         "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
         "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
-        "depth": _cache_diversity_tree.depth(),
+        "depth": _cache_diversity_tree.total_nodes,
     }
 
 
@@ -636,41 +637,39 @@ def compute_labeling_status(
         )
         stable = _compute_stable_status(good, bad, total)
 
-    # Span status from diversity tree info (passed in from the route)
+    # Span status from diversity tree info (passed in from the route).
+    # ``level`` is the number of consecutive BFS-order seen nodes and
+    # ``depth`` is the total number of nodes (the maximum diversity level).
     if span_info is None:
         span = {
             "status": "red",
             "reason": "Diversity tree not available.",
-            "level": -1,
-            "depth": -1,
-            "next_level_seen": 0,
-            "next_level_total": 0,
+            "level": 0,
+            "depth": 0,
         }
     else:
         level = span_info["level"]
-        depth = span_info["depth"]
-        nls = span_info["next_level_seen"]
-        nlt = span_info["next_level_total"]
-        if level >= depth and level >= 0:
-            span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
-        elif level >= 4:
+        total = span_info["depth"]  # total nodes
+        if total <= 0:
+            span = {"status": "green", "reason": "Degenerate tree.", **span_info}
+        elif level >= total:
+            span = {"status": "green", "reason": "All tree nodes covered.", **span_info}
+        elif level >= math.ceil(total * 0.75):
             span = {
                 "status": "green",
-                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "reason": f"{level}/{total} nodes covered.",
                 **span_info,
             }
-        elif level <= 1:
+        elif level < math.ceil(total * 0.25):
             span = {
                 "status": "red",
-                "reason": "No tree coverage yet."
-                if level < 0
-                else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
                 **span_info,
             }
         else:
             span = {
                 "status": "yellow",
-                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "reason": f"{level}/{total} nodes covered.",
                 **span_info,
             }
 
