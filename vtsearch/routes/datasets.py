@@ -655,7 +655,8 @@ def load_registered_dataset(dataset_id: str):
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+    # Clear stale error from any previous load.
+    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_LOAD_STEPS)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()

@@ -126,6 +126,10 @@ def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = 
     def _model_load_progress(status, message, current, total):
         update_progress(status, message, current, total, step=step, total_steps=total_steps)
 
+    update_progress(
+        "loading", "Loading embedding model…", 0, 0,
+        step=step, total_steps=total_steps,
+    )
     with intercept_tqdm_progress(_model_load_progress), intercept_weight_loading_progress(
         _model_load_progress, "Loading model weights…"
     ):
@@ -320,7 +324,8 @@ def _run_origin_load_in_background(
 
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
+    # Clear the error field so stale errors from previous loads don't persist.
+    update_progress("loading", "Preparing dataset...", error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     def task():
         try:
@@ -383,7 +388,7 @@ def _run_origin_load_in_background(
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     threading.Thread(target=task, daemon=True).start()
 
