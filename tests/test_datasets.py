@@ -882,28 +882,29 @@ class TestLoadProgressRaceCondition:
         assert progress["status"] == "loading"
 
     def test_load_embedder_sets_initial_progress(self):
-        """_load_embedder_for_clips must set progress before loading starts."""
+        """_load_embedder_for_clips must set progress before loading starts.
+
+        The function should emit 'Loading embedding model…' so the frontend
+        knows the embedder warm-up phase has begun (rather than staying stuck
+        on the previous phase's message like 'Saving to registry…').
+        """
         from unittest.mock import patch
 
-        from vtsearch.media import embedders_for_type
         from vtsearch.routes.datasets import _load_embedder_for_clips
-        from vtsearch.utils.progress import get_progress, update_progress
+        from vtsearch.utils.progress import update_progress
 
-        # Set a stale progress message from the previous phase
+        # _load_embedder_for_clips inspects medias to find the embedder.
+        # The conftest-populated medias dict provides this automatically.
+        # Set a stale progress message from the previous phase.
         update_progress("loading", "Saving to registry…", step=3, total_steps=4)
 
-        emb = embedders_for_type("audio")[0]
         messages: list[str] = []
 
-        orig_update = update_progress.__wrapped__ if hasattr(update_progress, "__wrapped__") else None
-
-        def _capture_update(status, message="", **kw):
+        def _capture_update(status, message="", current=0, total=0, **kw):
             messages.append(message)
 
         with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
-            with patch.object(emb, "load_models"):
-                with patch.object(emb, "embed_text"):
-                    _load_embedder_for_clips()
+            _load_embedder_for_clips()
 
         # Should have set "Loading embedding model…" before calling load_models
         assert any("Loading embedding model" in m for m in messages), (
