@@ -459,7 +459,7 @@ class TestEmptyState:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["id"] is None
-        assert data["diversity_level"] == -1
+        assert data["diversity_level"] == 0
 
     def test_textsort_suggestions_empty(self):
         resp = self.client.get("/api/textsort-suggestions")
