@@ -96,6 +96,10 @@ export class SortingApiService {
     return this.http.post<SortResponse>('/api/example-sort-server', params);
   }
 
+  exampleSortOrigin(params: { origin: Record<string, unknown>; key: string }): Observable<SortResponse> {
+    return this.http.post<SortResponse>('/api/example-sort-origin', params);
+  }
+
   uploadServerMediaFile(file: File): Observable<{ filename: string; original_name: string }> {
     const formData = new FormData();
     formData.append('file', file);

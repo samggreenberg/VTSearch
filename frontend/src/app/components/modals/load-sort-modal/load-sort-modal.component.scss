@@ -20,6 +20,8 @@
 .file-btn {
   display: inline-block;
   cursor: pointer;
+  margin-right: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .file-list {
@@ -39,8 +41,146 @@
   color: var(--text-primary);
   cursor: pointer;
   font-size: 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 
   &:hover {
     background: var(--bg-hover);
   }
+}
+
+.item-meta {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-left: 0.5rem;
+}
+
+// --- Media picker ---
+
+.media-picker {
+  min-height: 200px;
+}
+
+.back-btn {
+  margin-bottom: 0.75rem;
+}
+
+.picker-instructions {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.importer-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.importer-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.importer-icon {
+  margin-right: 0.35rem;
+}
+
+.importer-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.browse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.browse-item {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8rem;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.browse-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.entry-icon {
+  margin-right: 0.35rem;
+}
+
+.entry-size {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+  padding-left: 0.5rem;
+}
+
+.breadcrumbs {
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.breadcrumb-link {
+  background: none;
+  border: none;
+  color: var(--text-link);
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.breadcrumb-sep {
+  margin: 0 0.25rem;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem 0;
 }
