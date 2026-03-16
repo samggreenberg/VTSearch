@@ -856,3 +856,57 @@ class TestLoadProgressRaceCondition:
         assert progress["status"] == "downloading"
         assert progress["message"] == "Fetching files…"
         assert progress["step"] == 1  # downloading maps to step 1
+
+    def test_origin_load_clears_stale_error(self):
+        """_run_origin_load_in_background must clear old error on new load."""
+        from unittest.mock import patch
+
+        from vtsearch.utils.progress import get_progress, update_progress
+
+        # Simulate a previous load that left a stale error
+        update_progress("idle", "", error="Previous load failed", step=None, total_steps=None)
+        assert get_progress()["error"] == "Previous load failed"
+
+        # Start a new load (mock the thread so it doesn't actually run)
+        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+            _run_origin_load_in_background(
+                lambda: None, {"importer": "test", "params": {}},
+            )
+
+        progress = get_progress()
+        assert progress["error"] is None, (
+            "Starting a new load must clear the stale error from a previous load"
+        )
+        assert progress["status"] == "loading"
+
+    def test_load_embedder_sets_initial_progress(self):
+        """_load_embedder_for_clips must set progress before loading starts.
+
+        The function should emit 'Loading embedding model…' so the frontend
+        knows the embedder warm-up phase has begun (rather than staying stuck
+        on the previous phase's message like 'Saving to registry…').
+        """
+        from unittest.mock import patch
+
+        from vtsearch.routes.datasets import _load_embedder_for_clips
+        from vtsearch.utils.progress import update_progress
+
+        # _load_embedder_for_clips inspects medias to find the embedder.
+        # The conftest-populated medias dict provides this automatically.
+        # Set a stale progress message from the previous phase.
+        update_progress("loading", "Saving to registry…", step=3, total_steps=4)
+
+        messages: list[str] = []
+
+        def _capture_update(status, message="", current=0, total=0, **kw):
+            messages.append(message)
+
+        with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
+            _load_embedder_for_clips()
+
+        # Should have set "Loading embedding model…" before calling load_models
+        assert any("Loading embedding model" in m for m in messages), (
+            f"Expected 'Loading embedding model…' in progress messages, got: {messages}"
+        )

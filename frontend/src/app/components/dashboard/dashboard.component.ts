@@ -1,8 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, timer } from 'rxjs';
-import { takeUntil, switchMap } from 'rxjs/operators';
+import { EMPTY, Subject, timer } from 'rxjs';
+import { catchError, takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
@@ -301,7 +301,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(
         takeUntil(this.polling$),
         takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getProgress()),
+        switchMap(() => this.datasetsApi.getProgress().pipe(
+          catchError(() => EMPTY),
+        )),
       )
       .subscribe({
         next: (progress: any) => {
