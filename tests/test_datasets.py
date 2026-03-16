@@ -384,7 +384,7 @@ class TestDemoDatasetEmbedderStatus:
         from vtsearch.config import EMBEDDINGS_DIR
         from vtsearch.datasets import DEMO_DATASETS
 
-        # Pick a demo that has no required_folder (e.g. a text or image demo).
+        # Pick a demo that has no required_folder (e.g. a text demo).
         demo_name = None
         for name, info in DEMO_DATASETS.items():
             if info.get("required_folder") is None:

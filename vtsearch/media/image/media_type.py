@@ -7,6 +7,7 @@ from typing import Optional
 
 import numpy as np
 
+from vtsearch.config import DATA_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -223,53 +224,65 @@ class ImageMediaType(MediaType):
 
         cats101 = self._DEMO_CATEGORIES_CALTECH101
         cats256 = self._DEMO_CATEGORIES_CALTECH256
+        caltech101_folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
+        caltech256_folder = DATA_DIR / "caltech-256" / "256_ObjectCategories"
+        oxford_flowers_folder = DATA_DIR / "oxford_flowers"
+        food101_folder = DATA_DIR / "food-101" / "images"
+        eurosat_folder = DATA_DIR / "EuroSAT_RGB"
+        stanford_dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
+        ucsf_documents_folder = DATA_DIR / "ucsf_documents"
         return [
             DemoDataset(
                 id="caltech101_s", label="Caltech-101 (S)",
                 description="Centered, well-lit object photos — a classic vision benchmark.",
-                categories=cats101, source="caltech101",
+                categories=cats101, source="caltech101", required_folder=caltech101_folder,
                 slice_start=0, slice_end=20, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech101_m", label="Caltech-101 (M)",
                 description="Centered, well-lit object photos — a classic vision benchmark.",
-                categories=cats101, source="caltech101",
+                categories=cats101, source="caltech101", required_folder=caltech101_folder,
                 slice_start=20, slice_end=60, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech256_l", label="Caltech-256 (L)",
                 description="Harder object photos with more varied, cluttered backgrounds than Caltech-101.",
-                categories=cats256, source="caltech256",
+                categories=cats256, source="caltech256", required_folder=caltech256_folder,
                 slice_start=0, slice_end=80, download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="oxford_flowers_102_a", label="Oxford Flowers 102 (A)",
                 description="Close-up flower photography with fine-grained species variation.",
                 categories=self._OXFORD_FLOWERS_CATEGORIES, source="oxford_flowers_102",
+                required_folder=oxford_flowers_folder,
                 slice_start=0, slice_end=80, download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a", label="Food-101 (A)",
                 description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
                 categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=food101_folder,
                 slice_start=0, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a", label="EuroSAT (A)",
                 description="Sentinel-2 satellite imagery classified by land use type.",
                 categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=eurosat_folder,
                 slice_start=0, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a", label="Stanford Dogs (A)",
                 description="Fine-grained dog breed photos — many visually similar breeds.",
                 categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=stanford_dogs_folder,
                 slice_start=0, slice_end=171, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucsf_documents_a", label="UCSF Documents (A)",
                 description="Scanned industry document pages from the UCSF Industry Documents Library.",
                 categories=self._UCSF_DOCUMENTS_CATEGORIES, source="ucsf_documents",
+                required_folder=ucsf_documents_folder,
                 slice_start=0, slice_end=25, download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
             ),
         ]

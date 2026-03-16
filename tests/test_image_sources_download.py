@@ -600,3 +600,59 @@ class TestLoadDemoSourceStanfordDogs:
                 clips={},
                 on_progress=lambda *a: None,
             )
+
+
+# ---------------------------------------------------------------------------
+# Image demo datasets have required_folder for media browsing
+# ---------------------------------------------------------------------------
+
+
+class TestImageDemoDatasetsRequiredFolder:
+    """All image demo datasets must set required_folder so the Load Sort
+    media browser can list files after download."""
+
+    def test_all_image_demos_have_required_folder(self):
+        from vtsearch.media.image.media_type import ImageMediaType
+
+        mt = ImageMediaType()
+        for ds in mt.demo_datasets:
+            assert ds.required_folder is not None, (
+                f"Image demo dataset {ds.id!r} is missing required_folder"
+            )
+
+    def test_browse_api_returns_files_for_image_demo(self, client, tmp_path):
+        """Browse API returns image files for an image demo source."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        # Find an image demo dataset.
+        image_demo = None
+        for name, info in DEMO_DATASETS.items():
+            if info.get("media_type") == "image" and info.get("required_folder") is not None:
+                image_demo = name
+                break
+        if image_demo is None:
+            pytest.skip("No image demo dataset with required_folder found")
+
+        # Create a temp dir with an image file
+        sub = tmp_path / "airplanes"
+        sub.mkdir()
+        (sub / "image_0001.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_info = dict(DEMO_DATASETS[image_demo])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {image_demo: fake_info}):
+            resp = client.get(f"/api/browse-media-files?source=demo:{image_demo}&path=")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            dir_names = [d["name"] for d in data["directories"]]
+            assert "airplanes" in dir_names
+
+            # Drill into subdirectory
+            resp2 = client.get(f"/api/browse-media-files?source=demo:{image_demo}&path=airplanes")
+            assert resp2.status_code == 200
+            data2 = resp2.get_json()
+            file_names = [f["name"] for f in data2["files"]]
+            assert "image_0001.jpg" in file_names
