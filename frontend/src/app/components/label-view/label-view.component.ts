@@ -533,6 +533,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private checkResortPrompt(): void {
     // Only show during autopilot's "good" phase (sorting by example in top mode)
     if (!this.autopilotStateService.running) return;
+    // Eagerly check phase transition so we don't show the prompt after the user
+    // has already found enough greens (the panel's ngOnChanges may not have run yet).
+    this.autopilotStateService.checkPhaseTransition(
+      this.voteState.goodVotes.size, this.voteState.badVotes.size,
+    );
     const phase = this.autopilotStateService.state.phase;
     if (phase !== 'good') return;
 
@@ -623,6 +628,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('new');
     }
+
+    // Deactivate autopilot state so resort prompt and phase logic stop firing.
+    this.autopilotStateService.deactivate();
+    this.showResortPrompt = false;
   }
 
   // --- Panel percentage helpers ---
