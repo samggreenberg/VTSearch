@@ -8,7 +8,6 @@ from typing import Optional
 import numpy as np
 
 from vtsearch.media.base import (
-    DemoDataset,
     MediaResponse,
     MediaType,
     ProgressCallback,
@@ -97,64 +96,6 @@ class TextMediaType(MediaType):
     @property
     def loops(self) -> bool:
         return False
-
-    # ------------------------------------------------------------------
-    # Demo datasets
-    # ------------------------------------------------------------------
-
-    _DEMO_CATEGORIES = [
-        "sports", "science", "cars", "hockey", "electronics",
-        "religion", "world", "business", "technology", "medicine",
-        "crypto", "atheism", "motorcycles", "mideast", "guns",
-    ]
-
-    _AG_NEWS_CATEGORIES = ["World", "Sports", "Business", "Sci/Tech"]
-
-    _BBC_NEWS_CATEGORIES = ["business", "entertainment", "politics", "sport", "tech"]
-
-    _IMDB_CATEGORIES = ["pos", "neg"]
-
-    @property
-    def demo_datasets(self) -> list:
-        cats = self._DEMO_CATEGORIES
-        return [
-            DemoDataset(
-                id="20newsgroups_s", label="20 Newsgroups (S)",
-                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
-                slice_start=0, slice_end=25, download_size_mb=15,
-            ),
-            DemoDataset(
-                id="20newsgroups_m", label="20 Newsgroups (M)",
-                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
-                slice_start=25, slice_end=75, download_size_mb=15,
-            ),
-            DemoDataset(
-                id="20newsgroups_l", label="20 Newsgroups (L)",
-                description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
-                slice_start=75, slice_end=200, download_size_mb=15,
-            ),
-            DemoDataset(
-                id="ag_news_a", label="AG News (A)",
-                description="Short news summaries, well-balanced across world, sports, business, and tech.",
-                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
-                slice_start=0, slice_end=30000, download_size_mb=15,
-            ),
-            DemoDataset(
-                id="bbc_news_a", label="BBC News (A)",
-                description="Full BBC news articles — professionally written and cleanly labeled.",
-                categories=self._BBC_NEWS_CATEGORIES, source="bbc_news",
-                slice_start=0, slice_end=445, download_size_mb=15,
-            ),
-            DemoDataset(
-                id="imdb_a", label="IMDB Movie Reviews (A)",
-                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
-                categories=self._IMDB_CATEGORIES, source="imdb",
-                slice_start=0, slice_end=25000, download_size_mb=15,
-            ),
-        ]
 
     # ------------------------------------------------------------------
     # Demo dataset loading

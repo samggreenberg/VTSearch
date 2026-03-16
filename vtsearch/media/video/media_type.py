@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from vtsearch.media.base import (
-    DemoDataset,
     MediaResponse,
     MediaType,
     ProgressCallback,
@@ -95,42 +94,6 @@ class VideoMediaType(MediaType):
     @property
     def loops(self) -> bool:
         return True
-
-    # ------------------------------------------------------------------
-    # Demo datasets
-    # ------------------------------------------------------------------
-
-    _DEMO_CATEGORIES = [
-        "ApplyEyeMakeup", "ApplyLipstick", "Archery", "BabyCrawling", "BalanceBeam",
-        "BandMarching", "BaseballPitch", "Basketball", "BasketballDunk", "BenchPress",
-    ]
-
-    @property
-    def demo_datasets(self) -> list:
-        from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR  # noqa: PLC0415
-
-        cats = self._DEMO_CATEGORIES
-        folder = VIDEO_DIR / "ucf101"
-        return [
-            DemoDataset(
-                id="ucf101_s", label="UCF-101 (S)",
-                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
-                categories=cats, source="ucf101", required_folder=folder,
-                slice_start=0, slice_end=15, download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="ucf101_m", label="UCF-101 (M)",
-                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
-                categories=cats, source="ucf101", required_folder=folder,
-                slice_start=15, slice_end=40, download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="ucf101_l", label="UCF-101 (L)",
-                description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
-                categories=cats, source="ucf101", required_folder=folder,
-                slice_start=40, slice_end=150, download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
-            ),
-        ]
 
     # ------------------------------------------------------------------
     # Demo dataset loading

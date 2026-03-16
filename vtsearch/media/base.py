@@ -31,7 +31,6 @@ import numpy as np
 ProgressCallback = Callable[[str, str, int, int], None]
 
 __all__ = [
-    "DemoDataset",
     "Detector",
     "Extractor",
     "MediaClipper",
@@ -362,55 +361,6 @@ class MediaResponse:
     download_name: str = ""
 
 
-@dataclass
-class DemoDataset:
-    """Metadata describing one demo dataset that belongs to a media type."""
-
-    id: str
-    """Unique key used throughout the app (e.g. ``"nature_sounds"``)."""
-
-    label: str
-    """Human-readable display name (e.g. ``"Animal & Nature Sounds"``)."""
-
-    description: str
-    """Long-form description shown in the UI."""
-
-    categories: list
-    """Category names used to filter the raw source data."""
-
-    source: str = ""
-    """Identifier for the raw data source (e.g. ``"cifar10_sample"``, ``"ucf101"``).
-    Leave empty for sources that don't require an explicit identifier."""
-
-    required_folder: Optional[Path] = None
-    """Local directory that must exist for a cached ``.pkl`` to be usable.
-
-    Audio and video datasets store references to external media files rather
-    than inlining the bytes, so a stale ``.pkl`` left behind after the source
-    directory was removed would incorrectly appear ready.  Set this to the
-    directory that the importer places the source files into (e.g.
-    ``DATA_DIR / "ESC-50-master" / "audio"``).  Leave ``None`` for datasets
-    whose ``.pkl`` is entirely self-contained (images, text)."""
-
-    slice_start: int = 0
-    """Per-category start index for element slicing (inclusive).
-
-    When multiple datasets share the same categories, this allows them to
-    use disjoint subsets of elements within each category."""
-
-    slice_end: Optional[int] = None
-    """Per-category end index for element slicing (exclusive).
-
-    ``None`` means take all remaining elements after ``slice_start``."""
-
-    download_size_mb: float = 0
-    """Estimated download size in megabytes for this demo dataset's raw data.
-
-    Used by the frontend to display the expected download size before the
-    user starts loading.  Set to ``0`` for datasets that don't require a
-    network download (e.g. scikit-learn datasets that download automatically)."""
-
-
 class MediaType(ABC):
     """Abstract base class that every media type must implement.
 
@@ -420,7 +370,6 @@ class MediaType(ABC):
     * Human-readable identity: :attr:`name` and :attr:`icon`.
     * Which file extensions to scan when importing a folder (:attr:`file_extensions`).
     * Whether the viewer should loop (:attr:`loops`).
-    * Which demo datasets are available (:attr:`demo_datasets`).
     * How to serve a media over HTTP (:meth:`media_response`).
     * How to load media-specific media fields from a file (:meth:`load_media_data`).
     * An optional folder-import alias (:attr:`folder_import_name`) for the
@@ -557,15 +506,6 @@ class MediaType(ABC):
         """``True`` if the viewer should loop (audio/video); ``False`` otherwise."""
 
     # ------------------------------------------------------------------
-    # Demo datasets
-    # ------------------------------------------------------------------
-
-    @property
-    @abstractmethod
-    def demo_datasets(self) -> list:
-        """List of :class:`DemoDataset` objects available for this media type."""
-
-    # ------------------------------------------------------------------
     # Embeddings (delegated to MediaEmbedder)
     # ------------------------------------------------------------------
 
@@ -618,7 +558,7 @@ class MediaType(ABC):
         Caltech-101/256, etc.).
 
         Args:
-            source: The ``source`` identifier from the :class:`DemoDataset`.
+            source: The ``source`` identifier from the demo dataset entry.
             categories: List of category names to include.
             slice_start: Per-category start index for element slicing.
             slice_end: Per-category end index for element slicing (``None``

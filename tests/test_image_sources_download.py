@@ -612,10 +612,9 @@ class TestImageDemoDatasetsRequiredFolder:
     media browser can list files after download."""
 
     def test_all_image_demos_have_required_folder(self):
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtsearch.datasets.importers.demo.datasets import _image_demo_datasets
 
-        mt = ImageMediaType()
-        for ds in mt.demo_datasets:
+        for ds in _image_demo_datasets():
             assert ds.required_folder is not None, (
                 f"Image demo dataset {ds.id!r} is missing required_folder"
             )

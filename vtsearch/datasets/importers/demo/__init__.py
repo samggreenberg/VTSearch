@@ -1,9 +1,9 @@
 """Demo dataset importer — loads pre-configured demo datasets.
 
-Each registered :class:`~vtsearch.media.base.MediaType` defines a list of
-:class:`~vtsearch.media.base.DemoDataset` entries.  This importer exposes
-them through the standard importer interface so that demo datasets are
-discovered, loaded, and managed exactly like any other dataset source.
+Demo datasets are defined in :mod:`.datasets` and collected via
+:func:`.datasets.all_demo_datasets`.  This importer exposes them through
+the standard importer interface so that demo datasets are discovered,
+loaded, and managed exactly like any other dataset source.
 
 The ``name`` field selects which demo dataset to load.  Optional
 ``embedder`` and ``converter`` fields allow overriding the default
@@ -21,8 +21,8 @@ from vtsearch.datasets.loader import load_demo_dataset
 class DemoDatasetImporter(DatasetImporter):
     """Load a pre-configured demo dataset by name.
 
-    Demo datasets are defined by media types and collected via
-    :func:`~vtsearch.media.all_demo_datasets`.  This importer wraps the
+    Demo datasets are defined in :mod:`.datasets` and collected via
+    :func:`.datasets.all_demo_datasets`.  This importer wraps the
     existing ``load_demo_dataset()`` function so that the demo loading
     pipeline participates in the standard importer registry.
     """

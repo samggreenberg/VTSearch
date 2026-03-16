@@ -1,12 +1,9 @@
-"""Dataset configurations — built from the media type registry.
+"""Dataset configurations — built from the demo dataset registry.
 
-``DEMO_DATASETS`` is assembled at import time from every registered
-:class:`~vtsearch.media.base.MediaType`'s
-:attr:`~vtsearch.media.base.MediaType.demo_datasets` list.  Adding a new
-media type (and registering it in ``vtsearch/media/__init__.py``)
-automatically makes its demo datasets appear here with no further edits.
+``DEMO_DATASETS`` is assembled at import time from the centralised demo
+dataset definitions in :mod:`vtsearch.datasets.importers.demo.datasets`.
 """
 
-from vtsearch.media import all_demo_datasets
+from vtsearch.datasets.importers.demo.datasets import all_demo_datasets
 
 DEMO_DATASETS: dict = all_demo_datasets()

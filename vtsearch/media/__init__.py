@@ -18,7 +18,6 @@ initialisation, dataset loading, HTTP routing, and the demo-dataset listing.
 from __future__ import annotations
 
 from vtsearch.media.base import (
-    DemoDataset,
     Detector,
     Extractor,
     Localizer,
@@ -110,34 +109,6 @@ def all_types_dict() -> list[dict]:
     elements dynamically.
     """
     return [mt.to_dict() for mt in _registry.values()]
-
-
-def all_demo_datasets() -> dict:
-    """Return a flat ``{dataset_id: info_dict}`` mapping built from every
-    registered media type's :attr:`~MediaType.demo_datasets` list.
-
-    Each value is a dict with the keys expected by the datasets route:
-    ``label``, ``description``, ``categories``, ``media_type``,
-    optionally ``source``, and optionally ``required_folder``.
-    """
-    result: dict = {}
-    for mt in _registry.values():
-        for ds in mt.demo_datasets:
-            entry: dict = {
-                "label": ds.label,
-                "description": ds.description,
-                "categories": ds.categories,
-                "media_type": mt.type_id,
-                "slice_start": ds.slice_start,
-                "slice_end": ds.slice_end,
-                "download_size_mb": ds.download_size_mb,
-            }
-            if ds.source:
-                entry["source"] = ds.source
-            if ds.required_folder is not None:
-                entry["required_folder"] = ds.required_folder
-            result[ds.id] = entry
-    return result
 
 
 # ------------------------------------------------------------------
@@ -289,7 +260,6 @@ __all__ = [
     "MediaEmbedder",
     "MediaClipper",
     "MediaResponse",
-    "DemoDataset",
     "Processor",
     "Detector",
     "Localizer",
@@ -307,7 +277,6 @@ __all__ = [
     "all_folder_names",
     "all_type_ids",
     "all_types_dict",
-    "all_demo_datasets",
     "all_embedders",
     "all_embedders_dict",
     "all_clippers",

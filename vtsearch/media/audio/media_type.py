@@ -9,7 +9,6 @@ import numpy as np
 
 from vtsearch.config import DATA_DIR, SAMPLE_RATE
 from vtsearch.media.base import (
-    DemoDataset,
     MediaResponse,
     MediaType,
     ProgressCallback,
@@ -98,86 +97,6 @@ class AudioMediaType(MediaType):
     # ------------------------------------------------------------------
     # Demo datasets
     # ------------------------------------------------------------------
-
-    # Shared categories for all S/M/L audio demo datasets.
-    _DEMO_CATEGORIES = [
-        "dog", "rooster", "pig", "cow", "frog", "cat", "hen", "insects", "sheep", "crow",
-        "rain", "sea_waves", "crackling_fire", "crickets", "chirping_birds",
-        "water_drops", "wind", "pouring_water", "toilet_flush", "thunderstorm",
-        "crying_baby", "sneezing", "clapping", "breathing", "coughing",
-        "footsteps", "laughing", "brushing_teeth", "snoring", "drinking_sipping",
-        "door_wood_knock", "mouse_click", "keyboard_typing", "door_wood_creep", "can_opening",
-        "washing_machine", "vacuum_cleaner", "clock_alarm", "clock_tick", "glass_breaking",
-        "helicopter", "chainsaw", "siren", "car_horn", "engine",
-        "train", "church_bells", "airplane", "fireworks", "hand_saw",
-    ]
-
-    _GTZAN_CATEGORIES = [
-        "blues", "classical", "country", "disco", "hiphop",
-        "jazz", "metal", "pop", "reggae", "rock",
-    ]
-
-    _SPEECH_COMMANDS_CATEGORIES = [
-        "yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go",
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-        "bed", "bird", "cat", "dog", "happy", "house", "marvin", "sheila", "tree", "wow",
-        "backward", "follow", "forward", "learn", "visual",
-    ]
-
-    _URBANSOUND8K_CATEGORIES = [
-        "air_conditioner", "car_horn", "children_playing", "dog_bark", "drilling",
-        "engine_idling", "gun_shot", "jackhammer", "siren", "street_music",
-    ]
-
-    @property
-    def demo_datasets(self) -> list:
-        from vtsearch.datasets.downloader import (  # noqa: PLC0415
-            ESC50_DOWNLOAD_SIZE_MB,
-            GTZAN_DOWNLOAD_SIZE_MB,
-            SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
-            URBANSOUND8K_DOWNLOAD_SIZE_MB,
-        )
-
-        cats = self._DEMO_CATEGORIES
-        folder = DATA_DIR / "ESC-50-master" / "audio"
-        return [
-            DemoDataset(
-                id="esc50_s", label="ESC-50 (S)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
-                slice_start=0, slice_end=7, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="esc50_m", label="ESC-50 (M)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
-                slice_start=7, slice_end=20, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="esc50_l", label="ESC-50 (L)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
-                slice_start=20, slice_end=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="gtzan_a", label="GTZAN Music Genre (A)",
-                description="30-second music excerpts, one per genre.",
-                categories=self._GTZAN_CATEGORIES, source="gtzan",
-                slice_start=0, slice_end=100, download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="speech_commands_v2_a", label="Speech Commands v2 (A)",
-                description="One-second keyword utterances from crowd-sourced speakers.",
-                categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
-                slice_start=0, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
-            ),
-            DemoDataset(
-                id="urbansound8k_a", label="UrbanSound8K (A)",
-                description="Real urban field recordings, pre-segmented into labeled sounds.",
-                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
-                slice_start=0, slice_end=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
-            ),
-        ]
 
     # ------------------------------------------------------------------
     # Demo dataset loading

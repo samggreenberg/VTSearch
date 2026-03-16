@@ -120,10 +120,6 @@ class TestDocumentMediaType:
         mt = DocumentMediaType()
         assert mt.loops is False
 
-    def test_no_demo_datasets(self):
-        mt = DocumentMediaType()
-        assert mt.demo_datasets == []
-
     def test_embed_media_returns_none(self, tmp_path):
         mt = DocumentMediaType()
         pdf_path = tmp_path / "test.pdf"
