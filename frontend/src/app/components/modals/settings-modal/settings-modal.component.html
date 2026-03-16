@@ -22,6 +22,12 @@
           (click)="activeSettingsTab = 'autopilot'">
           Autopilot
         </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autoload'"
+          (click)="activeSettingsTab = 'autoload'">
+          Autoload
+        </button>
       </nav>
 
       <div class="settings-panel">
@@ -173,14 +179,29 @@
             <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
           </div>
 
+        }
+
+        <!-- Autoload -->
+        @if (activeSettingsTab === 'autoload') {
+          <h3>Autoload Embedders</h3>
           @if (embedders.length > 0) {
-            <h4>Autoload Embedders</h4>
-            @for (embedder of embedders; track embedder.name) {
-              <label class="checkbox-row">
-                <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
-                {{ embedder.name }} ({{ embedder.media_type_id }})
-              </label>
-            }
+            <div class="embedder-grid">
+              <div class="embedder-grid-header">
+                <span>Embedder</span>
+                <span>Media Type</span>
+                <span></span>
+              </div>
+              @for (embedder of embedders; track embedder.name) {
+                <label class="embedder-row">
+                  <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
+                  <span class="embedder-name">{{ embedder.name }}</span>
+                  <span class="embedder-media-type">{{ embedder.media_type_id }}</span>
+                  <span class="embedder-icon">{{ getMediaTypeIcon(embedder.media_type_id) }}</span>
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No embedders available.</p>
           }
         }
       </div>

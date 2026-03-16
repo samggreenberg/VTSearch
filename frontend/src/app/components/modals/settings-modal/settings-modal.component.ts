@@ -136,6 +136,11 @@ export class SettingsModalComponent implements OnInit {
     this.save();
   }
 
+  getMediaTypeIcon(typeId: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
+    return mt?.icon || '';
+  }
+
   isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
     return (this.settings.autoload_media_embedders || []).includes(embedder.name);
   }

@@ -149,6 +149,61 @@
   width: 4rem;
 }
 
+.embedder-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.embedder-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 8rem 2.5rem;
+  gap: 0.5rem;
+  padding: 0 0 0.4rem calc(1.25rem + 0.5rem);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color, #444);
+  margin-bottom: 0.25rem;
+}
+
+.embedder-row {
+  display: grid;
+  grid-template-columns: auto 1fr 8rem 2.5rem;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  }
+
+  input[type='checkbox'] {
+    margin: 0;
+  }
+}
+
+.embedder-name {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.embedder-media-type {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.embedder-icon {
+  text-align: center;
+  font-size: 1rem;
+}
+
 .settings-actions {
   display: flex;
   gap: 0.5rem;
