@@ -23,6 +23,10 @@
   font-size: 0.85rem;
   transition: background 0.15s, color 0.15s;
 
+  &:focus-visible {
+    outline: none;
+  }
+
   &:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
