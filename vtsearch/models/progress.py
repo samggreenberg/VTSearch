@@ -80,7 +80,10 @@ def invalidate_progress_cache_from(media_id: int) -> None:
                 break
 
         if truncate_at is None:
-            # Media never appeared in any cached step — nothing to invalidate.
+            # Media never appeared in any cached step.  Still need to clear
+            # live models — they may have been injected by learned-sort
+            # without building the progress cache.
+            _live_models.clear()
             return
 
         if truncate_at == 0:
