@@ -24,7 +24,25 @@ class TestMediaClipperABC:
 
         c = SoundDefaultClipper()
         d = c.to_dict()
-        assert d == {"name": "sound_default", "media_type": "audio"}
+        assert d == {"name": "sound_default", "display_name": "Sound Default", "media_type": "audio"}
+
+    def test_display_name_default(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        assert c.display_name == "Sound Default"
+
+    def test_display_name_tiling(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        assert c.display_name == "Sound Tiling"
+
+    def test_display_name_video_scene(self):
+        from vtsearch.media.video.clipper import VideoSceneClipper
+
+        c = VideoSceneClipper()
+        assert c.display_name == "Video Scene"
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +77,10 @@ class TestSoundTilingClipper:
         from vtsearch.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
-        assert c.name == "sound_tiling_2.0s"
+        assert c.name == "sound_tiling"
         assert c.media_type == "audio"
         assert c.duration == 2.0
+        assert c.min_overlap == 0.0
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_duration(self):
@@ -71,6 +90,20 @@ class TestSoundTilingClipper:
             SoundTilingClipper(0)
         with pytest.raises(ValueError):
             SoundTilingClipper(-1)
+
+    def test_rejects_negative_min_overlap(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        with pytest.raises(ValueError):
+            SoundTilingClipper(2.0, min_overlap=-0.1)
+
+    def test_rejects_min_overlap_ge_duration(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        with pytest.raises(ValueError):
+            SoundTilingClipper(2.0, min_overlap=2.0)
+        with pytest.raises(ValueError):
+            SoundTilingClipper(2.0, min_overlap=3.0)
 
     def test_short_audio_returned_unchanged(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
@@ -118,14 +151,38 @@ class TestSoundTilingClipper:
         result = SoundTilingClipper(2.0).clip(media)
         assert result == [media]
 
-    def test_to_dict_includes_duration(self):
+    def test_to_dict_includes_duration_and_min_overlap(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(3.5)
         d = c.to_dict()
-        assert d["name"] == "sound_tiling_3.5s"
+        assert d["name"] == "sound_tiling"
+        assert d["display_name"] == "Sound Tiling"
         assert d["media_type"] == "audio"
         assert d["duration"] == 3.5
+        assert d["min_overlap"] == 0.0
+
+    def test_min_overlap_produces_more_tiles(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        wav = generate_wav(440, 10.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 10.0}
+        # Without overlap: ceil(10/2) = 5 tiles
+        result_no_overlap = SoundTilingClipper(2.0, min_overlap=0.0).clip(media)
+        assert len(result_no_overlap) == 5
+        # With 1.0s min overlap: max_stride = 1.0, ceil((10-2)/1)+1 = 9 tiles
+        result_with_overlap = SoundTilingClipper(2.0, min_overlap=1.0).clip(media)
+        assert len(result_with_overlap) == 9
+        # Verify all tiles are 2s
+        for tile in result_with_overlap:
+            assert tile["duration"] == pytest.approx(2.0, abs=0.01)
+        # First starts at 0, last ends at 10
+        assert result_with_overlap[0]["clip_start"] == pytest.approx(0.0)
+        assert result_with_overlap[-1]["clip_end"] == pytest.approx(10.0, abs=0.01)
+        # Verify actual overlap >= 1.0 between consecutive tiles
+        for i in range(len(result_with_overlap) - 1):
+            overlap = result_with_overlap[i]["clip_end"] - result_with_overlap[i + 1]["clip_start"]
+            assert overlap >= 1.0 - 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -160,9 +217,10 @@ class TestVideoTilingClipper:
         from vtsearch.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(2.0)
-        assert c.name == "video_tiling_2.0s"
+        assert c.name == "video_tiling"
         assert c.media_type == "video"
         assert c.duration == 2.0
+        assert c.min_overlap == 0.0
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_duration(self):
@@ -172,6 +230,20 @@ class TestVideoTilingClipper:
             VideoTilingClipper(0)
         with pytest.raises(ValueError):
             VideoTilingClipper(-1)
+
+    def test_rejects_negative_min_overlap(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        with pytest.raises(ValueError):
+            VideoTilingClipper(2.0, min_overlap=-0.1)
+
+    def test_rejects_min_overlap_ge_duration(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        with pytest.raises(ValueError):
+            VideoTilingClipper(2.0, min_overlap=2.0)
+        with pytest.raises(ValueError):
+            VideoTilingClipper(2.0, min_overlap=3.0)
 
     def test_short_video_returned_unchanged(self):
         from vtsearch.media.video.clipper import VideoTilingClipper
@@ -203,14 +275,16 @@ class TestVideoTilingClipper:
         assert result[0]["clip_start"] == pytest.approx(0.0)
         assert result[-1]["clip_end"] == pytest.approx(10.0)
 
-    def test_to_dict_includes_duration(self):
+    def test_to_dict_includes_duration_and_min_overlap(self):
         from vtsearch.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(3.5)
         d = c.to_dict()
-        assert d["name"] == "video_tiling_3.5s"
+        assert d["name"] == "video_tiling"
+        assert d["display_name"] == "Video Tiling"
         assert d["media_type"] == "video"
         assert d["duration"] == 3.5
+        assert d["min_overlap"] == 0.0
 
     def test_zero_duration_video_returned_unchanged(self):
         from vtsearch.media.video.clipper import VideoTilingClipper
@@ -218,6 +292,25 @@ class TestVideoTilingClipper:
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 0}
         result = VideoTilingClipper(2.0).clip(media)
         assert result == [media]
+
+    def test_min_overlap_produces_more_tiles(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
+        # Without overlap: ceil(10/2) = 5 tiles
+        result_no_overlap = VideoTilingClipper(2.0, min_overlap=0.0).clip(media)
+        assert len(result_no_overlap) == 5
+        # With 1.0s min overlap: max_stride = 1.0, ceil((10-2)/1)+1 = 9 tiles
+        result_with_overlap = VideoTilingClipper(2.0, min_overlap=1.0).clip(media)
+        assert len(result_with_overlap) == 9
+        for tile in result_with_overlap:
+            assert tile["duration"] == pytest.approx(2.0)
+        assert result_with_overlap[0]["clip_start"] == pytest.approx(0.0)
+        assert result_with_overlap[-1]["clip_end"] == pytest.approx(10.0)
+        # Verify actual overlap >= 1.0 between consecutive tiles
+        for i in range(len(result_with_overlap) - 1):
+            overlap = result_with_overlap[i]["clip_end"] - result_with_overlap[i + 1]["clip_start"]
+            assert overlap >= 1.0 - 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -634,6 +727,9 @@ class TestClipperRegistry:
         assert "text_default" in names
         assert "video_default" in names
         assert "document_default" in names
+        # All dicts should have display_name
+        for d in dicts:
+            assert "display_name" in d
 
     def test_get_clipper(self):
         from vtsearch.media import get_clipper
@@ -654,7 +750,7 @@ class TestClipperRegistry:
         assert len(audio_clippers) >= 2
         names = [c.name for c in audio_clippers]
         assert "sound_default" in names
-        assert "sound_tiling_2.0s" in names
+        assert "sound_tiling" in names
 
     def test_clippers_for_type_image(self):
         from vtsearch.media import clippers_for_type
@@ -679,7 +775,7 @@ class TestClipperRegistry:
         video_clippers = clippers_for_type("video")
         names = [c.name for c in video_clippers]
         assert "video_default" in names
-        assert "video_tiling_2.0s" in names
+        assert "video_tiling" in names
 
     def test_clippers_for_type_document(self):
         from vtsearch.media import clippers_for_type
@@ -715,6 +811,9 @@ class TestClippersApiEndpoint:
         names = [c["name"] for c in data["clippers"]]
         assert "sound_default" in names
         assert "document_default" in names
+        # All entries should include display_name
+        for c in data["clippers"]:
+            assert "display_name" in c
 
     def test_filter_by_type_id(self, client):
         resp = client.get("/api/clippers?media_type=audio")
@@ -810,12 +909,12 @@ class TestDatasetRegistryClipperColumn:
             media_type="audio",
             num_items=10,
             pkl_path="/tmp/clip.pkl",
-            clipper="sound_tiling_2.0s",
+            clipper="sound_tiling",
         )
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         ds = data["datasets"][0]
-        assert ds["clipper"] == "sound_tiling_2.0s"
+        assert ds["clipper"] == "sound_tiling"
 
     def test_registry_clipper_defaults_to_empty(self, client):
         from vtsearch.datasets.registry import register_dataset
@@ -857,11 +956,15 @@ class TestClipperParameters:
 
         c = SoundTilingClipper(2.0)
         params = c.parameters
-        assert len(params) == 1
+        assert len(params) == 2
         assert params[0]["key"] == "duration"
         assert params[0]["type"] == "number"
         assert params[0]["default"] == 2.0
         assert params[0]["min"] == 0.1
+        assert params[1]["key"] == "min_overlap"
+        assert params[1]["type"] == "number"
+        assert params[1]["default"] == 0.0
+        assert params[1]["min"] == 0
 
     def test_sound_tiling_with_params(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
@@ -870,8 +973,17 @@ class TestClipperParameters:
         c2 = c.with_params({"duration": 5.0})
         assert isinstance(c2, SoundTilingClipper)
         assert c2.duration == 5.0
+        assert c2.min_overlap == 0.0
         assert c2 is not c
         assert c.duration == 2.0  # original unchanged
+
+    def test_sound_tiling_with_params_overlap(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        c2 = c.with_params({"duration": 5.0, "min_overlap": 1.0})
+        assert c2.duration == 5.0
+        assert c2.min_overlap == 1.0
 
     def test_sound_tiling_with_params_ignores_unknown_keys(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
@@ -885,9 +997,11 @@ class TestClipperParameters:
 
         c = VideoTilingClipper(2.0)
         params = c.parameters
-        assert len(params) == 1
+        assert len(params) == 2
         assert params[0]["key"] == "duration"
         assert params[0]["default"] == 2.0
+        assert params[1]["key"] == "min_overlap"
+        assert params[1]["default"] == 0.0
 
     def test_video_tiling_with_params(self):
         from vtsearch.media.video.clipper import VideoTilingClipper
@@ -896,7 +1010,16 @@ class TestClipperParameters:
         c2 = c.with_params({"duration": 10.0})
         assert isinstance(c2, VideoTilingClipper)
         assert c2.duration == 10.0
+        assert c2.min_overlap == 0.0
         assert c.duration == 2.0
+
+    def test_video_tiling_with_params_overlap(self):
+        from vtsearch.media.video.clipper import VideoTilingClipper
+
+        c = VideoTilingClipper(2.0)
+        c2 = c.with_params({"duration": 10.0, "min_overlap": 2.0})
+        assert c2.duration == 10.0
+        assert c2.min_overlap == 2.0
 
     def test_video_scene_parameters(self):
         from vtsearch.media.video.clipper import VideoSceneClipper
@@ -937,8 +1060,9 @@ class TestClipperParameters:
         c = SoundTilingClipper(2.0)
         d = c.to_dict()
         assert "parameters" in d
-        assert len(d["parameters"]) == 1
+        assert len(d["parameters"]) == 2
         assert d["parameters"][0]["key"] == "duration"
+        assert d["parameters"][1]["key"] == "min_overlap"
 
     def test_to_dict_no_parameters_for_default_clipper(self):
         from vtsearch.media.audio.clipper import SoundDefaultClipper
@@ -959,8 +1083,9 @@ class TestClipperParametersApi:
         # sound_tiling should have parameters
         tiling = next(c for c in clippers if c["name"].startswith("sound_tiling"))
         assert "parameters" in tiling
-        assert len(tiling["parameters"]) == 1
+        assert len(tiling["parameters"]) == 2
         assert tiling["parameters"][0]["key"] == "duration"
+        assert tiling["parameters"][1]["key"] == "min_overlap"
 
     def test_default_clipper_has_no_parameters_in_api(self, client):
         resp = client.get("/api/clippers?media_type=audio")
@@ -998,7 +1123,7 @@ class TestApplyClipperWithParams:
         }
         clips = {1: media}
         # With default 2s duration: ceil(10/2) = 5 tiles
-        _apply_clipper(clips, "sound_tiling_2.0s")
+        _apply_clipper(clips, "sound_tiling")
         assert len(clips) == 5
 
     def test_apply_clipper_with_overridden_duration(self):
@@ -1015,7 +1140,7 @@ class TestApplyClipperWithParams:
         }
         clips = {1: media}
         # Override to 5s duration: ceil(10/5) = 2 tiles
-        _apply_clipper(clips, "sound_tiling_2.0s", {"duration": 5.0})
+        _apply_clipper(clips, "sound_tiling", {"duration": 5.0})
         assert len(clips) == 2
 
     def test_apply_clipper_params_none_uses_defaults(self):
@@ -1031,5 +1156,22 @@ class TestApplyClipperWithParams:
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
-        _apply_clipper(clips, "sound_tiling_2.0s", None)
+        _apply_clipper(clips, "sound_tiling", None)
         assert len(clips) == 5  # default 2s → 5 tiles
+
+    def test_apply_clipper_with_min_overlap(self):
+        from vtsearch.audio import generate_wav
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        wav = generate_wav(440, 10.0)
+        media = {
+            "id": 1,
+            "type": "audio",
+            "media_bytes": wav,
+            "duration": 10.0,
+            "origin": {"importer": "test", "params": {}},
+        }
+        clips = {1: media}
+        # 2s clips with 1s min overlap: max_stride=1, ceil((10-2)/1)+1 = 9 tiles
+        _apply_clipper(clips, "sound_tiling", {"duration": 2.0, "min_overlap": 1.0})
+        assert len(clips) == 9

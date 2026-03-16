@@ -349,6 +349,7 @@ export interface ClipperParameter {
 
 export interface ClipperInfo {
   name: string;
+  display_name?: string;
   media_type: string;
   parameters?: ClipperParameter[];
   [key: string]: unknown;
