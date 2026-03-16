@@ -56,21 +56,21 @@ class DemoDatasetImporter(DatasetImporter):
         ),
     ]
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._refresh_options()
-
-    def _refresh_options(self) -> None:
-        """Populate the ``name`` field's options from the demo-dataset registry."""
-        from vtsearch.datasets.config import DEMO_DATASETS
+    def _ensure_options(self) -> None:
+        """Lazily populate the ``name`` field's options from the demo-dataset registry."""
+        from vtsearch.datasets.config import DEMO_DATASETS  # noqa: PLC0415
 
         for f in self.fields:
-            if f.key == "name":
+            if f.key == "name" and not f.options:
                 f.options = list(DEMO_DATASETS.keys())
                 break
 
+    def to_dict(self) -> dict:
+        self._ensure_options()
+        return super().to_dict()
+
     def resolve_display_name(self, field_values: dict[str, Any]) -> str:
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.config import DEMO_DATASETS  # noqa: PLC0415
 
         dataset_name = field_values.get("name", "")
         entry = DEMO_DATASETS.get(dataset_name)
