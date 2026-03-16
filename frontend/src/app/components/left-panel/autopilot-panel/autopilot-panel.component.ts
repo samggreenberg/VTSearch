@@ -104,11 +104,11 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
 
   private phaseLabel(phase: AutopilotPhase): string {
     switch (phase) {
-      case 'good': return 'Label Good Examples';
-      case 'bad': return 'Label Bad Examples';
-      case 'hard': return 'Refine Boundary';
-      case 'new': return 'Explore Diversity';
-      case 'done': return 'Done';
+      case 'good': return 'Find Initial Goods.';
+      case 'bad': return 'Find Initial Bads.';
+      case 'hard': return 'Refine Boundary.';
+      case 'new': return 'Explore Diversity.';
+      case 'done': return 'Done!';
       default: return '';
     }
   }
