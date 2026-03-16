@@ -255,7 +255,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: { label: string; name: string; embedder?: string }): void {
+  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
     this.importerModalOpen = false;
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
@@ -263,6 +263,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const params: Record<string, string> = {};
     if (demo.embedder) {
       params['embedder'] = demo.embedder;
+    }
+    if (demo.clipper) {
+      params['clipper'] = demo.clipper;
     }
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {

@@ -38,10 +38,13 @@ export class DatasetsApiService {
     return this.http.get<ImportersResponse>('/api/dataset/all-importers');
   }
 
-  getDemoList(embedder?: string): Observable<DemoListResponse> {
+  getDemoList(embedder?: string, clipper?: string): Observable<DemoListResponse> {
     const params: Record<string, string> = {};
     if (embedder) {
       params['embedder'] = embedder;
+    }
+    if (clipper) {
+      params['clipper'] = clipper;
     }
     return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
   }

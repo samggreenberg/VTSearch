@@ -48,6 +48,8 @@ export class DatasetImporterModalComponent implements OnInit {
   demoEmbedders: EmbedderInfo[] = [];
   selectedDemoEmbedder = '';
   demoEmbedder = '';
+  demoClippers: ClipperInfo[] = [];
+  selectedDemoClipper = '';
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string }[] = [];
@@ -223,6 +225,8 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!mediaType) {
       this.demoEmbedders = [];
       this.selectedDemoEmbedder = '';
+      this.demoClippers = [];
+      this.selectedDemoClipper = '';
       return;
     }
     this.datasetsApi.getEmbedders(mediaType).subscribe({
@@ -231,11 +235,17 @@ export class DatasetImporterModalComponent implements OnInit {
         this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
         this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
-        // The initial demo fetch had no embedder context, so re-fetch with the
-        // now-known default embedder for authoritative status values.
+        // The initial demo fetch had no embedder/clipper context, so re-fetch
+        // with the now-known defaults for authoritative status values.
         if (this.selectedDemoEmbedder) {
-          this.refetchDemoStatuses(this.selectedDemoEmbedder);
+          this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
         }
+      },
+    });
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.demoClippers = clippers;
+        this.selectedDemoClipper = clippers.length > 0 ? clippers[0].name : '';
       },
     });
   }
@@ -244,31 +254,32 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedDemoEmbedder = embedder;
     this.demoEmbedder = embedder;
     this.updateDemoStatuses();
-    // Re-fetch from the server for authoritative status when the pkl_embedder
-    // is missing or the client-side heuristic might be wrong.
-    this.refetchDemoStatuses(embedder);
+    this.refetchDemoStatuses(embedder, this.selectedDemoClipper);
+  }
+
+  onDemoClipperChange(clipper: string): void {
+    this.selectedDemoClipper = clipper;
+    this.updateDemoStatuses();
+    this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
   }
 
   /**
-   * Re-compute each demo's status client-side based on the selected embedder.
-   * A demo that has a cached pkl (`pkl_embedder` is set) is only "ready" when
-   * the pkl embedder matches the currently selected embedder; otherwise it
-   * downgrades to "needs_embedding" (source data is still present).
+   * Re-compute each demo's status client-side based on the selected embedder
+   * and clipper.  A demo that has a cached pkl is only "ready" when both the
+   * pkl embedder and clipper match the currently selected values; otherwise it
+   * downgrades to "needs_embedding".
    *
    * Only processes demos for the active tab to avoid accidentally changing
-   * statuses of demos from other media types (whose embedder names live in a
-   * different namespace).
+   * statuses of demos from other media types.
    */
   private updateDemoStatuses(): void {
     const emb = this.selectedDemoEmbedder;
+    const clip = this.selectedDemoClipper;
     for (const demo of this.demos) {
-      if (demo.media_type !== this.activeTab) continue;  // only touch current tab
-      if (demo.status === 'needs_download') continue;  // source data missing — can't re-embed
+      if (demo.media_type !== this.activeTab) continue;
+      if (demo.status === 'needs_download') continue;
 
       if (!demo.pkl_embedder) {
-        // pkl_embedder unknown — if the demo was marked "ready" by the server
-        // (no embedder param on initial fetch) we can't verify it matches the
-        // selected embedder, so conservatively downgrade.
         if (emb && demo.status === 'ready') {
           demo.status = 'needs_embedding';
           demo.ready = false;
@@ -276,22 +287,25 @@ export class DatasetImporterModalComponent implements OnInit {
         continue;
       }
 
-      if (emb && demo.pkl_embedder !== emb) {
-        demo.status = 'needs_embedding';
-        demo.ready = false;
-      } else {
+      const embedderMatch = !emb || demo.pkl_embedder === emb;
+      const clipperMatch = !clip || !demo.pkl_clipper || demo.pkl_clipper === clip;
+
+      if (embedderMatch && clipperMatch) {
         demo.status = 'ready';
         demo.ready = true;
+      } else {
+        demo.status = 'needs_embedding';
+        demo.ready = false;
       }
     }
   }
 
   /**
-   * Re-fetch the demo list from the server with the given embedder so the
-   * backend can authoritatively determine each demo's status.
+   * Re-fetch the demo list from the server with the given embedder and clipper
+   * so the backend can authoritatively determine each demo's status.
    */
-  private refetchDemoStatuses(embedder: string): void {
-    this.datasetsApi.getDemoList(embedder).subscribe({
+  private refetchDemoStatuses(embedder: string, clipper?: string): void {
+    this.datasetsApi.getDemoList(embedder, clipper).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
       },
@@ -371,7 +385,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   selectDemo(demo: DemoDataset): void {
-    this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder } as any);
+    this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder, clipper: this.selectedDemoClipper } as any);
     this.closed.emit();
   }
 
@@ -380,6 +394,7 @@ export class DatasetImporterModalComponent implements OnInit {
     // Reset embedder selection for the new tab
     const embedders = this.allEmbedders.filter((e) => e.media_type_id === tab);
     this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+    // Clipper is reset by loadDemoEmbedders (called from selectDemoTab)
   }
 
   back(): void {

@@ -127,18 +127,27 @@ def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = 
         update_progress(status, message, current, total, step=step, total_steps=total_steps)
 
     update_progress(
-        "loading", "Loading embedding model…", 0, 0,
-        step=step, total_steps=total_steps,
+        "loading",
+        "Loading embedding model…",
+        0,
+        0,
+        step=step,
+        total_steps=total_steps,
     )
-    with intercept_tqdm_progress(_model_load_progress), intercept_weight_loading_progress(
-        _model_load_progress, "Loading model weights…"
+    with (
+        intercept_tqdm_progress(_model_load_progress),
+        intercept_weight_loading_progress(_model_load_progress, "Loading model weights…"),
     ):
         emb.load_models()
 
     # Warm up the text encoder so the first text sort is instant.
     update_progress(
-        "loading", "Warming up text encoder…", 0, 0,
-        step=step, total_steps=total_steps,
+        "loading",
+        "Warming up text encoder…",
+        0,
+        0,
+        step=step,
+        total_steps=total_steps,
     )
     try:
         emb.embed_text("warmup")
@@ -289,8 +298,13 @@ def _auto_register_dataset(
 
 
 def _run_origin_load_in_background(
-    load_fn, origin: dict, *, name: str = "", clipper: str = "",
-    clipper_params: dict | None = None, embedder: str = "",
+    load_fn,
+    origin: dict,
+    *,
+    name: str = "",
+    clipper: str = "",
+    clipper_params: dict | None = None,
+    embedder: str = "",
     created_by: str = "",
 ) -> None:
     """Run a dataset load in a background thread with standard error handling.
@@ -330,8 +344,12 @@ def _run_origin_load_in_background(
     def task():
         try:
             update_progress(
-                "loading", "Clearing previous dataset…", 0, 0,
-                step=1, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Clearing previous dataset…",
+                0,
+                0,
+                step=1,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             clear_dataset()
             gc.collect()
@@ -341,25 +359,33 @@ def _run_origin_load_in_background(
             # inner functions like load_demo_dataset cannot prematurely
             # signal completion to the frontend.
             update_progress(
-                "loading", "Removing duplicates…",
-                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Removing duplicates…",
+                step=_TOTAL_LOAD_STEPS,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             _set_clip_origins(medias, origin)
             if clipper:
                 _apply_clipper(medias, clipper, clipper_params)
             collapse_duplicates(medias)
+
             def _diversity_progress(current: int, total: int) -> None:
                 update_progress(
-                    "loading", "Building diversity index…",
-                    current=current, total=total,
-                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    "loading",
+                    "Building diversity index…",
+                    current=current,
+                    total=total,
+                    step=_TOTAL_LOAD_STEPS,
+                    total_steps=_TOTAL_LOAD_STEPS,
                 )
 
             _diversity_progress(0, 0)
             build_diversity_tree(on_progress=_diversity_progress)
             update_progress(
-                "loading", "Saving to registry…",
-                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Saving to registry…",
+                step=_TOTAL_LOAD_STEPS,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             origin_str = _origin_to_str(origin)
             _auto_register_dataset(
@@ -397,8 +423,11 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
-    clipper_name = field_values.pop("clipper", "")
+    clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
+    # Keep clipper in field_values for importers that need it (e.g. demo
+    # importer writes a .clipper sidecar for readiness tracking).
+    field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
     def _load():
