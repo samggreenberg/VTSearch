@@ -14,8 +14,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
-import dns.resolver
-
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 FROM_ADDRESS = "VTSearch@fake.ai"
@@ -77,6 +75,8 @@ def _build_html(results: dict[str, Any]) -> str:
 
 def _resolve_mx(domain: str) -> str:
     """Return the highest-priority MX host for *domain*."""
+    import dns.resolver  # lazy import – dnspython is optional
+
     answers = dns.resolver.resolve(domain, "MX")
     best = min(answers, key=lambda r: r.preference)
     return str(best.exchange).rstrip(".")
