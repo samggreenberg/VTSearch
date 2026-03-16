@@ -40,11 +40,18 @@
 }
 
 .view-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.75rem;
   border: 1px solid var(--border-color, #444);
   border-top: 1px solid var(--border-color, #444);
   border-radius: 0 0 6px 6px;
   background: var(--bg-primary, #1e1e2e);
+
+  .form-label {
+    margin-bottom: 0;
+  }
 }
 
 .radio-group {
