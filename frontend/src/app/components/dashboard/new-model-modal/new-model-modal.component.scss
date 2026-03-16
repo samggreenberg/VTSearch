@@ -89,16 +89,18 @@
   color: var(--text-primary, #e0e0e0);
 }
 
+.chip-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
 .text-chip .chip-icon {
   color: var(--color-good, #4caf50);
-  font-weight: 700;
-  font-size: 0.75rem;
 }
 
 .media-chip .chip-icon {
   color: var(--accent, #2196f3);
-  font-weight: 700;
-  font-size: 0.75rem;
 }
 
 .chip-label {
