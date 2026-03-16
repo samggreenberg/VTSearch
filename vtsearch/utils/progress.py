@@ -6,12 +6,21 @@ from typing import Any, Optional
 _UNSET = object()  # sentinel for "caller did not provide this argument"
 
 
+class CancelledError(Exception):
+    """Raised when an operation is cancelled via :meth:`ProgressTracker.cancel`."""
+
+
 class ProgressTracker:
     """Thread-safe progress tracker for long-running operations.
 
     Each instance manages its own lock and data dict. The *extra_fields*
     parameter lets callers declare additional keys (e.g. ``"error"``,
     ``"staging_result"``) that are tracked alongside the base fields.
+
+    A :class:`threading.Event` is used for cooperative cancellation: call
+    :meth:`cancel` to set the flag and :meth:`check_cancelled` from inside
+    the background thread to raise :class:`CancelledError` when the flag is
+    set.
 
     Args:
         extra_fields: Mapping of extra field names to their default values.
@@ -22,6 +31,7 @@ class ProgressTracker:
     def __init__(self, extra_fields: Optional[dict[str, Any]] = None) -> None:
         self._lock = threading.Lock()
         self._extra_defaults = dict(extra_fields) if extra_fields else {}
+        self._cancel_event = threading.Event()
         self._data: dict[str, Any] = {
             "status": "idle",
             "message": "",
@@ -56,6 +66,36 @@ class ProgressTracker:
             for key in self._extra_defaults:
                 if key in kwargs:
                     self._data[key] = kwargs[key]
+
+    def cancel(self) -> None:
+        """Signal the background operation to stop.
+
+        This sets the internal cancel event.  The background thread must
+        cooperatively check it via :meth:`check_cancelled`.
+        """
+        self._cancel_event.set()
+
+    def check_cancelled(self) -> None:
+        """Raise :class:`CancelledError` if :meth:`cancel` has been called.
+
+        Call this periodically from inside the background thread (e.g. once
+        per loop iteration) to allow cooperative cancellation.
+        """
+        if self._cancel_event.is_set():
+            raise CancelledError("Operation cancelled by user")
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Return ``True`` if cancellation has been requested."""
+        return self._cancel_event.is_set()
+
+    def reset_cancel(self) -> None:
+        """Clear the cancellation flag.
+
+        Called at the beginning of a new operation so that a previous
+        cancellation does not immediately abort the next run.
+        """
+        self._cancel_event.clear()
 
     def get(self) -> dict[str, Any]:
         """Return a snapshot of the current progress data.
@@ -122,6 +162,16 @@ def update_progress(
 def get_progress() -> dict[str, Any]:
     """Return a snapshot of the current dataset progress data."""
     return dataset_progress.get()
+
+
+def cancel_dataset_progress() -> None:
+    """Signal the current dataset operation to cancel."""
+    dataset_progress.cancel()
+
+
+def check_dataset_cancelled() -> None:
+    """Raise :class:`CancelledError` if the dataset operation was cancelled."""
+    dataset_progress.check_cancelled()
 
 
 def update_sort_progress(

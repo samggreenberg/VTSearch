@@ -36,6 +36,7 @@ from vtsearch.datasets.registry import (
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
+    cancel_dataset_progress,
     collapse_duplicates,
     medias,
     get_dataset_display_name,
@@ -46,6 +47,8 @@ from vtsearch.utils import (
     snapshot_medias,
     update_progress,
 )
+from vtsearch.utils.progress import CancelledError
+from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
 import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
@@ -77,6 +80,7 @@ def _normalize_media_type_param(value: str) -> str:
         return get_by_folder_name(value).type_id
     except KeyError:
         return value  # assume it is already a type_id
+
 
 # Register the UI sub-blueprint.
 datasets_bp.register_blueprint(datasets_ui_bp)
@@ -200,6 +204,18 @@ def dataset_status():
 def dataset_progress():
     """Return the current progress of long-running operations."""
     return jsonify(get_progress())
+
+
+@datasets_bp.route("/api/dataset/cancel", methods=["POST"])
+def cancel_dataset_load():
+    """Cancel the currently running dataset load/import operation.
+
+    Sets a cancellation flag that is checked cooperatively by background
+    loading threads.  The thread will clean up partial state and set
+    progress to idle.
+    """
+    cancel_dataset_progress()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -598,11 +614,16 @@ def load_registered_dataset(dataset_id: str):
 
     _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
 
+    # Reset the cancellation flag so a previous cancel does not immediately
+    # abort this new operation.
+    _dataset_progress_tracker.reset_cancel()
+
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
     update_progress("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
+        _dataset_progress_tracker.check_cancelled()
         update_progress(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
 
     def load_task():
@@ -619,6 +640,7 @@ def load_registered_dataset(dataset_id: str):
             _reg_set_loaded(None)
             gc.collect()
             load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
+            _dataset_progress_tracker.check_cancelled()
             update_progress(
                 "loading",
                 "Removing duplicates…",
@@ -630,6 +652,7 @@ def load_registered_dataset(dataset_id: str):
             collapse_duplicates(medias)
 
             def _diversity_progress(current: int, total: int) -> None:
+                _dataset_progress_tracker.check_cancelled()
                 update_progress(
                     "loading",
                     "Building diversity index…",
@@ -646,6 +669,10 @@ def load_registered_dataset(dataset_id: str):
             _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
             set_dataset_display_name(entry.get("name", ""))
             _load_embedder_for_clips(step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
+        except CancelledError:
+            medias.clear()
+            gc.collect()
+            update_progress("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except MemoryError:
             medias.clear()
             gc.collect()

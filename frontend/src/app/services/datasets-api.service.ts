@@ -152,6 +152,10 @@ export class DatasetsApiService {
     return this.http.post('/api/dataset/combine', params);
   }
 
+  cancelIngest(): Observable<OkResponse> {
+    return this.http.post<OkResponse>('/api/dataset/cancel', {});
+  }
+
   clearDataset(): Observable<OkResponse> {
     return this.http.post<OkResponse>('/api/dataset/clear', {});
   }
