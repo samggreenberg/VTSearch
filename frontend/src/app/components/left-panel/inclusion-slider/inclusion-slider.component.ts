@@ -12,6 +12,7 @@ export class InclusionSliderComponent {
   @Input() value = 0;
 
   @Output() valueChange = new EventEmitter<number>();
+  @Output() viewClicked = new EventEmitter<void>();
 
   onInput(event: Event): void {
     const target = event.target as HTMLInputElement;

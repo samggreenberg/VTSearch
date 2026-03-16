@@ -7,6 +7,7 @@ import { ProgressIndicatorsComponent } from './progress-indicators/progress-indi
 import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
+import { LeftViewSettingsModalComponent } from '../modals/left-view-settings-modal/left-view-settings-modal.component';
 import { MediaItem, LabelingStatusResponse } from '../../models/api.models';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
@@ -24,6 +25,7 @@ export type { SortMode, SelectMode, SortedItem };
     MediaListComponent,
     StripeOverviewComponent,
     AutopilotPanelComponent,
+    LeftViewSettingsModalComponent,
   ],
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
@@ -66,6 +68,7 @@ export class LeftPanelComponent implements OnInit {
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
+  showLeftViewSettings = false;
 
   ngOnInit(): void {
     this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
