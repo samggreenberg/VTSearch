@@ -215,3 +215,60 @@
   text-align: center;
   padding: 16px 0;
 }
+
+// Breadcrumbs for file browser navigation
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.breadcrumb-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent, #2196f3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.85rem;
+
+  &:hover {
+    text-decoration: underline;
+    background: var(--bg-hover, #e8e8e8);
+  }
+}
+
+.breadcrumb-sep {
+  color: var(--text-muted);
+  margin: 0 1px;
+}
+
+.breadcrumb-current {
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+// File/directory entries
+.browse-dir {
+  font-weight: 600;
+}
+
+.browse-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.entry-icon {
+  flex-shrink: 0;
+}
+
+.entry-size {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}

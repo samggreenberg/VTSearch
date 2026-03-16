@@ -913,3 +913,4 @@ class TestSeedVotesFromExamples:
         data = res.get_json()
         assert data["seeded"] == 0
         assert data["skipped"] == 1
+
