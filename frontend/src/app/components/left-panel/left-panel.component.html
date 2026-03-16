@@ -40,16 +40,17 @@
         (selectModeChange)="selectModeChange.emit($event)"
       />
 
-      <vt-inclusion-slider
-        [value]="inclusion"
-        (valueChange)="inclusionChange.emit($event)"
-      />
-
       <vt-progress-indicators
         [labelingStatus]="labelingStatus"
         [sortBusy]="sortBusy"
         [sortStatus]="sortStatus"
         (indicatorClick)="indicatorClick.emit($event)"
+      />
+
+      <vt-inclusion-slider
+        [value]="inclusion"
+        (valueChange)="inclusionChange.emit($event)"
+        (viewClicked)="showLeftViewSettings = true"
       />
 
       <div class="media-list-container">
@@ -92,3 +93,7 @@
     </div>
   }
 </div>
+
+@if (showLeftViewSettings) {
+  <vt-left-view-settings-modal (closed)="showLeftViewSettings = false" />
+}

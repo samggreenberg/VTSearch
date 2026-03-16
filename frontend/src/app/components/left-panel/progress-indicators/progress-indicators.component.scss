@@ -1,6 +1,6 @@
 .progress-check-bar {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: stretch;
   min-height: 26px;
   flex-wrap: wrap;
@@ -38,8 +38,8 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 3px 6px;
+  gap: 2px;
+  padding: 3px 2px;
   border: 1px solid var(--indicator-border);
   border-radius: 4px;
   background: var(--bg-panel);
