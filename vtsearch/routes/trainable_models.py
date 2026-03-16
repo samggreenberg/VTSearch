@@ -106,11 +106,32 @@ def sync_labels_to_loaded_model() -> None:
     update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
+def _seed_demo_category(snap: dict, category: str) -> int:
+    """Seed good votes for all loaded medias that match *category*.
+
+    Returns the number of media items voted good.
+    """
+    from vtsearch.utils import apply_label
+
+    count = 0
+    for cid, media in snap.items():
+        if media.get("category") == category:
+            apply_label(cid, "good")
+            count += 1
+    return count
+
+
 def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     """Seed good votes from a model's media examples.
 
     For each ``type: "media"`` example, reads the file from
-    ``data/example_media/`` and adds it to ``good_votes``:
+    ``data/example_media/`` and adds it to ``good_votes``.
+
+    Demo category references (``demo:<name>/<category>``) are handled
+    specially: every loaded media whose ``category`` field matches the
+    specified category is voted good.
+
+    For file-based examples:
 
     * **Match by MD5** — if a loaded media has the same content hash,
       that media is voted good (keeping its original dataset origin).
@@ -123,6 +144,7 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     Returns the number of example entries successfully seeded.
     """
     import hashlib
+    import re
 
     from vtsearch.config import DATA_DIR
     from vtsearch.utils import (
@@ -156,9 +178,22 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     dataset_embedder_name = first_media.get("embedder", "")
     embedder = None  # lazily loaded only when needed
 
+    demo_re = re.compile(r"^demo:[^/]+/(.+)$")
+
     seeded = 0
     for ex in media_examples:
-        filename = ex["value"].strip()
+        value = ex["value"].strip()
+
+        # Handle demo category references: demo:<name>/<category>
+        m = demo_re.match(value)
+        if m:
+            category = m.group(1)
+            matched = _seed_demo_category(snap, category)
+            if matched > 0:
+                seeded += 1
+            continue
+
+        filename = value
         file_path = server_media_dir / filename
         # Prevent directory traversal
         try:

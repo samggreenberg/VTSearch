@@ -46,6 +46,11 @@ export class NewModelModalComponent implements OnInit {
   browseItems: BrowseItem[] = [];
   browseLoading = false;
 
+  // Demo drill-down state
+  selectedDemo: BrowseItem | null = null;
+  demoCategories: BrowseItem[] = [];
+  demoCategoriesLoading = false;
+
   constructor(
     private modelsApi: TrainableModelsApiService,
     private datasetsApi: DatasetsApiService,
@@ -85,6 +90,8 @@ export class NewModelModalComponent implements OnInit {
     this.view = 'media-picker';
     this.selectedSource = null;
     this.browseItems = [];
+    this.selectedDemo = null;
+    this.demoCategories = [];
     this.loadMediaSources();
   }
 
@@ -145,12 +152,47 @@ export class NewModelModalComponent implements OnInit {
   }
 
   selectBrowseItem(item: BrowseItem): void {
+    // For demo sources, drill down into categories instead of adding the whole pile
+    if (this.selectedSource?.name === 'demo') {
+      this.selectedDemo = item;
+      this.demoCategoriesLoading = true;
+      this.demoCategories = [];
+      this.datasetsApi.getDemoCategories(item.key).subscribe({
+        next: (res) => {
+          this.demoCategories = (res.categories || []).map((cat) => ({
+            key: cat,
+            display: cat,
+          }));
+          this.demoCategoriesLoading = false;
+        },
+        error: () => {
+          this.demoCategoriesLoading = false;
+        },
+      });
+      return;
+    }
+
     this.examples.push({
       type: 'media',
       value: item.key,
       display: item.display || item.key,
     });
     this.view = 'main';
+  }
+
+  selectDemoCategory(cat: BrowseItem): void {
+    const demo = this.selectedDemo!;
+    this.examples.push({
+      type: 'media',
+      value: `demo:${demo.key}/${cat.key}`,
+      display: `${demo.display} — ${cat.display}`,
+    });
+    this.view = 'main';
+  }
+
+  backToDemoList(): void {
+    this.selectedDemo = null;
+    this.demoCategories = [];
   }
 
   onLocalFileSelected(event: Event): void {

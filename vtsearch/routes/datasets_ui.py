@@ -128,6 +128,20 @@ def demo_dataset_list():
     return jsonify({"datasets": demos})
 
 
+@datasets_ui_bp.route("/api/dataset/demo-categories/<name>")
+def demo_dataset_categories(name: str):
+    """List the categories within a specific demo dataset.
+
+    Returns ``{"categories": ["cat1", "cat2", ...]}`` for the named demo.
+    """
+    dataset_info = DEMO_DATASETS.get(name)
+    if dataset_info is None:
+        return jsonify({"error": f"Unknown demo dataset: {name}"}), 404
+
+    categories = dataset_info.get("categories", [])
+    return jsonify({"categories": categories})
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------

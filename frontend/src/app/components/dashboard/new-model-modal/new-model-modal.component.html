@@ -103,7 +103,7 @@
         </div>
       }
 
-      @if (selectedSource && !browseLoading && browseItems.length > 0) {
+      @if (selectedSource && !selectedDemo && !browseLoading && browseItems.length > 0) {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
         <div class="browse-list">
           @for (item of browseItems; track item.key) {
@@ -114,11 +114,31 @@
         </div>
       }
 
+      @if (selectedDemo) {
+        <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoList()">&larr; Back to datasets</button>
+        @if (demoCategoriesLoading) {
+          <p class="empty-state">Loading categories...</p>
+        }
+        @if (!demoCategoriesLoading && demoCategories.length > 0) {
+          <p class="picker-instructions">Select a category from <strong>{{ selectedDemo.display }}</strong>:</p>
+          <div class="browse-list">
+            @for (cat of demoCategories; track cat.key) {
+              <button class="browse-item" (click)="selectDemoCategory(cat)" [title]="cat.key">
+                {{ cat.display }}
+              </button>
+            }
+          </div>
+        }
+        @if (!demoCategoriesLoading && demoCategories.length === 0) {
+          <p class="empty-state">No categories found in this dataset.</p>
+        }
+      }
+
       @if (browseLoading) {
         <p class="empty-state">Loading items...</p>
       }
 
-      @if (selectedSource && !browseLoading && browseItems.length === 0) {
+      @if (selectedSource && !selectedDemo && !browseLoading && browseItems.length === 0) {
         <p class="empty-state">No items found in this source.</p>
       }
     </div>

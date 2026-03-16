@@ -29,6 +29,29 @@ class TestDatasetEndpoints:
         # Should return available demo datasets
         assert "demos" in data or isinstance(data, dict)
 
+    def test_demo_categories_returns_categories(self, client):
+        """GET /api/dataset/demo-categories/<name> returns categories for a valid demo."""
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        resp = client.get(f"/api/dataset/demo-categories/{name}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "categories" in data
+        assert isinstance(data["categories"], list)
+        assert len(data["categories"]) > 0
+        expected = DEMO_DATASETS[name]["categories"]
+        assert data["categories"] == expected
+
+    def test_demo_categories_unknown_returns_404(self, client):
+        """GET /api/dataset/demo-categories/<name> returns 404 for unknown demo."""
+        resp = client.get("/api/dataset/demo-categories/nonexistent_dataset_xyz")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
+
     def test_clear_dataset(self, client):
         saved = dict(app_module.medias)
         try:

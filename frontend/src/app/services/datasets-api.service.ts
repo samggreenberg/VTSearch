@@ -46,6 +46,10 @@ export class DatasetsApiService {
     return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
   }
 
+  getDemoCategories(name: string): Observable<{ categories: string[] }> {
+    return this.http.get<{ categories: string[] }>(`/api/dataset/demo-categories/${name}`);
+  }
+
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
   }

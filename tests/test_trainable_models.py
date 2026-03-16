@@ -913,3 +913,39 @@ class TestSeedVotesFromExamples:
         data = res.get_json()
         assert data["seeded"] == 0
         assert data["skipped"] == 1
+
+    def test_seed_demo_category_matches_loaded_medias(self, client):
+        """demo:<name>/<category> examples should vote good on matching medias."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Find a category that at least one media has
+        categories = {m.get("category") for m in medias.values() if m.get("category")}
+        if not categories:
+            pytest.skip("No medias with categories")
+
+        category = next(iter(categories))
+        expected_ids = [cid for cid, m in medias.items() if m.get("category") == category]
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": f"demo:any_demo/{category}"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 1
+
+        for cid in expected_ids:
+            assert cid in good_votes
+
+    def test_seed_demo_category_no_match_seeds_nothing(self, client):
+        """demo:<name>/<category> with a nonexistent category should seed 0."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": "demo:some_demo/nonexistent_category_xyz"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
