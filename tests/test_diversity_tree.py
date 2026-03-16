@@ -324,67 +324,11 @@ class TestDiversityLevel:
 
 
 # ---------------------------------------------------------------------------
-# Fractional diversity level
+# Span info
 # ---------------------------------------------------------------------------
 
 
-class TestFractionalDiversityLevel:
-    def test_empty_tree(self):
-        tree = DiversityTree({})
-        assert tree.fractional_diversity_level() == 0.0
-
-    def test_no_labels_returns_zero(self):
-        vecs = _make_vectors(100)
-        tree = DiversityTree(vecs, k=2, min_node_size=10)
-        assert tree.fractional_diversity_level() == 0.0
-
-    def test_single_node_labeled_returns_one(self):
-        """A single-node tree has total_nodes=1; labeling gives diversity 1."""
-        vecs = _make_vectors(10)  # All in root (single node, depth=0)
-        tree = DiversityTree(vecs, k=2, min_node_size=20)
-        tree.label(1)
-        assert tree.fractional_diversity_level() == 1.0
-
-    def test_partial_children_gives_positive(self):
-        """Labeling one of two children should give a positive diversity level."""
-        vecs = _make_clustered_vectors([30, 30], dim=32)
-        tree = DiversityTree(vecs, k=2, min_node_size=10)
-        tree.label(1)  # cluster 0 only
-        frac = tree.fractional_diversity_level()
-        assert frac > 0
-
-    def test_all_children_increases(self):
-        """Labeling from all top-level children should increase diversity."""
-        vecs = _make_clustered_vectors([30, 30], dim=32)
-        tree = DiversityTree(vecs, k=2, min_node_size=10)
-        tree.label(1)  # cluster 0
-        level_partial = tree.fractional_diversity_level()
-        tree.label(31)  # cluster 1
-        level_full = tree.fractional_diversity_level()
-        assert level_full > level_partial
-
-    def test_fully_covered_equals_total_nodes(self):
-        vecs = _make_vectors(10)  # Single node tree
-        tree = DiversityTree(vecs, k=2, min_node_size=20)
-        tree.label(1)
-        assert tree.fractional_diversity_level() == float(tree.total_nodes)
-
-    def test_monotonically_increasing_with_coverage(self):
-        """Fractional level should not decrease as more clusters are covered."""
-        vecs = _make_clustered_vectors([40, 40, 40], dim=32)
-        tree = DiversityTree(vecs, k=3, min_node_size=10)
-
-        levels = []
-        for _ in range(30):
-            sample = tree.next_sample()
-            if sample is None:
-                break
-            tree.label(sample)
-            levels.append(tree.fractional_diversity_level())
-
-        for i in range(1, len(levels)):
-            assert levels[i] >= levels[i - 1], f"Fractional level decreased: {levels[i - 1]} -> {levels[i]} at step {i}"
-
+class TestSpanInfo:
     def test_span_info_includes_fractional_level(self):
         vecs = _make_clustered_vectors([30, 30], dim=32)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
@@ -393,6 +337,14 @@ class TestFractionalDiversityLevel:
         assert "fractional_level" in info
         assert isinstance(info["fractional_level"], float)
         assert info["fractional_level"] > 0.0
+
+    def test_span_info_diversity_matches_level(self):
+        vecs = _make_clustered_vectors([30, 30], dim=32)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+        tree.label(1)
+        info = tree.span_info()
+        assert info["diversity_level"] == float(tree.diversity_level())
+        assert info["max_level"] == tree.total_nodes
 
 
 # ---------------------------------------------------------------------------

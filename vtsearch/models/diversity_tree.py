@@ -224,14 +224,6 @@ class DiversityTree:
             queue.extend(self.nodes[name]["children"])
         return count
 
-    def fractional_diversity_level(self) -> float:
-        """Return the diversity level as a float.
-
-        With the linear BFS-count metric this is simply the integer
-        diversity level cast to float.
-        """
-        return float(self.diversity_level())
-
     @property
     def total_nodes(self) -> int:
         """Return the total number of nodes in the tree."""

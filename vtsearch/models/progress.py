@@ -178,7 +178,7 @@ def _sync_diversity_tree(media_id: int, label: str, was_labeled: bool) -> Option
             _cache_diversity_tree.label(media_id)
     return {
         "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-        "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
+        "diversity_level": _cache_diversity_tree.diversity_level(),
         "depth": _cache_diversity_tree.total_nodes,
     }
 
