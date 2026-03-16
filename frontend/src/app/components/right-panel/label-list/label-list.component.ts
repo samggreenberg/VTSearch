@@ -30,6 +30,7 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  @Output() viewButtonClicked = new EventEmitter<void>();
 
   sortedEntries: LabelEntry[] = [];
 
