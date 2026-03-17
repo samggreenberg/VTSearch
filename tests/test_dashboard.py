@@ -636,7 +636,7 @@ class TestFindProgress:
 
         # Create a detector with weights
         weights = [0.1] * 512 + [0.0]  # 512 weights + 1 bias
-        add_autorun_detector("prog-det", {"weights": weights, "threshold": 0.5, "media_type": "audio"})
+        add_autorun_detector("prog-det", "audio", weights=weights, threshold=0.5)
         m = register_model(name="prog-det", media_type="audio", trainable=False, detector_name="prog-det")
 
         # Capture progress snapshots during find by monkey-patching update
