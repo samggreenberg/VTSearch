@@ -914,7 +914,7 @@ class TestDatasetRegistryClipperColumn:
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         ds = data["datasets"][0]
-        assert ds["clipper"] == "sound_tiling"
+        assert ds["clipper"] == "Sound Tiling"
 
     def test_registry_clipper_defaults_to_empty(self, client):
         from vtsearch.datasets.registry import register_dataset
@@ -929,6 +929,21 @@ class TestDatasetRegistryClipperColumn:
         data = resp.get_json()
         ds = data["datasets"][0]
         assert ds["clipper"] == ""
+
+    def test_registry_default_clipper_shows_dash(self, client):
+        from vtsearch.datasets.registry import register_dataset
+
+        register_dataset(
+            name="default-clip",
+            media_type="image",
+            num_items=3,
+            pkl_path="/tmp/defclip.pkl",
+            clipper="image_default",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert ds["clipper"] == "-"
 
 
 # ---------------------------------------------------------------------------

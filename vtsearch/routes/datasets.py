@@ -585,6 +585,8 @@ def list_registered_datasets():
 
     entries = _reg_list_for_user(get_current_user())
     loaded_id = _reg_loaded_id()
+    from vtsearch.media import get_clipper
+
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
         if entry["loaded"]:
@@ -593,6 +595,16 @@ def list_registered_datasets():
             entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
+        # Resolve clipper name to display name; default clippers show as "-"
+        raw_clipper = entry.get("clipper", "")
+        if raw_clipper:
+            if raw_clipper.endswith("_default"):
+                entry["clipper"] = "-"
+            else:
+                try:
+                    entry["clipper"] = get_clipper(raw_clipper).display_name
+                except KeyError:
+                    pass  # keep raw name if clipper not found
     return jsonify({"datasets": entries})
 
 
