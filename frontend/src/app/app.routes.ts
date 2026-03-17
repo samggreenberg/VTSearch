@@ -15,5 +15,12 @@ export const routes: Routes = [
         (m) => m.LabelViewComponent,
       ),
   },
+  {
+    path: 'find',
+    loadComponent: () =>
+      import('./components/find-view/find-view.component').then(
+        (m) => m.FindViewComponent,
+      ),
+  },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
 ];
