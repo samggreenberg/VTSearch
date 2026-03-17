@@ -5,7 +5,9 @@ import hashlib
 import numpy as np
 
 from vtsearch.audio import generate_wav
-from vtsearch.config import DATA_DIR, NUM_MEDIAS
+from vtsearch.config import DATA_DIR
+
+NUM_MEDIAS = 20
 from vtsearch.models import embed_audio_file
 from vtsearch.utils import medias
 

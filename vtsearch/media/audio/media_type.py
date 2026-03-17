@@ -7,7 +7,7 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.config import DATA_DIR, SAMPLE_RATE
+from vtsearch.config import DATA_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
@@ -325,7 +325,7 @@ class AudioMediaType(MediaType):
         with open(file_path, "rb") as f:
             media_bytes = f.read()
         try:
-            audio_data, sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
+            audio_data, sr = librosa.load(file_path, sr=None, mono=True)
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0
