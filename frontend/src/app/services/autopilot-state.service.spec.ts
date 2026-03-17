@@ -87,6 +87,107 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('done');
   });
 
+  it('should bounce from new back to hard when smart goes non-green', () => {
+    service.activate();
+    service.checkPhaseTransition(3, 0);
+    service.checkPhaseTransition(3, 4);
+
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('new');
+
+    // Smart drops to yellow (surprise destabilized the model)
+    service.updateFromLabelingStatus({
+      smart: { status: 'yellow' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(12, 12);
+    expect(service.state.phase).toBe('hard');
+  });
+
+  it('should bounce from new back to hard when stable goes non-green', () => {
+    service.activate();
+    service.checkPhaseTransition(3, 0);
+    service.checkPhaseTransition(3, 4);
+
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('new');
+
+    // Stable drops to yellow (surprise caused prediction flips)
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'yellow' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(12, 12);
+    expect(service.state.phase).toBe('hard');
+  });
+
+  it('should return to new after bouncing back to hard once indicators recover', () => {
+    service.activate();
+    service.checkPhaseTransition(3, 0);
+    service.checkPhaseTransition(3, 4);
+
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('new');
+
+    // Bounce back to hard
+    service.updateFromLabelingStatus({
+      smart: { status: 'yellow' },
+      stable: { status: 'yellow' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(12, 12);
+    expect(service.state.phase).toBe('hard');
+
+    // Indicators recover — should go back to new
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(15, 15);
+    expect(service.state.phase).toBe('new');
+  });
+
+  it('should not bounce from new if both smart and stable remain green', () => {
+    service.activate();
+    service.checkPhaseTransition(3, 0);
+    service.checkPhaseTransition(3, 4);
+
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('new');
+
+    // Both still green — should stay in new
+    service.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    service.checkPhaseTransition(12, 12);
+    expect(service.state.phase).toBe('new');
+  });
+
   it('updateFromLabelingStatus should update status fields', () => {
     service.activate();
     const status: LabelingStatusResponse = {

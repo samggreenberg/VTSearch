@@ -105,6 +105,50 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('done');
   });
 
+  it('should bounce from new back to hard when smart drops to yellow', () => {
+    // Advance to new phase
+    autopilotState.checkPhaseTransition(3, 0);
+    autopilotState.checkPhaseTransition(3, 4);
+    autopilotState.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: '' },
+    });
+    autopilotState.checkPhaseTransition(10, 10);
+    expect(component.state.phase).toBe('new');
+
+    // A surprise vote causes smart to drop
+    component.labelingStatus = {
+      smart: { status: 'yellow' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    };
+    component.ngOnChanges({
+      labelingStatus: { currentValue: component.labelingStatus, previousValue: null, firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.state.phase).toBe('hard');
+  });
+
+  it('should show smart/stable status icons during new phase', () => {
+    // Advance to new phase
+    autopilotState.checkPhaseTransition(3, 0);
+    autopilotState.checkPhaseTransition(3, 4);
+    autopilotState.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    autopilotState.checkPhaseTransition(10, 10);
+    expect(component.state.phase).toBe('new');
+
+    fixture.detectChanges();
+    const steps = component.steps;
+    const newStep = steps.find((s: any) => s.phase === 'new');
+    expect(newStep!.statusIcons.length).toBe(2);
+    expect(newStep!.statusIcons[0].color).toBe('green');
+    expect(newStep!.statusIcons[1].color).toBe('green');
+  });
+
   it('should deactivate autopilot', () => {
     spyOn(component.stopped, 'emit');
     component.deactivate();

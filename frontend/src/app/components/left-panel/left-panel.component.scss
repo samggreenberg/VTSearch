@@ -71,6 +71,11 @@
   }
 }
 
+.label-divider {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .images-header {
   display: flex;
   align-items: center;

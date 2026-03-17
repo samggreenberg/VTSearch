@@ -125,7 +125,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   }
 
   private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
-    if (phase !== 'hard') return [];
+    if (phase !== 'hard' && phase !== 'new') return [];
     const st = this.state;
     return [
       { color: st.smartStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Smart: ${st.smartStatus === 'green' ? 'green' : 'pending'}` },

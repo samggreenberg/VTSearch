@@ -58,9 +58,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
-  private readonly LEFT_MAX = 500;
   private readonly RIGHT_MIN = 150;
-  private readonly RIGHT_MAX = 500;
+  private readonly CENTER_MIN = 100;
+  private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
@@ -164,7 +164,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
     let newWidth = event.clientX - layoutRect.left;
     const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
-    newWidth = Math.max(minWidth, Math.min(this.LEFT_MAX, newWidth));
+    const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+    newWidth = Math.max(minWidth, Math.min(leftMax, newWidth));
     this.ngZone.run(() => {
       if (this.autopilotCollapsed && newWidth >= this.LEFT_MIN) {
         this.autopilotCollapsed = false;
@@ -197,7 +198,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.draggingRight) return;
     const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
     let newWidth = layoutRect.right - event.clientX;
-    newWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, newWidth));
+    const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+    newWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, newWidth));
     this.ngZone.run(() => {
       this.rightWidth = newWidth;
       this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
@@ -646,14 +648,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private applyPanelPx(mediaType: string): void {
+    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelPxLeftDict[mediaType];
     if (leftPx != null && !this.autopilotCollapsed) {
-      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, leftPx));
+      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
     const rightPx = this.panelPxRightDict[mediaType];
     if (rightPx != null) {
-      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, rightPx));
+      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));
       this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }
   }
