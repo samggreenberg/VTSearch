@@ -71,7 +71,7 @@ describe('ProgressIndicatorsComponent', () => {
     component.labelingStatus = {
       span: { status: 'green', diversity_level: 2.5, max_level: 4 },
     };
-    expect(component.spanSubtext).toBe('2.5/4');
+    expect(component.spanSubtext).toBe('3/4');
   });
 
   it('should show sort overlay when sortBusy is true', () => {

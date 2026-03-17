@@ -186,6 +186,15 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "autopilot_resort_interval must be a number"}), 400
 
+    if "autopilot_goal_diversity" in body:
+        try:
+            val = body["autopilot_goal_diversity"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
+            settings.set_autopilot_goal_diversity(int(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
+
     if "autoload_media_types" in body:
         val = body["autoload_media_types"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):

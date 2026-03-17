@@ -156,7 +156,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         return `${total} labels`;
       }
       case 'new':
-        return `Diversity: ${st.fracDiversity.toFixed(1)}`;
+        return `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
         return 'All indicators green';
       default:

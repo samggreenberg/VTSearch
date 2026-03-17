@@ -20,6 +20,7 @@ describe('SettingsModalComponent', () => {
     calibration_fraction: 0.5,
     autopilot_top_greens: 3,
     autopilot_hard_reds: 3,
+    autopilot_goal_diversity: 40,
     autoload_media_types: ['audio'],
     autoload_media_embedders: ['audio'],
   };
