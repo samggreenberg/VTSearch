@@ -32,6 +32,7 @@
   overflow: hidden;
   background: var(--bg-panel);
   display: flex;
+  min-width: 100px;
 }
 
 .divider-right {
