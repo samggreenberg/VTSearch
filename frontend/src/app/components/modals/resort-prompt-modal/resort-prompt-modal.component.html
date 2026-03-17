@@ -41,7 +41,7 @@
 
   @if (view === 'prompt') {
     <div modal-footer>
-      <button class="btn btn--secondary" (click)="onKeep()">Keep Current</button>
+      <button class="btn btn--secondary" (click)="onKeep()">Keep Current{{ keepLabelsCount ? ' for ' + keepLabelsCount + ' more labels' : '' }}</button>
     </div>
   }
 

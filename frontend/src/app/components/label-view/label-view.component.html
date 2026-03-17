@@ -73,6 +73,7 @@
   <vt-resort-prompt-modal
     [currentExampleType]="resortCurrentType"
     [currentExampleDisplay]="resortCurrentDisplay"
+    [keepLabelsCount]="nextResortThreshold"
     (keepExample)="onResortKeep()"
     (newExample)="onResortNewExample($event)"
     (closed)="onResortClosed()"

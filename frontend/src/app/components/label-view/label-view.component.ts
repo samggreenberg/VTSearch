@@ -55,6 +55,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
 
+  get nextResortThreshold(): number {
+    return Math.round(this.resortNextThreshold * 1.5);
+  }
+
   private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
