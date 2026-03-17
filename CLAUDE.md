@@ -25,7 +25,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 ## Architecture
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware
 - `vtsearch/auth/` — Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
-- `vtsearch/config.py` — Constants (SAMPLE_RATE, NUM_MEDIAS, paths, model IDs)
+- `vtsearch/config.py` — Constants (CLAP_SAMPLE_RATE, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_columns_left, grid_columns_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir); auto-saves to `data/settings.json`

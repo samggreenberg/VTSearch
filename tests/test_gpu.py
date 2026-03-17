@@ -495,14 +495,14 @@ class TestCLAPEmbeddingGPU:
         import soundfile as sf
         from transformers import ClapModel, ClapProcessor
 
-        from vtsearch.config import CLAP_MODEL_ID, MODELS_CACHE_DIR, SAMPLE_RATE
+        from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
 
         # Generate a short sine wave
         duration = 1.0
-        t = np.linspace(0, duration, int(SAMPLE_RATE * duration), dtype=np.float32)
+        t = np.linspace(0, duration, int(CLAP_SAMPLE_RATE * duration), dtype=np.float32)
         audio = 0.5 * np.sin(2 * np.pi * 440 * t)
         wav_path = tmp_path / "test.wav"
-        sf.write(str(wav_path), audio, SAMPLE_RATE)
+        sf.write(str(wav_path), audio, CLAP_SAMPLE_RATE)
 
         cache_dir = str(MODELS_CACHE_DIR)
         model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
@@ -510,7 +510,7 @@ class TestCLAPEmbeddingGPU:
 
         inputs = processor(
             audio=audio,
-            sampling_rate=SAMPLE_RATE,
+            sampling_rate=CLAP_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
             max_length=480000,

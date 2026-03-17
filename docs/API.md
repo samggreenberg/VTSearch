@@ -30,6 +30,10 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 23. [Media Lookup](#media-lookup)
 24. [Multi-dataset Find](#multi-dataset-find)
 
+Endpoints for embedders, clippers, and converters are under
+[Datasets](#datasets). Indicator score history and evaluation endpoints
+are under [Labeling Progress](#labeling-progress).
+
 ---
 
 ## Conventions
@@ -450,29 +454,31 @@ Each metric has a `status` of `"red"`, `"yellow"`, or `"green"`.
 GET /api/indicator-score-history
 ```
 
-**Query:** `?metric=smart` — one of `smart`, `stable`, or `diverse`.
+**Query params:** `metric` — one of `"smart"`, `"stable"`, `"diverse"`.
 
 → `{"metric": "smart", "history": [...]}`
 
-Returns cached per-step data without retraining.
+Returns cached per-step indicator data (computed during labeling-status
+polling).
 
-### Compute indicator score history
+### Evaluate metric (train-and-score)
 
 ```
 POST /api/eval/train-and-score
 ```
 
-**Body:** `{"metric": "smart"}` — one of `smart`, `stable`, or `diverse`.
+**Body:** `{"metric": "smart"}` (or `"stable"` / `"diverse"`)
 
-→ `{"error_cost": [...]}` or `{"stability": [...]}` or `{"diversity": [...]}`
+→ `{"error_cost": [...]}` (smart), `{"stability": [...]}` (stable), or
+`{"diversity": [...]}` (diverse).
 
-### Eval computation progress
+### Evaluation progress
 
 ```
 GET /api/eval/voting-iterations
 ```
 
-→ `{"progress": 50, "total": 100, "done": false}`
+→ `{"progress": 5, "total": 10, "done": false}`
 
 ---
 
@@ -825,6 +831,43 @@ Registers all predefined processors as autorun entries.
 ```
 GET /api/media-types
 ```
+
+→ JSON object with a `media_types` array (see below).
+
+### Embedders
+
+```
+GET /api/embedders
+```
+
+**Query params:** `media_type` (optional) — filter by `type_id` or
+`folder_import_name`.
+
+→ `{"embedders": [...]}`
+
+### Clippers
+
+```
+GET /api/clippers
+```
+
+**Query params:** `media_type` (optional) — filter by `type_id` or
+`folder_import_name`.
+
+→ `{"clippers": [...]}`
+
+### Converters
+
+```
+GET /api/converters
+```
+
+**Query params (mutually exclusive):** `source` or `target` — filter by
+`type_id` or `folder_import_name`. Omit both to list all converters.
+
+→ `{"converters": [...]}`
+
+---
 
 → ```json
 {
@@ -1227,6 +1270,7 @@ GET /api/settings
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
+  "autopilot_goal_diversity": 40,
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
   "trainable_models_dir": "data/trainable_models"
@@ -1260,8 +1304,9 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `panel_pct_right` (dict), `autoload_media_types` (list of strings),
 `autoload_media_embedders` (list of strings), `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
-`autopilot_hard_reds` (int), `saved_datasets_dir` (string path),
-`detectors_dir` (string path), `trainable_models_dir` (string path).
+`autopilot_hard_reds` (int), `autopilot_goal_diversity` (int),
+`saved_datasets_dir` (string path), `detectors_dir` (string path),
+`trainable_models_dir` (string path).
 
 ### Get default settings
 

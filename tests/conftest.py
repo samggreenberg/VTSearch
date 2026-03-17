@@ -165,7 +165,8 @@ _patch_embed_audio.start()
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.config import NUM_MEDIAS, SAMPLE_RATE
+from vtsearch.audio.generator import GENERATOR_SAMPLE_RATE
+from vtsearch.medias import NUM_MEDIAS
 from vtsearch.audio import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
@@ -181,7 +182,7 @@ from vtsearch.utils import (
 
 # Attach to app_module for backward compatibility with existing tests
 app_module.NUM_MEDIAS = NUM_MEDIAS
-app_module.SAMPLE_RATE = SAMPLE_RATE
+app_module.SAMPLE_RATE = GENERATOR_SAMPLE_RATE
 app_module.generate_wav = generate_wav
 app_module.train_and_score = train_and_score
 app_module.medias = medias

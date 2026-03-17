@@ -246,6 +246,7 @@ and auto-saved on every change. Schema:
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
+  "autopilot_goal_diversity": 40,
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
   "trainable_models_dir": "data/trainable_models"
@@ -263,6 +264,9 @@ Notable fields:
 - `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
+- `view_mode_*`, `grid_columns_*`, `focus_mode_*`, `panel_pct_*` —
+  per-media-type UI layout preferences (keyed by media type ID)
+- `autopilot_enabled` — whether the autopilot feature is active
 
 ---
 

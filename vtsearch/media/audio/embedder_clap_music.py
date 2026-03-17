@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MUSIC_MODEL_ID, MODELS_CACHE_DIR, SAMPLE_RATE
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
+from vtsearch.config import CLAP_MUSIC_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -59,9 +59,7 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLAP Music model weights…", 0, 0)
-        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
-            self._on_progress, "Loading CLAP Music model weights…"
-        ):
+        with intercept_tqdm_progress(self._on_progress):
             self._model = ClapModel.from_pretrained(
                 CLAP_MUSIC_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
@@ -76,10 +74,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         import torch  # noqa: PLC0415
 
         self._on_progress("loading", "Warming up CLAP Music pipeline: preprocessing…", 2, 3)
-        dummy_audio = np.zeros(SAMPLE_RATE, dtype=np.float32)
+        dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
-            sampling_rate=SAMPLE_RATE,
+            sampling_rate=CLAP_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
             max_length=480000,
@@ -115,10 +113,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=SAMPLE_RATE, mono=True)
+            audio_data, _sr = librosa.load(file_path, sr=CLAP_SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,
-                sampling_rate=SAMPLE_RATE,
+                sampling_rate=CLAP_SAMPLE_RATE,
                 return_tensors="pt",
                 padding="max_length",
                 max_length=480000,
