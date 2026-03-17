@@ -165,6 +165,10 @@ export class DetectorsApiService {
     return this.http.post('/api/find', params);
   }
 
+  getFindProgress(): Observable<unknown> {
+    return this.http.get('/api/find/progress');
+  }
+
   // --- Pregen processors ---
 
   getPregenProcessors(): Observable<{ processors: unknown[] }> {

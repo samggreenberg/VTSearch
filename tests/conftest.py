@@ -282,10 +282,11 @@ def reset_state():
     _core.autorun_localizers.clear()
     clear_progress_cache()
 
-    # Reset the dataset progress cancellation flag
-    from vtsearch.utils.progress import dataset_progress
+    # Reset progress trackers
+    from vtsearch.utils.progress import dataset_progress, find_progress
 
     dataset_progress.reset_cancel()
+    find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
 
     # Reset the login provider to DefaultLoginProvider
     from vtsearch.auth import DefaultLoginProvider, set_login_provider

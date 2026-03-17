@@ -53,6 +53,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
+  private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
 
@@ -561,11 +562,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  private startFindProgressPolling(): void {
+    this.findPolling$.next(); // cancel previous
+    timer(0, 500)
+      .pipe(
+        takeUntil(this.findPolling$),
+        takeUntil(this.destroy$),
+        switchMap(() => this.detectorsApi.getFindProgress().pipe(
+          catchError(() => EMPTY),
+        )),
+      )
+      .subscribe({
+        next: (progress: any) => {
+          if (!progress || progress.status === 'idle') return;
+
+          if (progress.current != null && progress.total != null && progress.total > 0) {
+            this.progressIndeterminate = false;
+            this.progressValue = progress.current;
+            this.progressTotal = progress.total;
+          } else {
+            this.progressIndeterminate = true;
+          }
+
+          let msg = progress.message || 'Running Find...';
+          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
+            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
+          }
+          if (progress.current != null && progress.total != null && progress.total > 0) {
+            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
+            msg += ` (${pct}%)`;
+          }
+          this.datasetState.setProgressMessage(msg);
+        },
+      });
+  }
+
+  private stopFindProgressPolling(): void {
+    this.findPolling$.next();
+  }
+
   private runFind(findParams: Record<string, unknown>): void {
     this.datasetState.setProgressMessage('Running Find...');
+    this.startFindProgressPolling();
 
     this.detectorsApi.find(findParams).subscribe({
       next: (response: any) => {
+        this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
 
@@ -625,6 +667,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.findResultsOpen = true;
       },
       error: (err) => {
+        this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
         this.dialog.alert(err.error?.error || 'Find failed.', 'error');

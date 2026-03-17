@@ -25,6 +25,8 @@ import vtsearch.utils.paths as _paths
 
 from vtsearch.routes.detectors_crud import get_detectors_dir
 
+from vtsearch.utils.progress import get_find_progress, update_find_progress
+
 detectors_training_bp = Blueprint("detectors_training", __name__)
 
 
@@ -549,6 +551,16 @@ def find_check_labels():
     return jsonify({"warnings": warnings})
 
 
+@detectors_training_bp.route("/api/find/progress")
+def find_progress_endpoint():
+    """Return the current progress of the Find operation."""
+    return jsonify(get_find_progress())
+
+
+# Number of high-level Find steps: prepare models, load data, score.
+_FIND_STEPS = 3
+
+
 @detectors_training_bp.route("/api/find", methods=["POST"])
 def multi_find():
     """Run selected models on selected datasets and return merged results.
@@ -577,18 +589,29 @@ def multi_find():
     model_ids = body.get("model_ids", [])
 
     if not dataset_ids:
+        update_find_progress("idle", "", step=None, total_steps=None)
         return jsonify({"error": "No datasets selected"}), 400
     if not model_ids:
+        update_find_progress("idle", "", step=None, total_steps=None)
         return jsonify({"error": "No models selected"}), 400
+
+    # -- Step 1/3: Preparing models --
+    update_find_progress(
+        "running", "Preparing models…",
+        current=0, total=len(model_ids),
+        step=1, total_steps=_FIND_STEPS,
+    )
 
     # Resolve datasets and models from registries
     datasets = []
     for ds_id in dataset_ids:
         ds = reg_get_ds(ds_id)
         if ds is None:
+            update_find_progress("idle", "", step=None, total_steps=None)
             return jsonify({"error": f"Dataset '{ds_id}' not found"}), 404
         pkl_path = ds.get("pkl_path", "")
         if not pkl_path or not Path(pkl_path).is_file():
+            update_find_progress("idle", "", step=None, total_steps=None)
             return jsonify({"error": f"Dataset file missing for '{ds.get('name', ds_id)}'"}), 404
         datasets.append(ds)
 
@@ -596,14 +619,21 @@ def multi_find():
     for m_id in model_ids:
         m = reg_get_model(m_id)
         if m is None:
+            update_find_progress("idle", "", step=None, total_steps=None)
             return jsonify({"error": f"Model '{m_id}' not found"}), 404
         models.append(m)
 
     # Build the list of detector configs (weights+threshold) for each model
     model_configs = []
-    for m in models:
+    for mi, m in enumerate(models):
         det_name = m.get("detector_name", "")
         tm_name = m.get("trainable_model_name", "")
+
+        update_find_progress(
+            "running", f"Preparing model \"{m['name']}\"…",
+            current=mi + 1, total=len(models),
+            step=1, total_steps=_FIND_STEPS,
+        )
 
         # Try autorun detector first (has weights)
         if det_name:
@@ -634,6 +664,7 @@ def multi_find():
                 )
                 continue
 
+        update_find_progress("idle", "", step=None, total_steps=None)
         return jsonify({"error": f"Model '{m['name']}' has no weights or labels for detection"}), 400
 
     # Run Find across all datasets × models
@@ -644,7 +675,23 @@ def multi_find():
     multiple_models = len(model_configs) > 1
     model_names = [mc["name"] for mc in model_configs]
 
-    for ds in datasets:
+    # Compute total scoring units for step 3 progress:
+    # We'll count items scored across all dataset×model combos.
+    total_scoring_units = 0
+    scored_units = 0
+
+    for di, ds in enumerate(datasets):
+        # -- Step 2/3: Loading dataset --
+        ds_label = f"Loading dataset \"{ds['name']}\""
+        if len(datasets) > 1:
+            ds_label += f" ({di + 1}/{len(datasets)})"
+        ds_label += "…"
+        update_find_progress(
+            "running", ds_label,
+            current=di, total=len(datasets),
+            step=2, total_steps=_FIND_STEPS,
+        )
+
         # Load dataset from pkl
         temp_medias: dict = {}
         try:
@@ -663,6 +710,7 @@ def multi_find():
                     emb = np.array(emb, dtype=np.float32)
                 temp_medias[mid] = {**mdata, "id": mid, "embedding": emb}
         except Exception as e:
+            update_find_progress("idle", "", step=None, total_steps=None)
             return jsonify({"error": f"Failed to load dataset '{ds['name']}': {e}"}), 500
 
         if not temp_medias:
@@ -678,6 +726,9 @@ def multi_find():
         all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
 
+        # Update total scoring units now that we know the dataset size
+        total_scoring_units += len(all_ids) * len(model_configs)
+
         # Per-media result: {media_id -> {info, per_model_scores}}
         media_results: dict[int, dict] = {}
         for cid in all_ids:
@@ -692,8 +743,18 @@ def multi_find():
                 "model_verdicts": {},
             }
 
-        # Run each model on this dataset
+        # -- Step 3/3: Scoring --
         for mc in model_configs:
+            score_label = f"Scoring with \"{mc['name']}\" on \"{ds['name']}\""
+            if len(datasets) > 1 or len(model_configs) > 1:
+                score_label += f" ({scored_units}/{total_scoring_units} items)"
+            score_label += "…"
+            update_find_progress(
+                "running", score_label,
+                current=scored_units, total=total_scoring_units,
+                step=3, total_steps=_FIND_STEPS,
+            )
+
             if "weights" in mc:
                 # Pre-trained detector with weights
                 try:
@@ -780,6 +841,13 @@ def multi_find():
                             "score": 0,
                         }
 
+            scored_units += len(all_ids)
+            update_find_progress(
+                "running", f"Scored \"{mc['name']}\" on \"{ds['name']}\"",
+                current=scored_units, total=total_scoring_units,
+                step=3, total_steps=_FIND_STEPS,
+            )
+
         # Collect positive and negative hits
         for cid, mr in media_results.items():
             verdicts = mr["model_verdicts"]
@@ -791,6 +859,9 @@ def multi_find():
         # Free memory
         del temp_medias, X_all
         gc.collect()
+
+    # Reset progress to idle
+    update_find_progress("idle", "", step=None, total_steps=None)
 
     return jsonify(
         {
