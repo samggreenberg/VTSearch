@@ -340,8 +340,19 @@ class DatasetImporter(PluginBase):
         :class:`~pathlib.Path` to the actual file on disk — or ``None``
         if the file cannot be found.
 
-        The default implementation returns ``None``.  Importers that store
-        files on disk (e.g. ``folder``) should override this to resolve
-        the path.
+        .. important::
+
+           Every importer whose media can be located on disk **must**
+           override this method.  Cross-dataset features (e.g. applying a
+           saved Detector to a different dataset via "Find") rely on
+           resolving label entries back to files for re-embedding.  If this
+           method is not overridden, those features silently produce empty
+           results ("N/A" verdicts) with no error — making the root cause
+           very hard to diagnose.
+
+        The default implementation returns ``None``, which is only
+        appropriate for importers whose media truly cannot be resolved
+        from disk (e.g. ``pickle`` with browser-uploaded files and no
+        server path).
         """
         return None
