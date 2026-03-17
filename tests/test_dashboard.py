@@ -559,3 +559,37 @@ class TestDashboardColumnHeaders:
             combined += resp.data.decode("utf-8")
         assert "Autorun" in combined
         assert "Trainable" in combined
+
+
+class TestFindButtonValidation:
+    """Tests that the Find endpoint rejects invalid requests and that
+    the frontend bundle contains the resolved-count validation logic."""
+
+    def test_find_rejects_empty_model_ids(self, client):
+        """POST /api/find with no models returns 400."""
+        register_dataset(name="find-ds", media_type="audio", num_items=5, pkl_path="/tmp/find.pkl")
+        resp = client.get("/api/datasets/registry")
+        ds_id = resp.get_json()["datasets"][0]["id"]
+        resp = client.post("/api/find", json={"dataset_ids": [ds_id], "model_ids": []})
+        assert resp.status_code == 400
+        assert "No models selected" in resp.get_json()["error"]
+
+    def test_find_rejects_empty_dataset_ids(self, client):
+        """POST /api/find with no datasets returns 400."""
+        register_model(name="find-m", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        m_id = resp.get_json()["models"][0]["id"]
+        resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": [m_id]})
+        assert resp.status_code == 400
+        assert "No datasets selected" in resp.get_json()["error"]
+
+    def test_frontend_uses_resolved_model_count(self, client):
+        """The Angular bundle should use resolvedSelectedModels for Find validation."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "resolvedSelectedModels" in combined
+        assert "resolvedSelectedDatasets" in combined
