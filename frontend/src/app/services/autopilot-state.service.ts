@@ -78,6 +78,8 @@ export class AutopilotStateService {
       nextPhase = 'hard';
     } else if (st.phase === 'hard' && st.smartStatus === 'green' && st.stableStatus === 'green') {
       nextPhase = 'new';
+    } else if (st.phase === 'new' && (st.smartStatus !== 'green' || st.stableStatus !== 'green')) {
+      nextPhase = 'hard';
     } else if (st.phase === 'new' && st.spanStatus === 'green') {
       nextPhase = 'done';
     }

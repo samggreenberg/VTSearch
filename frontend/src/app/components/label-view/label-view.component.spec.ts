@@ -333,6 +333,61 @@ describe('LabelViewComponent', () => {
     expect(sortState.threshold).toBe(0.5);
   }));
 
+  it('should switch to hard select mode when bouncing from new back to hard', fakeAsync(() => {
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    const sortState = TestBed.inject(SortStateService);
+
+    // Set up votes so learned sort will fire
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+
+    // Activate and advance to new phase
+    autopilot.activate();
+    fixture.detectChanges();
+    autopilot.checkPhaseTransition(3, 0); // good → bad
+    fixture.detectChanges();
+    autopilot.checkPhaseTransition(3, 4); // bad → hard
+    fixture.detectChanges();
+    // Flush learned sort from hard transition
+    httpMock.expectOne('/api/learned-sort').flush({
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
+
+    autopilot.updateFromLabelingStatus({
+      smart: { status: 'green' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    autopilot.checkPhaseTransition(10, 10); // hard → new
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('new');
+    expect(sortState.selectMode).toBe('new');
+
+    // Surprise vote causes smart to drop → bounce back to hard
+    autopilot.updateFromLabelingStatus({
+      smart: { status: 'yellow' },
+      stable: { status: 'green' },
+      span: { status: 'yellow' },
+    });
+    autopilot.checkPhaseTransition(12, 12); // new → hard
+    fixture.detectChanges();
+    expect(autopilot.state.phase).toBe('hard');
+    expect(sortState.selectMode).toBe('hard');
+    expect(sortState.sortMode).toBe('learned');
+    expect(sortState.sortBusy).toBeTrue();
+
+    // Flush the learned sort request from bounce-back
+    const req = httpMock.expectOne('/api/learned-sort');
+    req.flush({
+      results: [{ id: 1, score: 0.7 }, { id: 2, score: 0.3 }],
+      threshold: 0.5,
+    });
+    expect(sortState.sortBusy).toBeFalse();
+  }));
+
   it('should advance past just-voted item even when vote state is stale', () => {
     flushInitialRequests();
 
