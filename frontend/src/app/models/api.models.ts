@@ -274,6 +274,7 @@ export interface AppSettings {
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
   autopilot_resort_interval?: number;
+  autopilot_goal_diversity?: number;
   [key: string]: unknown;
 }
 

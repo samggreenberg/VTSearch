@@ -5,6 +5,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ChartsService } from '../../../services/charts.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   ErrorCostDataPoint,
   StabilityDataPoint,
@@ -37,6 +38,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   constructor(
     private sortingApi: SortingApiService,
     private chartsService: ChartsService,
+    private settingsState: SettingsStateService,
   ) {}
 
   get title(): string {
@@ -132,7 +134,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
         this.chartsService.renderStabilityChart(canvas, this.chartData as StabilityDataPoint[]);
         break;
       case 'diverse':
-        this.chartsService.renderDiversityChart(canvas, this.chartData as DiversityDataPoint[]);
+        this.chartsService.renderDiversityChart(
+          canvas,
+          this.chartData as DiversityDataPoint[],
+          this.settingsState.settings?.autopilot_goal_diversity ?? 40,
+        );
         break;
     }
   }
