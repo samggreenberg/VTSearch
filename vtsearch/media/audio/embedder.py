@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MODEL_ID, CLAP_CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
+from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
 from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
 
 if TYPE_CHECKING:
@@ -82,17 +82,17 @@ class AudioClapEmbedder(MediaEmbedder):
 
         import soundfile as sf  # noqa: PLC0415
 
-        _warmup_sr = 16000  # intentionally different from CLAP_CLAP_SAMPLE_RATE
+        _warmup_sr = 16000  # intentionally different from CLAP_SAMPLE_RATE
         _warmup_buf = io.BytesIO()
         sf.write(_warmup_buf, np.zeros(_warmup_sr, dtype=np.float32), _warmup_sr, format="WAV")
         _warmup_buf.seek(0)
-        librosa.load(_warmup_buf, sr=CLAP_CLAP_SAMPLE_RATE, mono=True)
+        librosa.load(_warmup_buf, sr=CLAP_SAMPLE_RATE, mono=True)
 
         self._on_progress("loading", "Warming up audio pipeline: preprocessing…", 3, 4)
-        dummy_audio = np.zeros(CLAP_CLAP_SAMPLE_RATE, dtype=np.float32)
+        dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
-            sampling_rate=CLAP_CLAP_SAMPLE_RATE,
+            sampling_rate=CLAP_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
             max_length=480000,
@@ -128,10 +128,10 @@ class AudioClapEmbedder(MediaEmbedder):
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=CLAP_CLAP_SAMPLE_RATE, mono=True)
+            audio_data, _sr = librosa.load(file_path, sr=CLAP_SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,
-                sampling_rate=CLAP_CLAP_SAMPLE_RATE,
+                sampling_rate=CLAP_SAMPLE_RATE,
                 return_tensors="pt",
                 padding="max_length",
                 max_length=480000,
