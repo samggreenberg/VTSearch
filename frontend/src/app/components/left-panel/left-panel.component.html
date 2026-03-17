@@ -1,59 +1,7 @@
-<div class="left-panel" [class.collapsed-autopilot]="activeTab === 'autopilot' && autopilotCollapsed">
-  @if (!(activeTab === 'autopilot' && autopilotCollapsed)) {
-    <div class="left-tabs" role="tablist" aria-label="Panel mode">
-      <button
-        class="left-tab"
-        role="tab"
-        [class.active]="activeTab === 'manual'"
-        [attr.aria-selected]="activeTab === 'manual'"
-        (click)="setTab('manual')"
-      >Manual</button>
-      <button
-        class="left-tab"
-        role="tab"
-        [class.active]="activeTab === 'autopilot'"
-        [attr.aria-selected]="activeTab === 'autopilot'"
-        (click)="setTab('autopilot')"
-        title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
-      ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
-    </div>
-  }
-
-  @if (activeTab === 'manual') {
-    <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
-      <vt-sort-bar
-        [sortMode]="sortMode"
-        [loadSortLabel]="loadSortLabel"
-        [initialTextQuery]="textQuery"
-        [hasGoodVotes]="goodVotes.size > 0"
-        [hasBadVotes]="badVotes.size > 0"
-        (sortModeChange)="sortModeChange.emit($event)"
-        (textSort)="textSort.emit($event)"
-        (learnedSort)="learnedSort.emit()"
-        (loadSort)="loadSort.emit()"
-        (detectorLoaded)="detectorLoaded.emit($event)"
-        (exampleSortStarted)="exampleSortStarted.emit($event)"
-      />
-
-      <vt-select-mode
-        [selectMode]="selectMode"
-        (selectModeChange)="selectModeChange.emit($event)"
-      />
-
-      <vt-progress-indicators
-        [labelingStatus]="labelingStatus"
-        [sortBusy]="sortBusy"
-        [sortStatus]="sortStatus"
-        (indicatorClick)="indicatorClick.emit($event)"
-      />
-
-      <vt-inclusion-slider
-        [value]="inclusion"
-        (valueChange)="inclusionChange.emit($event)"
-      />
-
-      <div class="label-divider"></div>
-
+<div class="left-panel" [class.collapsed-autopilot]="panelMode === 'label' && activeTab === 'autopilot' && autopilotCollapsed">
+  @if (panelMode === 'find') {
+    <!-- Find mode: simplified view — just the media list header + media + stripe -->
+    <div class="tab-panel-manual" role="region" aria-label="Find results">
       <div class="images-header">
         <h3 class="images-header-title">
           {{ mediaTypeName }}
@@ -89,17 +37,109 @@
       </div>
     </div>
   } @else {
-    <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed" role="tabpanel" aria-label="Autopilot mode">
-      <vt-autopilot-panel
-        [goodVotes]="goodVotes"
-        [badVotes]="badVotes"
-        [labelingStatus]="labelingStatus"
-        [collapsed]="autopilotCollapsed"
-        (started)="autopilotStart.emit()"
-        (stopped)="autopilotStop.emit()"
-        (toggleCollapse)="autopilotToggleCollapse.emit()"
-      />
-    </div>
+    <!-- Label mode: full labeling UI with tabs -->
+    @if (!(activeTab === 'autopilot' && autopilotCollapsed)) {
+      <div class="left-tabs" role="tablist" aria-label="Panel mode">
+        <button
+          class="left-tab"
+          role="tab"
+          [class.active]="activeTab === 'manual'"
+          [attr.aria-selected]="activeTab === 'manual'"
+          (click)="setTab('manual')"
+        >Manual</button>
+        <button
+          class="left-tab"
+          role="tab"
+          [class.active]="activeTab === 'autopilot'"
+          [attr.aria-selected]="activeTab === 'autopilot'"
+          (click)="setTab('autopilot')"
+          title="Autopilot guides you through labeling in phases: good examples, bad examples, boundary refinement, and diversity exploration."
+        ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
+      </div>
+    }
+
+    @if (activeTab === 'manual') {
+      <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
+        <vt-sort-bar
+          [sortMode]="sortMode"
+          [loadSortLabel]="loadSortLabel"
+          [initialTextQuery]="textQuery"
+          [hasGoodVotes]="goodVotes.size > 0"
+          [hasBadVotes]="badVotes.size > 0"
+          (sortModeChange)="sortModeChange.emit($event)"
+          (textSort)="textSort.emit($event)"
+          (learnedSort)="learnedSort.emit()"
+          (loadSort)="loadSort.emit()"
+          (detectorLoaded)="detectorLoaded.emit($event)"
+          (exampleSortStarted)="exampleSortStarted.emit($event)"
+        />
+
+        <vt-select-mode
+          [selectMode]="selectMode"
+          (selectModeChange)="selectModeChange.emit($event)"
+        />
+
+        <vt-progress-indicators
+          [labelingStatus]="labelingStatus"
+          [sortBusy]="sortBusy"
+          [sortStatus]="sortStatus"
+          (indicatorClick)="indicatorClick.emit($event)"
+        />
+
+        <vt-inclusion-slider
+          [value]="inclusion"
+          (valueChange)="inclusionChange.emit($event)"
+        />
+
+        <div class="label-divider"></div>
+
+        <div class="images-header">
+          <h3 class="images-header-title">
+            {{ mediaTypeName }}
+            <span class="images-header-count">({{ medias.length }})</span>
+          </h3>
+          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+        </div>
+
+        <div class="media-list-container">
+          <vt-media-list
+            [medias]="medias"
+            [sortOrder]="sortOrder"
+            [threshold]="threshold"
+            [selectedId]="selectedId"
+            [goodVotes]="goodVotes"
+            [badVotes]="badVotes"
+            [viewMode]="viewMode"
+            [gridColumns]="gridColumns"
+            [focusMode]="focusMode"
+            [showScores]="false"
+            (mediaSelect)="mediaSelect.emit($event)"
+            (mediaVote)="mediaVote.emit($event)"
+          />
+          <vt-stripe-overview
+            [sortOrder]="sortOrder"
+            [threshold]="threshold"
+            [selectedId]="selectedId"
+            [goodVotes]="goodVotes"
+            [badVotes]="badVotes"
+            [totalCount]="medias.length"
+            (stripeClick)="onStripeClick($event)"
+          />
+        </div>
+      </div>
+    } @else {
+      <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed" role="tabpanel" aria-label="Autopilot mode">
+        <vt-autopilot-panel
+          [goodVotes]="goodVotes"
+          [badVotes]="badVotes"
+          [labelingStatus]="labelingStatus"
+          [collapsed]="autopilotCollapsed"
+          (started)="autopilotStart.emit()"
+          (stopped)="autopilotStop.emit()"
+          (toggleCollapse)="autopilotToggleCollapse.emit()"
+        />
+      </div>
+    }
   }
 </div>
 

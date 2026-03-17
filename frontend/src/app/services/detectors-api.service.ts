@@ -169,6 +169,10 @@ export class DetectorsApiService {
     return this.http.get('/api/find/progress');
   }
 
+  findLabel(params: Record<string, unknown>): Observable<unknown> {
+    return this.http.post('/api/find-label', params);
+  }
+
   // --- Pregen processors ---
 
   getPregenProcessors(): Observable<{ processors: unknown[] }> {
