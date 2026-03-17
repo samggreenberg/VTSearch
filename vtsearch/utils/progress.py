@@ -122,6 +122,11 @@ sort_progress = ProgressTracker()
 #: Eval progress (used by train-and-score / voting-iterations analysis).
 eval_progress = ProgressTracker()
 
+#: Find progress (used by the /api/find multi-dataset×model scoring operation).
+find_progress = ProgressTracker(
+    extra_fields={"step": None, "total_steps": None, "error": None}
+)
+
 
 # ---------------------------------------------------------------------------
 # Backward-compatible free-function API
@@ -202,3 +207,28 @@ def update_eval_progress(
 def get_eval_progress() -> dict[str, Any]:
     """Return a snapshot of the current eval progress data."""
     return eval_progress.get()
+
+
+def update_find_progress(
+    status: str,
+    message: str = "",
+    current: int = 0,
+    total: int = 0,
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
+    error: Any = _UNSET,
+) -> None:
+    """Update the find progress tracker in a thread-safe manner."""
+    kwargs: dict[str, Any] = {}
+    if step is not _UNSET:
+        kwargs["step"] = step
+    if total_steps is not _UNSET:
+        kwargs["total_steps"] = total_steps
+    if error is not _UNSET:
+        kwargs["error"] = error
+    find_progress.update(status, message, current, total, **kwargs)
+
+
+def get_find_progress() -> dict[str, Any]:
+    """Return a snapshot of the current find progress data."""
+    return find_progress.get()
