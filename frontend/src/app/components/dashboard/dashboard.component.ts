@@ -82,6 +82,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((datasets) => {
         const currentIds = new Set(datasets.map((d) => d.id));
+        // Prune selections that no longer exist in the registry
+        for (const id of this.selectedDatasetIds) {
+          if (!currentIds.has(id)) this.selectedDatasetIds.delete(id);
+        }
         const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
         if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
           // Items were added after initial load — select the new ones
@@ -98,6 +102,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((models) => {
         const currentIds = new Set(models.map((m) => m.id));
+        // Prune selections that no longer exist in the registry
+        for (const id of this.selectedModelIds) {
+          if (!currentIds.has(id)) this.selectedModelIds.delete(id);
+        }
         const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
         if (newIds.length > 0 && this.knownModelIds.size > 0) {
           // Items were added after initial load — select the new ones
@@ -411,54 +419,63 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Button state ---
 
   get labelEnabled(): boolean {
-    if (this.selectedDatasetIds.size !== 1 || this.selectedModelIds.size !== 1) return false;
-    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
-    if (!model || !model.trainable) return false;
-    const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
-    if (!dataset) return false;
-    if (model.media_type !== dataset.media_type) return false;
+    const selectedDatasets = this.resolvedSelectedDatasets;
+    const selectedModels = this.resolvedSelectedModels;
+    if (selectedDatasets.length !== 1 || selectedModels.length !== 1) return false;
+    const model = selectedModels[0];
+    if (!model.trainable) return false;
+    if (model.media_type !== selectedDatasets[0].media_type) return false;
     return true;
   }
 
   private findMediaTypesMatch(): boolean {
-    const selectedDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
-    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
     const types = new Set([
-      ...selectedDatasets.map((d) => d.media_type),
-      ...selectedModels.map((m) => m.media_type),
+      ...this.resolvedSelectedDatasets.map((d) => d.media_type),
+      ...this.resolvedSelectedModels.map((m) => m.media_type),
     ]);
     return types.size === 1;
   }
 
   private hasUntrainedModel(): boolean {
-    const selectedModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
-    return selectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+    return this.resolvedSelectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+  }
+
+  private get resolvedSelectedDatasets(): DatasetRegistryEntry[] {
+    return this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+  }
+
+  private get resolvedSelectedModels(): ModelRegistryEntry[] {
+    return this.models.filter((m) => this.selectedModelIds.has(m.id));
   }
 
   get findEnabled(): boolean {
-    if (this.selectedDatasetIds.size < 1 || this.selectedModelIds.size < 1) return false;
+    if (this.resolvedSelectedDatasets.length < 1 || this.resolvedSelectedModels.length < 1) return false;
     if (!this.findMediaTypesMatch()) return false;
     if (this.hasUntrainedModel()) return false;
     return true;
   }
 
   get findHint(): string {
-    if (this.selectedDatasetIds.size === 0 && this.selectedModelIds.size === 0) return 'Select a dataset and a model';
-    if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
-    if (this.selectedModelIds.size === 0) return 'Select a model';
+    const nDatasets = this.resolvedSelectedDatasets.length;
+    const nModels = this.resolvedSelectedModels.length;
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a model';
+    if (nDatasets === 0) return 'Select a dataset';
+    if (nModels === 0) return 'Select a model';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
     if (this.hasUntrainedModel()) return 'Selected model has no training labels';
     return 'Score selected datasets with selected models';
   }
 
   get labelHint(): string {
-    if (this.selectedDatasetIds.size === 0) return 'Select a dataset';
-    if (this.selectedDatasetIds.size > 1) return 'Select exactly 1 dataset';
-    if (this.selectedModelIds.size === 0) return 'Select a model';
-    if (this.selectedModelIds.size > 1) return 'Select exactly 1 model';
-    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
+    const nDatasets = this.resolvedSelectedDatasets.length;
+    const nModels = this.resolvedSelectedModels.length;
+    if (nDatasets === 0) return 'Select a dataset';
+    if (nDatasets > 1) return 'Select exactly 1 dataset';
+    if (nModels === 0) return 'Select a model';
+    if (nModels > 1) return 'Select exactly 1 model';
+    const model = this.resolvedSelectedModels[0];
     if (model && !model.trainable) return 'Model is not trainable';
-    const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
+    const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
