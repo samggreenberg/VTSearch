@@ -1198,8 +1198,8 @@ class TestDashboardToAutopilotWorkflow:
         assert resp.status_code == 200
         status = resp.get_json()
         assert "span" in status
-        assert "fractional_level" in status["span"]
-        assert isinstance(status["span"]["fractional_level"], (int, float))
+        assert "diversity_level" in status["span"]
+        assert isinstance(status["span"]["diversity_level"], (int, float))
 
         # --- Verify model labels persisted through entire workflow ---
         resp = client.post("/api/trainable-models/Beeping Sounds/labels")

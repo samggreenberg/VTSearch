@@ -132,7 +132,7 @@ class TestDiversityTreeNextEndpoint:
         assert "exhausted" in data
         assert data["id"] is not None
         assert data["id"] in medias
-        assert data["diversity_level"] == -1  # nothing labeled yet
+        assert data["diversity_level"] == 0  # nothing labeled yet
         assert data["exhausted"] is False
 
     def test_returns_null_when_no_tree(self, client):
@@ -140,7 +140,7 @@ class TestDiversityTreeNextEndpoint:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["id"] is None
-        assert data["diversity_level"] == -1
+        assert data["diversity_level"] == 0
         assert data["exhausted"] is False  # no tree != exhausted
 
     def test_get_still_works(self, client):
@@ -158,7 +158,7 @@ class TestDiversityTreeNextEndpoint:
         diversity_tree_label(first_id)
         resp = client.post("/api/diversity-tree/next", json={})
         data = resp.get_json()
-        assert data["diversity_level"] >= 0
+        assert data["diversity_level"] >= 1
 
     def test_exhausted_when_all_nodes_seen(self, client):
         """When every node in the tree has been seen, exhausted should be True."""
@@ -288,7 +288,7 @@ class TestSpanLevelProgression:
     def test_span_advances_with_next_sample_labeling(self):
         """Following next_sample suggestions should advance the diversity level."""
         tree = _build_tree()
-        assert tree.diversity_level() == -1
+        assert tree.diversity_level() == 0
 
         # Label medias guided by next_sample until the tree is exhausted or
         # we've done enough iterations to cover the full tree.
@@ -301,8 +301,8 @@ class TestSpanLevelProgression:
 
         # After labeling all suggested medias the tree must be fully covered
         final_level = tree.diversity_level()
-        assert final_level == tree.depth(), (
-            f"Expected diversity_level {tree.depth()} (fully covered) but got {final_level}"
+        assert final_level == tree.total_nodes, (
+            f"Expected diversity_level {tree.total_nodes} (fully covered) but got {final_level}"
         )
 
     def test_span_advances_beyond_zero_via_votes(self, client):
@@ -320,17 +320,17 @@ class TestSpanLevelProgression:
             resp = client.post(f"/api/medias/{sample}/vote", json={"vote": "good"})
             assert resp.status_code == 200
 
-        # After voting on diverse medias, the level should have advanced past 0
-        assert tree.diversity_level() >= 1, f"Expected diversity_level >= 1 but got {tree.diversity_level()}"
+        # After voting on diverse medias, the level should have advanced past 1
+        assert tree.diversity_level() >= 2, f"Expected diversity_level >= 2 but got {tree.diversity_level()}"
 
     def test_labeling_status_reflects_span_progression(self, client):
         """The /api/labeling-status endpoint should reflect advancing span level."""
         tree = _build_tree()
 
-        # Before any labels, span should be red with level -1
+        # Before any labels, span should be red with level 0
         resp = client.get("/api/labeling-status")
         data = resp.get_json()
-        assert data["span"]["level"] == -1
+        assert data["span"]["level"] == 0
         assert data["span"]["status"] == "red"
 
         # Label all medias to fully cover the tree
@@ -340,7 +340,7 @@ class TestSpanLevelProgression:
 
         resp = client.get("/api/labeling-status")
         data = resp.get_json()
-        assert data["span"]["level"] == tree.depth()
+        assert data["span"]["level"] == tree.total_nodes
         assert data["span"]["status"] == "green"
 
 
@@ -435,13 +435,13 @@ class TestDiversityLevelOverTime:
         for i in range(1, len(levels)):
             assert levels[i] >= levels[i - 1], f"Diversity level decreased at step {i}: {levels[i - 1]} -> {levels[i]}"
 
-    def test_labeling_status_includes_fractional_level(self, client):
-        """The /api/labeling-status span info should include fractional_level."""
+    def test_labeling_status_includes_diversity_level(self, client):
+        """The /api/labeling-status span info should include diversity_level."""
         _build_tree()
         diversity_tree_label(1)
         good_votes[1] = None
 
         resp = client.get("/api/labeling-status")
         data = resp.get_json()
-        assert "fractional_level" in data["span"]
-        assert isinstance(data["span"]["fractional_level"], (int, float))
+        assert "diversity_level" in data["span"]
+        assert isinstance(data["span"]["diversity_level"], (int, float))

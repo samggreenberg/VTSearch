@@ -491,8 +491,10 @@ POST accepts an optional body with sort scores to influence selection:
 
 → `{"id": 42, "diversity_level": 3, "exhausted": false}`
 
-`id` is `null` when the tree is not built or exhausted. `exhausted` is `true`
-when every node has been seen.
+`id` is `null` when the tree is not built or exhausted. `diversity_level` is the
+number of consecutive seen nodes in BFS order (0 when nothing is labeled, up to
+the total number of tree nodes when fully covered). `exhausted` is `true` when
+every node has been seen.
 
 ---
 

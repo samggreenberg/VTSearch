@@ -920,10 +920,10 @@ def diversity_tree_next():
     "bad" region).  Without scores the first element in the node is returned.
 
     Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
-    exhausted or not yet built.  Also includes ``diversity_level`` so the
-    frontend can display how many tree levels have been fully covered,
-    and ``exhausted`` (bool) which is true when the tree exists but every
-    node has already been seen.
+    exhausted or not yet built.  Also includes ``diversity_level`` (the
+    number of consecutive BFS-order seen nodes) so the frontend can display
+    progress, and ``exhausted`` (bool) which is true when the tree exists
+    but every node has already been seen.
     """
     scores = None
     threshold = None
@@ -944,7 +944,7 @@ def diversity_tree_next():
 
     tree = get_diversity_tree()
     next_id = diversity_tree_next_sample(scores=scores, threshold=threshold)
-    level = tree.diversity_level() if tree is not None else -1
+    level = tree.diversity_level() if tree is not None else 0
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
 
