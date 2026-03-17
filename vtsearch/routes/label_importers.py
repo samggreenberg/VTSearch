@@ -35,7 +35,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
-import vtsearch.utils.paths as _paths
+from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
 from vtsearch.utils import (
     apply_label,
     build_media_lookup,
@@ -115,46 +115,19 @@ def run_label_import(importer_name: str):
             404,
         )
 
-    # Build field_values from either multipart or JSON body
-    has_file_fields = any(f.field_type == "file" for f in importer.fields)
-    field_values: dict = {}
+    field_values = extract_plugin_fields(importer)
 
-    if has_file_fields:
-        for f in importer.fields:
-            if f.field_type == "file":
-                field_values[f.key] = request.files.get(f.key)
-            else:
-                field_values[f.key] = request.form.get(f.key, f.default if f.default is not None else "")
-    else:
-        body = request.get_json(force=True, silent=True) or {}
-        for f in importer.fields:
-            field_values[f.key] = body.get(f.key, f.default if f.default is not None else "")
+    err = validate_required_fields(importer, field_values)
+    if err:
+        return err
 
-    # Validate required fields (skip file fields — presence checked by importer)
-    missing_fields = [
-        f.key
-        for f in importer.fields
-        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
-    ]
-    if missing_fields:
-        return (
-            jsonify({"error": f"Missing required field(s): {missing_fields}", "missing_fields": missing_fields}),
-            400,
-        )
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
 
-    # Validate server file paths to prevent path traversal
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]))
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
-    try:
-        label_entries = importer.run(field_values)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:  # pragma: no cover
-        return jsonify({"error": f"Import failed: {exc}"}), 500
+    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
 
     if not isinstance(label_entries, list):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500

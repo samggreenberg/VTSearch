@@ -34,6 +34,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
@@ -105,6 +106,123 @@ def sync_labels_to_loaded_model() -> None:
     update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
+def _seed_good_votes_from_examples(examples: list[dict]) -> int:
+    """Seed good votes from a model's media examples.
+
+    For each ``type: "media"`` example, reads the file from
+    ``data/example_media/`` and adds it to ``good_votes``:
+
+    * **Match by MD5** — if a loaded media has the same content hash,
+      that media is voted good (keeping its original dataset origin).
+    * **No match** — the example file is embedded using the dataset's
+      embedder, inserted into the ``medias`` dict as a new item with
+      an ``example_media`` origin, and voted good.  This makes it
+      available for training (its embedding is in the medias snapshot)
+      and for label export (LabelSet picks it up from medias + votes).
+
+    Returns the number of example entries successfully seeded.
+    """
+    import hashlib
+
+    from vtsearch.config import DATA_DIR
+    from vtsearch.utils import (
+        _state_lock,
+        apply_label,
+        build_media_lookup,
+        medias,
+        next_media_id,
+        snapshot_medias,
+    )
+
+    media_examples = [
+        ex
+        for ex in examples
+        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
+    ]
+    if not media_examples:
+        return 0
+
+    snap = snapshot_medias()
+    if not snap:
+        return 0
+
+    _, md5_lookup = build_media_lookup(snap)
+    server_media_dir = DATA_DIR / "example_media"
+
+    # Determine the embedder and media type from the loaded dataset so we
+    # can embed example files that aren't already in the dataset.
+    first_media = next(iter(snap.values()))
+    dataset_media_type = first_media.get("type", "audio")
+    dataset_embedder_name = first_media.get("embedder", "")
+    embedder = None  # lazily loaded only when needed
+
+    seeded = 0
+    for ex in media_examples:
+        filename = ex["value"].strip()
+        file_path = server_media_dir / filename
+        # Prevent directory traversal
+        try:
+            file_path.resolve().relative_to(server_media_dir.resolve())
+        except ValueError:
+            continue
+        if not file_path.is_file():
+            continue
+
+        file_bytes = file_path.read_bytes()
+        file_md5 = hashlib.md5(file_bytes).hexdigest()
+        cids = md5_lookup.get(file_md5, [])
+
+        if cids:
+            # Example matches existing dataset media — just vote good.
+            for cid in cids:
+                apply_label(cid, "good")
+            seeded += 1
+        else:
+            # Example is NOT in the dataset — embed and insert as new media.
+            if embedder is None:
+                from vtsearch.media import embedders_for_type, get_embedder
+
+                if dataset_embedder_name:
+                    try:
+                        embedder = get_embedder(dataset_embedder_name)
+                    except KeyError:
+                        pass
+                if embedder is None:
+                    avail = embedders_for_type(dataset_media_type)
+                    embedder = avail[0] if avail else None
+                if embedder is None:
+                    # No embedder available; skip remaining examples.
+                    continue
+
+            embedding = embedder.embed_media(file_path)
+            if embedding is None:
+                continue
+
+            with _state_lock:
+                new_id = next_media_id(medias)
+                medias[new_id] = {
+                    "id": new_id,
+                    "type": dataset_media_type,
+                    "embedder": dataset_embedder_name,
+                    "md5": file_md5,
+                    "embedding": embedding,
+                    "media_bytes": file_bytes,
+                    "filename": filename,
+                    "file_size": len(file_bytes),
+                    "category": "",
+                    "origin": {
+                        "importer": "example_media",
+                        "params": {"filename": filename},
+                    },
+                    "origin_name": filename,
+                }
+
+            apply_label(new_id, "good")
+            seeded += 1
+
+    return seeded
+
+
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
     tm_dir = get_trainable_models_dir()
@@ -121,6 +239,7 @@ def _list_all() -> list[dict]:
         models.append({
             "name": data["name"],
             "text_query": data.get("text_query", ""),
+            "media_example": data.get("media_example", ""),
             "media_type": data.get("media_type", ""),
             "examples": data.get("examples", []),
             "num_labels": len(labels),
@@ -156,13 +275,14 @@ def create_trainable_model():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("name", "").strip()
     text_query = data.get("text_query", "").strip()
+    media_example = data.get("media_example", "").strip()
     media_type = data.get("media_type", "").strip()
     examples = data.get("examples")
 
     if not name:
         return jsonify({"error": "name is required"}), 400
-    if not text_query and not examples:
-        return jsonify({"error": "text_query or examples is required"}), 400
+    if not text_query and not media_example and not examples:
+        return jsonify({"error": "text_query, media_example, or examples is required"}), 400
     if not media_type or media_type == "any":
         return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
@@ -170,14 +290,17 @@ def create_trainable_model():
     if path.exists():
         return jsonify({"error": f"A trainable model named '{name}' already exists"}), 409
 
-    # Build examples list; if text_query provided without explicit examples,
-    # create a single text example from it for backward compatibility.
+    # Build examples list; if text_query/media_example provided without
+    # explicit examples, create a single example from it for backward compat.
     if examples is None and text_query:
         examples = [{"type": "text", "value": text_query}]
+    elif examples is None and media_example:
+        examples = [{"type": "media", "value": media_example}]
 
     model_data = {
         "name": name,
         "text_query": text_query,
+        "media_example": media_example,
         "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
@@ -189,6 +312,7 @@ def create_trainable_model():
         "success": True,
         "name": name,
         "text_query": text_query,
+        "media_example": media_example,
         "media_type": media_type,
         "examples": examples or [],
         "num_labels": 0,
@@ -384,6 +508,7 @@ def register_model_route():
     media_type = data.get("media_type", "").strip()
     trainable = data.get("trainable", True)
     text_query = data.get("text_query", "")
+    media_example = data.get("media_example", "")
     detector_name = data.get("detector_name", "")
     trainable_model_name = data.get("trainable_model_name", "")
 
@@ -397,12 +522,15 @@ def register_model_route():
         trainable_model_name = name
         tm_path = _model_path(name)
         if not tm_path.exists():
-            examples = []
-            if text_query:
+            examples = data.get("examples", [])
+            if not examples and text_query:
                 examples = [{"type": "text", "value": text_query}]
+            if not examples and media_example:
+                examples = [{"type": "media", "value": media_example}]
             model_data = {
                 "name": name,
                 "text_query": text_query,
+                "media_example": media_example,
                 "media_type": media_type,
                 "examples": examples,
                 "created_at": time.time(),
@@ -415,8 +543,10 @@ def register_model_route():
         media_type=media_type,
         trainable=trainable,
         text_query=text_query,
+        media_example=media_example,
         detector_name=detector_name,
         trainable_model_name=trainable_model_name,
+        created_by=get_current_user(),
     )
     return jsonify({"ok": True, "model": entry}), 201
 
@@ -430,6 +560,11 @@ def load_model_route():
         {"model_id": "abc123"}
 
     Pass ``model_id: null`` to unload.
+
+    When loading a model that has media examples, any example files whose
+    MD5 matches a loaded media item are automatically added to
+    ``good_votes`` so that the labeling session starts with those examples
+    pre-labeled as Good.
     """
     from vtsearch.models.registry import get_model, set_loaded_id
 
@@ -442,7 +577,19 @@ def load_model_route():
             return jsonify({"error": "Model not found"}), 404
 
     set_loaded_id(model_id)
-    return jsonify({"ok": True})
+
+    # Seed good votes from media examples on the loaded model.
+    examples_seeded = 0
+    if model_id is not None and entry is not None:
+        tm_name = entry.get("trainable_model_name", "")
+        if tm_name:
+            tm_data = _read_model(_model_path(tm_name))
+            if tm_data:
+                examples_seeded = _seed_good_votes_from_examples(
+                    tm_data.get("examples", [])
+                )
+
+    return jsonify({"ok": True, "examples_seeded": examples_seeded})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

@@ -20,14 +20,15 @@ describe('SettingsModalComponent', () => {
     calibration_fraction: 0.5,
     autopilot_top_greens: 3,
     autopilot_hard_reds: 3,
+    autopilot_goal_diversity: 40,
     autoload_media_types: ['audio'],
     autoload_media_embedders: ['audio'],
   };
 
   const mockMediaTypes = {
     media_types: [
-      { type_id: 'audio', name: 'Sound' },
-      { type_id: 'image', name: 'Image' },
+      { type_id: 'audio', name: 'Sound', icon: '\uD83D\uDD0A' },
+      { type_id: 'image', name: 'Image', icon: '\uD83D\uDDBC\uFE0F' },
     ],
   };
 
@@ -164,6 +165,7 @@ describe('SettingsModalComponent', () => {
     component.preselectedViewTab = 'image';
     flushInit();
     expect(component.activeViewTab).toBe('image');
+    expect(component.activeSettingsTab).toBe('appearance');
   });
 
   it('should ignore preselectedViewTab when not in mediaTypes', () => {
@@ -176,6 +178,13 @@ describe('SettingsModalComponent', () => {
     component.preselectedViewTab = '';
     flushInit();
     expect(component.activeViewTab).toBe('audio');
+  });
+
+  it('should return media type icon for embedder', () => {
+    flushInit();
+    expect(component.getMediaTypeIcon('audio')).toBe('\uD83D\uDD0A');
+    expect(component.getMediaTypeIcon('image')).toBe('\uD83D\uDDBC\uFE0F');
+    expect(component.getMediaTypeIcon('unknown')).toBe('');
   });
 
   it('should emit closed on close', () => {

@@ -525,6 +525,32 @@ describe('DashboardComponent', () => {
     });
   });
 
+  it('should continue polling after HTTP error on progress endpoint', fakeAsync(() => {
+    flushInitialRequests();
+    component.onDemoSelected({ name: 'gtzan', label: 'GTZAN' });
+
+    const demoReq = httpMock.expectOne('/api/dataset/load-demo');
+    demoReq.flush({});
+
+    // First progress poll fails with a server error
+    const failedReq = httpMock.expectOne('/api/dataset/progress');
+    failedReq.error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
+
+    // Component should still be in loading state
+    expect(component.loading).toBeTrue();
+
+    // Advance timer to trigger next poll — polling should survive the error
+    tick(1000);
+    const retryReq = httpMock.expectOne('/api/dataset/progress');
+    retryReq.flush({ status: 'idle' });
+
+    expect(component.loading).toBeFalse();
+
+    // Refresh after completion
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+  }));
+
   it('should load demo dataset on demoSelected', () => {
     flushInitialRequests();
     component.importerModalOpen = true;

@@ -1,48 +1,165 @@
-<vt-modal [open]="true" title="New Model" [showCloseButton]="false" (closed)="close()">
-  <form class="new-model-form" (ngSubmit)="submit()">
-    <div class="form-group">
-      <label for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
-      <input
-        id="model-name"
-        class="form-input"
-        [(ngModel)]="name"
-        name="name"
-        placeholder="e.g. Dog Barks"
-        title="A short name to identify this model"
-        autofocus
-      />
-    </div>
+<vt-modal [open]="true" [title]="view === 'main' ? 'New Model' : 'Select Media Example'" [showCloseButton]="false" (closed)="close()">
+  @if (view === 'main') {
+    <form class="new-model-form" (ngSubmit)="submit()">
+      <div class="form-group">
+        <label for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
+        <input
+          id="model-name"
+          class="form-input"
+          [(ngModel)]="name"
+          name="name"
+          placeholder="e.g. Dog Barks"
+          title="A short name to identify this model"
+          autofocus
+        />
+      </div>
 
-    <div class="form-group">
-      <label for="model-media-type" title="The type of media this model will process">Media Type</label>
-      <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
-        @for (mt of mediaTypes; track mt) {
-          <option [value]="mt">{{ mt }}</option>
+      <div class="form-group">
+        <label for="model-media-type" title="The type of media this model will process">Media Type</label>
+        <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
+          @for (mt of mediaTypes; track mt) {
+            <option [value]="mt">{{ getMediaTypeLabel(mt) }}</option>
+          }
+        </select>
+      </div>
+
+      @if (hasExample) {
+        <div class="example-display">
+          <label class="col-label">Example</label>
+          <div class="example-row">
+            @if (exampleType === 'text') {
+              <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h10a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zm1 3v1.5h8V4H4zm0 3v1.5h8V7H4zm0 3v1.5h5V10H4z"/></svg>
+            } @else {
+              <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
+            }
+            <span class="example-label" [title]="exampleDisplay">{{ exampleDisplay }}</span>
+            <button type="button" class="btn btn--secondary btn--sm" (click)="clearExample()">Change</button>
+          </div>
+        </div>
+      } @else {
+        <div class="example-columns">
+          <div class="example-col">
+            <label class="col-label">Text Example</label>
+            <div class="text-input-row">
+              <input
+                class="form-input"
+                [(ngModel)]="pendingText"
+                name="pendingText"
+                placeholder="e.g. dog barking sounds"
+                title="A text description of what this model should find"
+                (keydown.enter)="$event.preventDefault(); setTextExample()"
+              />
+              <button type="button" class="btn btn--primary btn--sm" (click)="setTextExample()" [disabled]="!pendingText.trim()">Set</button>
+            </div>
+          </div>
+          <div class="example-col">
+            <label class="col-label">Media Example</label>
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()">Browse Media...</button>
+            <input
+              #fileInput
+              type="file"
+              class="hidden-file-input"
+              (change)="onLocalFileSelected($event)"
+            />
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()">Upload File...</button>
+          </div>
+        </div>
+      }
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+    </form>
+  }
+
+  @if (view === 'main') {
+    <div modal-footer>
+      <button class="btn btn--secondary" (click)="close()">Cancel</button>
+      <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
+        {{ submitting ? 'Creating...' : 'Create' }}
+      </button>
+    </div>
+  }
+
+  @if (view === 'media-picker') {
+    <div class="media-picker">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()">&larr; Back</button>
+
+      <!-- Source selection (top level) -->
+      @if (!selectedSource) {
+        <p class="picker-instructions">Choose a source to browse media from:</p>
+        <div class="source-list">
+          @for (src of mediaSources; track src.name) {
+            <button class="importer-card" (click)="selectSource(src)">
+              <span class="importer-name">@if (src.icon) {<span class="importer-icon">{{ src.icon }}</span> }{{ src.display_name || src.name }}</span>
+              @if (src.description) {
+                <span class="importer-desc">{{ src.description }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
+
+      <!-- Browse items (demo list or server media files) -->
+      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length > 0) {
+        <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
+        <div class="browse-list">
+          @for (item of browseItems; track item.key) {
+            <button class="browse-item" (click)="selectBrowseItem(item)" [title]="item.key">
+              {{ item.display || item.key }}
+            </button>
+          }
+        </div>
+      }
+
+      <!-- File browser (recursive directory navigation) -->
+      @if (fileBrowsing) {
+        <div class="breadcrumbs">
+          @for (seg of browsePath; track $index) {
+            @if ($index > 0) { <span class="breadcrumb-sep">/</span> }
+            @if ($index < browsePath.length - 1) {
+              <button class="breadcrumb-link" (click)="navigateBreadcrumb($index)">{{ seg }}</button>
+            } @else {
+              <span class="breadcrumb-current">{{ seg }}</span>
+            }
+          }
+        </div>
+
+        @if (fileLoading) {
+          <p class="empty-state">Loading...</p>
         }
-      </select>
+
+        @if (!fileLoading && browseEntries.length > 0) {
+          <div class="browse-list">
+            @for (entry of browseEntries; track entry.path) {
+              @if (entry.isDir) {
+                <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
+                  <span class="entry-icon">&#128193;</span> {{ entry.name }}
+                </button>
+              } @else {
+                <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
+                  <span class="entry-icon">&#128196;</span> {{ entry.name }}
+                  @if (entry.size_bytes != null) {
+                    <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
+                  }
+                </button>
+              }
+            }
+          </div>
+        }
+
+        @if (!fileLoading && browseEntries.length === 0) {
+          <p class="empty-state">No media files found in this directory.</p>
+        }
+      }
+
+      @if (browseLoading) {
+        <p class="empty-state">Loading items...</p>
+      }
+
+      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length === 0) {
+        <p class="empty-state">No items found in this source.</p>
+      }
     </div>
-
-    <div class="form-group">
-      <label for="model-query" title="A text description or example of what this model should find">Text Query / Example <span class="required">*</span></label>
-      <input
-        id="model-query"
-        class="form-input"
-        [(ngModel)]="textQuery"
-        name="textQuery"
-        placeholder="e.g. dog barking sounds"
-        title="A text description or example of what this model should find"
-      />
-    </div>
-
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
-    }
-  </form>
-
-  <div modal-footer>
-    <button class="btn btn--secondary" (click)="close()">Cancel</button>
-    <button class="btn btn--primary" [disabled]="submitting" (click)="submit()">
-      {{ submitting ? 'Creating...' : 'Create' }}
-    </button>
-  </div>
+  }
 </vt-modal>

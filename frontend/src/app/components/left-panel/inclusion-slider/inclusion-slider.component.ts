@@ -16,11 +16,8 @@ export class InclusionSliderComponent {
   onInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     const val = parseInt(target.value, 10);
-    this.valueChange.emit(val);
-  }
-
-  get displayValue(): string {
-    if (this.value === 0) return '0';
-    return this.value > 0 ? `+${this.value}` : `${this.value}`;
+    if (!isNaN(val) && val >= -10 && val <= 10) {
+      this.valueChange.emit(val);
+    }
   }
 }

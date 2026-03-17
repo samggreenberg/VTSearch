@@ -32,6 +32,12 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_diversity_tree: Any = None  # DiversityTree | None
 
+# Live models injected by `train_and_score` during sorting.  Keyed by
+# ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
+# can look up the actual model that was used at each label step instead
+# of retraining from scratch.
+_live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {}
+
 # Reentrant lock protecting all module-level cache variables.
 # RLock is used because public functions call _ensure_cache which may
 # call clear_progress_cache internally when the inclusion value changes.
@@ -52,6 +58,76 @@ def clear_progress_cache() -> None:
         _cache_prev_predictions = None
         _cache_inclusion = None
         _cache_diversity_tree = None
+        _live_models.clear()
+
+
+def invalidate_progress_cache_from(media_id: int) -> None:
+    """Truncate the progress cache to just before *media_id* first appeared.
+
+    Called when a vote switches polarity (good→bad or bad→good).  Steps
+    before the media was first labeled are still valid — their models never
+    included this media in training data.  Only steps from the first
+    appearance onward are discarded so they can be retrained and their
+    stability/evaluation metrics recomputed.
+    """
+    global _cache_prev_predictions, _cache_diversity_tree
+    with _progress_lock:
+        # Find the first cached step that includes media_id in its training data.
+        truncate_at = None
+        for i, step in enumerate(_cached_steps):
+            if media_id in step["good_ids"] or media_id in step["bad_ids"]:
+                truncate_at = i
+                break
+
+        if truncate_at is None:
+            # Media never appeared in any cached step.  Still need to clear
+            # live models — they may have been injected by learned-sort
+            # without building the progress cache.
+            _live_models.clear()
+            return
+
+        if truncate_at == 0:
+            # Media was present from the very first step — full clear.
+            clear_progress_cache()
+            return
+
+        # Keep steps [0, truncate_at); discard the rest.
+        del _cached_steps[truncate_at:]
+
+        # Restore running ID sets from the last kept step.
+        last = _cached_steps[-1]
+        _cache_good_ids.clear()
+        _cache_good_ids.update(last["good_ids"])
+        _cache_bad_ids.clear()
+        _cache_bad_ids.update(last["bad_ids"])
+
+        # Reset the stability prediction chain — it will restart from the
+        # truncation point when _ensure_cache replays the remaining history.
+        _cache_prev_predictions = None
+
+        # Rebuild the diversity tree on next _ensure_cache call so its label
+        # state is re-synced from the truncation point forward.
+        _cache_diversity_tree = None
+
+        # Clear live models — some may have been trained with the old label.
+        _live_models.clear()
+
+
+def inject_live_model(
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    model: nn.Sequential,
+    threshold: float,
+) -> None:
+    """Register a live model from ``train_and_score`` for progress-cache reuse.
+
+    Called by the learned-sort route after each live training run.  The model
+    is stored keyed by its label set so ``_ensure_cache`` can look it up
+    instead of retraining from scratch.
+    """
+    key = (frozenset(good_votes), frozenset(bad_votes))
+    with _progress_lock:
+        _live_models[key] = (model, threshold)
 
 
 def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
@@ -101,8 +177,8 @@ def _sync_diversity_tree(media_id: int, label: str, was_labeled: bool) -> Option
             _cache_diversity_tree.label(media_id)
     return {
         "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-        "diversity_level": round(_cache_diversity_tree.fractional_diversity_level(), 4),
-        "depth": _cache_diversity_tree.depth(),
+        "diversity_level": _cache_diversity_tree.diversity_level(),
+        "depth": _cache_diversity_tree.total_nodes,
     }
 
 
@@ -259,7 +335,16 @@ def _ensure_cache(
         training_data_changed = prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
 
         if training_data_changed:
-            model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+            # Check whether train_and_score already produced a model for
+            # this exact label set during live sorting.  If so, reuse it
+            # (correct cross-calibrated threshold, zero compute cost).
+            live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
+            live = _live_models.get(live_key)
+            if live is not None:
+                model, threshold = live
+                stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+            else:
+                model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
         else:
             # Reuse previous model — no new training or stability entry.
             model = prev["model"] if prev else None
@@ -551,41 +636,47 @@ def compute_labeling_status(
         )
         stable = _compute_stable_status(good, bad, total)
 
-    # Span status from diversity tree info (passed in from the route)
+    # Span status from diversity tree info (passed in from the route).
+    # ``level`` is the number of consecutive BFS-order seen nodes and
+    # ``depth`` is the total number of nodes (the maximum diversity level).
+    #
+    # The old metric required 4 full tree levels for green, which in a k=3
+    # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
+    # nodes (capped at total), yellow at 10, red below 10.
+    from vtsearch.settings import get_autopilot_goal_diversity
+
+    SPAN_GREEN = get_autopilot_goal_diversity()
+    SPAN_YELLOW = 10
     if span_info is None:
         span = {
             "status": "red",
             "reason": "Diversity tree not available.",
-            "level": -1,
-            "depth": -1,
-            "next_level_seen": 0,
-            "next_level_total": 0,
+            "level": 0,
+            "depth": 0,
         }
     else:
         level = span_info["level"]
-        depth = span_info["depth"]
-        nls = span_info["next_level_seen"]
-        nlt = span_info["next_level_total"]
-        if level >= depth and level >= 0:
-            span = {"status": "green", "reason": "All tree levels fully covered.", **span_info}
-        elif level >= 4:
+        total = span_info["depth"]  # total nodes
+        green_at = min(SPAN_GREEN, total)
+        yellow_at = min(SPAN_YELLOW, green_at)
+        if total <= 0:
+            span = {"status": "green", "reason": "Degenerate tree.", **span_info}
+        elif level >= green_at:
             span = {
                 "status": "green",
-                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "reason": "All tree nodes covered." if level >= total else f"{level}/{total} nodes covered.",
                 **span_info,
             }
-        elif level <= 1:
+        elif level >= yellow_at:
             span = {
-                "status": "red",
-                "reason": "No tree coverage yet."
-                if level < 0
-                else f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "status": "yellow",
+                "reason": f"{level}/{total} nodes covered.",
                 **span_info,
             }
         else:
             span = {
-                "status": "yellow",
-                "reason": f"Level {level}/{depth} full. {nls}/{nlt} of next level seen.",
+                "status": "red",
+                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
                 **span_info,
             }
 

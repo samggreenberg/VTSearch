@@ -80,7 +80,17 @@ def resolve_file_from_origin(
     if importer_name == "converter":
         return _resolve_converter(origin.get("params", {}))
 
-    # -- Registry-based dispatch --
+    # -- Source-based dispatch (preferred) --
+
+    from vtsearch.datasets.sources import get_source_for_origin
+
+    source = get_source_for_origin(origin)
+    if source is not None:
+        result = source.resolve_path(origin_name, filename)
+        if result is not None:
+            return result
+
+    # -- Registry-based dispatch (fallback for importers without a source) --
 
     from vtsearch.datasets.importers import get_importer
 
@@ -186,5 +196,28 @@ def resolve_label_embeddings(
         result.embeddings.append(embedding)
         result.labels.append(1.0 if label_val == "good" else 0.0)
         result.resolved_count += 1
+
+    if result.total_count > 0 and result.resolved_count == 0:
+        log.warning(
+            "Label resolution failed: 0 of %d labels resolved. "
+            "This usually means the importer's resolve_file() method is missing or "
+            "the source files are no longer on disk.",
+            result.total_count,
+        )
+        if result.missing_entries:
+            first = result.missing_entries[0]
+            log.warning(
+                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
+                first.get("origin"),
+                first.get("origin_name", ""),
+                first.get("filename", ""),
+            )
+    elif result.missing_entries:
+        log.warning(
+            "Partial label resolution: %d of %d labels resolved (%d missing).",
+            result.resolved_count,
+            result.total_count,
+            len(result.missing_entries),
+        )
 
     return result

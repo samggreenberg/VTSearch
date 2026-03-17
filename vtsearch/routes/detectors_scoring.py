@@ -19,6 +19,14 @@ from vtsearch.routes.detectors_crud import _build_extractor, _build_localizer
 
 detectors_scoring_bp = Blueprint("detectors_scoring", __name__)
 
+# Keys excluded from API responses (large binary/vector data).
+_HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string")
+
+
+def _media_info_for_response(media: dict) -> dict:
+    """Return a copy of *media* without heavyweight fields."""
+    return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
+
 
 # ---------------------------------------------------------------------------
 # Detector scoring
@@ -55,8 +63,10 @@ def detector_sort():
     all_ids = sorted(snap.keys())
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
+
     with torch.no_grad():
-        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+        raw_logits = model(X_all)
+        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
@@ -119,10 +129,7 @@ def auto_detect():
             positive_hits = []
             negative_hits = []
             for cid, score in zip(all_ids, scores):
-                clip_info = snap[cid].copy()
-                clip_info.pop("embedding", None)
-                clip_info.pop("media_bytes", None)
-                clip_info.pop("media_string", None)
+                clip_info = _media_info_for_response(snap[cid])
                 clip_info["score"] = round(score, 4)
                 if score >= threshold:
                     positive_hits.append(clip_info)
@@ -164,6 +171,69 @@ def auto_detect():
 
 
 # ---------------------------------------------------------------------------
+# Shared helper for extractor / localizer processing
+# ---------------------------------------------------------------------------
+
+
+def _apply_processor_to_medias(processor, snap: dict, method: str, result_key: str) -> list[dict]:
+    """Run a processor (extractor or localizer) on all medias, returning hits.
+
+    Args:
+        processor: An extractor or localizer instance with *method*.
+        snap: A snapshot of the medias dict.
+        method: The method name to call (``"extract"`` or ``"localize"``).
+        result_key: The key to store results under (``"extractions"`` or ``"localizations"``).
+    """
+    func = getattr(processor, method)
+    results = []
+    for media_id in sorted(snap.keys()):
+        media = snap[media_id]
+        hits = func(media)
+        if hits:
+            info = _media_info_for_response(media)
+            info[result_key] = hits
+            results.append(info)
+    return results
+
+
+def _auto_run_processors(snap: dict, processors: dict, build_fn, type_key: str, method: str, result_key: str, name_key: str) -> dict:
+    """Run multiple processors in parallel via ThreadPoolExecutor.
+
+    Args:
+        snap: A snapshot of the medias dict.
+        processors: ``{name: data_dict}`` of registered processors.
+        build_fn: Factory ``(name, type_str, config) -> processor``.
+        type_key: Key in *data_dict* holding the processor type string.
+        method: Method name (``"extract"`` or ``"localize"``).
+        result_key: Key for per-media results (``"extractions"`` or ``"localizations"``).
+        name_key: Key for the processor name in the result dict.
+    """
+
+    def _run_single(proc_name, proc_data):
+        try:
+            proc = build_fn(proc_name, proc_data[type_key], proc_data["config"])
+        except Exception:
+            return None
+
+        hits = _apply_processor_to_medias(proc, snap, method, result_key)
+        return proc_name, {
+            name_key: proc_name,
+            "total_medias_with_hits": len(hits),
+            "results": hits,
+        }
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(processors), 8)) as pool:
+        futures = [pool.submit(_run_single, name, data) for name, data in processors.items()]
+        for future in futures:
+            outcome = future.result()
+            if outcome is not None:
+                name, result = outcome
+                results[name] = result
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Extractor execution
 # ---------------------------------------------------------------------------
 
@@ -200,14 +270,7 @@ def run_extract():
             400,
         )
 
-    results = []
-    for media_id in sorted(snap.keys()):
-        media = snap[media_id]
-        extractions = extractor.extract(media)
-        if extractions:
-            clip_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
-            clip_info["extractions"] = extractions
-            results.append(clip_info)
+    results = _apply_processor_to_medias(extractor, snap, "extract", "extractions")
 
     return jsonify(
         {
@@ -232,39 +295,7 @@ def auto_extract():
     if not extractors:
         return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
 
-    sorted_media_ids = sorted(snap.keys())
-
-    def _run_single_extractor(ext_name, ext_data):
-        """Run a single extractor on all medias and return (name, result_dict) or None."""
-        try:
-            extractor = _build_extractor(ext_name, ext_data["extractor_type"], ext_data["config"])
-        except Exception:
-            return None
-
-        ext_results = []
-        for media_id in sorted_media_ids:
-            media = snap[media_id]
-            extractions = extractor.extract(media)
-            if extractions:
-                clip_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
-                clip_info["extractions"] = extractions
-                ext_results.append(clip_info)
-
-        return ext_name, {
-            "extractor_name": ext_name,
-            "total_medias_with_hits": len(ext_results),
-            "results": ext_results,
-        }
-
-    # Run all extractors in parallel
-    results = {}
-    with ThreadPoolExecutor(max_workers=min(len(extractors), 8)) as pool:
-        futures = [pool.submit(_run_single_extractor, name, data) for name, data in extractors.items()]
-        for future in futures:
-            outcome = future.result()
-            if outcome is not None:
-                name, result = outcome
-                results[name] = result
+    results = _auto_run_processors(snap, extractors, _build_extractor, "extractor_type", "extract", "extractions", "extractor_name")
 
     return jsonify(
         {
@@ -312,14 +343,7 @@ def run_localize():
             400,
         )
 
-    results = []
-    for media_id in sorted(snap.keys()):
-        media = snap[media_id]
-        localizations = localizer.localize(media)
-        if localizations:
-            media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
-            media_info["localizations"] = localizations
-            results.append(media_info)
+    results = _apply_processor_to_medias(localizer, snap, "localize", "localizations")
 
     return jsonify(
         {
@@ -344,37 +368,7 @@ def auto_localize():
     if not localizers:
         return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
 
-    sorted_media_ids = sorted(snap.keys())
-
-    def _run_single_localizer(loc_name, loc_data):
-        try:
-            localizer = _build_localizer(loc_name, loc_data["localizer_type"], loc_data["config"])
-        except Exception:
-            return None
-
-        loc_results = []
-        for media_id in sorted_media_ids:
-            media = snap[media_id]
-            localizations = localizer.localize(media)
-            if localizations:
-                media_info = {k: v for k, v in media.items() if k not in ("embedding", "media_bytes", "media_string")}
-                media_info["localizations"] = localizations
-                loc_results.append(media_info)
-
-        return loc_name, {
-            "localizer_name": loc_name,
-            "total_medias_with_hits": len(loc_results),
-            "results": loc_results,
-        }
-
-    results = {}
-    with ThreadPoolExecutor(max_workers=min(len(localizers), 8)) as pool:
-        futures = [pool.submit(_run_single_localizer, name, data) for name, data in localizers.items()]
-        for future in futures:
-            outcome = future.result()
-            if outcome is not None:
-                name, result = outcome
-                results[name] = result
+    results = _auto_run_processors(snap, localizers, _build_localizer, "localizer_type", "localize", "localizations", "localizer_name")
 
     return jsonify(
         {

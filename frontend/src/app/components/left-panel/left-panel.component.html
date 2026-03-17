@@ -31,16 +31,13 @@
         (textSort)="textSort.emit($event)"
         (learnedSort)="learnedSort.emit()"
         (loadSort)="loadSort.emit()"
+        (detectorLoaded)="detectorLoaded.emit($event)"
+        (exampleSortStarted)="exampleSortStarted.emit($event)"
       />
 
       <vt-select-mode
         [selectMode]="selectMode"
         (selectModeChange)="selectModeChange.emit($event)"
-      />
-
-      <vt-inclusion-slider
-        [value]="inclusion"
-        (valueChange)="inclusionChange.emit($event)"
       />
 
       <vt-progress-indicators
@@ -49,6 +46,19 @@
         [sortStatus]="sortStatus"
         (indicatorClick)="indicatorClick.emit($event)"
       />
+
+      <vt-inclusion-slider
+        [value]="inclusion"
+        (valueChange)="inclusionChange.emit($event)"
+      />
+
+      <div class="images-header">
+        <h3 class="images-header-title">
+          {{ mediaTypeName }}
+          <span class="images-header-count">({{ medias.length }})</span>
+        </h3>
+        <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+      </div>
 
       <div class="media-list-container">
         <vt-media-list
@@ -90,3 +100,7 @@
     </div>
   }
 </div>
+
+@if (showLeftViewSettings) {
+  <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
+}

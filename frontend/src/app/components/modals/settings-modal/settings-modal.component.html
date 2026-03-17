@@ -2,141 +2,206 @@
   @if (loading) {
     <p class="empty-state">Loading settings...</p>
   } @else {
-    <div class="settings-grid">
-      <!-- Appearance -->
-      <div class="settings-section">
-        <h3>Appearance</h3>
-        <div class="form-group">
-          <label class="form-label">Theme</label>
-          <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)">
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="highviz">High Visibility</option>
-          </select>
-        </div>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
-          Swipe animation
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
-          Show metadata panel
-        </label>
-      </div>
+    <div class="settings-layout">
+      <nav class="settings-tabs">
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'appearance'"
+          (click)="activeSettingsTab = 'appearance'">
+          Appearance
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'sorting'"
+          (click)="activeSettingsTab = 'sorting'">
+          Sorting
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
+          (click)="activeSettingsTab = 'autopilot'">
+          Autopilot
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autoload'"
+          (click)="activeSettingsTab = 'autoload'">
+          Autoload
+        </button>
+      </nav>
 
-      <!-- Media Type Settings (per-media-type) -->
-      <div class="settings-section settings-section--wide">
-        <h3>Media Type Settings</h3>
-        @if (mediaTypes.length > 0) {
-          <div class="view-tabs">
-            @for (mt of mediaTypes; track mt.type_id) {
-              <button
-                class="view-tab"
-                [class.view-tab--active]="activeViewTab === mt.type_id"
-                (click)="activeViewTab = mt.type_id">
-                {{ mt.name }}
-              </button>
-            }
+      <div class="settings-panel">
+        <!-- Appearance -->
+        @if (activeSettingsTab === 'appearance') {
+          <h3>Appearance</h3>
+          <div class="form-group">
+            <label class="form-label">Theme</label>
+            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="highviz">High Visibility</option>
+            </select>
           </div>
-          <div class="view-tab-content">
-            <div class="form-group">
-              <label class="form-label">Left panel view</label>
-              <select class="form-select" [ngModel]="getViewMode('view_mode_left', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_left', activeViewTab, $event)">
-                <option value="list">List View</option>
-                <option value="grid">Grid View</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Right panel view</label>
-              <select class="form-select" [ngModel]="getViewMode('view_mode_right', activeViewTab)" (ngModelChange)="onViewModeChange('view_mode_right', activeViewTab, $event)">
-                <option value="list">List View</option>
-                <option value="grid">Grid View</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Left focus mode</label>
-              <select class="form-select" [ngModel]="getFocusMode('focus_mode_left', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_left', activeViewTab, $event)">
-                <option value="click">Click</option>
-                <option value="hover">Hover</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Right focus mode</label>
-              <select class="form-select" [ngModel]="getFocusMode('focus_mode_right', activeViewTab)" (ngModelChange)="onFocusModeChange('focus_mode_right', activeViewTab, $event)">
-                <option value="click">Click</option>
-                <option value="hover">Hover</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Left panel grid columns</label>
-              <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Right panel grid columns</label>
-              <input type="number" class="form-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Left Panel %</label>
-              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_left', activeViewTab) }}</span>
-              @if (getPanelPct('panel_pct_left', activeViewTab) != null) {
-                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_left', activeViewTab)">Reset</button>
+          <label class="checkbox-row">
+            <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
+            Swipe animation
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
+            Show metadata panel
+          </label>
+
+          @if (mediaTypes.length > 0) {
+            <h4>Per-Media-Type</h4>
+            <div class="view-tabs">
+              @for (mt of mediaTypes; track mt.type_id) {
+                <button
+                  class="view-tab"
+                  [class.view-tab--active]="activeViewTab === mt.type_id"
+                  (click)="activeViewTab = mt.type_id">
+                  {{ mt.name }}
+                </button>
               }
             </div>
-            <div class="form-group">
-              <label class="form-label">Right Panel %</label>
-              <span class="panel-pct-display">{{ getPanelPctDisplay('panel_pct_right', activeViewTab) }}</span>
-              @if (getPanelPct('panel_pct_right', activeViewTab) != null) {
-                <button class="btn btn--small btn--secondary" (click)="clearPanelPct('panel_pct_right', activeViewTab)">Reset</button>
-              }
+            <div class="view-tab-content">
+              <div class="view-side-section">
+                <h4>Left Side</h4>
+                <div class="form-group">
+                  <label class="form-label">View Mode:</label>
+                  <div class="radio-group">
+                    <label class="radio-row">
+                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_left', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'list')" />
+                      List
+                    </label>
+                    <label class="radio-row">
+                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'grid')" />
+                      Grid
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Focus Mode:</label>
+                  <div class="radio-group">
+                    <label class="radio-row">
+                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" />
+                      Click
+                    </label>
+                    <label class="radio-row">
+                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')" />
+                      Hover
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label"># Grid Columns:</label>
+                  <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_left', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_left', activeViewTab, $event)" min="1" max="6" />
+                </div>
+              </div>
+              <div class="view-side-section">
+                <h4>Right Side</h4>
+                <div class="form-group">
+                  <label class="form-label">View Mode:</label>
+                  <div class="radio-group">
+                    <label class="radio-row">
+                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_right', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'list')" />
+                      List
+                    </label>
+                    <label class="radio-row">
+                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'grid')" />
+                      Grid
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Focus Mode:</label>
+                  <div class="radio-group">
+                    <label class="radio-row">
+                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" />
+                      Click
+                    </label>
+                    <label class="radio-row">
+                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')" />
+                      Hover
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label"># Grid Columns:</label>
+                  <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns('grid_columns_right', activeViewTab)" (ngModelChange)="onGridColumnsChange('grid_columns_right', activeViewTab, $event)" min="1" max="6" />
+                </div>
+              </div>
             </div>
+          }
+        }
+
+        <!-- Sorting & Calibration -->
+        @if (activeSettingsTab === 'sorting') {
+          <h3>Sorting &amp; Calibration</h3>
+          <label class="checkbox-row">
+            <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
+            Enrich descriptions
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
+            Safe thresholds
+          </label>
+          <div class="form-group">
+            <label class="form-label">Calibrate count</label>
+            <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Calibration fraction</label>
+            <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" />
           </div>
         }
-      </div>
 
-      <!-- Sorting & Calibration -->
-      <div class="settings-section">
-        <h3>Sorting &amp; Calibration</h3>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
-          Enrich descriptions
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
-          Safe thresholds
-        </label>
-        <div class="form-group">
-          <label class="form-label">Calibrate count</label>
-          <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Calibration fraction</label>
-          <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" />
-        </div>
-      </div>
+        <!-- Autopilot & Actions -->
+        @if (activeSettingsTab === 'autopilot') {
+          <h3>Autopilot &amp; Actions</h3>
+          <label class="checkbox-row">
+            <input type="checkbox" [ngModel]="settings.hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
+            Hide autopilot panel
+          </label>
+          <div class="form-group">
+            <label class="form-label"># Good to start</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label"># Bad to start</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label"># Start to re-sort</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Goal Diversity</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" />
+          </div>
 
-      <!-- Autopilot & Actions -->
-      <div class="settings-section">
-        <h3>Autopilot &amp; Actions</h3>
-        <label class="checkbox-row">
-          <input type="checkbox" [ngModel]="settings.hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
-          Hide autopilot panel
-        </label>
-        <div class="form-group">
-          <label class="form-label"># Good to start</label>
-          <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" />
-        </div>
-        <div class="form-group">
-          <label class="form-label"># Bad to start</label>
-          <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
-        </div>
+        }
 
-        @if (embedders.length > 0) {
-          <h4>Autoload Embedders</h4>
-          @for (embedder of embedders; track embedder.name) {
-            <label class="checkbox-row">
-              <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
-              {{ embedder.name }} ({{ embedder.media_type_id }})
-            </label>
+        <!-- Autoload -->
+        @if (activeSettingsTab === 'autoload') {
+          <h3>Autoload Embedders</h3>
+          @if (embedders.length > 0) {
+            <div class="embedder-grid">
+              <div class="embedder-grid-header">
+                <span>Embedder</span>
+                <span>Media Type</span>
+                <span></span>
+              </div>
+              @for (embedder of embedders; track embedder.name) {
+                <label class="embedder-row">
+                  <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
+                  <span class="embedder-name">{{ embedder.name }}</span>
+                  <span class="embedder-media-type">{{ embedder.media_type_id }}</span>
+                  <span class="embedder-icon">{{ getMediaTypeIcon(embedder.media_type_id) }}</span>
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No embedders available.</p>
           }
         }
       </div>

@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
-from vtsearch.datasets.loader import read_pkl_embedder
+from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtsearch.routes.datasets_loading import _origin_to_str
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
@@ -43,9 +43,11 @@ def demo_dataset_list():
     from vtsearch.converters import list_converters_for_source
     from vtsearch.media import get as media_get
 
-    # Optional embedder filter: when the caller specifies an embedder, a cached
-    # pkl is only considered "ready" if it was produced by that same embedder.
+    # Optional embedder/clipper filters: when the caller specifies an embedder
+    # or clipper, a cached pkl is only considered "ready" if it was produced by
+    # those same values.
     requested_embedder = request.args.get("embedder", "").strip()
+    requested_clipper = request.args.get("clipper", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
@@ -84,6 +86,14 @@ def demo_dataset_list():
             if pkl_embedder is not None and pkl_embedder != requested_embedder:
                 status = "needs_embedding"
 
+        # Same check for clipper: if the pkl was created with a different
+        # clipper, it needs re-clipping (and re-embedding of the clips).
+        pkl_clipper: str | None = None
+        if status == "ready" and requested_clipper:
+            pkl_clipper = read_pkl_clipper(pkl_file)
+            if pkl_clipper is not None and pkl_clipper != requested_clipper:
+                status = "needs_embedding"
+
         # Calculate number of files from slice parameters
         num_categories = len(dataset_info["categories"])
         slice_start = dataset_info.get("slice_start", 0)
@@ -110,6 +120,10 @@ def demo_dataset_list():
         if pkl_embedder is None and has_pkl:
             pkl_embedder = read_pkl_embedder(pkl_file)
 
+        # Resolve pkl_clipper if not already read above.
+        if pkl_clipper is None and has_pkl:
+            pkl_clipper = read_pkl_clipper(pkl_file)
+
         demos.append(
             {
                 "name": name,
@@ -123,9 +137,189 @@ def demo_dataset_list():
                 "num_categories": num_categories,
                 "available_converters": available_converters,
                 "pkl_embedder": pkl_embedder or "",
+                "pkl_clipper": pkl_clipper or "",
             }
         )
     return jsonify({"datasets": demos})
+
+
+@datasets_ui_bp.route("/api/dataset/demo-categories/<name>")
+def demo_dataset_categories(name: str):
+    """List the categories within a specific demo dataset.
+
+    Returns ``{"categories": ["cat1", "cat2", ...]}`` for the named demo.
+    """
+    dataset_info = DEMO_DATASETS.get(name)
+    if dataset_info is None:
+        return jsonify({"error": f"Unknown demo dataset: {name}"}), 404
+
+    categories = dataset_info.get("categories", [])
+    return jsonify({"categories": categories})
+
+
+# ---------------------------------------------------------------------------
+# File browsing for the media example picker
+# ---------------------------------------------------------------------------
+
+# Collect all media-file extensions from every registered media type.
+_MEDIA_EXTENSIONS: set[str] | None = None
+
+
+def _media_extensions() -> set[str]:
+    """Lazily build the set of known media-file extensions (lowercase, with dot)."""
+    global _MEDIA_EXTENSIONS
+    if _MEDIA_EXTENSIONS is None:
+        from vtsearch.media import all_types
+
+        exts: set[str] = set()
+        for mt in all_types():
+            for pattern in mt.file_extensions:
+                # pattern looks like "*.wav" — extract ".wav"
+                ext = pattern.lstrip("*").lower()
+                exts.add(ext)
+        _MEDIA_EXTENSIONS = exts
+    return _MEDIA_EXTENSIONS
+
+
+def _resolve_browse_root(source: str) -> Path | None:
+    """Map a browse source identifier to an absolute directory path.
+
+    Supported source values:
+
+    * ``demo:<name>`` — the ``required_folder`` of the named demo dataset.
+    * ``folder`` — the configured ``saved_datasets_dir``.
+
+    Returns ``None`` if the source is unrecognised or the directory does not
+    exist.
+    """
+    if source.startswith("demo:"):
+        demo_name = source[5:]
+        info = DEMO_DATASETS.get(demo_name)
+        if info is None:
+            return None
+        folder = info.get("required_folder")
+        if folder is None or not folder.is_dir():
+            return None
+        return folder.resolve()
+
+    if source == "folder":
+        from vtsearch.settings import get_saved_datasets_dir
+
+        ds_dir = get_saved_datasets_dir()
+        if ds_dir.is_dir():
+            return ds_dir.resolve()
+        return None
+
+    return None
+
+
+@datasets_ui_bp.route("/api/browse-media-files")
+def browse_media_files():
+    """List files and subdirectories within an allowed root.
+
+    Query parameters:
+
+    * ``source`` — one of ``demo:<name>`` or ``folder``.
+    * ``path`` — relative sub-path within the root (default ``""``).
+
+    Returns::
+
+        {
+            "directories": [{"name": "dog"}, {"name": "cat"}, ...],
+            "files": [
+                {"name": "bark.wav", "path": "dog/bark.wav", "size_bytes": 12345},
+                ...
+            ]
+        }
+    """
+    source = request.args.get("source", "").strip()
+    subpath = request.args.get("path", "").strip()
+
+    root = _resolve_browse_root(source)
+    if root is None:
+        return jsonify({"error": "Source not found or not available on disk"}), 404
+
+    # Resolve the target directory, preventing traversal.
+    target = (root / subpath).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not target.is_dir():
+        return jsonify({"error": "Directory not found"}), 404
+
+    known_exts = _media_extensions()
+    directories: list[dict] = []
+    files: list[dict] = []
+
+    for entry in sorted(target.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        rel = str(entry.relative_to(root))
+        if entry.is_dir():
+            directories.append({"name": entry.name, "path": rel})
+        elif entry.is_file() and entry.suffix.lower() in known_exts:
+            files.append(
+                {
+                    "name": entry.name,
+                    "path": rel,
+                    "size_bytes": entry.stat().st_size,
+                }
+            )
+
+    return jsonify({"directories": directories, "files": files, "root_path": str(root)})
+
+
+@datasets_ui_bp.route("/api/browse-media-files/select", methods=["POST"])
+def select_browsed_file():
+    """Copy a file from a browse source into ``data/example_media/``.
+
+    Expects JSON::
+
+        {"source": "demo:esc50_s", "path": "dog/1-100032-A-0.wav"}
+
+    Returns::
+
+        {"filename": "<safe-name>", "original_name": "1-100032-A-0.wav"}
+    """
+    import shutil
+    import uuid
+
+    from vtsearch.config import DATA_DIR
+
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    source = (data.get("source") or "").strip()
+    file_path = (data.get("path") or "").strip()
+
+    if not source or not file_path:
+        return jsonify({"error": "source and path are required"}), 400
+
+    root = _resolve_browse_root(source)
+    if root is None:
+        return jsonify({"error": "Source not found"}), 404
+
+    # Resolve and validate the file path within the root.
+    abs_path = (root / file_path).resolve()
+    try:
+        abs_path.relative_to(root)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not abs_path.is_file():
+        return jsonify({"error": "File not found"}), 404
+
+    # Copy to data/example_media/ with a unique prefix to avoid collisions.
+    dest_dir = DATA_DIR / "example_media"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = f"{uuid.uuid4().hex[:8]}_{abs_path.name}"
+    dest = dest_dir / safe_name
+    shutil.copy2(abs_path, dest)
+
+    return jsonify({"filename": safe_name, "original_name": abs_path.name}), 201
 
 
 # ---------------------------------------------------------------------------

@@ -29,6 +29,141 @@ class TestDatasetEndpoints:
         # Should return available demo datasets
         assert "demos" in data or isinstance(data, dict)
 
+    def test_demo_categories_returns_categories(self, client):
+        """GET /api/dataset/demo-categories/<name> returns categories for a valid demo."""
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        resp = client.get(f"/api/dataset/demo-categories/{name}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "categories" in data
+        assert isinstance(data["categories"], list)
+        assert len(data["categories"]) > 0
+        expected = DEMO_DATASETS[name]["categories"]
+        assert data["categories"] == expected
+
+    def test_demo_categories_unknown_returns_404(self, client):
+        """GET /api/dataset/demo-categories/<name> returns 404 for unknown demo."""
+        resp = client.get("/api/dataset/demo-categories/nonexistent_dataset_xyz")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_browse_media_files_unknown_source(self, client):
+        """GET /api/browse-media-files with unknown source returns 404."""
+        resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_browse_media_files_path_traversal_blocked(self, client):
+        """GET /api/browse-media-files rejects path traversal."""
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        info = DEMO_DATASETS[name]
+        if info.get("required_folder") is None or not info["required_folder"].is_dir():
+            pytest.skip("Demo source directory not present on disk")
+
+        resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=../../etc")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+
+    def test_browse_media_files_demo_source(self, client, tmp_path):
+        """GET /api/browse-media-files lists files and directories for a demo source."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+
+        # Create a temp dir with a subdir and a .wav file
+        sub = tmp_path / "catA"
+        sub.mkdir()
+        (sub / "sound.wav").write_bytes(b"RIFF" + b"\x00" * 100)
+        (tmp_path / "top.wav").write_bytes(b"RIFF" + b"\x00" * 50)
+
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "directories" in data
+            assert "files" in data
+            dir_names = [d["name"] for d in data["directories"]]
+            file_names = [f["name"] for f in data["files"]]
+            assert "catA" in dir_names
+            assert "top.wav" in file_names
+
+            # Drill into subdirectory
+            resp2 = client.get(f"/api/browse-media-files?source=demo:{name}&path=catA")
+            assert resp2.status_code == 200
+            data2 = resp2.get_json()
+            file_names2 = [f["name"] for f in data2["files"]]
+            assert "sound.wav" in file_names2
+
+    def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
+        """POST /api/browse-media-files/select copies the file to example_media."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+
+        # Create a temp file
+        (tmp_path / "pick_me.wav").write_bytes(b"RIFF" + b"\x00" * 80)
+
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.post(
+                "/api/browse-media-files/select",
+                json={"source": f"demo:{name}", "path": "pick_me.wav"},
+            )
+            assert resp.status_code == 201
+            data = resp.get_json()
+            assert "filename" in data
+            assert data["original_name"] == "pick_me.wav"
+            # The file should have been copied to data/example_media/
+            from vtsearch.config import DATA_DIR
+
+            dest = DATA_DIR / "example_media" / data["filename"]
+            assert dest.exists()
+            # Clean up
+            dest.unlink(missing_ok=True)
+
+    def test_select_browsed_file_traversal_blocked(self, client, tmp_path):
+        """POST /api/browse-media-files/select rejects traversal paths."""
+        from unittest.mock import patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        name = next(iter(DEMO_DATASETS))
+        fake_info = dict(DEMO_DATASETS[name])
+        fake_info["required_folder"] = tmp_path
+
+        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+            resp = client.post(
+                "/api/browse-media-files/select",
+                json={"source": f"demo:{name}", "path": "../../etc/passwd"},
+            )
+            assert resp.status_code == 400
+
     def test_clear_dataset(self, client):
         saved = dict(app_module.medias)
         try:
@@ -146,7 +281,8 @@ class TestDemoDatasetReadiness:
         """Video pkl exists but UCF-101 dir is absent → needs_download (stale pkl)."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR, VIDEO_DIR
+        from vtsearch.config import EMBEDDINGS_DIR
+        from vtsearch.datasets.downloader import VIDEO_DIR
 
         ucf101_dir = VIDEO_DIR / "ucf101"
         if ucf101_dir.exists():
@@ -185,7 +321,9 @@ class TestDemoDatasetReadiness:
         # Create the ESC-50 audio dir with a dummy file
         esc50_dir.mkdir(parents=True, exist_ok=True)
         dummy_wav = esc50_dir / "_test_dummy.wav"
-        already_populated = any(f.name != "_test_dummy.wav" for f in esc50_dir.iterdir()) if esc50_dir.exists() else False
+        already_populated = (
+            any(f.name != "_test_dummy.wav" for f in esc50_dir.iterdir()) if esc50_dir.exists() else False
+        )
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(1)
@@ -374,10 +512,12 @@ class TestDemoDatasetEmbedderStatus:
         sidecar = pkl_file.with_suffix(".embedder")
         # Write pkl with embedder info in media entries, no sidecar
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
+                }
+            )
         )
         sidecar.unlink(missing_ok=True)
         try:
@@ -726,7 +866,7 @@ class TestUCF101SubsetDownload:
 
     def test_demo_list_shows_video_download_size(self, client):
         """Video demo datasets should report a non-zero download size."""
-        from vtsearch.config import UCF101_SUBSET_DOWNLOAD_SIZE_MB
+        from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB
 
         resp = client.get("/api/dataset/demo-list")
         data = resp.get_json()
@@ -741,17 +881,21 @@ class TestUCF101SubsetDownload:
         from vtsearch.datasets.config import DEMO_DATASETS
 
         subset_categories = {
-            "ApplyEyeMakeup", "ApplyLipstick", "Archery", "BabyCrawling",
-            "BalanceBeam", "BandMarching", "BaseballPitch", "Basketball",
-            "BasketballDunk", "BenchPress",
+            "ApplyEyeMakeup",
+            "ApplyLipstick",
+            "Archery",
+            "BabyCrawling",
+            "BalanceBeam",
+            "BandMarching",
+            "BaseballPitch",
+            "Basketball",
+            "BasketballDunk",
+            "BenchPress",
         }
         for name, info in DEMO_DATASETS.items():
             if info.get("media_type") == "video":
                 for cat in info["categories"]:
-                    assert cat in subset_categories, (
-                        f"Video demo '{name}' uses category '{cat}' "
-                        f"not in UCF-101 subset"
-                    )
+                    assert cat in subset_categories, f"Video demo '{name}' uses category '{cat}' not in UCF-101 subset"
 
 
 class TestLoadProgressRaceCondition:
@@ -844,8 +988,7 @@ class TestLoadProgressRaceCondition:
         # Progress must NOT have changed to idle
         progress = get_progress()
         assert progress["status"] == "loading", (
-            "_stepped_progress must filter out 'idle' to prevent "
-            "premature completion signals from cached dataset loads"
+            "_stepped_progress must filter out 'idle' to prevent premature completion signals from cached dataset loads"
         )
         assert progress["message"] == "In progress…"
 
@@ -855,3 +998,171 @@ class TestLoadProgressRaceCondition:
         assert progress["status"] == "downloading"
         assert progress["message"] == "Fetching files…"
         assert progress["step"] == 1  # downloading maps to step 1
+
+    def test_origin_load_clears_stale_error(self):
+        """_run_origin_load_in_background must clear old error on new load."""
+        from unittest.mock import patch
+
+        from vtsearch.utils.progress import get_progress, update_progress
+
+        # Simulate a previous load that left a stale error
+        update_progress("idle", "", error="Previous load failed", step=None, total_steps=None)
+        assert get_progress()["error"] == "Previous load failed"
+
+        # Start a new load (mock the thread so it doesn't actually run)
+        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+            _run_origin_load_in_background(
+                lambda: None,
+                {"importer": "test", "params": {}},
+            )
+
+        progress = get_progress()
+        assert progress["error"] is None, "Starting a new load must clear the stale error from a previous load"
+        assert progress["status"] == "loading"
+
+    def test_load_embedder_sets_initial_progress(self):
+        """_load_embedder_for_clips must set progress before loading starts.
+
+        The function should emit 'Loading embedding model…' so the frontend
+        knows the embedder warm-up phase has begun (rather than staying stuck
+        on the previous phase's message like 'Saving to registry…').
+        """
+        from unittest.mock import patch
+
+        from vtsearch.routes.datasets import _load_embedder_for_clips
+        from vtsearch.utils.progress import update_progress
+
+        # _load_embedder_for_clips inspects medias to find the embedder.
+        # The conftest-populated medias dict provides this automatically.
+        # Set a stale progress message from the previous phase.
+        update_progress("loading", "Saving to registry…", step=3, total_steps=4)
+
+        messages: list[str] = []
+
+        def _capture_update(status, message="", current=0, total=0, **kw):
+            messages.append(message)
+
+        with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
+            _load_embedder_for_clips()
+
+        # Should have set "Loading embedding model…" before calling load_models
+        assert any("Loading embedding model" in m for m in messages), (
+            f"Expected 'Loading embedding model…' in progress messages, got: {messages}"
+        )
+
+
+class TestCancelIngest:
+    """Tests for the POST /api/dataset/cancel endpoint."""
+
+    def test_cancel_endpoint_returns_ok(self, client):
+        """POST /api/dataset/cancel should return ok."""
+        resp = client.post("/api/dataset/cancel")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+
+    def test_cancel_sets_event(self, client):
+        """POST /api/dataset/cancel should set the cancellation event."""
+        from vtsearch.utils.progress import dataset_progress
+
+        dataset_progress.reset_cancel()
+        assert not dataset_progress.is_cancelled
+
+        client.post("/api/dataset/cancel")
+        assert dataset_progress.is_cancelled
+
+        # Clean up
+        dataset_progress.reset_cancel()
+
+    def test_cancel_clears_medias_on_background_load(self, client):
+        """Cancelling during a background load should clean up medias."""
+        import time
+
+        from vtsearch.utils.progress import dataset_progress, get_progress
+
+        saved = dict(app_module.medias)
+        try:
+            # Simulate a slow importer that checks cancellation via progress
+            def slow_load():
+                for i in range(100):
+                    dataset_progress.check_cancelled()
+                    time.sleep(0.05)
+
+            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+            _run_origin_load_in_background(
+                slow_load,
+                {"importer": "test", "params": {}},
+                created_by="test",
+            )
+
+            # Give the thread a moment to start
+            time.sleep(0.2)
+
+            # Cancel it
+            client.post("/api/dataset/cancel")
+
+            # Wait for the thread to notice the cancellation
+            for _ in range(40):
+                time.sleep(0.1)
+                progress = get_progress()
+                if progress["status"] == "idle":
+                    break
+
+            progress = get_progress()
+            assert progress["status"] == "idle"
+            assert progress["error"] == "Cancelled"
+        finally:
+            dataset_progress.reset_cancel()
+            app_module.medias.clear()
+            app_module.medias.update(saved)
+
+    def test_stepped_progress_raises_on_cancel(self):
+        """_stepped_progress should raise CancelledError when cancelled."""
+        from vtsearch.routes.datasets_loading import _stepped_progress
+        from vtsearch.utils.progress import CancelledError, dataset_progress
+
+        dataset_progress.reset_cancel()
+
+        # Should work normally when not cancelled
+        _stepped_progress("loading", "Test", 0, 0)
+
+        # Set cancel flag
+        dataset_progress.cancel()
+
+        # Should raise CancelledError
+        with pytest.raises(CancelledError):
+            _stepped_progress("loading", "Test", 0, 0)
+
+        dataset_progress.reset_cancel()
+
+    def test_new_load_resets_cancel_flag(self, client):
+        """Starting a new load should clear any previous cancellation."""
+        from unittest.mock import patch
+
+        from vtsearch.utils.progress import dataset_progress
+
+        # Set cancel from a previous operation
+        dataset_progress.cancel()
+        assert dataset_progress.is_cancelled
+
+        saved = dict(app_module.medias)
+        try:
+            # Start a new load — should reset the flag
+            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+            with patch("vtsearch.routes.datasets_loading._load_embedder_for_clips"):
+                _run_origin_load_in_background(
+                    lambda: None,
+                    {"importer": "test", "params": {}},
+                    created_by="test",
+                )
+
+            # Cancel flag should have been cleared
+            assert not dataset_progress.is_cancelled
+        finally:
+            dataset_progress.reset_cancel()
+            app_module.medias.clear()
+            app_module.medias.update(saved)

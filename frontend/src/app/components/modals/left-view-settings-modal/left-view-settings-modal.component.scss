@@ -1,0 +1,78 @@
+:host {
+  ::ng-deep .modal-content {
+    width: 400px;
+  }
+}
+
+.view-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  border-radius: 6px 6px 0 0;
+  border: 1px solid var(--border-color, #444);
+  border-bottom: none;
+  padding: 0.25rem 0.25rem 0;
+}
+
+.view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  &--active {
+    color: var(--text-primary);
+    background: var(--bg-primary, #1e1e2e);
+    border-bottom-color: var(--accent-color, #6cf);
+  }
+}
+
+.view-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #444);
+  border-top: 1px solid var(--border-color, #444);
+  border-radius: 0 0 6px 6px;
+  background: var(--bg-primary, #1e1e2e);
+
+  .form-label {
+    margin-bottom: 0;
+  }
+}
+
+.radio-group {
+  display: flex;
+  gap: 1rem;
+}
+
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.grid-columns-input {
+  width: 4rem;
+}
+
+.view-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

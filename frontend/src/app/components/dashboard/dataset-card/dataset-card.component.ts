@@ -11,6 +11,8 @@ import { FormsModule } from '@angular/forms';
 })
 export class DatasetCardComponent {
   @Input() dataset: any;
+  @Input() currentUser = '';
+  @Input() isDefaultLogin = true;
   @Input() @HostBinding('class.selected') selected = false;
   @Output() rowClick = new EventEmitter<MouseEvent>();
 
@@ -20,6 +22,11 @@ export class DatasetCardComponent {
   }
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
+  @Output() security = new EventEmitter<void>();
+
+  get isOwner(): boolean {
+    return this.dataset?.created_by === this.currentUser;
+  }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
@@ -51,6 +58,11 @@ export class DatasetCardComponent {
     } else if (event.key === 'Escape') {
       this.cancelRename();
     }
+  }
+
+  onSecurity(event: MouseEvent): void {
+    event.stopPropagation();
+    this.security.emit();
   }
 
   onDelete(event: MouseEvent): void {

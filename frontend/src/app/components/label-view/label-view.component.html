@@ -24,6 +24,8 @@
       (textSort)="onTextSort($event)"
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
+      (detectorLoaded)="onDetectorLoaded($event)"
+      (exampleSortStarted)="onExampleSortStarted($event)"
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
       (indicatorClick)="onIndicatorClick($event)"
@@ -64,5 +66,15 @@
     [metric]="progressModalMetric"
     [useCachedHistory]="true"
     (closed)="onProgressModalClosed()"
+  />
+}
+
+@if (showResortPrompt) {
+  <vt-resort-prompt-modal
+    [currentExampleType]="resortCurrentType"
+    [currentExampleDisplay]="resortCurrentDisplay"
+    (keepExample)="onResortKeep()"
+    (newExample)="onResortNewExample($event)"
+    (closed)="onResortClosed()"
   />
 }

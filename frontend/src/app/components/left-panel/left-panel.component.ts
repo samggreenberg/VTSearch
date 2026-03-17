@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
@@ -7,7 +7,9 @@ import { ProgressIndicatorsComponent } from './progress-indicators/progress-indi
 import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
-import { MediaItem, LabelingStatusResponse } from '../../models/api.models';
+import { LeftViewSettingsModalComponent } from '../modals/left-view-settings-modal/left-view-settings-modal.component';
+import { MediaItem, LabelingStatusResponse, MediaTypeInfo } from '../../models/api.models';
+import { DatasetsApiService } from '../../services/datasets-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
 export type { SortMode, SelectMode, SortedItem };
@@ -24,11 +26,12 @@ export type { SortMode, SelectMode, SortedItem };
     MediaListComponent,
     StripeOverviewComponent,
     AutopilotPanelComponent,
+    LeftViewSettingsModalComponent,
   ],
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
 })
-export class LeftPanelComponent implements OnInit {
+export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -55,6 +58,8 @@ export class LeftPanelComponent implements OnInit {
   @Output() textSort = new EventEmitter<string>();
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
+  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() exampleSortStarted = new EventEmitter<unknown>();
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @Output() indicatorClick = new EventEmitter<string>();
@@ -66,11 +71,38 @@ export class LeftPanelComponent implements OnInit {
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
+  showLeftViewSettings = false;
+  mediaTypeName = 'Media';
+  private mediaTypeInfos: MediaTypeInfo[] = [];
+  private currentTypeId = '';
+
+  constructor(private datasetsApi: DatasetsApiService) {}
 
   ngOnInit(): void {
+    this.datasetsApi.getMediaTypes().subscribe({
+      next: (resp) => {
+        this.mediaTypeInfos = resp.media_types;
+        this.updateMediaTypeName();
+      },
+    });
     this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
     if (this.autopilotEnabled) {
       this.autopilotStart.emit();
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['medias']) {
+      this.updateMediaTypeName();
+    }
+  }
+
+  private updateMediaTypeName(): void {
+    const typeId = this.medias.length > 0 ? this.medias[0].type : '';
+    if (typeId && typeId !== this.currentTypeId) {
+      this.currentTypeId = typeId;
+      const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
+      this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
     }
   }
 

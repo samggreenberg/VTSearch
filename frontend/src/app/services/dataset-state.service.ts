@@ -1,13 +1,14 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { DatasetRegistryEntry, ModelRegistryEntry } from '../models/api.models';
 import { DatasetsApiService } from './datasets-api.service';
 import { TrainableModelsApiService } from './trainable-models-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class DatasetStateService implements OnDestroy {
-  private readonly datasetsSubject = new BehaviorSubject<any[]>([]);
-  private readonly modelsSubject = new BehaviorSubject<any[]>([]);
+  private readonly datasetsSubject = new BehaviorSubject<DatasetRegistryEntry[]>([]);
+  private readonly modelsSubject = new BehaviorSubject<ModelRegistryEntry[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
   private readonly destroy$ = new Subject<void>();
@@ -27,11 +28,11 @@ export class DatasetStateService implements OnDestroy {
     this.destroy$.complete();
   }
 
-  get datasets(): any[] {
+  get datasets(): DatasetRegistryEntry[] {
     return this.datasetsSubject.value;
   }
 
-  get models(): any[] {
+  get models(): ModelRegistryEntry[] {
     return this.modelsSubject.value;
   }
 
@@ -59,8 +60,8 @@ export class DatasetStateService implements OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: ({ datasets, models }) => {
-          this.datasetsSubject.next((datasets as any).datasets || []);
-          this.modelsSubject.next((models as any).models || []);
+          this.datasetsSubject.next(datasets.datasets || []);
+          this.modelsSubject.next(models.models || []);
         },
       });
   }

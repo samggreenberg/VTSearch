@@ -47,7 +47,7 @@ export class ProgressIndicatorsComponent {
     if (!this.labelingStatus?.span) return '';
     const s = this.labelingStatus.span;
     if (s['diversity_level'] != null && s['max_level'] != null) {
-      return `${(s['diversity_level'] as number).toFixed(1)}/${s['max_level']}`;
+      return `${Math.round(s['diversity_level'] as number)}/${s['max_level']}`;
     }
     return '';
   }

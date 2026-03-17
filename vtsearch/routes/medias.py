@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, send_file
+from flask import Blueprint, Response, jsonify, request, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
+    _state_lock,
+    apply_label,
+    build_media_lookup,
     get_media,
+    medias,
+    next_media_id,
     snapshot_medias,
     toggle_vote,
 )
@@ -89,6 +95,10 @@ def list_medias() -> Response:
         if importer_custom:
             custom.update(importer_custom)
         media_data["custom_metadata"] = custom
+        if "origin_name" in c:
+            media_data["origin_name"] = c["origin_name"]
+        if "description" in c:
+            media_data["description"] = c["description"]
         result.append(media_data)
     return jsonify(result)
 
@@ -313,3 +323,110 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
     sync_labels_to_loaded_model()
 
     return jsonify({"ok": True})
+
+
+@medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
+def add_media_to_pile() -> tuple[Response, int] | Response:
+    """Upload a media file and add it directly to the Good or Bad pile.
+
+    If a media with the same MD5 already exists in the dataset, the existing
+    media is voted accordingly.  Otherwise the file is embedded using the
+    dataset's embedder, inserted as a new media item, and then voted.
+
+    Request (``multipart/form-data``):
+        - ``file``: The media file to upload.
+        - ``label``: ``"good"`` or ``"bad"``.
+
+    Returns:
+        ``{"ok": true, "media_id": <int>, "is_new": <bool>}`` on success
+        (HTTP 200/201), or a JSON error response.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    label = request.form.get("label", "")
+    if label not in ("good", "bad"):
+        return jsonify({"error": "label must be 'good' or 'bad'"}), 400
+
+    file_bytes = file.read()
+    if not file_bytes:
+        return jsonify({"error": "Empty file"}), 400
+
+    file_md5 = hashlib.md5(file_bytes).hexdigest()
+
+    # Check if a media with this MD5 already exists
+    snap = snapshot_medias()
+    _, md5_lookup = build_media_lookup(snap)
+    existing_cids = md5_lookup.get(file_md5, [])
+
+    if existing_cids:
+        # MD5 match — vote the existing media(s).
+        for cid in existing_cids:
+            apply_label(cid, label)
+        return jsonify({"ok": True, "media_id": existing_cids[0], "is_new": False})
+
+    # No match — embed and insert as new media.
+    if not snap:
+        return jsonify({"error": "No dataset loaded. Load a dataset first."}), 400
+
+    first_media = next(iter(snap.values()))
+    dataset_media_type = first_media.get("type", "audio")
+    dataset_embedder_name = first_media.get("embedder", "")
+
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    embedder = None
+    if dataset_embedder_name:
+        try:
+            embedder = get_embedder(dataset_embedder_name)
+        except KeyError:
+            pass
+    if embedder is None:
+        avail = embedders_for_type(dataset_media_type)
+        embedder = avail[0] if avail else None
+    if embedder is None:
+        return jsonify({"error": "No embedder available for the current dataset type."}), 400
+
+    # Write to a temporary file for embedding
+    import tempfile
+
+    original_filename = file.filename or "upload.bin"
+    suffix = Path(original_filename).suffix or ".bin"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    try:
+        embedding = embedder.embed_media(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if embedding is None:
+        return jsonify({"error": "Failed to embed the uploaded file."}), 400
+
+    with _state_lock:
+        new_id = next_media_id(medias)
+        medias[new_id] = {
+            "id": new_id,
+            "type": dataset_media_type,
+            "embedder": dataset_embedder_name,
+            "md5": file_md5,
+            "embedding": embedding,
+            "media_bytes": file_bytes,
+            "filename": original_filename,
+            "file_size": len(file_bytes),
+            "category": "",
+            "origin": {
+                "importer": "add_to_pile",
+                "params": {"filename": original_filename},
+            },
+            "origin_name": original_filename,
+        }
+
+    apply_label(new_id, label)
+
+    return jsonify({"ok": True, "media_id": new_id, "is_new": True}), 201

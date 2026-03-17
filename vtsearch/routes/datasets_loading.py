@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
 from vtsearch.datasets.registry import (
@@ -24,6 +25,7 @@ from vtsearch.utils import (
     snapshot_medias,
     update_progress,
 )
+from vtsearch.utils.progress import CancelledError, dataset_progress
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +58,11 @@ def _stepped_progress(status: str, message: str = "", current: int = 0, total: i
     ``"idle"`` before the wrapper overrides it, and a frontend poll during
     that window would stop polling prematurely — leaving the UI stuck on
     the progress overlay.
+
+    Also checks the cancellation flag on each callback so that long-running
+    loops (embedding, downloading) abort promptly when the user cancels.
     """
+    dataset_progress.check_cancelled()
     if status == "idle":
         return
     step = _STATUS_TO_STEP.get(status)
@@ -89,7 +95,7 @@ def _get_embedder_for_clips():
     return avail[0] if avail else None
 
 
-def _load_embedder_for_clips() -> None:
+def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
     """Eagerly load the embedder for the current dataset's media type.
 
     Called right after a dataset finishes loading so the first text sort
@@ -103,8 +109,19 @@ def _load_embedder_for_clips() -> None:
     media branch, leaving the text branch cold.  Without this warmup the
     first user-initiated text sort would stall on PyTorch's lazy
     initialisation for that branch.
+
+    Args:
+        step: The step number to report for this phase.  Defaults to
+            ``_TOTAL_LOAD_STEPS`` (the last step of the demo/importer flow).
+        total_steps: The total number of steps to report.  Defaults to
+            ``_TOTAL_LOAD_STEPS``.
     """
-    from vtsearch.media.base import intercept_tqdm_progress
+    if step is None:
+        step = _TOTAL_LOAD_STEPS
+    if total_steps is None:
+        total_steps = _TOTAL_LOAD_STEPS
+
+    from vtsearch.media.base import intercept_tqdm_progress, intercept_weight_loading_progress
 
     emb = _get_embedder_for_clips()
     if emb is None:
@@ -112,15 +129,30 @@ def _load_embedder_for_clips() -> None:
         return
 
     def _model_load_progress(status, message, current, total):
-        update_progress(status, message, current, total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+        update_progress(status, message, current, total, step=step, total_steps=total_steps)
 
-    with intercept_tqdm_progress(_model_load_progress):
+    update_progress(
+        "loading",
+        "Loading embedding model…",
+        0,
+        0,
+        step=step,
+        total_steps=total_steps,
+    )
+    with (
+        intercept_tqdm_progress(_model_load_progress),
+        intercept_weight_loading_progress(_model_load_progress, "Loading model weights…"),
+    ):
         emb.load_models()
 
     # Warm up the text encoder so the first text sort is instant.
     update_progress(
-        "loading", "Warming up text encoder…", 0, 0,
-        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+        "loading",
+        "Warming up text encoder…",
+        0,
+        0,
+        step=step,
+        total_steps=total_steps,
     )
     try:
         emb.embed_text("warmup")
@@ -169,12 +201,15 @@ def _origin_to_str(origin: dict | None) -> str:
     return importer_name
 
 
-def _apply_clipper(clips_dict: dict, clipper_name: str) -> None:
+def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
     """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
 
     Each media is run through the clipper's ``clip()`` method.  The resulting
     clips are assigned fresh sequential IDs and their origins are annotated
     with the clipper name and clip index.
+
+    If *clipper_params* is provided, the registered clipper is customised via
+    its :meth:`~MediaClipper.with_params` method before clipping.
     """
     if not clipper_name:
         return
@@ -184,6 +219,9 @@ def _apply_clipper(clips_dict: dict, clipper_name: str) -> None:
         clipper = get_clipper(clipper_name)
     except KeyError:
         return
+
+    if clipper_params:
+        clipper = clipper.with_params(clipper_params)
 
     all_clipped: list[dict] = []
     for media in list(clips_dict.values()):
@@ -211,6 +249,7 @@ def _auto_register_dataset(
     source: dict | None = None,
     clipper: str = "",
     embedder: str = "",
+    created_by: str = "",
 ) -> None:
     """Save the current medias as a pkl and register in the dataset registry.
 
@@ -258,12 +297,20 @@ def _auto_register_dataset(
         source=source,
         clipper=clipper,
         embedder=embedder,
+        created_by=created_by,
     )
     _reg_set_loaded(entry["id"])
 
 
 def _run_origin_load_in_background(
-    load_fn, origin: dict, *, name: str = "", clipper: str = "", embedder: str = "",
+    load_fn,
+    origin: dict,
+    *,
+    name: str = "",
+    clipper: str = "",
+    clipper_params: dict | None = None,
+    embedder: str = "",
+    created_by: str = "",
 ) -> None:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -283,48 +330,74 @@ def _run_origin_load_in_background(
     clipper:
         Name of the clipper to apply after loading.  Empty string means
         no clipping.
+    clipper_params:
+        Optional dict of parameter overrides for the clipper (e.g.
+        ``{"duration": 5.0}``).
     embedder:
         Name of the embedder used.  When empty, derived from the medias
         at registration time.
+    created_by:
+        Username of the user who initiated the load.  Captured before
+        the background thread starts (no Flask request context in thread).
     """
+
+    # Reset the cancellation flag so a previous cancel does not immediately
+    # abort this new operation.
+    dataset_progress.reset_cancel()
 
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
+    # Clear the error field so stale errors from previous loads don't persist.
+    update_progress("loading", "Preparing dataset...", error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     def task():
         try:
             update_progress(
-                "loading", "Clearing previous dataset…", 0, 0,
-                step=1, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Clearing previous dataset…",
+                0,
+                0,
+                step=1,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             clear_dataset()
             gc.collect()
             load_fn()
+            dataset_progress.check_cancelled()
             # _stepped_progress (the progress callback injected by
             # _run_importer_in_background) filters out "idle" so that
             # inner functions like load_demo_dataset cannot prematurely
             # signal completion to the frontend.
             update_progress(
-                "loading", "Removing duplicates…",
-                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Removing duplicates…",
+                step=_TOTAL_LOAD_STEPS,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             _set_clip_origins(medias, origin)
             if clipper:
-                _apply_clipper(medias, clipper)
+                _apply_clipper(medias, clipper, clipper_params)
             collapse_duplicates(medias)
+
             def _diversity_progress(current: int, total: int) -> None:
+                dataset_progress.check_cancelled()
                 update_progress(
-                    "loading", "Building diversity index…",
-                    current=current, total=total,
-                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    "loading",
+                    "Building diversity index…",
+                    current=current,
+                    total=total,
+                    step=_TOTAL_LOAD_STEPS,
+                    total_steps=_TOTAL_LOAD_STEPS,
                 )
 
             _diversity_progress(0, 0)
             build_diversity_tree(on_progress=_diversity_progress)
+            dataset_progress.check_cancelled()
             update_progress(
-                "loading", "Saving to registry…",
-                step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                "loading",
+                "Saving to registry…",
+                step=_TOTAL_LOAD_STEPS,
+                total_steps=_TOTAL_LOAD_STEPS,
             )
             origin_str = _origin_to_str(origin)
             _auto_register_dataset(
@@ -333,8 +406,21 @@ def _run_origin_load_in_background(
                 source=origin,
                 clipper=clipper,
                 embedder=embedder,
+                created_by=created_by,
             )
             _load_embedder_for_clips()
+        except CancelledError:
+            medias.clear()
+            gc.collect()
+            update_progress(
+                "idle",
+                "",
+                0,
+                0,
+                error="Cancelled",
+                step=None,
+                total_steps=None,
+            )
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -352,15 +438,20 @@ def _run_origin_load_in_background(
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     threading.Thread(target=task, daemon=True).start()
 
 
 def _run_importer_in_background(importer, field_values: dict) -> None:
     """Start *importer*.run() in a daemon thread after clearing the dataset."""
+    created_by = get_current_user()
     origin = importer.build_origin(field_values)
-    clipper_name = field_values.pop("clipper", "")
+    clipper_name = field_values.pop("clipper", "") or ""
+    clipper_params = field_values.pop("clipper_params", None)
+    # Keep clipper in field_values for importers that need it (e.g. demo
+    # importer writes a .clipper sidecar for readiness tracking).
+    field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
     def _load():
@@ -386,7 +477,9 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
         origin,
         name=importer.resolve_display_name(field_values),
         clipper=clipper_name,
+        clipper_params=clipper_params,
         embedder=embedder_name,
+        created_by=created_by,
     )
 
 

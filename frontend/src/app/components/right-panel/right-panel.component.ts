@@ -10,9 +10,9 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
-import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
-import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
+import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
+import { ViewSettingsModalComponent } from '../modals/view-settings-modal/view-settings-modal.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -26,9 +26,9 @@ export interface TrainModeContext {
     LabelSortComponent,
     LabelListComponent,
     DetectorContextBarComponent,
-    DetectorExportModalComponent,
-    LabelExporterModalComponent,
+    ExportModalComponent,
     LabelImporterModalComponent,
+    ViewSettingsModalComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -48,12 +48,12 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   viewMode: 'grid' | 'list' = 'grid';
   gridColumns: number = 2;
   showLabelImport = false;
-  showLabelExport = false;
-  showDetectorExport = false;
+  showExport = false;
+  showViewSettings = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridColumnsRightDict: Record<string, number> = {};
-  private currentMediaType = '';
+  protected currentMediaType = '';
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -101,12 +101,12 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.showLabelImport = true;
   }
 
-  onExportLabels(): void {
-    this.showLabelExport = true;
+  onExport(): void {
+    this.showExport = true;
   }
 
-  onExportDetector(): void {
-    this.showDetectorExport = true;
+  onViewSettings(): void {
+    this.showViewSettings = true;
   }
 
   onDetectorRenamed(newName: string): void {

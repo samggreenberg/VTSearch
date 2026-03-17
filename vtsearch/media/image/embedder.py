@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
 
 if TYPE_CHECKING:
     import torch
@@ -79,7 +79,9 @@ class ImageClipEmbedder(MediaEmbedder):
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading CLIP model weights…", 0, 0)
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        with intercept_tqdm_progress(self._on_progress):
+        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
+            self._on_progress, "Loading CLIP model weights…"
+        ):
             self._model = CLIPModel.from_pretrained(
                 CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )

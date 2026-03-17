@@ -78,7 +78,7 @@ export interface FillFromSortDryRunResponse {
 export interface FillFromSortConfirmResponse {
   good_applied: number;
   bad_applied: number;
-  results: unknown[];
+  results: Record<string, unknown>;
 }
 
 export interface DiversityTreeNextResponse {
@@ -177,6 +177,7 @@ export interface DemoDataset {
   media_type: string;
   num_categories: number;
   pkl_embedder?: string;
+  pkl_clipper?: string;
 }
 
 export interface DemoListResponse {
@@ -196,6 +197,11 @@ export interface MediaTypesResponse {
 }
 
 export interface DatasetRegistryEntry {
+  id: string;
+  name: string;
+  media_type: string;
+  loaded?: boolean;
+  readers?: string[];
   [key: string]: unknown;
 }
 
@@ -258,8 +264,8 @@ export interface AppSettings {
   grid_columns_right?: Record<string, number>;
   focus_mode_left?: Record<string, 'click' | 'hover'>;
   focus_mode_right?: Record<string, 'click' | 'hover'>;
-  panel_pct_left?: Record<string, number | null>;
-  panel_pct_right?: Record<string, number | null>;
+  panel_pct_left?: Record<string, number>;
+  panel_pct_right?: Record<string, number>;
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
   autorun_processors?: AutorunProcessor[];
@@ -267,6 +273,8 @@ export interface AppSettings {
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
+  autopilot_resort_interval?: number;
+  autopilot_goal_diversity?: number;
   [key: string]: unknown;
 }
 
@@ -279,9 +287,12 @@ export interface AutorunProcessor {
 
 export interface ExporterInfo {
   name: string;
-  label?: string;
+  display_name?: string;
   description?: string;
+  icon?: string;
   fields?: ImporterField[];
+  ui_mode?: string;
+  hidden_from_picker?: boolean;
   [key: string]: unknown;
 }
 
@@ -296,8 +307,20 @@ export interface TrainableModelsResponse {
   models: TrainableModel[];
 }
 
+export interface ModelRegistryEntry {
+  id: string;
+  name: string;
+  media_type: string;
+  trainable?: boolean;
+  num_training?: number;
+  text_query?: string;
+  media_example?: string;
+  detector_name?: string;
+  [key: string]: unknown;
+}
+
 export interface ModelsRegistryResponse {
-  models: unknown[];
+  models: ModelRegistryEntry[];
 }
 
 // --- Label Importers ---
@@ -316,9 +339,21 @@ export interface ProcessorImporterInfo {
 
 // --- Clippers ---
 
+export interface ClipperParameter {
+  key: string;
+  label: string;
+  type: 'number' | 'string';
+  default: number | string;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
 export interface ClipperInfo {
   name: string;
+  display_name?: string;
   media_type: string;
+  parameters?: ClipperParameter[];
   [key: string]: unknown;
 }
 

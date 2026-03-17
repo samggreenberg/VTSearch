@@ -355,6 +355,69 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId).toBe(2);
   });
 
+  it('should deactivate autopilot state when switching to manual mode', () => {
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    expect(autopilot.running).toBeTrue();
+    expect(autopilot.state.phase).toBe('good');
+
+    component.onAutopilotStop();
+    expect(autopilot.running).toBeFalse();
+    expect(autopilot.state.phase).toBe('idle');
+  });
+
+  it('should not show resort prompt after switching to manual mode', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'test query';
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    component.onAutopilotStart();
+
+    // Switch to manual mode
+    component.onAutopilotStop();
+
+    // Vote many times — resort prompt should never fire because autopilot is off
+    for (let i = 0; i < 15; i++) {
+      component.onMediaVoted({ id: 1, vote: 'good' });
+      httpMock.match('/api/votes').forEach(req =>
+        req.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} }),
+      );
+    }
+
+    expect(component.showResortPrompt).toBeFalse();
+  });
+
+  it('should not show resort prompt after phase transitions past good', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'test query';
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    component.onAutopilotStart();
+
+    // Simulate optimistic votes that push good count past threshold
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {} });
+
+    // Phase should transition to 'bad' when checkResortPrompt eagerly checks
+    // Vote 11 times (exceeding default resort interval of 10)
+    for (let i = 0; i < 11; i++) {
+      component.onMediaVoted({ id: 1, vote: 'bad' });
+      httpMock.match('/api/votes').forEach(req =>
+        req.flush({ good: [1, 2, 3], bad: [4], click_times: {}, learned_scores: {} }),
+      );
+    }
+
+    // Phase should have transitioned to 'bad', so no resort prompt
+    expect(autopilot.state.phase).toBe('bad');
+    expect(component.showResortPrompt).toBeFalse();
+  });
+
   it('should clear stale autopilot state from previous session on init', () => {
     const autopilot = TestBed.inject(AutopilotStateService);
     // Simulate leftover state from a previous detector session

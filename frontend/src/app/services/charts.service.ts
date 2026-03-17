@@ -175,7 +175,7 @@ export class ChartsService {
     ctx.fillText('0', left - 5, top + chartHeight + 5);
   }
 
-  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityDataPoint[]): void {
+  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityDataPoint[], goalDiversity = 40): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -193,7 +193,8 @@ export class ChartsService {
     const treeDepth = data[0].depth;
 
     const maxLabels = Math.max(...numLabels);
-    const maxLevel = Math.max(treeDepth, Math.max(...levels), 1);
+    const greenLevel = Math.min(goalDiversity, treeDepth);
+    const maxLevel = Math.max(greenLevel, Math.max(...levels), 1);
     const minLevel = Math.min(0, Math.min(...levels));
 
     const xScale = (val: number) => left + (val / maxLabels) * chartWidth;
@@ -203,21 +204,21 @@ export class ChartsService {
     this.drawAxes(ctx, canvas.width, canvas.height);
     this.drawGrid(ctx, canvas.width, canvas.height);
 
-    // Draw tree depth target line
+    // Draw green threshold line (diversity indicator turns green at goal level)
     ctx.strokeStyle = this.themeColor('--color-good');
     ctx.lineWidth = 1;
     ctx.setLineDash([6, 4]);
-    const depthY = yScale(treeDepth);
+    const greenY = yScale(greenLevel);
     ctx.beginPath();
-    ctx.moveTo(left, depthY);
-    ctx.lineTo(left + chartWidth, depthY);
+    ctx.moveTo(left, greenY);
+    ctx.lineTo(left + chartWidth, greenY);
     ctx.stroke();
     ctx.setLineDash([]);
 
     ctx.fillStyle = this.themeColor('--color-good');
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`depth ${treeDepth}`, left + chartWidth - 55, depthY - 5);
+    ctx.fillText(`green (${greenLevel})`, left + chartWidth - 70, greenY - 5);
 
     const xs = numLabels.map(xScale);
     const ys = levels.map(yScale);

@@ -26,6 +26,8 @@ _TEST_GROUPS = {
         "test_error_recovery",
         "test_dashboard",
         "test_path_validation",
+        "test_multi_user_security",
+        "test_ssrf_validation",
     ],
     "sorting": [
         "test_sorting",
@@ -67,6 +69,7 @@ _TEST_GROUPS = {
         "test_eval_visualize",
         "test_eval_voting_iterations",
         "test_resolver",
+        "test_new_embedders",
     ],
     "downloads": [
         "test_ag_news_download",
@@ -90,6 +93,7 @@ _TEST_GROUPS = {
     ],
     "converters": [
         "test_document_and_converters",
+        "test_converter_selection",
     ],
 }
 
@@ -222,7 +226,12 @@ def _allow_test_tmp_paths(monkeypatch):
         try:
             return _original(filepath_str, base_dir)
         except ValueError:
-            # Also allow the system temp directory (where pytest tmp_path lives).
+            # Also allow the system temp directory (where pytest tmp_path lives),
+            # but only when base_dir was not explicitly set (i.e. only for the
+            # default CWD fallback).  When a specific base_dir is given (e.g. in
+            # multi-user mode) we must honour that restriction.
+            if base_dir is not None:
+                raise
             return _original(filepath_str, Path(tempfile.gettempdir()))
 
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
@@ -273,6 +282,17 @@ def reset_state():
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
+
+    # Reset progress trackers
+    from vtsearch.utils.progress import dataset_progress, find_progress
+
+    dataset_progress.reset_cancel()
+    find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+
+    # Reset the login provider to DefaultLoginProvider
+    from vtsearch.auth import DefaultLoginProvider, set_login_provider
+
+    set_login_provider(DefaultLoginProvider())
 
     # Reset the dataset and model registries
     from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg

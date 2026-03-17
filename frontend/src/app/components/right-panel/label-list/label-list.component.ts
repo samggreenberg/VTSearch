@@ -87,19 +87,6 @@ export class LabelListComponent implements OnInit, OnChanges {
     return sorted;
   }
 
-  metaText(entry: LabelEntry): string {
-    const parts: string[] = [];
-    if (entry.time >= 0) {
-      parts.push(`#${entry.time}`);
-    } else {
-      parts.push('imported');
-    }
-    if (entry.confidence >= 0) {
-      parts.push(`${(entry.confidence * 100).toFixed(0)}%`);
-    }
-    return parts.join(' \u00B7 ');
-  }
-
   get isGrid(): boolean {
     return this.viewMode === 'grid';
   }

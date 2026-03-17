@@ -140,7 +140,7 @@ pip install -r requirements-cpu.txt
 pip install -r requirements-gpu.txt
 ```
 
-This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies.
+This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies (including importers and exporters).
 
 **For development** (adds pytest and other dev tools):
 

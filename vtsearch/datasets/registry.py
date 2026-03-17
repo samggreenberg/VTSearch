@@ -110,8 +110,16 @@ def register_dataset(
     num_dupes: int = 0,
     clipper: str = "",
     embedder: str = "",
+    created_by: str = "default",
+    readers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
+
+    Args:
+        created_by: Username of the user who created this dataset.
+        readers: List of usernames granted read access.  An empty list
+            (the default) means only the creator can see the dataset.
+            Include ``"*"`` to make it visible to all users.
 
     Returns the newly created entry (with a generated ``id``).
     """
@@ -128,7 +136,9 @@ def register_dataset(
         "source": source,
         "clipper": clipper,
         "embedder": embedder,
+        "created_by": created_by,
         "created_at": time.time(),
+        "readers": readers or [],
     }
     with _lock:
         entries = _ensure_loaded()
@@ -202,6 +212,67 @@ def find_by_pkl_path(pkl_path: str) -> dict[str, Any] | None:
             if entry.get("pkl_path") == pkl_path:
                 return dict(entry)
     return None
+
+
+def can_user_access(dataset_id: str, username: str) -> bool:
+    """Return ``True`` if *username* may view/load the dataset.
+
+    Access is granted when any of the following hold:
+
+    * The user is the dataset creator (``created_by``).
+    * The username appears in the ``readers`` list.
+    * The ``readers`` list contains the wildcard ``"*"``.
+    """
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == dataset_id:
+                if entry.get("created_by", "default") == username:
+                    return True
+                readers = entry.get("readers", [])
+                return username in readers or "*" in readers
+    return False
+
+
+def is_owner(dataset_id: str, username: str) -> bool:
+    """Return ``True`` if *username* is the creator of the dataset."""
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == dataset_id:
+                return entry.get("created_by", "default") == username
+    return False
+
+
+def list_datasets_for_user(username: str) -> list[dict[str, Any]]:
+    """Return only datasets that *username* is allowed to see.
+
+    A dataset is visible when the user is its creator, is listed in
+    ``readers``, or ``"*"`` is in ``readers``.
+    """
+    with _lock:
+        result = []
+        for entry in _ensure_loaded():
+            creator = entry.get("created_by", "default")
+            readers = entry.get("readers", [])
+            if creator == username or username in readers or "*" in readers:
+                result.append(dict(entry))
+        return result
+
+
+def set_readers(dataset_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
+    """Update the ``readers`` list.  Only the creator may call this.
+
+    Returns ``(success, error_message)``.
+    """
+    with _lock:
+        entries = _ensure_loaded()
+        for entry in entries:
+            if entry["id"] == dataset_id:
+                if entry.get("created_by", "default") != requesting_user:
+                    return False, "Only the dataset creator can modify readers"
+                entry["readers"] = readers
+                _save(entries)
+                return True, ""
+        return False, "Dataset not found"
 
 
 def reset_for_tests() -> None:

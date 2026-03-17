@@ -6,27 +6,33 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 ## Table of Contents
 
 1.  [Conventions](#conventions)
-2.  [Static / UI](#static--ui)
-3.  [Medias](#medias)
-4.  [Sorting](#sorting)
-5.  [Votes & Labels](#votes--labels)
-6.  [Inclusion & Thresholds](#inclusion--thresholds)
-7.  [Labeling Progress](#labeling-progress)
-8.  [Diversity Tree](#diversity-tree)
-9.  [Detectors](#detectors)
-10. [Extractors](#extractors)
-11. [Localizers](#localizers)
-12. [Pre-generated Processors](#pre-generated-processors)
-13. [Datasets](#datasets)
-14. [Dataset Registry](#dataset-registry)
-15. [Exporters](#exporters)
-16. [Label Importers](#label-importers)
-17. [Processor Importers](#processor-importers)
-18. [Settings](#settings)
-19. [Trainable Models](#trainable-models)
-20. [Model Registry](#model-registry)
-21. [Dashboard](#dashboard)
-22. [Multi-dataset Find](#multi-dataset-find)
+2.  [Authentication](#authentication)
+3.  [Static / UI](#static--ui)
+4.  [Medias](#medias)
+5.  [Sorting](#sorting)
+6.  [Votes & Labels](#votes--labels)
+7.  [Inclusion & Thresholds](#inclusion--thresholds)
+8.  [Labeling Progress](#labeling-progress)
+9.  [Diversity Tree](#diversity-tree)
+10. [Detectors](#detectors)
+11. [Extractors](#extractors)
+12. [Localizers](#localizers)
+13. [Pre-generated Processors](#pre-generated-processors)
+14. [Datasets](#datasets)
+15. [Dataset Registry](#dataset-registry)
+16. [Exporters](#exporters)
+17. [Label Importers](#label-importers)
+18. [Processor Importers](#processor-importers)
+19. [Settings](#settings)
+20. [Trainable Models](#trainable-models)
+21. [Model Registry](#model-registry)
+22. [Dashboard](#dashboard)
+23. [Media Lookup](#media-lookup)
+24. [Multi-dataset Find](#multi-dataset-find)
+
+Endpoints for embedders, clippers, and converters are under
+[Datasets](#datasets). Indicator score history and evaluation endpoints
+are under [Labeling Progress](#labeling-progress).
 
 Endpoints for embedders, clippers, and converters are under
 [Datasets](#datasets). Indicator score history and evaluation endpoints
@@ -56,6 +62,29 @@ Error.
 
 ---
 
+## Authentication
+
+### Auth status
+
+```
+GET /api/auth/status
+```
+
+→ ```json
+{
+  "provider": "default",
+  "user": "default",
+  "authenticated": true,
+  "login_required": false
+}
+```
+
+Returns the active login provider name, current user, whether the request
+is authenticated, and whether the frontend should show a login screen.
+With `DefaultLoginProvider`, every request is authenticated as `"default"`.
+
+---
+
 ## Static / UI
 
 | Method | Path | Description |
@@ -82,21 +111,24 @@ GET /api/medias
   {
     "id": 0,
     "type": "audio",
-    "duration": 5.0,
-    "file_size": 160044,
     "filename": "media_0.wav",
-    "category": "sine",
     "md5": "abc123...",
-    "frequency": 440,
-    "width": 640,
-    "height": 480,
-    "word_count": 150
+    "custom_metadata": {
+      "duration": 5.0,
+      "file_size": 160044,
+      "category": "sine",
+      "frequency": 440
+    },
+    "origin_name": "media_0.wav",
+    "description": "A 440 Hz sine wave"
   }
 ]
 ```
 
-Fields `frequency`, `width`, `height`, and `word_count` are only present when
-applicable.
+Every item contains `id`, `type`, `filename`, `md5`, and `custom_metadata`.
+The `custom_metadata` dict holds media-type-specific display fields (e.g.
+`duration`/`frequency` for audio, `width`/`height` for images, `word_count`
+for text). `origin_name` and `description` are included when present.
 
 ### Stream audio
 
@@ -295,6 +327,8 @@ POST /api/textsort-suggestions
 GET /api/labels/export
 ```
 
+**Query:** `?goods_only=1` — optional, export only good labels.
+
 → LabelSet JSON with per-element origin and MD5 info:
 
 ```json
@@ -467,8 +501,10 @@ POST accepts an optional body with sort scores to influence selection:
 
 → `{"id": 42, "diversity_level": 3, "exhausted": false}`
 
-`id` is `null` when the tree is not built or exhausted. `exhausted` is `true`
-when every node has been seen.
+`id` is `null` when the tree is not built or exhausted. `diversity_level` is the
+number of consecutive seen nodes in BFS order (0 when nothing is labeled, up to
+the total number of tree nodes when fully covered). `exhausted` is `true` when
+every node has been seen.
 
 ---
 
@@ -534,7 +570,10 @@ GET /api/autorun-detectors
 POST /api/autorun-detectors
 ```
 
-**Body:** `{"name": "bark_detector", "media_type": "audio", "weights": {...}, "threshold": 0.5, "autodetect": true, "examples": [], "num_labels": 100}`
+**Body:** `{"name": "bark_detector", "media_type": "audio"}` (required)
+
+Optional fields: `weights` (dict), `threshold` (number), `autodetect`
+(bool, default false), `examples` (list), `num_labels` (int, default 0).
 
 → `{"success": true, "name": "bark_detector"}`
 
@@ -1210,7 +1249,7 @@ GET /api/settings
 
 → ```json
 {
-  "volume": 0.8,
+  "volume": 1.0,
   "theme": "dark",
   "inclusion": 0,
   "enrich_descriptions": false,
@@ -1222,21 +1261,28 @@ GET /api/settings
   "show_metadata": true,
   "view_mode_left": {},
   "view_mode_right": {},
-  "grid_columns_left": {},
-  "grid_columns_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
+  "grid_columns_left": {},
+  "grid_columns_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_types": [],
   "autoload_media_embedders": [],
-  "autorun_processors": [...],
+  "autorun_processors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
-  "autopilot_hard_reds": 4
+  "autopilot_hard_reds": 4,
+  "autopilot_goal_diversity": 40,
+  "saved_datasets_dir": "data/saved_datasets",
+  "detectors_dir": "data/detectors",
+  "trainable_models_dir": "data/trainable_models"
 }
 ```
+
+Per-media-type settings (`view_mode_*`, `focus_mode_*`, `grid_columns_*`,
+`panel_pct_*`) use dicts keyed by media type ID (e.g. `{"audio": "list"}`).
 
 ### Update settings
 
@@ -1256,13 +1302,15 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
 (number), `audio_playing` (bool), `swipe_animation` (bool),
-`show_metadata` (bool), `view_mode_left` (object), `view_mode_right`
-(object), `grid_columns_left` (object), `grid_columns_right` (object),
-`focus_mode_left` (object), `focus_mode_right` (object), `panel_pct_left`
-(object), `panel_pct_right` (object), `autopilot_enabled` (bool),
+`show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
+`focus_mode_left` (dict), `focus_mode_right` (dict), `grid_columns_left`
+(dict), `grid_columns_right` (dict), `panel_pct_left` (dict),
+`panel_pct_right` (dict), `autoload_media_types` (list of strings),
+`autoload_media_embedders` (list of strings), `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
-`autopilot_hard_reds` (int), `autoload_media_types` (list of strings),
-`autoload_media_embedders` (list of strings).
+`autopilot_hard_reds` (int), `autopilot_goal_diversity` (int),
+`saved_datasets_dir` (string path), `detectors_dir` (string path),
+`trainable_models_dir` (string path).
 
 ### Get default settings
 
@@ -1417,6 +1465,18 @@ POST /api/models/registry
 
 → `{"ok": true, "model": {...}}` (201)
 
+### Load / unload model
+
+```
+POST /api/models/registry/load
+```
+
+**Body:** `{"model_id": "abc123"}` — pass `null` to unload.
+
+→ `{"ok": true}`
+
+404 if model not found.
+
 ### Delete registered model
 
 ```
@@ -1467,3 +1527,38 @@ PUT /api/dashboard/dataset-rename
 **Body:** `{"name": "My Custom Name"}`
 
 → `{"success": true, "name": "My Custom Name"}`
+
+---
+
+## Media Lookup
+
+### List embedders
+
+```
+GET /api/embedders
+```
+
+**Query:** `?media_type=image` — optional, filter by `type_id` or `folder_import_name`.
+
+→ `{"embedders": [{"name": "clip", "display_name": "CLIP", "media_type_id": "image", ...}]}`
+
+### List clippers
+
+```
+GET /api/clippers
+```
+
+**Query:** `?media_type=audio` — optional, same filtering as embedders.
+
+→ `{"clippers": [{"name": "sound_default", "media_type": "audio", ...}]}`
+
+### List converters
+
+```
+GET /api/converters
+```
+
+**Query:** `?target=image` and/or `?source=video` — optional, filter by
+`type_id` or `folder_import_name`.
+
+→ `{"converters": [{"name": "video2image", "source_type": "video", "target_type": "image", ...}]}`

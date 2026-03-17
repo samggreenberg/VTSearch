@@ -18,6 +18,12 @@ class TestDetectorExport:
         assert "threshold" in data
         assert isinstance(data["weights"], dict)
         assert isinstance(data["threshold"], (int, float))
+        # Origin info for weight-free serialisation
+        assert "good_origins" in data
+        assert "bad_origins" in data
+        assert "inclusion" in data
+        assert len(data["good_origins"]) == 3
+        assert len(data["bad_origins"]) == 3
 
     def test_export_requires_good_votes(self, client):
         app_module.bad_votes.update({k: None for k in [1, 2]})
@@ -347,6 +353,9 @@ class TestAutorunDetectors:
         assert "weights" in stored
         assert "threshold" in stored
         assert "created_at" in stored
+        assert "good_origins" in stored
+        assert "bad_origins" in stored
+        assert "inclusion" in stored
 
 
 class TestAutoDetect:
@@ -569,17 +578,21 @@ class TestServerDetectorExport:
         self._vote()
         client.post("/api/detector/export-server", json={"name": "valid_json"})
         content = json.loads((self._det_dir / "valid_json.json").read_text())
-        assert "weights" in content
-        assert "threshold" in content
+        # New format: origins instead of weights
+        assert "good_origins" in content
+        assert "bad_origins" in content
+        assert "inclusion" in content
         assert "media_type" in content
         assert "name" in content
+        # Weights must NOT be serialised to disk
+        assert "weights" not in content
 
-    def test_export_server_returns_path(self, client):
+    def test_export_server_returns_name(self, client):
         self._vote()
         resp = client.post("/api/detector/export-server", json={"name": "path_check"})
         data = resp.get_json()
-        assert "path" in data
-        assert "path_check.json" in data["path"]
+        assert data["success"] is True
+        assert data["name"] == "path_check"
 
     # -- name validation --
 
@@ -638,12 +651,12 @@ class TestServerDetectorExport:
         names = [f["name"] for f in data["files"]]
         assert "listed" in names
 
-    def test_list_server_files_has_path_and_size(self, client):
+    def test_list_server_files_has_filename_and_size(self, client):
         self._vote()
         client.post("/api/detector/export-server", json={"name": "sized"})
         resp = client.get("/api/detector/server-files")
         entry = resp.get_json()["files"][0]
-        assert "path" in entry
+        assert "filename" in entry
         assert "size_bytes" in entry
         assert entry["size_bytes"] > 0
 

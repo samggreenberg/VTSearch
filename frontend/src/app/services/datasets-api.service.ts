@@ -38,12 +38,44 @@ export class DatasetsApiService {
     return this.http.get<ImportersResponse>('/api/dataset/all-importers');
   }
 
-  getDemoList(embedder?: string): Observable<DemoListResponse> {
+  getDemoList(embedder?: string, clipper?: string): Observable<DemoListResponse> {
     const params: Record<string, string> = {};
     if (embedder) {
       params['embedder'] = embedder;
     }
+    if (clipper) {
+      params['clipper'] = clipper;
+    }
     return this.http.get<DemoListResponse>('/api/dataset/demo-list', { params });
+  }
+
+  getDemoCategories(name: string): Observable<{ categories: string[] }> {
+    return this.http.get<{ categories: string[] }>(`/api/dataset/demo-categories/${name}`);
+  }
+
+  browseMediaFiles(
+    source: string,
+    path: string,
+  ): Observable<{
+    directories: { name: string; path: string }[];
+    files: { name: string; path: string; size_bytes: number }[];
+    root_path: string;
+  }> {
+    return this.http.get<{
+      directories: { name: string; path: string }[];
+      files: { name: string; path: string; size_bytes: number }[];
+      root_path: string;
+    }>('/api/browse-media-files', { params: { source, path } });
+  }
+
+  selectBrowsedFile(
+    source: string,
+    path: string,
+  ): Observable<{ filename: string; original_name: string }> {
+    return this.http.post<{ filename: string; original_name: string }>(
+      '/api/browse-media-files/select',
+      { source, path },
+    );
   }
 
   getMediaTypes(): Observable<MediaTypesResponse> {
@@ -120,6 +152,10 @@ export class DatasetsApiService {
     return this.http.post('/api/dataset/combine', params);
   }
 
+  cancelIngest(): Observable<OkResponse> {
+    return this.http.post<OkResponse>('/api/dataset/cancel', {});
+  }
+
   clearDataset(): Observable<OkResponse> {
     return this.http.post<OkResponse>('/api/dataset/clear', {});
   }
@@ -146,6 +182,10 @@ export class DatasetsApiService {
 
   renameRegistered(datasetId: string, newName: string): Observable<unknown> {
     return this.http.put(`/api/datasets/registry/${datasetId}/rename`, { name: newName });
+  }
+
+  updateReaders(datasetId: string, readers: string[]): Observable<unknown> {
+    return this.http.put(`/api/datasets/registry/${datasetId}/readers`, { readers });
   }
 
   loadSource(params: Record<string, unknown>): Observable<unknown> {

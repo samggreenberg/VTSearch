@@ -23,7 +23,7 @@ export class SettingsApiService {
     return this.http.get<{ autorun_processors: AutorunProcessor[] }>('/api/settings/autorun-processors');
   }
 
-  addAutorunProcessor(processor: AutorunProcessor): Observable<unknown> {
+  addAutorunProcessor(processor: { processor_name: string; processor_importer: string; field_values?: Record<string, unknown> }): Observable<unknown> {
     return this.http.post('/api/settings/autorun-processors', processor);
   }
 

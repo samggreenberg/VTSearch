@@ -19,7 +19,7 @@ def _get_progress():
     return update_progress
 
 
-def _load_clips_from_pickle(file_path: Path) -> dict[int, dict[str, Any]]:
+def _load_clips_from_pickle(file_path: Path, thin: bool = False) -> dict[int, dict[str, Any]]:
     """Load medias from a pickle file without clearing a target dict.
 
     Returns a fresh dict mapping media-id to media-data.  This is a
@@ -29,7 +29,7 @@ def _load_clips_from_pickle(file_path: Path) -> dict[int, dict[str, Any]]:
     from vtsearch.datasets.loader import load_dataset_from_pickle
 
     temp_medias: dict[int, dict[str, Any]] = {}
-    load_dataset_from_pickle(file_path, temp_medias)
+    load_dataset_from_pickle(file_path, temp_medias, thin=thin)
     return temp_medias
 
 
@@ -90,7 +90,7 @@ class CombineDatasetsImporter(DatasetImporter):
                     i + 1,
                     len(paths),
                 )
-                source_clips = _load_clips_from_pickle(pkl_path)
+                source_clips = _load_clips_from_pickle(pkl_path, thin=thin)
 
                 if not source_clips:
                     progress("loading", f"Skipping empty dataset: {pkl_path.name}", i + 1, len(paths))

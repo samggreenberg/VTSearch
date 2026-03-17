@@ -18,14 +18,17 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_request_field
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
+    can_user_access as _reg_can_access,
     get_loaded_id as _reg_loaded_id,
-    list_datasets as _reg_list_datasets,
+    is_owner as _reg_is_owner,
+    list_datasets_for_user as _reg_list_for_user,
     rename_dataset as _reg_rename,
     set_loaded_id as _reg_set_loaded,
+    set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
     get_dataset as _reg_get,
@@ -33,8 +36,10 @@ from vtsearch.datasets.registry import (
 from vtsearch.utils import (
     bad_votes,
     build_diversity_tree,
+    cancel_dataset_progress,
     collapse_duplicates,
     medias,
+    get_dataset_display_name,
     get_dupe_count,
     get_progress,
     good_votes,
@@ -42,6 +47,8 @@ from vtsearch.utils import (
     snapshot_medias,
     update_progress,
 )
+from vtsearch.utils.progress import CancelledError
+from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
 import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
@@ -61,9 +68,22 @@ from vtsearch.routes.datasets_ui import datasets_ui_bp  # noqa: F401
 
 datasets_bp = Blueprint("datasets", __name__)
 
+
+def _normalize_media_type_param(value: str) -> str:
+    """Accept both ``type_id`` (``"image"``) and ``folder_import_name`` (``"images"``)."""
+    value = value.strip()
+    if not value:
+        return ""
+    from vtsearch.media import get_by_folder_name
+
+    try:
+        return get_by_folder_name(value).type_id
+    except KeyError:
+        return value  # assume it is already a type_id
+
+
 # Register the UI sub-blueprint.
 datasets_bp.register_blueprint(datasets_ui_bp)
-
 
 
 # ---------------------------------------------------------------------------
@@ -88,16 +108,10 @@ def embedders_list():
             (e.g. ``"images"``).  When provided, only embedders whose
             ``media_type_id`` matches are returned.
     """
-    from vtsearch.media import all_embedders_dict, embedders_for_type, get_by_folder_name
+    from vtsearch.media import all_embedders_dict, embedders_for_type
 
-    media_type = request.args.get("media_type", "").strip()
+    media_type = _normalize_media_type_param(request.args.get("media_type", ""))
     if media_type:
-        # Accept both type_id ("image") and folder_import_name ("images").
-        try:
-            mt = get_by_folder_name(media_type)
-            media_type = mt.type_id
-        except KeyError:
-            pass  # assume it is already a type_id
         embedders = [e.to_dict() for e in embedders_for_type(media_type)]
     else:
         embedders = all_embedders_dict()
@@ -119,16 +133,10 @@ def clippers_list():
             (e.g. ``"images"``).  When provided, only clippers whose
             ``media_type`` matches are returned.
     """
-    from vtsearch.media import all_clippers_dict, clippers_for_type, get_by_folder_name
+    from vtsearch.media import all_clippers_dict, clippers_for_type
 
-    media_type = request.args.get("media_type", "").strip()
+    media_type = _normalize_media_type_param(request.args.get("media_type", ""))
     if media_type:
-        # Accept both type_id ("image") and folder_import_name ("images").
-        try:
-            mt = get_by_folder_name(media_type)
-            media_type = mt.type_id
-        except KeyError:
-            pass  # assume it is already a type_id
         clippers = [c.to_dict() for c in clippers_for_type(media_type)]
     else:
         clippers = all_clippers_dict()
@@ -154,24 +162,13 @@ def converters_list():
             ``source_type`` matches are returned.
     """
     from vtsearch.converters import list_converters, list_converters_for_source, list_converters_for_target
-    from vtsearch.media import get_by_folder_name
 
-    target = request.args.get("target", "").strip()
-    source = request.args.get("source", "").strip()
+    target = _normalize_media_type_param(request.args.get("target", ""))
+    source = _normalize_media_type_param(request.args.get("source", ""))
 
     if target:
-        try:
-            mt = get_by_folder_name(target)
-            target = mt.type_id
-        except KeyError:
-            pass
         converters = list_converters_for_target(target)
     elif source:
-        try:
-            mt = get_by_folder_name(source)
-            source = mt.type_id
-        except KeyError:
-            pass
         converters = list_converters_for_source(source)
     else:
         converters = list_converters()
@@ -197,6 +194,7 @@ def dataset_status():
             "num_medias": len(snap),
             "has_votes": len(good_votes) + len(bad_votes) > 0,
             "media_type": media_type,
+            "display_name": get_dataset_display_name(),
             "num_dupes": get_dupe_count(),
         }
     )
@@ -206,6 +204,18 @@ def dataset_status():
 def dataset_progress():
     """Return the current progress of long-running operations."""
     return jsonify(get_progress())
+
+
+@datasets_bp.route("/api/dataset/cancel", methods=["POST"])
+def cancel_dataset_load():
+    """Cancel the currently running dataset load/import operation.
+
+    Sets a cancellation flag that is checked cooperatively by background
+    loading threads.  The thread will clean up partial state and set
+    progress to idle.
+    """
+    cancel_dataset_progress()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -257,9 +267,10 @@ def combine_datasets_route():
     if not isinstance(dataset_paths, list) or len(dataset_paths) < 2:
         return jsonify({"error": "Provide at least two dataset file paths."}), 400
 
+    _base = _paths.get_file_access_base_dir()
     for p in dataset_paths:
         try:
-            _paths.validate_server_filepath(str(p))
+            _paths.validate_server_filepath(str(p), base_dir=_base)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         if not Path(p).exists():
@@ -345,13 +356,11 @@ def stage_import(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
-    # Pass through the optional "converters" key.
-    if file_keys:
-        conv = request.form.get("converters", "")
-    else:
-        conv = (request.get_json(force=True) or {}).get("converters", "")
-    if conv:
-        field_values["converters"] = conv
+    # Pass through optional keys not declared as plugin fields.
+    for key in ("converters",):
+        val = get_request_field(key, bool(file_keys))
+        if val:
+            field_values[key] = val
 
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
@@ -425,30 +434,11 @@ def import_dataset(importer_name: str):
                 return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
             field_values[f.key] = body.get(f.key, f.default)
 
-    # Pass through the optional "converters" key for importers that support
-    # converter selection (e.g. folder, http_archive).
-    if file_keys:
-        converters_val = request.form.get("converters", "")
-    else:
-        converters_val = (request.get_json(force=True) or {}).get("converters", "")
-    if converters_val:
-        field_values["converters"] = converters_val
-
-    # Pass through the optional "clipper" key for post-import clipping.
-    if file_keys:
-        clipper_val = request.form.get("clipper", "")
-    else:
-        clipper_val = (request.get_json(force=True) or {}).get("clipper", "")
-    if clipper_val:
-        field_values["clipper"] = clipper_val
-
-    # Pass through the optional "embedder" key for embedder selection.
-    if file_keys:
-        embedder_val = request.form.get("embedder", "")
-    else:
-        embedder_val = (request.get_json(force=True) or {}).get("embedder", "")
-    if embedder_val:
-        field_values["embedder"] = embedder_val
+    # Pass through optional keys not declared as plugin fields.
+    for key in ("converters", "clipper", "embedder"):
+        val = get_request_field(key, bool(file_keys))
+        if val:
+            field_values[key] = val
 
     _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started"})
@@ -535,7 +525,7 @@ def load_dataset_folder():
         return jsonify({"error": "No folder path provided"}), 400
 
     try:
-        _paths.validate_server_filepath(str(folder_path))
+        _paths.validate_server_filepath(str(folder_path), base_dir=_paths.get_file_access_base_dir())
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -568,8 +558,11 @@ def export_dataset():
             download_name="vtsearch_dataset.pkl",
             as_attachment=True,
         )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Dataset export failed")
+        return jsonify({"error": "Dataset export failed"}), 500
 
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
@@ -587,9 +580,13 @@ def clear_dataset_route():
 
 @datasets_bp.route("/api/datasets/registry")
 def list_registered_datasets():
-    """Return all registered datasets with their loaded state."""
-    entries = _reg_list_datasets()
+    """Return registered datasets visible to the current user."""
+    from vtsearch.auth import get_current_user
+
+    entries = _reg_list_for_user(get_current_user())
     loaded_id = _reg_loaded_id()
+    from vtsearch.media import get_clipper
+
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
         if entry["loaded"]:
@@ -597,49 +594,84 @@ def list_registered_datasets():
         else:
             entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
+        entry.setdefault("readers", [])
+        # Resolve clipper name to display name; default clippers show as "-"
+        raw_clipper = entry.get("clipper", "")
+        if raw_clipper:
+            if raw_clipper.endswith("_default"):
+                entry["clipper"] = "-"
+            else:
+                try:
+                    entry["clipper"] = get_clipper(raw_clipper).display_name
+                except KeyError:
+                    pass  # keep raw name if clipper not found
     return jsonify({"datasets": entries})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
 def load_registered_dataset(dataset_id: str):
     """Load a registered dataset from its saved pkl file."""
+    from vtsearch.auth import get_current_user
+
     entry = _reg_get(dataset_id)
     if entry is None:
         return jsonify({"error": "Dataset not found in registry"}), 404
+
+    if not _reg_can_access(dataset_id, get_current_user()):
+        return jsonify({"error": "Access denied"}), 403
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
-    _LOAD_STEPS = 4  # read pickle, process items, build diversity index, warm up embedder
+    _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
+
+    # Reset the cancellation flag so a previous cancel does not immediately
+    # abort this new operation.
+    _dataset_progress_tracker.reset_cancel()
 
     # Set progress to "loading" synchronously so the frontend never sees a
     # stale "idle" status from a previous operation before the thread starts.
     update_progress("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
-        update_progress(status, message, current, total, step=2, total_steps=_LOAD_STEPS)
+        _dataset_progress_tracker.check_cancelled()
+        update_progress(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
 
     def load_task():
         try:
             update_progress(
-                "loading", "Clearing previous dataset…", 0, 0,
-                step=1, total_steps=_LOAD_STEPS,
+                "loading",
+                "Preparing…",
+                0,
+                0,
+                step=1,
+                total_steps=_LOAD_STEPS,
             )
             clear_dataset()
             _reg_set_loaded(None)
             gc.collect()
             load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
+            _dataset_progress_tracker.check_cancelled()
             update_progress(
-                "loading", "Removing duplicates…", 0, 0,
-                step=3, total_steps=_LOAD_STEPS,
+                "loading",
+                "Removing duplicates…",
+                0,
+                0,
+                step=2,
+                total_steps=_LOAD_STEPS,
             )
             collapse_duplicates(medias)
+
             def _diversity_progress(current: int, total: int) -> None:
+                _dataset_progress_tracker.check_cancelled()
                 update_progress(
-                    "loading", "Building diversity index…",
-                    current=current, total=total,
-                    step=3, total_steps=_LOAD_STEPS,
+                    "loading",
+                    "Building diversity index…",
+                    current=current,
+                    total=total,
+                    step=2,
+                    total_steps=_LOAD_STEPS,
                 )
 
             _diversity_progress(0, 0)
@@ -648,7 +680,11 @@ def load_registered_dataset(dataset_id: str):
             # Update item count and dupe count in case they changed
             _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
             set_dataset_display_name(entry.get("name", ""))
-            _load_embedder_for_clips()
+            _load_embedder_for_clips(step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
+        except CancelledError:
+            medias.clear()
+            gc.collect()
+            update_progress("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except MemoryError:
             medias.clear()
             gc.collect()
@@ -658,7 +694,8 @@ def load_registered_dataset(dataset_id: str):
 
     # Signal "loading" before the thread starts so frontend polling never
     # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+    # Clear stale error from any previous load.
+    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_LOAD_STEPS)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
@@ -679,6 +716,11 @@ def unload_registered_dataset(dataset_id: str):
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
 def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can delete it"}), 403
+
     loaded = _reg_loaded_id()
     if loaded == dataset_id:
         clear_dataset()
@@ -692,6 +734,11 @@ def delete_registered_dataset(dataset_id: str):
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
 def rename_registered_dataset(dataset_id: str):
     """Rename a registered dataset."""
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can rename it"}), 403
+
     data = request.get_json(force=True, silent=True) or {}
     new_name = data.get("name", "").strip()
     if not new_name:
@@ -703,6 +750,27 @@ def rename_registered_dataset(dataset_id: str):
     if _reg_loaded_id() == dataset_id:
         set_dataset_display_name(new_name)
     return jsonify({"ok": True, "name": new_name})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/readers", methods=["PUT"])
+def update_dataset_readers(dataset_id: str):
+    """Update the readers list for a dataset.  Only the creator may call this.
+
+    Body: ``{"readers": ["alice", "bob"]}``
+    Use ``["*"]`` to make the dataset public to all users.
+    """
+    from vtsearch.auth import get_current_user
+
+    data = request.get_json(force=True, silent=True) or {}
+    readers = data.get("readers")
+    if not isinstance(readers, list) or not all(isinstance(r, str) for r in readers):
+        return jsonify({"error": "readers must be a list of strings"}), 400
+
+    ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
+    if not ok:
+        status = 403 if "creator" in err else 404
+        return jsonify({"error": err}), status
+    return jsonify({"ok": True, "readers": readers})
 
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
@@ -748,10 +816,11 @@ def _load_from_origin(source: dict):
         return jsonify({"error": f"Cannot reload from {importer_name} origin"}), 400
 
     # Validate any server file paths in the field values
+    _base = _paths.get_file_access_base_dir()
     for key, val in field_values.items():
         if isinstance(val, str) and ("/" in val or "\\" in val):
             try:
-                _paths.validate_server_filepath(val)
+                _paths.validate_server_filepath(val, base_dir=_base)
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
 

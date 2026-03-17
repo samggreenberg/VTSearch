@@ -6,6 +6,7 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { DetectorsApiService } from '../../services/detectors-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
@@ -14,12 +15,13 @@ import { SortStateService, SortMode, SelectMode, SortedItem } from '../../servic
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
+import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
 
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent, ResortPromptModalComponent],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -36,14 +38,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private gridColumnsLeftDict: Record<string, number> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
-  private panelPctLeftDict: Record<string, number | null> = {};
-  private panelPctRightDict: Record<string, number | null> = {};
+  private panelPxLeftDict: Record<string, number> = {};
+  private panelPxRightDict: Record<string, number> = {};
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
   autopilotEnabled = true;
   progressModalMetric: ProgressMetric | null = null;
+
+  // Re-sort prompt state
+  showResortPrompt = false;
+  resortCurrentType: 'text' | 'media' = 'text';
+  resortCurrentDisplay = '';
+  private resortInterval = 10;
+  private resortVoteCount = 0;
+  private resortNextThreshold = 0;
 
   private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
@@ -55,6 +65,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
   private autopilotTextSortPending = false;
+  private autopilotMediaSortPending = false;
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -64,6 +75,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private sortingApi: SortingApiService,
+    private detectorsApi: DetectorsApiService,
     private mediasApi: MediasApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
@@ -94,12 +106,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPct(newType);
+            this.applyPanelPx(newType);
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
           this.autopilotTextSortPending = false;
           this.triggerAutopilotTextSort();
+        }
+        if (this.autopilotMediaSortPending && medias.length > 0) {
+          this.autopilotMediaSortPending = false;
+          this.triggerAutopilotMediaSort();
         }
       });
 
@@ -112,7 +128,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
           this.sortState.setSortMode('learned');
-          this.onLearnedSort();
+          this.onLearnedSort(false);
         }
         else if (curr.phase === 'new') this.sortState.setSelectMode('new');
       });
@@ -163,7 +179,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    this.savePanelPct('left');
+    this.savePanelPx('left');
   }
 
   // --- Right divider drag ---
@@ -192,7 +208,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
-    this.savePanelPct('right');
+    this.savePanelPx('right');
   }
 
   // --- Data loading ---
@@ -233,16 +249,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         const pplDict = settings.panel_pct_left;
         if (pplDict && typeof pplDict === 'object') {
-          this.panelPctLeftDict = pplDict as Record<string, number | null>;
+          this.panelPxLeftDict = pplDict as Record<string, number>;
           if (this.currentMediaType) {
-            this.applyPanelPct(this.currentMediaType);
+            this.applyPanelPx(this.currentMediaType);
           }
         }
         const pprDict = settings.panel_pct_right;
         if (pprDict && typeof pprDict === 'object') {
-          this.panelPctRightDict = pprDict as Record<string, number | null>;
+          this.panelPxRightDict = pprDict as Record<string, number>;
           if (this.currentMediaType) {
-            this.applyPanelPct(this.currentMediaType);
+            this.applyPanelPx(this.currentMediaType);
           }
         }
         if (settings.autopilot_enabled != null) {
@@ -255,6 +271,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (settings.inclusion != null) {
           this.sortState.setInclusion(settings.inclusion);
+        }
+        if (settings.autopilot_resort_interval != null) {
+          this.resortInterval = settings.autopilot_resort_interval;
+          // Initialize the threshold if not yet set
+          if (this.resortNextThreshold === 0) {
+            this.resortNextThreshold = this.resortInterval;
+          }
         }
       });
   }
@@ -324,7 +347,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLoadSort(): void {
-    // Will be fully wired in Phase 7 (modals for loading detectors/examples)
+    // Re-sort using existing load sort results when switching back to load mode
+  }
+
+  onDetectorLoaded(data: unknown): void {
+    const detector = data as Record<string, unknown>;
+    const name = (detector['name'] as string) || 'Detector';
+    this.sortState.setSortMode('load');
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Scoring with detector...');
+    this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (response) => {
+        this.sortState.setSortResults(
+          response.results.map((r) => ({ id: r.id, score: r.score })),
+          response.threshold,
+        );
+        this.sortState.setLoadSortLabel(name);
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
+        this.autoSelectNext();
+      },
+      error: () => {
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('Detector sort failed');
+      },
+    });
+  }
+
+  onExampleSortStarted(data: unknown): void {
+    const response = data as { results: { id: number; similarity: number }[]; threshold: number };
+    this.sortState.setSortMode('load');
+    this.sortState.setSortResults(
+      response.results.map((r) => ({ id: r.id, score: r.similarity })),
+      response.threshold,
+    );
+    this.sortState.setLoadSortLabel('Example media');
+    this.sortState.setSortBusy(false);
+    this.sortState.setSortStatus('');
+    this.autoSelectNext();
   }
 
   // --- Select mode ---
@@ -386,11 +446,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.voteState.applyOptimisticVote(event.id, event.vote);
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
       this.scheduleLearnedSort(false);
     }
+    this.checkResortPrompt();
   }
 
   // --- Indicators ---
@@ -415,12 +477,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onAutopilotStart(): void {
     this.sortState.setSelectMode('top');
+    // Initialize re-sort tracking
+    this.resortVoteCount = 0;
+    this.resortNextThreshold = this.resortInterval;
     const textQuery = this.labelSession.textQuery;
+    const mediaExample = this.labelSession.mediaExample;
     if (textQuery) {
       if (this.mediaState.medias.length > 0) {
         this.triggerAutopilotTextSort();
       } else {
         this.autopilotTextSortPending = true;
+      }
+    } else if (mediaExample) {
+      if (this.mediaState.medias.length > 0) {
+        this.triggerAutopilotMediaSort();
+      } else {
+        this.autopilotMediaSortPending = true;
       }
     }
   }
@@ -430,6 +502,90 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (textQuery) {
       this.onTextSort(textQuery);
     }
+  }
+
+  private triggerAutopilotMediaSort(): void {
+    const mediaExample = this.labelSession.mediaExample;
+    if (mediaExample) {
+      this.sortState.setSortBusy(true);
+      this.sortState.setSortStatus('Sorting by example...');
+      this.sortingApi.exampleSortServer({ filename: mediaExample }).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (response) => {
+          this.sortState.setSortResults(
+            response.results.map((r) => ({ id: r.id, score: r.similarity })),
+            response.threshold,
+          );
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('');
+          this.sortState.setSortMode('load');
+          this.autoSelectNext();
+        },
+        error: () => {
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('Example sort failed');
+        },
+      });
+    }
+  }
+
+  // --- Re-sort prompt ---
+
+  private checkResortPrompt(): void {
+    // Only show during autopilot's "good" phase (sorting by example in top mode)
+    if (!this.autopilotStateService.running) return;
+    // Eagerly check phase transition so we don't show the prompt after the user
+    // has already found enough greens (the panel's ngOnChanges may not have run yet).
+    this.autopilotStateService.checkPhaseTransition(
+      this.voteState.goodVotes.size, this.voteState.badVotes.size,
+    );
+    const phase = this.autopilotStateService.state.phase;
+    if (phase !== 'good') return;
+
+    this.resortVoteCount++;
+    if (this.resortVoteCount >= this.resortNextThreshold) {
+      // Determine current example info for the prompt
+      if (this.labelSession.textQuery) {
+        this.resortCurrentType = 'text';
+        this.resortCurrentDisplay = this.labelSession.textQuery;
+      } else if (this.labelSession.mediaExample) {
+        this.resortCurrentType = 'media';
+        this.resortCurrentDisplay = this.labelSession.mediaExample;
+      } else {
+        return; // No example to prompt about
+      }
+      this.showResortPrompt = true;
+    }
+  }
+
+  onResortKeep(): void {
+    this.showResortPrompt = false;
+    // Multiply threshold by 1.5 for next prompt
+    this.resortNextThreshold = Math.round(this.resortNextThreshold * 1.5);
+    this.resortVoteCount = 0;
+  }
+
+  onResortNewExample(result: ResortResult): void {
+    this.showResortPrompt = false;
+    this.resortVoteCount = 0;
+    // Reset threshold back to the base interval
+    this.resortNextThreshold = this.resortInterval;
+
+    if (result.type === 'text') {
+      this.labelSession.textQuery = result.value;
+      this.labelSession.mediaExample = '';
+      this.sortState.setSelectMode('top');
+      this.triggerAutopilotTextSort();
+    } else {
+      this.labelSession.mediaExample = result.value;
+      this.labelSession.textQuery = '';
+      this.sortState.setSelectMode('top');
+      this.triggerAutopilotMediaSort();
+    }
+  }
+
+  onResortClosed(): void {
+    // Treat closing the modal as "keep"
+    this.onResortKeep();
   }
 
   onAutopilotToggleCollapse(): void {
@@ -456,13 +612,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onAutopilotStop(): void {
     const phase = this.autopilotStateService.state.phase;
+    const isMediaBased = !!this.labelSession.mediaExample && !this.labelSession.textQuery;
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
     if (phase === 'good') {
-      this.sortState.setSortMode('text');
+      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {
-      this.sortState.setSortMode('text');
+      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
       this.sortState.setSelectMode('hard');
     } else if (phase === 'hard') {
       this.sortState.setSortMode('learned');
@@ -471,35 +628,32 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortState.setSortMode('learned');
       this.sortState.setSelectMode('new');
     }
+
+    // Deactivate autopilot state so resort prompt and phase logic stop firing.
+    this.autopilotStateService.deactivate();
+    this.showResortPrompt = false;
   }
 
   // --- Panel percentage helpers ---
 
-  private savePanelPct(side: 'left' | 'right'): void {
+  private savePanelPx(side: 'left' | 'right'): void {
     if (!this.currentMediaType) return;
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-    if (layoutWidth <= 0) return;
     const px = side === 'left' ? this.leftWidth : this.rightWidth;
-    const pct = Math.round((px / layoutWidth) * 1000) / 1000; // 3 decimal places
     const key = side === 'left' ? 'panel_pct_left' : 'panel_pct_right';
-    const dict = side === 'left' ? this.panelPctLeftDict : this.panelPctRightDict;
-    dict[this.currentMediaType] = pct;
+    const dict = side === 'left' ? this.panelPxLeftDict : this.panelPxRightDict;
+    dict[this.currentMediaType] = px;
     this.settingsState.update({ [key]: { ...dict } }).subscribe();
   }
 
-  private applyPanelPct(mediaType: string): void {
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-    if (layoutWidth <= 0) return;
-    const leftPct = this.panelPctLeftDict[mediaType];
-    if (leftPct != null && !this.autopilotCollapsed) {
-      const px = Math.round(leftPct * layoutWidth);
-      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, px));
+  private applyPanelPx(mediaType: string): void {
+    const leftPx = this.panelPxLeftDict[mediaType];
+    if (leftPx != null && !this.autopilotCollapsed) {
+      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(this.LEFT_MAX, leftPx));
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
-    const rightPct = this.panelPctRightDict[mediaType];
-    if (rightPct != null) {
-      const px = Math.round(rightPct * layoutWidth);
-      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, px));
+    const rightPx = this.panelPxRightDict[mediaType];
+    if (rightPx != null) {
+      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(this.RIGHT_MAX, rightPx));
       this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }
   }

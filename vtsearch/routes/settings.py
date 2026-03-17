@@ -177,6 +177,24 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "autopilot_hard_reds must be a number"}), 400
 
+    if "autopilot_resort_interval" in body:
+        try:
+            val = body["autopilot_resort_interval"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "autopilot_resort_interval must be a number"}), 400
+            settings.set_autopilot_resort_interval(int(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "autopilot_resort_interval must be a number"}), 400
+
+    if "autopilot_goal_diversity" in body:
+        try:
+            val = body["autopilot_goal_diversity"]
+            if not isinstance(val, (int, float)):
+                return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
+            settings.set_autopilot_goal_diversity(int(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
+
     if "autoload_media_types" in body:
         val = body["autoload_media_types"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
@@ -196,6 +214,9 @@ def update_settings():
             return jsonify({"error": str(exc)}), 400
 
     # Directory path settings
+    import vtsearch.utils.paths as _paths
+
+    _dir_base = _paths.get_file_access_base_dir()
     for dir_key, setter in (
         ("saved_datasets_dir", settings.set_saved_datasets_dir),
         ("detectors_dir", settings.set_detectors_dir),
@@ -205,6 +226,12 @@ def update_settings():
             val = body[dir_key]
             if not isinstance(val, str) or not val.strip():
                 return jsonify({"error": f"{dir_key} must be a non-empty string"}), 400
+            # In multi-user mode, restrict directory paths to user's data dir
+            if _dir_base is not None:
+                try:
+                    _paths.validate_server_filepath(val.strip(), base_dir=_dir_base)
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
             setter(val.strip())
 
     return jsonify(settings.get_all())

@@ -88,6 +88,114 @@ describe('VoteStateService', () => {
     expect(service.learnedScores).toEqual({});
   });
 
+  it('applyOptimisticVote should add to good and set click time', () => {
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeTrue();
+    expect(service.badVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote should add to bad and set click time', () => {
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.badVotes.has(5)).toBeTrue();
+    expect(service.goodVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote click time should exceed existing max', () => {
+    // Load votes with existing click times
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush(mockVotes);
+    // mockVotes has click_times: { '1': 100, '2': 200 }
+
+    service.applyOptimisticVote(7, 'good');
+    expect(service.clickTimes['7']).toBe(201);
+  });
+
+  it('applyOptimisticVote toggle-off should not set click time', () => {
+    service.applyOptimisticVote(5, 'good');
+    const timeAfterAdd = service.clickTimes['5'];
+    expect(timeAfterAdd).toBe(1);
+
+    // Toggle off
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeFalse();
+    // Click time should remain unchanged (no new time set on removal)
+    expect(service.clickTimes['5']).toBe(1);
+  });
+
+  it('applyOptimisticVote should move from bad to good with new click time', () => {
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.clickTimes['5']).toBe(1);
+
+    service.applyOptimisticVote(5, 'good');
+    expect(service.goodVotes.has(5)).toBeTrue();
+    expect(service.badVotes.has(5)).toBeFalse();
+    expect(service.clickTimes['5']).toBe(2);
+  });
+
+  it('applyVotes should preserve optimistic vote when server has not caught up', () => {
+    // Simulate optimistic vote
+    service.applyOptimisticVote(10, 'good');
+    expect(service.goodVotes.has(10)).toBeTrue();
+    expect(service.clickTimes['10']).toBe(1);
+
+    // Server response arrives WITHOUT the new vote (stale data)
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush({
+      good: [1, 2],
+      bad: [3],
+      click_times: { '1': 100, '2': 200 },
+      learned_scores: {},
+    });
+
+    // Optimistic vote should be preserved
+    expect(service.goodVotes.has(10)).toBeTrue();
+    expect(service.clickTimes['10']).toBe(1);
+    // Server data should also be present
+    expect(service.goodVotes.has(1)).toBeTrue();
+    expect(service.goodVotes.has(2)).toBeTrue();
+  });
+
+  it('applyVotes should clear optimistic tracking once server confirms', () => {
+    // Simulate optimistic vote
+    service.applyOptimisticVote(10, 'good');
+
+    // Server response now includes the voted item
+    service.loadVotes();
+    httpMock.expectOne('/api/votes').flush({
+      good: [1, 2, 10],
+      bad: [3],
+      click_times: { '1': 100, '2': 200, '10': 300 },
+      learned_scores: {},
+    });
+
+    expect(service.goodVotes.has(10)).toBeTrue();
+    // Server's click time should be used now (not the optimistic one)
+    expect(service.clickTimes['10']).toBe(300);
+  });
+
+  it('stale polling should not remove optimistic bad vote', fakeAsync(() => {
+    service.startPolling(1000);
+    // Initial poll
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // User votes bad optimistically
+    service.applyOptimisticVote(5, 'bad');
+    expect(service.badVotes.has(5)).toBeTrue();
+
+    // Next poll arrives with stale data (no vote for 5)
+    tick(1000);
+    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+    // Optimistic bad vote should still be preserved
+    expect(service.badVotes.has(5)).toBeTrue();
+    expect(service.clickTimes['5']).toBe(1);
+
+    service.stopPolling();
+    discardPeriodicTasks();
+  }));
+
   it('goodVotes$ should emit on load', (done) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));

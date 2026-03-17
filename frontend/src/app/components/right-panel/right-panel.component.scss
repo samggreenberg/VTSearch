@@ -13,6 +13,12 @@
   padding: 0;
 }
 
+.import-row {
+  display: flex;
+  padding: 8px 16px;
+  flex-shrink: 0;
+}
+
 .sort-row {
   display: flex;
   align-items: center;
@@ -28,6 +34,28 @@
   ::ng-deep .label-sort-bar {
     border-bottom: none;
   }
+}
+
+.view-btn {
+  margin-right: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1.4;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+}
+
+.label-divider {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .export-row {
@@ -57,9 +85,11 @@
 }
 
 .import-btn {
-  margin-right: 8px;
+  flex: 1;
+  text-align: center;
 }
 
 .export-btn {
   flex: 1;
+  text-align: center;
 }

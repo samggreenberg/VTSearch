@@ -11,6 +11,13 @@ import {
   DetectorServerFilesResponse,
 } from '../models/api.models';
 
+export interface FindLabelWarning {
+  model_name: string;
+  total_labels: number;
+  resolved_labels: number;
+  failed_labels: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class DetectorsApiService {
   constructor(private http: HttpClient) {}
@@ -53,8 +60,13 @@ export class DetectorsApiService {
     return this.http.put(`/api/autorun-detectors/${name}/examples`, { examples });
   }
 
-  importDetectorPkl(data: unknown): Observable<unknown> {
-    return this.http.post('/api/autorun-detectors/import-pkl', data);
+  importDetectorPkl(file: File, name?: string): Observable<unknown> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    if (name) {
+      formData.append('name', name);
+    }
+    return this.http.post('/api/autorun-detectors/import-pkl', formData);
   }
 
   getServerFiles(): Observable<DetectorServerFilesResponse> {
@@ -145,8 +157,16 @@ export class DetectorsApiService {
     return this.http.post(`/api/autorun-detectors/from-label-import/${importerName}`, params);
   }
 
+  findCheckLabels(params: Record<string, unknown>): Observable<{ warnings: FindLabelWarning[] }> {
+    return this.http.post<{ warnings: FindLabelWarning[] }>('/api/find/check-labels', params);
+  }
+
   find(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/find', params);
+  }
+
+  getFindProgress(): Observable<unknown> {
+    return this.http.get('/api/find/progress');
   }
 
   // --- Pregen processors ---

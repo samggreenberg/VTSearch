@@ -331,6 +331,49 @@ class TestDashboardDatasetEmbedderColumn:
         assert ds["embedder"] == "clip"
 
 
+class TestDashboardSecurityIcon:
+    """Tests that the dataset registry API returns fields needed by the security icon."""
+
+    def test_dataset_registry_includes_created_by(self, client):
+        """Registered datasets include a created_by string for ownership checks."""
+        register_dataset(name="sec-ds", media_type="audio", num_items=5, pkl_path="/tmp/sec.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "created_by" in ds
+        assert isinstance(ds["created_by"], str)
+        assert len(ds["created_by"]) > 0
+
+    def test_dataset_registry_includes_readers(self, client):
+        """Registered datasets include a readers list for the access control UI."""
+        register_dataset(name="readers-ds", media_type="image", num_items=10, pkl_path="/tmp/readers.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        assert "readers" in ds
+        assert isinstance(ds["readers"], list)
+
+    def test_security_icon_in_frontend_bundle(self, client):
+        """The Angular bundle should contain the security icon shield path."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        # The shield SVG path used for the security icon
+        assert "Edit access list" in combined or "security-btn" in combined
+
+    def test_dataset_registry_created_by_defaults_to_current_user(self, client):
+        """Datasets created without explicit created_by use the current user."""
+        register_dataset(name="default-owner", media_type="text", num_items=3, pkl_path="/tmp/defown.pkl")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        ds = data["datasets"][0]
+        # In single-user mode, created_by defaults to "default"
+        assert ds["created_by"] == "default"
+
+
 class TestEmbeddersApiEndpoint:
     """Tests for the /api/embedders endpoint with optional media_type filtering."""
 
@@ -516,3 +559,130 @@ class TestDashboardColumnHeaders:
             combined += resp.data.decode("utf-8")
         assert "Autorun" in combined
         assert "Trainable" in combined
+
+
+class TestFindButtonValidation:
+    """Tests that the Find endpoint rejects invalid requests and that
+    the frontend bundle contains the resolved-count validation logic."""
+
+    def test_find_rejects_empty_model_ids(self, client):
+        """POST /api/find with no models returns 400."""
+        register_dataset(name="find-ds", media_type="audio", num_items=5, pkl_path="/tmp/find.pkl")
+        resp = client.get("/api/datasets/registry")
+        ds_id = resp.get_json()["datasets"][0]["id"]
+        resp = client.post("/api/find", json={"dataset_ids": [ds_id], "model_ids": []})
+        assert resp.status_code == 400
+        assert "No models selected" in resp.get_json()["error"]
+
+    def test_find_rejects_empty_dataset_ids(self, client):
+        """POST /api/find with no datasets returns 400."""
+        register_model(name="find-m", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        m_id = resp.get_json()["models"][0]["id"]
+        resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": [m_id]})
+        assert resp.status_code == 400
+        assert "No datasets selected" in resp.get_json()["error"]
+
+    def test_frontend_uses_resolved_model_count(self, client):
+        """The Angular bundle should use resolvedSelectedModels for Find validation."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "resolvedSelectedModels" in combined
+        assert "resolvedSelectedDatasets" in combined
+
+
+class TestFindProgress:
+    """Tests for the /api/find/progress endpoint and progress reporting."""
+
+    def test_find_progress_returns_idle_by_default(self, client):
+        """GET /api/find/progress returns idle state when no Find is running."""
+        resp = client.get("/api/find/progress")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "idle"
+        assert data["message"] == ""
+        assert data["step"] is None
+        assert data["total_steps"] is None
+
+    def test_find_progress_updates_during_find(self, client, tmp_path):
+        """The find_progress tracker is updated during /api/find execution."""
+        import pickle
+
+        import numpy as np
+
+        from vtsearch.utils.progress import find_progress
+
+        # Create a dataset pkl
+        ds_medias = {}
+        for i in range(3):
+            emb = np.random.RandomState(i + 50).randn(512).astype(np.float32)
+            ds_medias[i] = {
+                "id": i,
+                "type": "audio",
+                "embedding": emb,
+                "md5": f"prog_md5_{i}",
+                "filename": f"prog_{i}.wav",
+                "origin_name": f"prog_{i}.wav",
+            }
+        pkl_path = tmp_path / "prog_ds.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": ds_medias}, f)
+
+        ds = register_dataset(name="prog-ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
+
+        # Create a detector with weights
+        weights = [0.1] * 512 + [0.0]  # 512 weights + 1 bias
+        add_autorun_detector("prog-det", "audio", weights=weights, threshold=0.5)
+        m = register_model(name="prog-det", media_type="audio", trainable=False, detector_name="prog-det")
+
+        # Capture progress snapshots during find by monkey-patching update
+        snapshots = []
+        original_update = find_progress.update
+
+        def capturing_update(*args, **kwargs):
+            original_update(*args, **kwargs)
+            snapshots.append(find_progress.get())
+
+        find_progress.update = capturing_update
+        try:
+            resp = client.post("/api/find", json={"dataset_ids": [ds["id"]], "model_ids": [m["id"]]})
+        finally:
+            find_progress.update = original_update
+
+        assert resp.status_code == 200
+
+        # Should have progress snapshots from each phase
+        assert len(snapshots) >= 3  # at least: prepare models, load dataset, score
+
+        # Check step 1 (preparing models)
+        step1 = [s for s in snapshots if s.get("step") == 1]
+        assert len(step1) >= 1
+        assert step1[0]["total_steps"] == 3
+        assert step1[0]["status"] == "running"
+
+        # Check step 2 (loading dataset)
+        step2 = [s for s in snapshots if s.get("step") == 2]
+        assert len(step2) >= 1
+        assert "Loading dataset" in step2[0]["message"]
+
+        # Check step 3 (scoring)
+        step3 = [s for s in snapshots if s.get("step") == 3]
+        assert len(step3) >= 1
+        assert "Scoring" in step3[0]["message"]
+
+        # Final state should be idle
+        final = find_progress.get()
+        assert final["status"] == "idle"
+
+    def test_find_progress_resets_on_error(self, client):
+        """Progress resets to idle when Find returns an error."""
+        from vtsearch.utils.progress import find_progress
+
+        resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": []})
+        assert resp.status_code == 400
+        data = find_progress.get()
+        assert data["status"] == "idle"

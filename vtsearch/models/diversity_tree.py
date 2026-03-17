@@ -7,12 +7,13 @@ The tree supports:
 - Lookup: given a vector ID, return the name of its deepest (leaf) node.
 - Labeling: when a vector is labeled, mark its leaf and all ancestors as seen.
 - Unlabeling: when a label is removed, propagate unseen status upward.
-- Diversity level: the deepest tree level at which every node is seen.
+- Diversity level: the number of consecutive seen nodes in BFS order.
 - Next sample: a surprise-maximising element of the first unseen node in BFS order.
 """
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from collections.abc import Callable
 
@@ -21,6 +22,7 @@ import numpy as np
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
 DIVERSITY_TREE_MIN_NODE_SIZE = 20
+_N_INIT = 10  # number of k-means initialisations per node
 
 
 class DiversityTree:
@@ -71,12 +73,24 @@ class DiversityTree:
             ids = list(vectors.keys())
             total = len(ids)
             vecs = np.array([vectors[i] for i in ids], dtype=np.float32)
-            self._leaves_placed = 0
             self._on_progress = on_progress
-            self._total_vectors = total
+            # Estimate total k-means work: each tree level clusters ~N vectors
+            # total.  Number of levels ≈ log_k(N / min_node_size), capped at
+            # max_depth.  Progress is reported after each k-means call, weighted
+            # by the number of vectors in that call.
+            if total >= min_node_size and total >= 2 * k:
+                num_levels = max(1, math.ceil(math.log(total / min_node_size, k)))
+                num_levels = min(num_levels, max_depth)
+            else:
+                num_levels = 0
+            self._estimated_total_work = max(total * num_levels * _N_INIT, 1)
+            self._work_done = 0
             if on_progress:
-                on_progress(0, total)
+                on_progress(0, self._estimated_total_work)
             self._build_node("0", ids, vecs, depth=0, parent=None)
+            # Ensure we hit 100% at the end
+            if on_progress:
+                on_progress(self._estimated_total_work, self._estimated_total_work)
             self._on_progress = None
 
     def _build_node(
@@ -100,21 +114,42 @@ class DiversityTree:
         if len(ids) < self.min_node_size or depth >= self.max_depth:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
             return
 
         actual_k = min(self.k, len(ids))
         if actual_k < 2:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
             return
 
-        # Run k-means
+        # Run k-means in individual inits for granular progress reporting.
+        # Each of the N_INIT runs reports progress separately, so the UI
+        # updates during the expensive root clustering instead of sitting
+        # at 0% until it finishes.
         from sklearn.cluster import KMeans  # noqa: PLC0415
 
-        kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(vecs)
+        best_labels = None
+        best_inertia = float("inf")
+        for init_i in range(_N_INIT):
+            km = KMeans(
+                n_clusters=actual_k,
+                random_state=42 + init_i,
+                n_init=1,
+            )
+            candidate_labels = km.fit_predict(vecs)
+            if km.inertia_ < best_inertia:
+                best_inertia = km.inertia_
+                best_labels = candidate_labels
+
+            # Report progress after each init
+            self._work_done += len(ids)
+            if self._on_progress:
+                self._on_progress(
+                    min(self._work_done, self._estimated_total_work),
+                    self._estimated_total_work,
+                )
+
+        labels = best_labels
 
         children = []
         for ci in range(actual_k):
@@ -133,13 +168,6 @@ class DiversityTree:
         if not children:
             for vid in ids:
                 self.vector_to_leaf[vid] = name
-            self._report_leaf_progress(len(ids))
-
-    def _report_leaf_progress(self, count: int) -> None:
-        """Report progress when vectors are assigned to a leaf node."""
-        self._leaves_placed += count
-        if self._on_progress:
-            self._on_progress(self._leaves_placed, self._total_vectors)
 
     def lookup(self, vector_id: int) -> str:
         """Return the name of the deepest (leaf) node containing this vector."""
@@ -177,57 +205,29 @@ class DiversityTree:
             node = self.nodes[node]["parent"]
 
     def diversity_level(self) -> int:
-        """Return the deepest level where all nodes at that level and above are seen.
+        """Return the number of consecutive seen nodes in BFS order.
 
-        Returns -1 if even the root is unseen.
+        Traverses the tree in breadth-first order and counts how many nodes
+        are seen before hitting the first unseen node.  Returns 0 when nothing
+        is seen or the tree is empty.
         """
         if not self.nodes:
-            return -1
+            return 0
 
-        max_depth = max(self.nodes_by_depth.keys())
-        result = -1
-        for level in range(max_depth + 1):
-            nodes_at_level = self.nodes_by_depth.get(level, [])
-            if not nodes_at_level:
-                continue
-            if all(name in self.seen for name in nodes_at_level):
-                result = level
-            else:
+        queue = deque(["0"])
+        count = 0
+        while queue:
+            name = queue.popleft()
+            if name not in self.seen:
                 break
-        return result
+            count += 1
+            queue.extend(self.nodes[name]["children"])
+        return count
 
-    def fractional_diversity_level(self) -> float:
-        """Return the diversity level as a float with fractional progress.
-
-        The integer part is the deepest fully-covered level.  The fractional
-        part represents progress toward the next level: ``seen / total`` at
-        that level.  Returns -1.0 when nothing is seen.  When the tree is
-        fully covered, returns ``depth`` (as a float).
-        """
-        level = self.diversity_level()
-        d = self.depth()
-
-        if level < 0:
-            # Nothing seen yet — check if any nodes at level 0 are seen
-            nodes_at_zero = self.nodes_by_depth.get(0, [])
-            if not nodes_at_zero:
-                return -1.0
-            seen_count = sum(1 for name in nodes_at_zero if name in self.seen)
-            if seen_count == 0:
-                return -1.0
-            # Partial progress toward level 0
-            return -1.0 + seen_count / len(nodes_at_zero)
-
-        if level >= d:
-            return float(d)
-
-        next_level = level + 1
-        nodes_at_next = self.nodes_by_depth.get(next_level, [])
-        if not nodes_at_next:
-            return float(level)
-
-        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
-        return level + seen_count / len(nodes_at_next)
+    @property
+    def total_nodes(self) -> int:
+        """Return the total number of nodes in the tree."""
+        return len(self.nodes)
 
     def next_sample(
         self,
@@ -286,38 +286,17 @@ class DiversityTree:
         """Return span level details for the labeling progress indicator.
 
         Returns a dict with:
-        - level: deepest fully-seen level (-1 if none)
-        - fractional_level: float diversity level with partial progress
-        - depth: max tree depth
-        - next_level_seen: how many nodes at the next incomplete level are seen
-        - next_level_total: total nodes at the next incomplete level
+        - level: number of consecutive BFS-order seen nodes
+        - diversity_level: same as level
+        - depth: total number of nodes (the maximum diversity level)
+        - max_level: alias for depth
         """
         level = self.diversity_level()
-        frac = self.fractional_diversity_level()
-        d = self.depth()
-
-        next_level = level + 1
-        if next_level > d:
-            # All levels fully covered
-            return {
-                "level": level,
-                "fractional_level": round(frac, 4),
-                "diversity_level": round(frac, 4),
-                "depth": d,
-                "max_level": d,
-                "next_level_seen": 0,
-                "next_level_total": 0,
-            }
-
-        nodes_at_next = self.nodes_by_depth.get(next_level, [])
-        seen_count = sum(1 for name in nodes_at_next if name in self.seen)
+        total = self.total_nodes
 
         return {
             "level": level,
-            "fractional_level": round(frac, 4),
-            "diversity_level": round(frac, 4),
-            "depth": d,
-            "max_level": d,
-            "next_level_seen": seen_count,
-            "next_level_total": len(nodes_at_next),
+            "diversity_level": level,
+            "depth": total,
+            "max_level": total,
         }

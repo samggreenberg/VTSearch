@@ -137,23 +137,6 @@ describe('LabelListComponent', () => {
     });
   });
 
-  describe('meta text', () => {
-    it('should show click time index', () => {
-      const entry: LabelEntry = { id: 1, name: 'test', time: 5, score: -1, confidence: -1 };
-      expect(component.metaText(entry)).toBe('#5');
-    });
-
-    it('should show imported when no click time', () => {
-      const entry: LabelEntry = { id: 1, name: 'test', time: -1, score: -1, confidence: -1 };
-      expect(component.metaText(entry)).toBe('imported');
-    });
-
-    it('should show confidence percentage', () => {
-      const entry: LabelEntry = { id: 1, name: 'test', time: 3, score: 0.8, confidence: 0.8 };
-      expect(component.metaText(entry)).toBe('#3 \u00B7 80%');
-    });
-  });
-
   describe('view modes and thumbnails', () => {
     beforeEach(() => {
       component.medias = sampleMedias;

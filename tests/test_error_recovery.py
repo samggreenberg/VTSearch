@@ -110,45 +110,63 @@ class TestMissingRequiredFields:
         assert resp.status_code == 400
 
     def test_autorun_detector_missing_name(self):
-        resp = self.client.post("/api/autorun-detectors", json={
-            "media_type": "audio",
-        })
+        resp = self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "media_type": "audio",
+            },
+        )
         assert resp.status_code == 400
         assert "name" in resp.get_json()["error"]
 
     def test_autorun_detector_missing_media_type(self):
-        resp = self.client.post("/api/autorun-detectors", json={
-            "name": "test",
-        })
+        resp = self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "test",
+            },
+        )
         assert resp.status_code == 400
         assert "media_type" in resp.get_json()["error"]
 
     def test_autorun_detector_rename_missing_new_name(self):
-        self.client.post("/api/autorun-detectors", json={
-            "name": "rename_test",
-            "media_type": "audio",
-        })
+        self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "rename_test",
+                "media_type": "audio",
+            },
+        )
         resp = self.client.put("/api/autorun-detectors/rename_test/rename", json={})
         assert resp.status_code == 400
 
     def test_autodetect_flag_missing_autodetect(self):
-        self.client.post("/api/autorun-detectors", json={
-            "name": "ad_test",
-            "media_type": "audio",
-        })
+        self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "ad_test",
+                "media_type": "audio",
+            },
+        )
         resp = self.client.put("/api/autorun-detectors/ad_test/autodetect", json={})
         assert resp.status_code == 400
 
     def test_fill_from_sort_missing_threshold(self):
-        resp = self.client.post("/api/labels/fill-from-sort", json={
-            "sort_results": [{"id": 1, "score": 0.5}],
-        })
+        resp = self.client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": [{"id": 1, "score": 0.5}],
+            },
+        )
         assert resp.status_code == 400
 
     def test_fill_from_sort_missing_sort_results(self):
-        resp = self.client.post("/api/labels/fill-from-sort", json={
-            "threshold": 0.5,
-        })
+        resp = self.client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "threshold": 0.5,
+            },
+        )
         assert resp.status_code == 400
 
     def test_exporter_missing_name(self):
@@ -164,15 +182,21 @@ class TestMissingRequiredFields:
         assert resp.status_code == 400
 
     def test_autorun_processor_missing_name(self):
-        resp = self.client.post("/api/settings/autorun-processors", json={
-            "processor_importer": "some_importer",
-        })
+        resp = self.client.post(
+            "/api/settings/autorun-processors",
+            json={
+                "processor_importer": "some_importer",
+            },
+        )
         assert resp.status_code == 400
 
     def test_autorun_processor_missing_importer(self):
-        resp = self.client.post("/api/settings/autorun-processors", json={
-            "processor_name": "some_name",
-        })
+        resp = self.client.post(
+            "/api/settings/autorun-processors",
+            json={
+                "processor_name": "some_name",
+            },
+        )
         assert resp.status_code == 400
 
 
@@ -189,10 +213,8 @@ class TestTypeMismatches:
 
     def test_inclusion_boolean_value(self):
         resp = self.client.post("/api/inclusion", json={"inclusion": True})
-        # bool is a subclass of int in Python, so isinstance(True, (int, float))
-        # passes validation.  True → int(1) → clamped to 1.
-        assert resp.status_code == 200
-        assert resp.get_json()["inclusion"] == 1
+        # Booleans are explicitly rejected even though bool is a subclass of int.
+        assert resp.status_code == 400
 
     def test_safe_thresholds_string_value(self):
         resp = self.client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
@@ -231,18 +253,24 @@ class TestTypeMismatches:
         assert resp.status_code == 400
 
     def test_fill_from_sort_threshold_string(self):
-        resp = self.client.post("/api/labels/fill-from-sort", json={
-            "sort_results": [{"id": 1, "score": 0.5}],
-            "threshold": "high",
-        })
+        resp = self.client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": [{"id": 1, "score": 0.5}],
+                "threshold": "high",
+            },
+        )
         assert resp.status_code == 400
 
     def test_fill_from_sort_invalid_sides(self):
-        resp = self.client.post("/api/labels/fill-from-sort", json={
-            "sort_results": [{"id": 1, "score": 0.5}],
-            "threshold": 0.5,
-            "sides": "left",
-        })
+        resp = self.client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": [{"id": 1, "score": 0.5}],
+                "threshold": 0.5,
+                "sides": "left",
+            },
+        )
         assert resp.status_code == 400
 
     def test_labels_import_labels_not_list(self):
@@ -290,15 +318,21 @@ class TestNonexistentResources:
         assert resp.status_code == 404
 
     def test_rename_nonexistent_detector(self):
-        resp = self.client.put("/api/autorun-detectors/does_not_exist/rename", json={
-            "new_name": "new",
-        })
+        resp = self.client.put(
+            "/api/autorun-detectors/does_not_exist/rename",
+            json={
+                "new_name": "new",
+            },
+        )
         assert resp.status_code == 400  # "not found or new name already exists"
 
     def test_autodetect_nonexistent_detector(self):
-        resp = self.client.put("/api/autorun-detectors/does_not_exist/autodetect", json={
-            "autodetect": True,
-        })
+        resp = self.client.put(
+            "/api/autorun-detectors/does_not_exist/autodetect",
+            json={
+                "autodetect": True,
+            },
+        )
         assert resp.status_code == 404
 
     def test_export_nonexistent_detector(self):
@@ -306,15 +340,21 @@ class TestNonexistentResources:
         assert resp.status_code == 404
 
     def test_set_examples_nonexistent_detector(self):
-        resp = self.client.put("/api/autorun-detectors/does_not_exist/examples", json={
-            "examples": [],
-        })
+        resp = self.client.put(
+            "/api/autorun-detectors/does_not_exist/examples",
+            json={
+                "examples": [],
+            },
+        )
         assert resp.status_code == 404
 
     def test_unknown_exporter(self):
-        resp = self.client.post("/api/exporters/export", json={
-            "exporter_name": "nonexistent",
-        })
+        resp = self.client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "nonexistent",
+            },
+        )
         assert resp.status_code == 404
 
     def test_unknown_label_importer(self):
@@ -419,7 +459,7 @@ class TestEmptyState:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["id"] is None
-        assert data["diversity_level"] == -1
+        assert data["diversity_level"] == 0
 
     def test_textsort_suggestions_empty(self):
         resp = self.client.get("/api/textsort-suggestions")
@@ -485,12 +525,15 @@ class TestBoundaryValues:
         assert resp.status_code == 200
 
     def test_fill_from_sort_empty_results(self):
-        resp = self.client.post("/api/labels/fill-from-sort", json={
-            "sort_results": [],
-            "threshold": 0.5,
-            "sides": "both",
-            "confirm": False,
-        })
+        resp = self.client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": [],
+                "threshold": 0.5,
+                "sides": "both",
+                "confirm": False,
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["good_count"] == 0
@@ -505,13 +548,16 @@ class TestBoundaryValues:
 
     def test_labels_import_with_invalid_label_values(self):
         """Labels with value other than good/bad should be skipped, not crash."""
-        resp = self.client.post("/api/labels/import", json={
-            "labels": [
-                {"md5": "abc", "label": "neutral"},
-                {"md5": "def", "label": 123},
-                {"md5": "ghi"},  # missing label
-            ],
-        })
+        resp = self.client.post(
+            "/api/labels/import",
+            json={
+                "labels": [
+                    {"md5": "abc", "label": "neutral"},
+                    {"md5": "def", "label": 123},
+                    {"md5": "ghi"},  # missing label
+                ],
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["skipped"] == 3
@@ -526,42 +572,57 @@ class TestDetectorEdgeCases:
 
     def test_export_detector_no_weights(self):
         """Exporting a detector with no weights should return 400."""
-        self.client.post("/api/autorun-detectors", json={
-            "name": "no_weights",
-            "media_type": "audio",
-        })
+        self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "no_weights",
+                "media_type": "audio",
+            },
+        )
         resp = self.client.get("/api/autorun-detectors/no_weights/export")
         assert resp.status_code == 400
         assert "no trained weights" in resp.get_json()["error"]
 
     def test_create_detector_with_empty_name(self):
-        resp = self.client.post("/api/autorun-detectors", json={
-            "name": "",
-            "media_type": "audio",
-        })
+        resp = self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "",
+                "media_type": "audio",
+            },
+        )
         assert resp.status_code == 400
 
     def test_create_detector_with_whitespace_name(self):
-        resp = self.client.post("/api/autorun-detectors", json={
-            "name": "   ",
-            "media_type": "audio",
-        })
+        resp = self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "   ",
+                "media_type": "audio",
+            },
+        )
         assert resp.status_code == 400
 
     def test_set_examples_missing_examples_field(self):
-        self.client.post("/api/autorun-detectors", json={
-            "name": "ex_test",
-            "media_type": "audio",
-        })
+        self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "ex_test",
+                "media_type": "audio",
+            },
+        )
         resp = self.client.put("/api/autorun-detectors/ex_test/examples", json={})
         assert resp.status_code == 400
 
     def test_double_delete_detector(self):
         """Deleting a detector twice: second should 404."""
-        self.client.post("/api/autorun-detectors", json={
-            "name": "del_twice",
-            "media_type": "audio",
-        })
+        self.client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "del_twice",
+                "media_type": "audio",
+            },
+        )
         resp1 = self.client.delete("/api/autorun-detectors/del_twice")
         assert resp1.status_code == 200
         resp2 = self.client.delete("/api/autorun-detectors/del_twice")
@@ -576,29 +637,38 @@ class TestSettingsEdgeCases:
         self.client = app_module.app.test_client()
 
     def test_update_multiple_settings_at_once(self):
-        resp = self.client.put("/api/settings", json={
-            "volume": 0.7,
-            "swipe_animation": False,
-            "enrich_descriptions": True,
-        })
+        resp = self.client.put(
+            "/api/settings",
+            json={
+                "volume": 0.7,
+                "swipe_animation": False,
+                "enrich_descriptions": True,
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "volume" in data
 
     def test_update_with_unknown_key_ignored(self):
         """Unknown keys should be ignored, not cause errors."""
-        resp = self.client.put("/api/settings", json={
-            "volume": 0.5,
-            "unknown_setting": "value",
-        })
+        resp = self.client.put(
+            "/api/settings",
+            json={
+                "volume": 0.5,
+                "unknown_setting": "value",
+            },
+        )
         assert resp.status_code == 200
 
     def test_autorun_processor_add_and_remove(self):
-        resp = self.client.post("/api/settings/autorun-processors", json={
-            "processor_name": "test_proc",
-            "processor_importer": "some_importer",
-            "field_values": {"key": "value"},
-        })
+        resp = self.client.post(
+            "/api/settings/autorun-processors",
+            json={
+                "processor_name": "test_proc",
+                "processor_importer": "some_importer",
+                "field_values": {"key": "value"},
+            },
+        )
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
@@ -615,11 +685,14 @@ class TestVoteEdgeCases:
 
     def test_vote_with_extra_fields_ignored(self):
         """Extra fields in vote request should not cause errors."""
-        resp = self.client.post("/api/medias/1/vote", json={
-            "vote": "good",
-            "confidence": 0.95,
-            "note": "very relevant",
-        })
+        resp = self.client.post(
+            "/api/medias/1/vote",
+            json={
+                "vote": "good",
+                "confidence": 0.95,
+                "note": "very relevant",
+            },
+        )
         assert resp.status_code == 200
 
     def test_rapid_toggle_votes(self):

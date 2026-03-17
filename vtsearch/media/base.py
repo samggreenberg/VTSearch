@@ -41,6 +41,7 @@ __all__ = [
     "Processor",
     "ProgressCallback",
     "intercept_tqdm_progress",
+    "intercept_weight_loading_progress",
 ]
 
 
@@ -115,6 +116,120 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
         tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
         tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
+
+
+@contextlib.contextmanager
+def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:
+    """Track tensor-level progress during model weight loading.
+
+    HuggingFace ``transformers`` with ``low_cpu_mem_usage=True`` dispatches
+    tensors one-by-one via ``set_module_tensor_to_device`` from ``accelerate``.
+    PyTorch's ``load_state_dict`` (used by ``sentence-transformers``) loads
+    tensors via ``__getitem__`` on the state dict.
+
+    This context manager monkey-patches both paths to count tensor operations
+    and report ``(current, total)`` progress via *callback*.  The total is
+    discovered by also intercepting ``safetensors.torch.load_file`` and
+    ``torch.load`` to count keys in loaded state dicts.
+    """
+    _counter = [0]
+    _total = [0]
+    _patches: list[tuple] = []
+
+    def _report() -> None:
+        if _total[0] > 0:
+            callback("loading", label, min(_counter[0], _total[0]), _total[0])
+
+    # --- Intercept safetensors.torch.load_file to learn total tensor count ---
+    try:
+        import safetensors.torch as _st  # noqa: PLC0415
+
+        _orig_lf = _st.load_file
+
+        def _tracked_lf(*a: Any, **kw: Any) -> Any:
+            r = _orig_lf(*a, **kw)
+            _total[0] += len(r)
+            return r
+
+        _st.load_file = _tracked_lf
+        _patches.append((_st, "load_file", _orig_lf))
+    except ImportError:
+        pass
+
+    # --- Intercept torch.load for .bin weight files ---
+    try:
+        import torch as _torch  # noqa: PLC0415
+
+        _orig_tl = _torch.load
+
+        def _tracked_tl(*a: Any, **kw: Any) -> Any:
+            r = _orig_tl(*a, **kw)
+            if isinstance(r, dict) and r:
+                sample = next(iter(r.values()))
+                if isinstance(sample, _torch.Tensor):
+                    _total[0] += len(r)
+            return r
+
+        _torch.load = _tracked_tl
+        _patches.append((_torch, "load", _orig_tl))
+    except ImportError:
+        pass
+
+    # --- Intercept set_module_tensor_to_device (HF with low_cpu_mem_usage) ---
+    try:
+        import transformers.modeling_utils as _tm  # noqa: PLC0415
+
+        _orig_smttd = _tm.set_module_tensor_to_device
+
+        def _tracked_smttd(*a: Any, **kw: Any) -> Any:
+            r = _orig_smttd(*a, **kw)
+            _counter[0] += 1
+            _report()
+            return r
+
+        _tm.set_module_tensor_to_device = _tracked_smttd
+        _patches.append((_tm, "set_module_tensor_to_device", _orig_smttd))
+    except (ImportError, AttributeError):
+        pass
+
+    # --- Intercept Module.load_state_dict (PyTorch / SentenceTransformers) ---
+    try:
+        import torch.nn as _nn  # noqa: PLC0415
+
+        _orig_lsd = _nn.Module.load_state_dict
+
+        class _CountingStateDict(dict):
+            """Dict wrapper that counts unique key accesses for progress."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
+                self._seen: set = set()
+
+            def __getitem__(self, key: Any) -> Any:
+                val = super().__getitem__(key)
+                if key not in self._seen:
+                    self._seen.add(key)
+                    _counter[0] += 1
+                    _report()
+                return val
+
+        def _tracked_lsd(self_model: Any, state_dict: Any, *a: Any, **kw: Any) -> Any:
+            if isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
+                if _total[0] == 0:
+                    _total[0] = len(state_dict)
+                state_dict = _CountingStateDict(state_dict)
+            return _orig_lsd(self_model, state_dict, *a, **kw)
+
+        _nn.Module.load_state_dict = _tracked_lsd  # type: ignore[assignment]
+        _patches.append((_nn.Module, "load_state_dict", _orig_lsd))
+    except ImportError:
+        pass
+
+    try:
+        yield
+    finally:
+        for obj, attr, orig in _patches:
+            setattr(obj, attr, orig)
 
 
 class MediaEmbedder(ABC):
@@ -896,12 +1011,53 @@ class MediaClipper(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Unique identifier for this clipper, e.g. ``"video_tiling_2s"``."""
+        """Unique identifier for this clipper, e.g. ``"video_tiling"``."""
 
     @property
     @abstractmethod
     def media_type(self) -> str:
         """The media ``type_id`` this clipper operates on (e.g. ``"audio"``)."""
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable name for UI dropdowns.
+
+        Defaults to title-casing the :attr:`name` with underscores replaced
+        by spaces (e.g. ``"sound_tiling"`` → ``"Sound Tiling"``).  Subclasses
+        may override for a custom label.
+        """
+        return self.name.replace("_", " ").title()
+
+    # ------------------------------------------------------------------
+    # Parameters
+    # ------------------------------------------------------------------
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        """Return a list of user-configurable parameter descriptors.
+
+        Each descriptor is a dict with keys:
+
+        * ``key`` — parameter name (used in :meth:`with_params`).
+        * ``label`` — human-readable label for the UI.
+        * ``type`` — ``"number"`` or ``"string"``.
+        * ``default`` — current/default value.
+        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+
+        Clippers with no configurable parameters return ``[]`` (the default).
+        """
+        return []
+
+    def with_params(self, params: dict[str, Any]) -> "MediaClipper":
+        """Return a **new** clipper of the same type with overridden parameters.
+
+        *params* is a dict mapping parameter keys (as declared by
+        :attr:`parameters`) to their new values.  Unknown keys are ignored.
+
+        The default implementation returns ``self`` unchanged (suitable for
+        clippers that have no parameters).
+        """
+        return self
 
     # ------------------------------------------------------------------
     # Clipping
@@ -927,7 +1083,12 @@ class MediaClipper(ABC):
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable summary of this clipper's metadata."""
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
+            "display_name": self.display_name,
             "media_type": self.media_type,
         }
+        params = self.parameters
+        if params:
+            d["parameters"] = params
+        return d

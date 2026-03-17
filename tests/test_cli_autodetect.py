@@ -191,17 +191,18 @@ class TestRunAutodetect:
         with pytest.raises(ValueError, match="missing 'weights'"):
             run_autodetect(str(dataset_path), str(bad_detector))
 
-    def test_detector_missing_threshold_raises_error(self, client, tmp_path):
+    def test_detector_missing_threshold_defaults_to_half(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
 
-        # Write detector with threshold removed
+        # Write detector with threshold removed — should default to 0.5
         del detector["threshold"]
         no_threshold_path = tmp_path / "no_threshold.json"
         no_threshold_path.write_text(json.dumps(detector))
 
-        with pytest.raises(ValueError, match="missing 'threshold'"):
-            run_autodetect(str(dataset_path), str(no_threshold_path))
+        # Should not raise; threshold defaults to 0.5
+        hits = run_autodetect(str(dataset_path), str(no_threshold_path))
+        assert isinstance(hits, list)
 
     def test_hits_do_not_contain_embedding(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)

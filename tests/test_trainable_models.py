@@ -557,3 +557,360 @@ class TestVoteSyncsToLoadedModel:
 
         entry = get_model(model_id)
         assert entry["num_training"] == 1
+
+
+class TestSeedVotesFromExamples:
+    """When loading a model with media examples, matching medias get auto-labeled Good."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_medias(self):
+        """Remove any media items inserted by seeding after each test."""
+        from vtsearch.utils import medias
+
+        saved = dict(medias)
+        yield
+        # Remove items that were added, restore any that were modified
+        medias.clear()
+        medias.update(saved)
+
+    def _create_example_file(self, media_bytes: bytes, filename: str = "ex.wav") -> str:
+        """Write *media_bytes* into data/example_media/<filename> and return the filename."""
+        from vtsearch.config import DATA_DIR
+
+        example_dir = DATA_DIR / "example_media"
+        example_dir.mkdir(parents=True, exist_ok=True)
+        dest = example_dir / filename
+        dest.write_bytes(media_bytes)
+        return filename
+
+    # ---- POST /api/votes/seed-from-examples ----
+
+    def test_seed_endpoint_adds_good_votes(self, client):
+        """Media examples whose MD5 matches a loaded media should become good votes."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        media_bytes = media["media_bytes"]
+
+        fname = self._create_example_file(media_bytes, "seed_test.wav")
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 1
+        assert data["skipped"] == 0
+        assert first_id in good_votes
+
+    def test_seed_skips_text_examples(self, client):
+        """Text examples should be skipped (only media examples are seeded)."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "text", "value": "dog barking"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+
+    def test_seed_skips_nonexistent_file(self, client):
+        """A media example whose file doesn't exist should be skipped."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": "no_such_file.wav"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+
+    def test_seed_unmatched_inserts_new_media(self, client):
+        """A media example not in the dataset should be embedded and inserted as a new media."""
+        from vtsearch.utils import good_votes, medias
+
+        original_count = len(medias)
+
+        # Create a file whose content differs from all loaded medias
+        fname = self._create_example_file(b"novel-example-content", "novel.wav")
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 1
+
+        # A new media should have been inserted
+        assert len(medias) == original_count + 1
+
+        # The new media should be in good_votes
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+
+        # The new media should have the example_media origin (not a dataset origin)
+        new_media = medias[new_id]
+        assert new_media["origin"]["importer"] == "example_media"
+        assert new_media["origin"]["params"]["filename"] == fname
+        assert new_media["filename"] == fname
+        assert new_media["embedding"] is not None
+
+    def test_seed_preserves_original_origins(self, client):
+        """Seeded medias should keep their original dataset origins."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        original_origin = media.get("origin")
+        original_origin_name = media.get("origin_name", "")
+
+        fname = self._create_example_file(media["media_bytes"], "origin_test.wav")
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        # Origin should be unchanged
+        assert medias[first_id].get("origin") == original_origin
+        assert medias[first_id].get("origin_name", "") == original_origin_name
+
+    def test_seed_appears_in_label_export(self, client):
+        """Seeded good votes should appear in the label export."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "export_test.wav")
+
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        res = client.get("/api/labels/export")
+        assert res.status_code == 200
+        labels = res.get_json()["labels"]
+        assert len(labels) >= 1
+        assert any(lbl["label"] == "good" for lbl in labels)
+
+    def test_new_example_appears_in_label_export(self, client):
+        """A non-dataset example inserted by seeding should appear in label export."""
+        fname = self._create_example_file(b"export-novel-bytes", "export_novel.wav")
+
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        res = client.get("/api/labels/export")
+        assert res.status_code == 200
+        labels = res.get_json()["labels"]
+        example_labels = [
+            lbl for lbl in labels if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
+        ]
+        assert len(example_labels) == 1
+        assert example_labels[0]["label"] == "good"
+        assert example_labels[0]["origin"]["params"]["filename"] == fname
+
+    def test_new_example_usable_in_training(self, client):
+        """Inserted examples should have embeddings usable by learned-sort."""
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Seed a novel example as good
+        fname = self._create_example_file(b"training-novel-bytes", "train_novel.wav")
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert len(good_votes) >= 1
+
+        # Add a bad vote on the first dataset media so we have both good+bad
+        first_id = next(iter(medias))
+        # Make sure we don't vote bad on the newly inserted item
+        new_id = max(medias.keys())
+        target_id = first_id if first_id != new_id else list(medias.keys())[1]
+        client.post(f"/api/medias/{target_id}/vote", json={"vote": "bad"})
+        assert len(bad_votes) >= 1
+
+        # Learned sort should work — it accesses the embedding from the inserted media
+        res = client.post("/api/learned-sort")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "results" in data
+        assert len(data["results"]) > 0
+
+    # ---- Model load auto-seeding ----
+
+    def test_load_model_seeds_from_media_examples(self, client):
+        """Loading a model with media examples should auto-seed good votes."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "autoload.wav")
+
+        # Create model with a media example
+        client.post(
+            "/api/trainable-models",
+            json={
+                "name": "AutoSeed",
+                "media_type": "audio",
+                "examples": [{"type": "media", "value": fname}],
+            },
+        )
+        # Register in model registry
+        res = client.post(
+            "/api/models/registry",
+            json={
+                "name": "AutoSeed",
+                "media_type": "audio",
+                "trainable": True,
+                "text_query": "",
+                "media_example": fname,
+            },
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        # Clear any prior votes
+        client.post("/api/votes/clear")
+        assert len(good_votes) == 0
+
+        # Load model — should auto-seed
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["examples_seeded"] == 1
+        assert first_id in good_votes
+
+    def test_load_model_without_examples_seeds_nothing(self, client):
+        """Loading a text-only model should seed 0 examples."""
+        from vtsearch.utils import good_votes
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "TextOnly", "media_type": "audio", "text_query": "dogs"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={
+                "name": "TextOnly",
+                "media_type": "audio",
+                "trainable": True,
+                "text_query": "dogs",
+            },
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        client.post("/api/votes/clear")
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.status_code == 200
+        assert res.get_json()["examples_seeded"] == 0
+        assert len(good_votes) == 0
+
+    def test_seeded_examples_enable_autopilot_skip(self, client):
+        """If seeded examples meet the autopilot threshold, Good phase can be skipped.
+
+        This tests the backend side: enough media examples seed enough
+        good_votes that ``goodCount >= autopilot_top_greens``.
+        """
+        from vtsearch.utils import good_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create example files for 4 medias
+        fnames = []
+        for i, cid in enumerate(ids[:4]):
+            fname = self._create_example_file(medias[cid]["media_bytes"], f"skip_{i}.wav")
+            fnames.append(fname)
+
+        examples = [{"type": "media", "value": fn} for fn in fnames]
+        client.post(
+            "/api/trainable-models",
+            json={"name": "SkipGood", "media_type": "audio", "examples": examples},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={
+                "name": "SkipGood",
+                "media_type": "audio",
+                "trainable": True,
+                "text_query": "",
+            },
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        client.post("/api/votes/clear")
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.get_json()["examples_seeded"] == 4
+
+        # With default autopilot_top_greens=3, 4 good votes is enough to skip Good phase
+        assert len(good_votes) >= 4
+
+    def test_load_model_seeds_novel_example(self, client):
+        """Loading a model with a non-dataset example should embed and insert it."""
+        from vtsearch.utils import good_votes, medias
+
+        original_count = len(medias)
+        fname = self._create_example_file(b"novel-load-bytes", "novel_load.wav")
+
+        client.post(
+            "/api/trainable-models",
+            json={
+                "name": "NovelSeed",
+                "media_type": "audio",
+                "examples": [{"type": "media", "value": fname}],
+            },
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={
+                "name": "NovelSeed",
+                "media_type": "audio",
+                "trainable": True,
+                "text_query": "",
+            },
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        client.post("/api/votes/clear")
+        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        assert res.status_code == 200
+        assert res.get_json()["examples_seeded"] == 1
+
+        # A new media should have been inserted
+        assert len(medias) == original_count + 1
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+        assert medias[new_id]["origin"]["importer"] == "example_media"
+
+    def test_seed_directory_traversal_blocked(self, client):
+        """Path traversal attempts in example filenames should be rejected."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": "../../etc/passwd"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+

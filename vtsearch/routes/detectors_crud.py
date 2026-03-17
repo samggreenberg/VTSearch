@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import (
@@ -84,8 +85,35 @@ def add_autorun_detector_route():
     if not media_type:
         return jsonify({"error": "media_type is required"}), 400
 
+    # Capture origins from request or from current votes
+    good_origins = data.get("good_origins")
+    bad_origins = data.get("bad_origins")
+    det_inclusion = data.get("inclusion", 0)
+    if weights and not good_origins:
+        # Best-effort: capture origins from current votes if available
+        from vtsearch.models import collect_media_origins
+        from vtsearch.utils import bad_votes, good_votes
+
+        if good_votes and bad_votes:
+            snap = snapshot_medias()
+            good_origins = collect_media_origins(good_votes, snap)
+            bad_origins = collect_media_origins(bad_votes, snap)
+            from vtsearch.utils import get_inclusion
+
+            det_inclusion = get_inclusion()
+
     add_autorun_detector(
-        name, media_type, weights, threshold, autodetect=autodetect, examples=examples, num_labels=num_labels
+        name,
+        media_type,
+        weights,
+        threshold,
+        autodetect=autodetect,
+        examples=examples,
+        num_labels=num_labels,
+        created_by=get_current_user(),
+        good_origins=good_origins,
+        bad_origins=bad_origins,
+        inclusion=det_inclusion,
     )
 
     # Extract text_query from examples (first text example) for the registry
@@ -129,6 +157,7 @@ def add_autorun_detector_route():
             detector_name=name,
             text_query=text_query,
             trainable_model_name=trainable_model_name,
+            created_by=get_current_user(),
         )
 
     return jsonify({"success": True, "name": name})
@@ -213,6 +242,9 @@ def export_autorun_detector_route(name):
 def export_autorun_detector_server_route(name):
     """Save a named autorun detector to a file on the server filesystem.
 
+    Stores the origin information and inclusion setting, not MLP weights.
+    When re-loaded, the weights are re-derived from the original media.
+
     Expects JSON body with optional ``filename`` (defaults to detector name)
     and ``overwrite`` (bool, default false).
     """
@@ -220,8 +252,8 @@ def export_autorun_detector_server_route(name):
     det = detectors.get(name)
     if det is None:
         return jsonify({"error": "Detector not found"}), 404
-    if not det.get("weights"):
-        return jsonify({"error": "Detector has no trained weights"}), 400
+    if not det.get("good_origins") or not det.get("bad_origins"):
+        return jsonify({"error": "Detector has no origin information and cannot be exported to file"}), 400
 
     data = request.get_json(force=True) or {}
     filename = (data.get("filename") or name).strip()
@@ -236,11 +268,12 @@ def export_autorun_detector_server_route(name):
     filepath = det_dir / f"{safe_name}.json"
 
     if filepath.exists() and not overwrite:
-        return jsonify({"exists": True, "path": str(filepath.resolve()), "name": safe_name}), 409
+        return jsonify({"exists": True, "name": safe_name}), 409
 
     detector_data = {
-        "weights": det["weights"],
-        "threshold": det.get("threshold", 0.5),
+        "good_origins": det["good_origins"],
+        "bad_origins": det["bad_origins"],
+        "inclusion": det.get("inclusion", 0),
         "media_type": det.get("media_type", ""),
         "name": safe_name,
     }
@@ -250,7 +283,6 @@ def export_autorun_detector_server_route(name):
         {
             "success": True,
             "name": safe_name,
-            "path": str(filepath.resolve()),
         }
     )
 
@@ -302,12 +334,6 @@ def import_detector_pkl():
         text = file.read().decode("utf-8")
         detector_data = json.loads(text)
 
-        weights = detector_data.get("weights")
-        threshold = detector_data.get("threshold", 0.5)
-
-        if not weights:
-            return jsonify({"error": "Invalid detector file format"}), 400
-
         # Prefer media_type stored in the file; fall back to current medias, then "audio"
         media_type = detector_data.get("media_type", "")
         if not media_type:
@@ -317,11 +343,54 @@ def import_detector_pkl():
             else:
                 media_type = "audio"
 
-        add_autorun_detector(name, media_type, weights, threshold)
+        good_origins = detector_data.get("good_origins")
+        bad_origins = detector_data.get("bad_origins")
+        legacy_weights = detector_data.get("weights")
+
+        weights = None
+        file_threshold = detector_data.get("threshold", 0.5)
+        threshold = file_threshold
+        det_inclusion = detector_data.get("inclusion", 0)
+
+        if good_origins and bad_origins:
+            # Origin-based format: re-derive weights from origins
+            from vtsearch.models import train_detector_from_origins
+
+            weights, threshold = train_detector_from_origins(
+                good_origins,
+                bad_origins,
+                det_inclusion,
+                media_type,
+            )
+
+        if weights is None and legacy_weights:
+            # Fallback to serialised weights (legacy or unresolvable origins)
+            weights = legacy_weights
+            threshold = file_threshold
+            good_origins = None
+            bad_origins = None
+
+        if weights is None:
+            return jsonify({"error": "Invalid detector file format"}), 400
+
+        add_autorun_detector(
+            name,
+            media_type,
+            weights,
+            threshold,
+            created_by=get_current_user(),
+            good_origins=good_origins,
+            bad_origins=bad_origins,
+            inclusion=det_inclusion,
+        )
+
         return jsonify({"success": True, "name": name, "media_type": media_type})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Failed to import detector")
+        return jsonify({"error": "Failed to import detector file"}), 500
 
 
 @detectors_crud_bp.route("/api/detector/server-files", methods=["GET"])
@@ -336,7 +405,7 @@ def list_server_detector_files():
         files.append(
             {
                 "name": p.stem,
-                "path": str(p.resolve()),
+                "filename": p.name,
                 "size_bytes": p.stat().st_size,
             }
         )
@@ -363,8 +432,11 @@ def get_server_detector_file(name: str):
     try:
         data = json.loads(filepath.read_text(encoding="utf-8"))
         return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Failed to read detector file: %s", safe_name)
+        return jsonify({"error": "Failed to read detector file"}), 500
 
 
 # ---------------------------------------------------------------------------

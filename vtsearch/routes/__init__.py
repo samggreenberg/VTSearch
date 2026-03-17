@@ -1,5 +1,6 @@
 """Flask blueprints for organizing application routes."""
 
+from vtsearch.routes.auth import auth_bp
 from vtsearch.routes.medias import medias_bp
 from vtsearch.routes.datasets import datasets_bp
 from vtsearch.routes.detectors import detectors_bp
@@ -12,6 +13,7 @@ from vtsearch.routes.sorting import sorting_bp
 from vtsearch.routes.trainable_models import trainable_models_bp
 
 __all__ = [
+    "auth_bp",
     "main_bp",
     "medias_bp",
     "sorting_bp",

@@ -23,6 +23,7 @@ export class SettingsModalComponent implements OnInit {
   settings: AppSettings = { volume: 50 };
   embedders: EmbedderInfo[] = [];
   mediaTypes: MediaTypeInfo[] = [];
+  activeSettingsTab = 'appearance';
   activeViewTab = '';
   loading = true;
   error = '';
@@ -50,6 +51,7 @@ export class SettingsModalComponent implements OnInit {
           const preselected = this.preselectedViewTab;
           if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
             this.activeViewTab = preselected;
+            this.activeSettingsTab = 'appearance';
           } else {
             this.activeViewTab = this.mediaTypes[0].type_id;
           }
@@ -114,29 +116,6 @@ export class SettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'click';
   }
 
-  onPanelPctChange(side: 'panel_pct_left' | 'panel_pct_right', typeId: string, value: number | null): void {
-    const dict = (this.settings[side] as Record<string, number | null>) || {};
-    dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[side] = { ...dict };
-    this.save();
-  }
-
-  getPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): number | null {
-    const dict = this.settings[side];
-    if (!dict) return null;
-    return dict[typeId] ?? null;
-  }
-
-  getPanelPctDisplay(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): string {
-    const pct = this.getPanelPct(side, typeId);
-    if (pct == null) return '—';
-    return Math.round(pct * 100) + '%';
-  }
-
-  clearPanelPct(side: 'panel_pct_left' | 'panel_pct_right', typeId: string): void {
-    this.onPanelPctChange(side, typeId, null);
-  }
-
   onNumberChange(key: string, value: number): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
@@ -145,6 +124,11 @@ export class SettingsModalComponent implements OnInit {
   onStringChange(key: string, value: string): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
+  }
+
+  getMediaTypeIcon(typeId: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
+    return mt?.icon || '';
   }
 
   isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
@@ -188,6 +172,12 @@ export class SettingsModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
+    // Reject files larger than 1 MB to prevent browser memory issues.
+    const MAX_SETTINGS_SIZE = 1024 * 1024;
+    if (file.size > MAX_SETTINGS_SIZE) {
+      this.error = 'Settings file is too large (max 1 MB)';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {

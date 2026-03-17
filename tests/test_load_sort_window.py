@@ -5,6 +5,9 @@ Covers:
 - /api/server-media-files (listing)
 - /api/example-sort-server (server-side example sort)
 - /api/detector/server-files/<name> (individual server detector fetch)
+- /api/models/registry (dashboard models for detector loading)
+- /api/autorun-detectors/<name>/export (export detector weights for load sort)
+- /api/example-sort-origin (sort by origin-based media file)
 """
 
 import io
@@ -203,3 +206,124 @@ class TestServerDetectorFileGet:
     def test_invalid_name_returns_400(self, client):
         resp = client.get("/api/detector/server-files/%%%")
         assert resp.status_code == 400
+
+
+class TestRegistryModelsForLoadSort:
+    """Tests for using dashboard registry models as detector sources in Load Sort.
+
+    The Load Sort window lists trained registry models so users can pick one
+    and run detector-sort with its exported weights.
+    """
+
+    def test_registry_lists_models(self, client):
+        """GET /api/models/registry returns models list."""
+        resp = client.get("/api/models/registry")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "models" in data
+        assert isinstance(data["models"], list)
+
+    def test_create_and_list_registry_model(self, client):
+        """A registered model appears in the registry listing."""
+        resp = client.post(
+            "/api/models/registry",
+            json={"name": "Test LoadSort Model", "media_type": "audio", "trainable": True},
+        )
+        assert resp.status_code == 201
+
+        resp = client.get("/api/models/registry")
+        models = resp.get_json()["models"]
+        names = [m["name"] for m in models]
+        assert "Test LoadSort Model" in names
+
+    def test_export_trained_detector_weights(self, client):
+        """An autorun detector with weights can export them for detector-sort."""
+        from vtsearch.utils.state import autorun_detectors
+
+        autorun_detectors["test_det"] = {
+            "name": "test_det",
+            "media_type": "audio",
+            "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.0]},
+            "threshold": 0.5,
+        }
+
+        resp = client.get("/api/autorun-detectors/test_det/export")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "weights" in data
+        assert data["name"] == "test_det"
+        assert data["threshold"] == 0.5
+
+    def test_export_untrained_detector_returns_400(self, client):
+        """An autorun detector without weights cannot be exported."""
+        from vtsearch.utils.state import autorun_detectors
+
+        autorun_detectors["no_weights"] = {
+            "name": "no_weights",
+            "media_type": "audio",
+            "weights": None,
+            "threshold": 0.5,
+        }
+
+        resp = client.get("/api/autorun-detectors/no_weights/export")
+        assert resp.status_code == 400
+
+    def test_export_nonexistent_detector_returns_404(self, client):
+        """Exporting a non-existent detector returns 404."""
+        resp = client.get("/api/autorun-detectors/does_not_exist/export")
+        assert resp.status_code == 404
+
+
+class TestExampleSortOrigin:
+    """Tests for /api/example-sort-origin (sort by origin-resolved media file)."""
+
+    def test_missing_origin_returns_400(self, client):
+        resp = client.post("/api/example-sort-origin", json={"key": "test.wav"})
+        assert resp.status_code == 400
+        assert "origin" in resp.get_json()["error"].lower()
+
+    def test_missing_key_returns_400(self, client):
+        resp = client.post(
+            "/api/example-sort-origin",
+            json={"origin": {"importer": "folder", "params": {"path": "/tmp"}}},
+        )
+        assert resp.status_code == 400
+        assert "key" in resp.get_json()["error"].lower()
+
+    def test_invalid_origin_type_returns_400(self, client):
+        resp = client.post("/api/example-sort-origin", json={"origin": "not_a_dict", "key": "test.wav"})
+        assert resp.status_code == 400
+
+    def test_unknown_origin_importer_returns_400(self, client):
+        resp = client.post(
+            "/api/example-sort-origin",
+            json={"origin": {"importer": "nonexistent_source"}, "key": "test.wav"},
+        )
+        assert resp.status_code == 400
+        assert "source" in resp.get_json()["error"].lower()
+
+    def test_sort_with_folder_origin(self, client, tmp_path):
+        """Sort by a media file resolved from a folder origin."""
+        # Create a test WAV in a temp folder
+        sample_rate = 16000
+        num_samples = int(sample_rate * 0.1)
+        samples = [int(32767 * np.sin(2 * np.pi * 440 * i / sample_rate)) for i in range(num_samples)]
+        wav_path = tmp_path / "test_audio.wav"
+        with wave.open(str(wav_path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
+
+        resp = client.post(
+            "/api/example-sort-origin",
+            json={
+                "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
+                "key": "test_audio.wav",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "results" in data
+        assert "threshold" in data
+        assert len(data["results"]) == app_module.NUM_MEDIAS

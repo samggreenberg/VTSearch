@@ -1054,3 +1054,47 @@ def _write_zip_to(archive_path, tmp_path):
     """Helper: write a minimal .zip so _extract_archive succeeds."""
     with zipfile.ZipFile(archive_path, "w") as zf:
         zf.writestr("dummy.wav", _make_wav_bytes())
+
+
+# ---------------------------------------------------------------------------
+# Registry-level contract: importers that store files must override resolve_file
+# ---------------------------------------------------------------------------
+
+
+class TestImporterResolveFileContract:
+    """Verify that importers which produce disk-backed media override resolve_file.
+
+    This prevents a repeat of the demo-importer bug where a missing
+    resolve_file() caused cross-dataset detector labels to silently fail
+    to resolve, producing "N/A" verdicts with no error.
+
+    Importers that legitimately cannot resolve files (e.g. ``pickle`` for
+    browser uploads, ``combine_datasets`` which delegates to sub-origins)
+    are excluded.
+    """
+
+    # Importers whose media origins always delegate resolution elsewhere:
+    # - pickle: browser-uploaded files with no guaranteed server path
+    # - combine_datasets: each element retains its source dataset's origin
+    _DELEGATE_IMPORTERS = {"pickle", "combine_datasets"}
+
+    def test_all_disk_importers_override_resolve_file(self):
+        """Every registered importer that stores files must override resolve_file."""
+        from vtsearch.datasets.importers import list_importers
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        default_method = DatasetImporter.resolve_file
+
+        missing = []
+        for imp in list_importers():
+            if imp.name in self._DELEGATE_IMPORTERS:
+                continue
+            # Check if the importer's resolve_file is the unoverridden default
+            if type(imp).resolve_file is default_method:
+                missing.append(imp.name)
+
+        assert missing == [], (
+            f"Importers {missing} do not override resolve_file(). "
+            "Cross-dataset label resolution will silently fail for media "
+            "loaded by these importers. See DatasetImporter.resolve_file docstring."
+        )

@@ -4,11 +4,13 @@ import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { LoginComponent } from './components/login/login.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
+import { AuthService } from './services/auth.service';
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent, LoginComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -23,7 +25,9 @@ export class AppComponent {
     private router: Router,
     private mediaState: MediaStateService,
     private datasetState: DatasetStateService,
+    public auth: AuthService,
   ) {
+    this.auth.checkStatus();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {

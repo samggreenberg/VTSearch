@@ -222,7 +222,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
-            results, threshold = train_and_score(clips_dict, good, bad)
+            results, threshold, _model = train_and_score(clips_dict, good, bad)
 
             assert len(results) == 20
             assert isinstance(threshold, float)
@@ -242,7 +242,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
-            results, _ = train_and_score(clips_dict, good, bad)
+            results, _, _m = train_and_score(clips_dict, good, bad)
             for entry in results:
                 assert 0.0 <= entry["score"] <= 1.0
         finally:
@@ -258,7 +258,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2], [3, 4])
-            results, _ = train_and_score(clips_dict, good, bad)
+            results, _, _m = train_and_score(clips_dict, good, bad)
             scores = [e["score"] for e in results]
             assert scores == sorted(scores, reverse=True)
         finally:
@@ -281,7 +281,7 @@ class TestTrainAndScoreGPU:
                 clips_dict[i] = {"id": i, "embedding": emb, "type": "audio"}
 
             good, bad = _make_votes([1, 2, 3, 4, 5], [16, 17, 18, 19, 20])
-            results, _ = train_and_score(clips_dict, good, bad)
+            results, _, _m = train_and_score(clips_dict, good, bad)
             score_map = {e["id"]: e["score"] for e in results}
             avg_good = np.mean([score_map[i] for i in good])
             avg_bad = np.mean([score_map[i] for i in bad])
@@ -299,7 +299,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
-            results, threshold = train_and_score(clips_dict, good, bad, inclusion_value=5)
+            results, threshold, _model = train_and_score(clips_dict, good, bad, inclusion_value=5)
             assert len(results) == 20
             assert isinstance(threshold, float)
         finally:

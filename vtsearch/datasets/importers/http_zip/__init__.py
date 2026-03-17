@@ -210,7 +210,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
         run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
         extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
@@ -257,7 +257,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"
         run_id = uuid4().hex[:12]
-        archive_path = DATA_DIR / f"http_archive_download_{url_filename}"
+        archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
         extract_dir = DATA_DIR / f"http_archive_extract_{run_id}"
 
         progress("downloading", "Downloading archive...", 0, 0)
@@ -325,52 +325,13 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         if not url:
             return None
 
-        url_filename = url.rsplit("/", 1)[-1].split("?")[0]
-        download_path = DATA_DIR / f"http_archive_download_{url_filename}"
-        extract_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
+        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
 
-        # If already extracted, search there
-        if extract_dir.is_dir():
-            found = _search_dir_for_file(extract_dir, origin_name, filename)
-            if found:
-                return found
-
-        # If archive downloaded but not extracted
-        if download_path.is_file() and not extract_dir.is_dir():
-            try:
-                extract_dir.mkdir(parents=True, exist_ok=True)
-                _extract_archive(download_path, extract_dir)
-                found = _search_dir_for_file(extract_dir, origin_name, filename)
-                if found:
-                    return found
-            except Exception:
-                import logging
-
-                logging.getLogger(__name__).warning("Failed to extract %s", download_path, exc_info=True)
-
-        # Download if not present
-        if not download_path.is_file():
-            try:
-                import logging
-                import urllib.request
-
-                logging.getLogger(__name__).info("Downloading %s for label resolution...", url)
-                download_path.parent.mkdir(parents=True, exist_ok=True)
-                urllib.request.urlretrieve(url, str(download_path))  # noqa: S310
-                if download_path.is_file():
-                    extract_dir.mkdir(parents=True, exist_ok=True)
-                    _extract_archive(download_path, extract_dir)
-                    found = _search_dir_for_file(extract_dir, origin_name, filename)
-                    if found:
-                        return found
-            except Exception:
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "Failed to download %s for label resolution", url, exc_info=True
-                )
-
-        return None
+        source = HttpArchiveSource(url)
+        # Note: we intentionally do NOT call source.cleanup() here because
+        # the extracted archive should remain cached for future resolve_file
+        # calls (matching the previous behaviour of keeping resolve dirs).
+        return source.resolve_path(origin_name, filename)
 
 
 def _search_dir_for_file(

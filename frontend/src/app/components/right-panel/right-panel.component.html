@@ -5,12 +5,16 @@
     (renamed)="onDetectorRenamed($event)"
   />
 
+  <div class="import-row">
+    <button class="panel-btn import-btn" (click)="onImportLabels()">Import Labels</button>
+  </div>
+
   <div class="sort-row">
     <vt-label-sort
       [mode]="sortMode"
       (modeChange)="onSortModeChange($event)"
     />
-    <button class="panel-btn import-btn" (click)="onImportLabels()">Import Labels</button>
+    <button class="view-btn" (click)="onViewSettings()">View</button>
   </div>
 
   <vt-label-list
@@ -27,6 +31,8 @@
     (mediaVote)="onMediaVote($event)"
   />
 
+  <div class="label-divider"></div>
+
   <vt-label-list
     label="bad"
     [ids]="badIds"
@@ -42,8 +48,7 @@
   />
 
   <div class="export-row">
-    <button class="panel-btn export-btn" (click)="onExportLabels()">Export Labels</button>
-    <button class="panel-btn export-btn" (click)="onExportDetector()">Export Detector</button>
+    <button class="panel-btn export-btn" (click)="onExport()">Export</button>
   </div>
 </aside>
 
@@ -51,10 +56,14 @@
   <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="showLabelImport = false" />
 }
 
-@if (showLabelExport) {
-  <vt-label-exporter-modal (closed)="showLabelExport = false" (exportComplete)="showLabelExport = false" />
+@if (showExport) {
+  <vt-export-modal
+    [detectorName]="trainMode?.model?.name ?? ''"
+    (closed)="showExport = false"
+    (exported)="showExport = false"
+  />
 }
 
-@if (showDetectorExport) {
-  <vt-detector-export-modal (closed)="showDetectorExport = false" (exported)="showDetectorExport = false" />
+@if (showViewSettings) {
+  <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
 }

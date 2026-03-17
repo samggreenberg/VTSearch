@@ -13,6 +13,8 @@ export class VoteStateService implements OnDestroy {
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
+  /** Tracks optimistic votes not yet confirmed by the server. */
+  private pendingOptimistic = new Map<number, { vote: 'good' | 'bad'; clickTime: number }>();
 
   readonly goodVotes$ = this.goodVotesSubject.asObservable();
   readonly badVotes$ = this.badVotesSubject.asObservable();
@@ -44,6 +46,53 @@ export class VoteStateService implements OnDestroy {
     return this.learnedScoresSubject.value;
   }
 
+  /**
+   * Optimistically update local vote sets to reflect a toggle vote.
+   *
+   * This mirrors the backend toggle semantics so that callers checking
+   * vote state immediately after a vote see the updated counts without
+   * waiting for the async loadVotes() HTTP round-trip.
+   */
+  applyOptimisticVote(id: number, vote: 'good' | 'bad'): void {
+    const good = new Set(this.goodVotesSubject.value);
+    const bad = new Set(this.badVotesSubject.value);
+
+    const isAdd = vote === 'good' ? !good.has(id) : !bad.has(id);
+
+    if (vote === 'good') {
+      if (good.has(id)) {
+        good.delete(id);
+      } else {
+        good.add(id);
+        bad.delete(id);
+      }
+    } else {
+      if (bad.has(id)) {
+        bad.delete(id);
+      } else {
+        bad.add(id);
+        good.delete(id);
+      }
+    }
+
+    // Set an optimistic click time so the item sorts correctly immediately,
+    // rather than appearing with time=-1 and then jumping when the server responds.
+    const times = { ...this.clickTimesSubject.value };
+    if (isAdd) {
+      const maxTime = Object.values(times).reduce((m, t) => Math.max(m, t), 0);
+      const optimisticTime = maxTime + 1;
+      times[String(id)] = optimisticTime;
+      this.pendingOptimistic.set(id, { vote, clickTime: optimisticTime });
+    } else {
+      this.pendingOptimistic.delete(id);
+    }
+
+    // Emit all changes together so Angular sees a single consistent state.
+    this.goodVotesSubject.next(good);
+    this.badVotesSubject.next(bad);
+    this.clickTimesSubject.next(times);
+  }
+
   loadVotes(): void {
     this.sortingApi
       .getVotes()
@@ -73,12 +122,39 @@ export class VoteStateService implements OnDestroy {
     this.badVotesSubject.next(new Set());
     this.clickTimesSubject.next({});
     this.learnedScoresSubject.next({});
+    this.pendingOptimistic.clear();
   }
 
   private applyVotes(votes: VotesResponse): void {
-    this.goodVotesSubject.next(new Set(votes.good));
-    this.badVotesSubject.next(new Set(votes.bad));
-    this.clickTimesSubject.next(votes.click_times);
+    const good = new Set(votes.good);
+    const bad = new Set(votes.bad);
+    const times = { ...votes.click_times };
+
+    // Preserve optimistic votes that the server hasn't acknowledged yet.
+    // Without this, a stale polling response (or a loadVotes() response that
+    // raced ahead of the vote POST) would remove the item from the grid,
+    // causing it to disappear and reappear (flicker).
+    for (const [id, opt] of this.pendingOptimistic) {
+      const serverHasIt = opt.vote === 'good' ? good.has(id) : bad.has(id);
+      if (serverHasIt) {
+        // Server caught up — stop preserving this optimistic vote.
+        this.pendingOptimistic.delete(id);
+      } else {
+        // Server hasn't processed the vote yet — keep optimistic state.
+        if (opt.vote === 'good') {
+          good.add(id);
+          bad.delete(id);
+        } else {
+          bad.add(id);
+          good.delete(id);
+        }
+        times[String(id)] = opt.clickTime;
+      }
+    }
+
+    this.goodVotesSubject.next(good);
+    this.badVotesSubject.next(bad);
+    this.clickTimesSubject.next(times);
     this.learnedScoresSubject.next(votes.learned_scores);
   }
 }

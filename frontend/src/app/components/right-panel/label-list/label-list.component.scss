@@ -8,12 +8,10 @@
 .vote-section {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 12px 16px;
-}
-
-:host + :host {
-  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
 }
 
 h3 {
@@ -21,6 +19,9 @@ h3 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0 0 8px 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 
   &.good {
     color: var(--color-good);
@@ -40,8 +41,12 @@ h3 {
 .vote-list {
   &.grid-layout {
     display: grid;
-    grid-template-columns: repeat(var(--grid-columns, 2), 1fr);
+    grid-template-columns: repeat(var(--grid-columns, 2), minmax(0, 1fr));
     gap: 4px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    align-content: start;
   }
 }
 
@@ -79,7 +84,7 @@ h3 {
 .vote-thumbnail {
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 3px;
   background: var(--bg-surface);
 }
@@ -94,6 +99,7 @@ h3 {
   background: var(--bg-surface);
   color: var(--text-muted);
   font-size: 1.5rem;
+  overflow: hidden;
 }
 
 .vote-name {
@@ -113,10 +119,5 @@ h3 {
   width: 100%;
   text-align: center;
   line-height: 1.2;
-}
-
-.vote-meta {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--text-muted);
+  flex-shrink: 0;
 }

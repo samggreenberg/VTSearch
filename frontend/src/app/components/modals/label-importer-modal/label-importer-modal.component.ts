@@ -1,17 +1,20 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, ElementRef, EventEmitter, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { MediasApiService } from '../../../services/medias-api.service';
+import { VoteStateService } from '../../../services/vote-state.service';
 import { ImporterField } from '../../../models/api.models';
 
-interface LabelImporter {
+interface LabelImporterInfo {
   name: string;
-  label?: string;
   display_name?: string;
   description?: string;
   icon?: string;
   fields?: ImporterField[];
+  ui_mode?: string;
+  hidden_from_picker?: boolean;
 }
 
 type ModalView = 'picker' | 'form';
@@ -27,29 +30,53 @@ export class LabelImporterModalComponent implements OnInit {
   @Output() closed = new EventEmitter<void>();
   @Output() imported = new EventEmitter<void>();
 
+  @ViewChild('addGoodInput') addGoodInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('addBadInput') addBadInput!: ElementRef<HTMLInputElement>;
+
   view: ModalView = 'picker';
-  importers: LabelImporter[] = [];
-  selectedImporter: LabelImporter | null = null;
+  importers: LabelImporterInfo[] = [];
+  loading = true;
+  selectedImporter: LabelImporterInfo | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
   submitting = false;
   error = '';
   successMessage = '';
+  addingGood = false;
+  addingBad = false;
 
-  constructor(private labelImportersApi: LabelImportersApiService) {}
+  constructor(
+    private labelImportersApi: LabelImportersApiService,
+    private mediasApi: MediasApiService,
+    private voteState: VoteStateService,
+  ) {}
+
+  get modalTitle(): string {
+    if (this.view === 'form' && this.selectedImporter) {
+      return this.selectedImporter.display_name || this.selectedImporter.name;
+    }
+    return 'Import Labels';
+  }
 
   ngOnInit(): void {
     this.labelImportersApi.list().subscribe({
       next: (list: any[]) => {
-        this.importers = list;
+        this.importers = list.filter((imp) => !imp.hidden_from_picker);
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+        this.error = 'Failed to load label importers';
       },
     });
   }
 
-  selectImporter(importer: LabelImporter): void {
+  selectImporter(importer: LabelImporterInfo): void {
     this.selectedImporter = importer;
     this.formValues = {};
+    this.selectedFile = null;
+    this.selectedFileFieldKey = null;
     this.error = '';
     this.successMessage = '';
     if (importer.fields) {
@@ -97,6 +124,51 @@ export class LabelImporterModalComponent implements OnInit {
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.error || 'Import failed';
+      },
+    });
+  }
+
+  triggerAddGood(): void {
+    this.addGoodInput.nativeElement.click();
+  }
+
+  triggerAddBad(): void {
+    this.addBadInput.nativeElement.click();
+  }
+
+  onAddToPile(event: Event, label: 'good' | 'bad'): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    input.value = '';
+
+    if (label === 'good') {
+      this.addingGood = true;
+    } else {
+      this.addingBad = true;
+    }
+    this.error = '';
+    this.successMessage = '';
+
+    this.mediasApi.addToPile(file, label).subscribe({
+      next: (result) => {
+        const action = result.is_new ? 'Added new media' : 'Matched existing media';
+        this.successMessage = `${action} to ${label} pile.`;
+        this.voteState.loadVotes();
+        this.imported.emit();
+        if (label === 'good') {
+          this.addingGood = false;
+        } else {
+          this.addingBad = false;
+        }
+      },
+      error: (err) => {
+        this.error = err.error?.error || `Failed to add media to ${label} pile`;
+        if (label === 'good') {
+          this.addingGood = false;
+        } else {
+          this.addingBad = false;
+        }
       },
     });
   }

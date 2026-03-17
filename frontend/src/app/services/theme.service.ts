@@ -17,10 +17,15 @@ export class ThemeService {
 
   /** Load the persisted theme from the backend. */
   loadFromSettings(): void {
-    this.settingsApi.getSettings().subscribe(settings => {
-      if (settings.theme) {
-        this.applyTheme(settings.theme as Theme);
-      }
+    this.settingsApi.getSettings().subscribe({
+      next: (settings) => {
+        if (settings.theme) {
+          this.applyTheme(settings.theme as Theme);
+        }
+      },
+      error: () => {
+        // Settings unavailable — keep the default dark theme.
+      },
     });
   }
 
