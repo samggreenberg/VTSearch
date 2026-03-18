@@ -211,6 +211,13 @@ def set_autorun_detector_autodetect_route(name):
         return jsonify({"error": "autodetect is required"}), 400
 
     if set_autorun_detector_autodetect(name, bool(autodetect)):
+        # Persist in settings so the flag survives restarts
+        from vtsearch.settings import add_autorun_detector_name, remove_autorun_detector_name
+
+        if autodetect:
+            add_autorun_detector_name(name)
+        else:
+            remove_autorun_detector_name(name)
         return jsonify({"success": True, "autodetect": bool(autodetect)})
     return jsonify({"error": "Detector not found"}), 404
 

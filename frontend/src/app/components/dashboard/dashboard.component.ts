@@ -252,6 +252,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
+    const detectorName = model.detector_name || model.name;
+    this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
   // --- Importer modal ---
 
   openImporterModal(): void {

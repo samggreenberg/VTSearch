@@ -124,6 +124,45 @@ class TestSettingsModule:
         parsed = json.loads(snippet)
         assert parsed["field_values"]["filepath"] == "/my path/det.json"
 
+    def test_autorun_detector_names_default_empty(self):
+        assert settings_mod.get_autorun_detector_names() == []
+
+    def test_add_autorun_detector_name(self, isolated_settings):
+        settings_mod.add_autorun_detector_name("det-a")
+        assert settings_mod.get_autorun_detector_names() == ["det-a"]
+
+    def test_add_autorun_detector_name_idempotent(self, isolated_settings):
+        settings_mod.add_autorun_detector_name("det-a")
+        settings_mod.add_autorun_detector_name("det-a")
+        assert settings_mod.get_autorun_detector_names() == ["det-a"]
+
+    def test_remove_autorun_detector_name(self, isolated_settings):
+        settings_mod.add_autorun_detector_name("det-a")
+        assert settings_mod.remove_autorun_detector_name("det-a") is True
+        assert settings_mod.get_autorun_detector_names() == []
+
+    def test_remove_autorun_detector_name_nonexistent(self):
+        assert settings_mod.remove_autorun_detector_name("nope") is False
+
+    def test_is_autorun_detector(self, isolated_settings):
+        settings_mod.add_autorun_detector_name("det-a")
+        assert settings_mod.is_autorun_detector("det-a") is True
+        assert settings_mod.is_autorun_detector("det-b") is False
+
+    def test_autorun_detector_names_persists_across_reset(self, isolated_settings):
+        settings_mod.add_autorun_detector_name("det-a")
+        settings_mod.add_autorun_detector_name("det-b")
+        settings_mod.reset()
+        assert settings_mod.get_autorun_detector_names() == ["det-a", "det-b"]
+
+    def test_set_autorun_detector_names(self, isolated_settings):
+        settings_mod.set_autorun_detector_names(["x", "y", "z"])
+        assert settings_mod.get_autorun_detector_names() == ["x", "y", "z"]
+
+    def test_set_autorun_detector_names_deduplicates(self, isolated_settings):
+        settings_mod.set_autorun_detector_names(["x", "y", "x"])
+        assert settings_mod.get_autorun_detector_names() == ["x", "y"]
+
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
         settings_mod.add_autorun_processor("p", "server_detector_file", {"filepath": "p.json"})
