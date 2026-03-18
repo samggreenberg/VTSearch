@@ -8,6 +8,7 @@ import { DetectorsApiService } from '../../services/detectors-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
+import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { AuthService } from '../../services/auth.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, ModelRegistryEntry } from '../../models/api.models';
@@ -67,6 +68,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
+    private findSession: FindSessionService,
     public datasetState: DatasetStateService,
     private authService: AuthService,
   ) {}
@@ -528,6 +530,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onFind(): void {
+    const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
+    if (!dataset) return;
+
+    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
+    if (!model) return;
+
+    // Store model info in the find session service
+    this.findSession.modelId = model.id;
+    this.findSession.modelName = model.name;
+
+    const navigateToFind = (): void => {
+      this.router.navigate(['/find']);
+    };
+
+    if (dataset.loaded) {
+      navigateToFind();
+      return;
+    }
+
+    // Dataset not loaded — load it first, then navigate
+    this.datasetState.setLoading(true);
+    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
+    this.progressIndeterminate = true;
+    this.datasetsApi.loadRegistered(dataset.id).subscribe({
+      next: () => {
+        this.startProgressPolling(() => {
+          navigateToFind();
+        });
+      },
+      error: () => {
+        this.datasetState.setLoading(false);
+        this.progressIndeterminate = false;
+      },
+    });
+  }
+
+  /** Old Find window — runs multi-dataset multi-model find and shows results modal. */
+  onOldFind(): void {
     const datasetIds = [...this.selectedDatasetIds];
     const modelIds = [...this.selectedModelIds];
     const findParams = { dataset_ids: datasetIds, model_ids: modelIds };

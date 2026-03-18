@@ -73,6 +73,103 @@ def detector_sort():
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 
+@detectors_scoring_bp.route("/api/find-label", methods=["POST"])
+def find_label():
+    """Score all loaded medias with a model and apply labels based on threshold.
+
+    Expects JSON::
+
+        {"model_id": "abc123"}
+
+    Resolves the model from the registry, scores every loaded media, and
+    applies Good/Bad labels for ALL elements based on the threshold.  Returns
+    the sort results so the frontend can display the stripe and scroll order.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtsearch.models.registry import get_model as reg_get_model
+    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.utils import (
+        apply_label_with_click_time,
+        get_autorun_detectors,
+        good_votes,
+        bad_votes,
+    )
+
+    body = request.get_json(force=True, silent=True) or {}
+    model_id = body.get("model_id")
+    if not model_id:
+        return jsonify({"error": "model_id is required"}), 400
+
+    m = reg_get_model(model_id)
+    if m is None:
+        return jsonify({"error": f"Model '{model_id}' not found"}), 404
+
+    # Resolve model weights
+    det_name = m.get("detector_name", "")
+    tm_name = m.get("trainable_model_name", "")
+    weights = None
+    threshold = 0.5
+
+    if det_name:
+        det = get_autorun_detectors().get(det_name)
+        if det and det.get("weights"):
+            weights = det["weights"]
+            threshold = det.get("threshold", 0.5)
+
+    if weights is None and tm_name:
+        # Trainable model with saved weights in its data
+        tm_path = _model_path(tm_name)
+        tm_data = _read_model(tm_path)
+        if tm_data and tm_data.get("weights"):
+            weights = tm_data["weights"]
+            threshold = tm_data.get("threshold", 0.5)
+
+    if weights is None:
+        return jsonify({"error": f"Model '{m['name']}' has no weights for scoring"}), 400
+
+    snap = snapshot_medias()
+    if not snap:
+        return jsonify({"error": "No medias loaded"}), 400
+
+    # Score all medias
+    model = build_model_from_weights(weights)
+    all_ids = sorted(snap.keys())
+    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
+    X_all = torch.tensor(all_embs, dtype=torch.float32)
+
+    with torch.no_grad():
+        raw_logits = model(X_all)
+        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+
+    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    # Apply labels to ALL elements based on threshold
+    good_count = 0
+    bad_count = 0
+    for entry in results:
+        cid = entry["id"]
+        # Skip already-labeled items
+        if cid in good_votes or cid in bad_votes:
+            continue
+        if entry["score"] >= threshold:
+            apply_label_with_click_time(cid, "good")
+            good_count += 1
+        else:
+            apply_label_with_click_time(cid, "bad")
+            bad_count += 1
+
+    return jsonify({
+        "ok": True,
+        "results": results,
+        "threshold": round(threshold, 4),
+        "good_count": good_count,
+        "bad_count": bad_count,
+        "model_name": m.get("name", ""),
+    })
+
+
 @detectors_scoring_bp.route("/api/auto-detect", methods=["POST"])
 def auto_detect():
     """Run autorun detectors for the current media type and return positive hits.

@@ -51,6 +51,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() textQuery = '';
   @Input() autopilotCollapsed = false;
   @Input() autopilotEnabled = true;
+  /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
+  @Input() panelMode: 'label' | 'find' = 'label';
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();
@@ -85,9 +87,14 @@ export class LeftPanelComponent implements OnInit, OnChanges {
         this.updateMediaTypeName();
       },
     });
-    this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
-    if (this.autopilotEnabled) {
-      this.autopilotStart.emit();
+    if (this.panelMode === 'find') {
+      // Find mode doesn't use tabs — keep manual as a no-op default
+      this.activeTab = 'manual';
+    } else {
+      this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
+      if (this.autopilotEnabled) {
+        this.autopilotStart.emit();
+      }
     }
   }
 
