@@ -427,6 +427,69 @@ class TestFindLabel:
         total = data["good_count"] + data["bad_count"]
         assert total == app_module.NUM_MEDIAS
 
+    def test_find_label_trainable_model_with_labelset(self, client, tmp_path):
+        """find-label should train on-the-fly from a trainable model's labelset.
+
+        Reproduces the core bug: user creates a trainable model, labels items
+        on Dataset A (labelset auto-saved), loads Dataset B, runs Find.
+        Previously returned 400 because no pre-trained weights existed.
+        """
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.datasets.labelset import LabelSet
+        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+        reset_for_tests()
+
+        # Simulate labeling: vote on some items
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+
+        # Build a labelset from the current votes (as sync_labels_to_loaded_model does)
+        snap = snapshot_medias()
+        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
+
+        # Write a trainable model file with the labelset but NO weights
+        import vtsearch.settings as _settings
+
+        original_dir = _settings.get_trainable_models_dir()
+        _settings._settings_cache["trainable_models_dir"] = str(tmp_path)
+        try:
+            tm_name = "test-find-trainable"
+            tm_path = tmp_path / f"{tm_name}.json"
+            _write_model(
+                tm_path,
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "examples": [],
+                    "labelset": labelset.to_dict(),
+                },
+            )
+
+            # Register in model registry as a trainable model (no detector_name weights)
+            entry = register_model(
+                name="Trainable Find Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+
+            # Clear training votes (simulates loading a new dataset)
+            good_votes.clear()
+            bad_votes.clear()
+
+            # Run find-label — should train on-the-fly from the labelset
+            resp = client.post("/api/find-label", json={"model_id": model_id})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True
+            total = data["good_count"] + data["bad_count"]
+            assert total == app_module.NUM_MEDIAS
+        finally:
+            _settings._settings_cache["trainable_models_dir"] = str(original_dir)
+
     def test_find_label_missing_model_id(self, client):
         resp = client.post("/api/find-label", json={})
         assert resp.status_code == 400

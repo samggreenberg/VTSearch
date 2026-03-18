@@ -115,6 +115,7 @@ def find_label():
             weights = det["weights"]
             threshold = det.get("threshold", 0.5)
 
+    tm_data = None
     if weights is None and tm_name:
         # Trainable model with saved weights in its data
         tm_path = _model_path(tm_name)
@@ -122,6 +123,54 @@ def find_label():
         if tm_data and tm_data.get("weights"):
             weights = tm_data["weights"]
             threshold = tm_data.get("threshold", 0.5)
+
+    # If still no weights, try training on-the-fly from the trainable model's
+    # labelset.  This handles the cross-dataset scenario: user trains on
+    # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
+    # origin info lets us resolve the original files, embed them, and train.
+    if weights is None and tm_data:
+        label_entries = tm_data.get("labelset", {}).get("labels", [])
+        if label_entries:
+            from vtsearch.routes.detectors_helpers import serialize_weights as _serialize_weights, train_and_threshold
+
+            media_type = m.get("media_type", "image")
+            X_list: list = []
+            y_list: list[float] = []
+
+            # First pass: match labelset MD5s against currently loaded medias.
+            # This covers the common case where medias are still loaded (same
+            # dataset) or overlap between datasets.
+            snap_for_train = snapshot_medias()
+            md5_to_emb = {c["md5"]: c["embedding"] for c in snap_for_train.values()}
+            unresolved: list[dict] = []
+            for entry in label_entries:
+                label_val = entry.get("label", "")
+                if label_val not in ("good", "bad"):
+                    continue
+                md5 = entry.get("md5", "")
+                if md5 and md5 in md5_to_emb:
+                    X_list.append(md5_to_emb[md5])
+                    y_list.append(1.0 if label_val == "good" else 0.0)
+                else:
+                    unresolved.append(entry)
+
+            # Second pass: resolve remaining entries from their origins (files
+            # on disk).  Needed for the cross-dataset case where Dataset A's
+            # items are not in Dataset B.
+            if unresolved:
+                from vtsearch.models.resolver import resolve_label_embeddings
+
+                resolved = resolve_label_embeddings(unresolved, media_type)
+                X_list.extend(resolved.embeddings)
+                y_list.extend(resolved.labels)
+
+            has_good = any(v == 1.0 for v in y_list)
+            has_bad = any(v == 0.0 for v in y_list)
+            if has_good and has_bad:
+                trained_model, threshold = train_and_threshold(
+                    X_list, y_list, snap=snap_for_train,
+                )
+                weights = _serialize_weights(trained_model)
 
     if weights is None:
         return jsonify({"error": f"Model '{m['name']}' has no weights for scoring"}), 400
