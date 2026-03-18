@@ -34,7 +34,7 @@ describe('LabelListComponent', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     const heading = el.querySelector('h3');
-    expect(heading?.textContent).toContain('Good');
+    expect(heading?.textContent).toContain('Goods');
     expect(heading?.textContent).toContain('(2)');
     expect(heading?.classList.contains('good')).toBeTrue();
   });
@@ -47,7 +47,7 @@ describe('LabelListComponent', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     const heading = el.querySelector('h3');
-    expect(heading?.textContent).toContain('Bad');
+    expect(heading?.textContent).toContain('Bads');
     expect(heading?.classList.contains('bad')).toBeTrue();
   });
 
