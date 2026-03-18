@@ -59,6 +59,7 @@
 @if (showExport) {
   <vt-export-modal
     [detectorName]="trainMode?.model?.name ?? ''"
+    [mode]="mode"
     (closed)="showExport = false"
     (exported)="showExport = false"
   />
