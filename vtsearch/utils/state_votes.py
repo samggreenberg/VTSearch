@@ -195,3 +195,29 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
+
+
+def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]]) -> None:
+    """Apply many labels in a single lock acquisition (for find-label scoring).
+
+    Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
+    ``"bad"``.  All labels are applied atomically with click-time ordinals
+    assigned in order.
+    """
+    import time as _time
+
+    with _state_lock:
+        tree = _core._diversity_tree
+        for media_id, label in labels:
+            if label == "good":
+                bad_votes.pop(media_id, None)
+                good_votes[media_id] = None
+                label_history.append((media_id, "good", _time.time()))
+            else:
+                good_votes.pop(media_id, None)
+                bad_votes[media_id] = None
+                label_history.append((media_id, "bad", _time.time()))
+            _core._click_counter += 1
+            vote_click_times[media_id] = _core._click_counter
+            if tree is not None and media_id in tree.vector_to_leaf:
+                tree.label(media_id)

@@ -90,7 +90,7 @@ def find_label():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
     from vtsearch.utils import (
-        apply_label_with_click_time,
+        apply_labels_bulk_with_click_time,
         get_autorun_detectors,
     )
 
@@ -192,17 +192,18 @@ def find_label():
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
 
-    # Apply labels to ALL elements based on threshold
+    # Apply labels to ALL elements based on threshold (bulk for performance)
+    label_pairs = []
     good_count = 0
     bad_count = 0
     for entry in results:
-        cid = entry["id"]
         if entry["score"] >= threshold:
-            apply_label_with_click_time(cid, "good")
+            label_pairs.append((entry["id"], "good"))
             good_count += 1
         else:
-            apply_label_with_click_time(cid, "bad")
+            label_pairs.append((entry["id"], "bad"))
             bad_count += 1
+    apply_labels_bulk_with_click_time(label_pairs)
 
     return jsonify({
         "ok": True,
