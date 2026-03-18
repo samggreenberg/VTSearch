@@ -94,6 +94,11 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   activate(): void {
     if (this.running) return;
     this.autopilotState.activate();
+    // Immediately check whether existing votes already satisfy early phases
+    // (e.g. user labeled 23 goods in Manual mode before switching to Autopilot).
+    // ngOnChanges ran before ngOnInit so `running` was false and the check was
+    // skipped; do it now so the phase cascades (good→bad→hard) before we emit.
+    this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
     this.started.emit();
   }
 
