@@ -31,7 +31,8 @@ export class AppComponent {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
-        this.isOnLabelView = e.urlAfterRedirects.startsWith('/label');
+        this.isOnLabelView =
+          e.urlAfterRedirects.startsWith('/label') || e.urlAfterRedirects.startsWith('/find');
       });
   }
 
