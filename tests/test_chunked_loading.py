@@ -45,7 +45,7 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
-            "embedding": np.random.randn(512).tolist(),
+            "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
             "media_bytes": wav_bytes,
@@ -69,7 +69,7 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
-            "embedding": np.random.randn(512).tolist(),
+            "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
         }
@@ -248,7 +248,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "image",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"\x89PNG fake",
                 "filename": "photo.png",
                 "width": 640,
@@ -278,7 +278,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "paragraph",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Hello world",
                 "media_bytes": b"Hello world",
                 "filename": "doc.txt",
@@ -309,7 +309,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "document",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"%PDF-1.4 fake",
                 "filename": "report.pdf",
                 "category": "test",
@@ -336,14 +336,14 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "audio",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "wav_bytes": _make_wav_bytes(),
                 "filename": "clip.wav",
                 "category": "test",
             },
             2: {
                 "type": "image",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "image_bytes": b"\x89PNG fake",
                 "filename": "pic.png",
                 "category": "test",
@@ -368,7 +368,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "document",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "filename": "report.pdf",
                 "category": "test",
             }
@@ -396,7 +396,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "type": "paragraph",
-                "embedding": np.random.randn(512).tolist(),
+                "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "text_content": "Some text paragraph",
                 "filename": "para.txt",
                 "category": "test",
