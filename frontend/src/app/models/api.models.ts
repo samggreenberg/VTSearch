@@ -260,8 +260,8 @@ export interface AppSettings {
   show_metadata?: boolean;
   view_mode_left?: Record<string, 'grid' | 'list'>;
   view_mode_right?: Record<string, 'grid' | 'list'>;
-  grid_columns_left?: Record<string, number>;
-  grid_columns_right?: Record<string, number>;
+  grid_icon_size_left?: Record<string, string>;
+  grid_icon_size_right?: Record<string, string>;
   focus_mode_left?: Record<string, 'click' | 'hover'>;
   focus_mode_right?: Record<string, 'click' | 'hover'>;
   panel_pct_left?: Record<string, number>;

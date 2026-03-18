@@ -7,6 +7,7 @@ import { MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 
+import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
@@ -46,13 +47,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   learnedScores: Record<string, number> = {};
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
-  gridColumns: number = 2;
+  gridGoalWidth: number = 80;
   showLabelImport = false;
   showExport = false;
   showViewSettings = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsRightDict: Record<string, number> = {};
+  private gridIconSizeRightDict: Record<string, string> = {};
   protected currentMediaType = '';
   private destroy$ = new Subject<void>();
 
@@ -75,7 +76,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       if (newType !== this.currentMediaType) {
         this.currentMediaType = newType;
         this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
-        this.gridColumns = this.gridColumnsRightDict[newType] ?? 2;
+        this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M');
       }
     }
   }
@@ -133,11 +134,11 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
               this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
             }
           }
-          const colsDict = settings.grid_columns_right;
-          if (colsDict && typeof colsDict === 'object') {
-            this.gridColumnsRightDict = colsDict as Record<string, number>;
+          const sizeDict = settings.grid_icon_size_right;
+          if (sizeDict && typeof sizeDict === 'object') {
+            this.gridIconSizeRightDict = sizeDict as Record<string, string>;
             if (this.currentMediaType) {
-              this.gridColumns = this.gridColumnsRightDict[this.currentMediaType] ?? 2;
+              this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType] ?? 'M');
             }
           }
         },

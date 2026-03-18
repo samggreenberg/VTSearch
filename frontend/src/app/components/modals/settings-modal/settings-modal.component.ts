@@ -89,18 +89,17 @@ export class SettingsModalComponent implements OnInit {
     return dict[typeId] ?? (side === 'view_mode_left' ? 'list' : 'grid');
   }
 
-  onGridColumnsChange(side: 'grid_columns_left' | 'grid_columns_right', typeId: string, value: number): void {
-    const clamped = Math.max(1, Math.min(6, Math.round(value)));
-    const dict = (this.settings[side] as Record<string, number>) || {};
-    dict[typeId] = clamped;
+  onGridIconSizeChange(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string, value: string): void {
+    const dict = (this.settings[side] as Record<string, string>) || {};
+    dict[typeId] = value;
     (this.settings as Record<string, unknown>)[side] = { ...dict };
     this.save();
   }
 
-  getGridColumns(side: 'grid_columns_left' | 'grid_columns_right', typeId: string): number {
+  getGridIconSize(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string): string {
     const dict = this.settings[side];
-    if (!dict) return 2;
-    return dict[typeId] ?? 2;
+    if (!dict) return 'M';
+    return dict[typeId] ?? 'M';
   }
 
   onFocusModeChange(side: 'focus_mode_left' | 'focus_mode_right', typeId: string, value: string): void {

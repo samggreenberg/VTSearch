@@ -35,7 +35,7 @@ h3 {
 .vote-list {
   &.grid-layout {
     display: grid;
-    grid-template-columns: repeat(var(--grid-columns, 2), minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--grid-goal-width, 80px), 1fr));
     gap: 4px;
     overflow-y: auto;
     flex: 1;
