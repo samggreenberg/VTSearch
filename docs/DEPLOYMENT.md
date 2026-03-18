@@ -235,8 +235,8 @@ and auto-saved on every change. Schema:
   "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
-  "grid_columns_left": {},
-  "grid_columns_right": {},
+  "grid_icon_size_left": {},
+  "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_types": [],
@@ -264,7 +264,7 @@ Notable fields:
 - `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
-- `view_mode_*`, `grid_columns_*`, `focus_mode_*`, `panel_pct_*` —
+- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*` —
   per-media-type UI layout preferences (keyed by media type ID)
 - `autopilot_enabled` — whether the autopilot feature is active
 

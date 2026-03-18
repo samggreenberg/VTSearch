@@ -29,8 +29,7 @@ COPY vtsearch/exporters/webhook/requirements.txt vtsearch/exporters/webhook/requ
 COPY vtsearch/datasets/importers/combine_datasets/requirements.txt vtsearch/datasets/importers/combine_datasets/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
-    pip install --no-cache-dir -r requirements-cpu.txt && \
-    pip install --no-cache-dir -r requirements-exporters.txt
+    pip install --no-cache-dir -r requirements-cpu.txt
 
 # ---------- application layer ----------
 COPY . .
