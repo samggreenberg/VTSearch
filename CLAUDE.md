@@ -184,6 +184,44 @@ All mutable global state is reset automatically before each test via two autouse
   ```
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
+## Avoiding Flaky Tests (IMPORTANT)
+
+When writing new tests, avoid these two common sources of flakiness:
+
+### 1. Always seed random number generators
+Never call `np.random.randn()`, `np.random.rand()`, `torch.randn()`, or similar without a fixed seed. Random embeddings feed into neural net training and sorting, where different values cause non-deterministic convergence — making assertions pass or fail depending on the random draw.
+
+**Do this:**
+```python
+rng = np.random.default_rng(42)
+fake_embeddings = rng.standard_normal((n, dim)).astype(np.float32)
+```
+
+**Not this:**
+```python
+fake_embeddings = np.random.randn(n, dim).astype(np.float32)  # FLAKY — unseeded
+```
+
+### 2. Never use `time.sleep()` for thread synchronization
+`time.sleep(0.2)` to "wait for a thread to start" is unreliable on loaded machines. Use `threading.Event` for deterministic synchronization, and set generous polling timeouts.
+
+**Do this:**
+```python
+started = threading.Event()
+def target():
+    started.set()
+    # ... work ...
+thread = threading.Thread(target=target)
+thread.start()
+started.wait(timeout=5)
+```
+
+**Not this:**
+```python
+thread.start()
+time.sleep(0.2)  # FLAKY — may not be enough on a loaded machine
+```
+
 ## Environment Notes (Claude Code on the web)
 - **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
