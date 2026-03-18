@@ -533,6 +533,63 @@ class TestDashboardModelRegistryColumns:
         assert m["last_trained_at"] >= now
 
 
+class TestAutorunCheckboxPersistence:
+    """Tests that toggling autodetect via the API persists the setting."""
+
+    def test_autodetect_toggle_persists_to_settings(self, client):
+        """Toggling autodetect on saves the detector name to settings."""
+        from vtsearch.settings import get_autorun_detector_names
+
+        add_autorun_detector("persist-det", "audio", None, 0.5, autodetect=False)
+        register_model(name="persist-det", media_type="audio", trainable=False, detector_name="persist-det")
+
+        resp = client.put(
+            "/api/autorun-detectors/persist-det/autodetect",
+            json={"autodetect": True},
+        )
+        assert resp.status_code == 200
+        assert "persist-det" in get_autorun_detector_names()
+
+    def test_autodetect_toggle_off_removes_from_settings(self, client):
+        """Toggling autodetect off removes the detector name from settings."""
+        from vtsearch.settings import add_autorun_detector_name, get_autorun_detector_names
+
+        add_autorun_detector("remove-det", "audio", None, 0.5, autodetect=True)
+        add_autorun_detector_name("remove-det")
+
+        resp = client.put(
+            "/api/autorun-detectors/remove-det/autodetect",
+            json={"autodetect": False},
+        )
+        assert resp.status_code == 200
+        assert "remove-det" not in get_autorun_detector_names()
+
+    def test_model_registry_falls_back_to_settings(self, client):
+        """When no runtime detector exists, autodetect falls back to settings."""
+        from vtsearch.settings import add_autorun_detector_name
+
+        register_model(name="settings-det", media_type="audio", trainable=False, detector_name="settings-det")
+        add_autorun_detector_name("settings-det")
+
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["autodetect"] is True
+
+    def test_model_registry_settings_fallback_false(self, client):
+        """Without settings entry, autodetect is False when no runtime detector."""
+        register_model(name="no-det", media_type="audio", trainable=False, detector_name="no-det")
+
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["autodetect"] is False
+
+    def test_autorun_not_in_settings_window(self, client):
+        """autorun_detector_names should not appear in the defaults endpoint."""
+        resp = client.get("/api/settings/defaults")
+        data = resp.get_json()
+        assert "autorun_detector_names" not in data
+
+
 class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
 

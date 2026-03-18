@@ -58,6 +58,7 @@ _DEFAULTS: dict[str, Any] = {
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
+    "autorun_detector_names": [],
     "autopilot_enabled": True,
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
@@ -71,7 +72,13 @@ _DEFAULTS: dict[str, Any] = {
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
-_EXCLUDE_FROM_DEFAULTS = {"autorun_processors", "saved_datasets_dir", "detectors_dir", "trainable_models_dir"}
+_EXCLUDE_FROM_DEFAULTS = {
+    "autorun_processors",
+    "autorun_detector_names",
+    "saved_datasets_dir",
+    "detectors_dir",
+    "trainable_models_dir",
+}
 
 # In-memory cache — loaded once, written on every mutation.
 _settings: dict[str, Any] | None = None
@@ -712,6 +719,48 @@ def to_settings_json(entry: dict[str, Any]) -> str:
         "field_values": entry.get("field_values", {}),
     }
     return json.dumps(snippet)
+
+
+def get_autorun_detector_names() -> list[str]:
+    """Return the list of detector names flagged for autorun."""
+    with _settings_lock:
+        raw = _ensure_loaded().get("autorun_detector_names", [])
+        if isinstance(raw, list):
+            return list(raw)
+        return []
+
+
+def set_autorun_detector_names(value: list[str]) -> None:
+    """Set and persist the full list of autorun detector names."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autorun_detector_names"] = list(dict.fromkeys(value))  # deduplicate, preserve order
+        _save(s)
+
+
+def add_autorun_detector_name(name: str) -> None:
+    """Add a detector name to the autorun list (idempotent)."""
+    with _settings_lock:
+        current = get_autorun_detector_names()
+        if name not in current:
+            current.append(name)
+            set_autorun_detector_names(current)
+
+
+def remove_autorun_detector_name(name: str) -> bool:
+    """Remove a detector name from the autorun list. Returns True if found."""
+    with _settings_lock:
+        current = get_autorun_detector_names()
+        if name in current:
+            current.remove(name)
+            set_autorun_detector_names(current)
+            return True
+        return False
+
+
+def is_autorun_detector(name: str) -> bool:
+    """Check whether a detector name is in the autorun list."""
+    return name in get_autorun_detector_names()
 
 
 def ensure_autorun_processors_imported() -> list[str]:

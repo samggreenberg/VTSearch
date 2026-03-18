@@ -42,6 +42,16 @@
     <span class="dim">-</span>
   }
 </td>
+<td class="text-center">
+  <input
+    type="checkbox"
+    [checked]="model.autodetect"
+    (change)="onAutorunToggle($event)"
+    (click)="$event.stopPropagation()"
+    aria-label="Autorun"
+    title="Include in CLI autorun"
+  />
+</td>
 <td class="text-center">{{ formatDate(model.last_trained_at) }}</td>
 <td class="text-center">{{ formatDate(model.created_at) }}</td>
 <td class="actions-cell text-center">
