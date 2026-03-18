@@ -74,16 +74,22 @@ class DiversityTree:
             total = len(ids)
             vecs = np.array([vectors[i] for i in ids], dtype=np.float32)
             self._on_progress = on_progress
-            # Estimate total k-means work: each tree level clusters ~N vectors
-            # total.  Number of levels ≈ log_k(N / min_node_size), capped at
-            # max_depth.  Progress is reported after each k-means call, weighted
-            # by the number of vectors in that call.
+            # Estimate total k-means work: count the expected number of
+            # clustering operations (k-means fits).  Each internal node runs
+            # _N_INIT fits.  The number of internal (splitting) nodes in a
+            # balanced k-ary tree of *num_levels* levels is
+            # (k^num_levels - 1) / (k - 1).  Progress increments by 1 per
+            # fit so that every clustering contributes equally — this keeps
+            # the bar moving during the expensive root clustering instead of
+            # weighting by vector count (which bunches progress into the
+            # many tiny leaf-adjacent nodes).
             if total >= min_node_size and total >= 2 * k:
                 num_levels = max(1, math.ceil(math.log(total / min_node_size, k)))
                 num_levels = min(num_levels, max_depth)
             else:
                 num_levels = 0
-            self._estimated_total_work = max(total * num_levels * _N_INIT, 1)
+            estimated_nodes = (k**num_levels - 1) // (k - 1) if num_levels > 0 else 0
+            self._estimated_total_work = max(estimated_nodes * _N_INIT, 1)
             self._work_done = 0
             if on_progress:
                 on_progress(0, self._estimated_total_work)
@@ -141,8 +147,8 @@ class DiversityTree:
                 best_inertia = km.inertia_
                 best_labels = candidate_labels
 
-            # Report progress after each init
-            self._work_done += len(ids)
+            # Report progress after each init (one fit = one unit of work)
+            self._work_done += 1
             if self._on_progress:
                 self._on_progress(
                     min(self._work_done, self._estimated_total_work),

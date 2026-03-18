@@ -603,13 +603,17 @@ class TestKmeansProgress:
         assert calls[1][0] > 0, "Progress should advance after root k-means"
 
     def test_progress_total_reflects_estimated_work(self):
-        """Total should be based on N * num_levels, not just N."""
+        """Total should be based on estimated clustering fits (nodes × N_INIT)."""
         vecs = _make_vectors(200)
         calls = []
         DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
         total = calls[0][1]
-        n = len(vecs)
-        assert total > n, f"Estimated total work ({total}) should exceed vector count ({n})"
+        from vtsearch.models.diversity_tree import _N_INIT
+
+        # With k=2, 200 vectors, min_node_size=10 → 5 levels.
+        # Estimated internal nodes = (2^5 - 1) / (2 - 1) = 31.
+        # Estimated total = 31 * _N_INIT = 310.
+        assert total == 31 * _N_INIT, f"Expected 31 * {_N_INIT} = {31 * _N_INIT}, got {total}"
 
     def test_no_progress_for_small_input(self):
         """Vectors below min_node_size should not trigger k-means progress."""

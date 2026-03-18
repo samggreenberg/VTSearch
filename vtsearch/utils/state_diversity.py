@@ -20,7 +20,7 @@ def build_diversity_tree(
     replayed into the new tree so the seen state stays accurate.
 
     *on_progress*, when provided, is called as ``on_progress(current, total)``
-    to report how many vectors have been placed into leaf nodes so far.
+    to report how many k-means clustering fits have been completed so far.
     """
     import numpy as np
 
