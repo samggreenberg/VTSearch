@@ -83,7 +83,7 @@ describe('DashboardComponent', () => {
     });
     httpMock.expectOne('/api/models/registry').flush({ models: [] });
 
-    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBeFalse();
     expect(component.selectedDatasetIds.has('d2')).toBeTrue();
   });
 
