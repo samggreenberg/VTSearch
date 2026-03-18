@@ -12,6 +12,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-find-view',
@@ -25,11 +26,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   viewModeLeft: 'grid' | 'list' = 'list';
-  gridColumnsLeft: number = 2;
+  gridGoalWidthLeft: number = 80;
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsLeftDict: Record<string, number> = {};
+  private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private panelPxLeftDict: Record<string, number> = {};
@@ -77,7 +78,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
             this.applyPanelPx(newType);
@@ -209,11 +210,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
           }
         }
-        const colsDict = settings.grid_columns_left;
-        if (colsDict && typeof colsDict === 'object') {
-          this.gridColumnsLeftDict = colsDict as Record<string, number>;
+        const sizeDict = settings.grid_icon_size_left;
+        if (sizeDict && typeof sizeDict === 'object') {
+          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
           if (this.currentMediaType) {
-            this.gridColumnsLeft = this.gridColumnsLeftDict[this.currentMediaType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
           }
         }
         const fmLeft = settings.focus_mode_left;

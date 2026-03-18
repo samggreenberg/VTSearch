@@ -257,91 +257,86 @@ class TestSettingsModule:
         with pytest.raises(ValueError):
             settings_mod.set_view_mode_left({"nonexistent_type": "grid"})
 
-    def test_get_grid_columns_left_default(self):
-        result = settings_mod.get_grid_columns_left()
+    def test_get_grid_icon_size_left_default(self):
+        result = settings_mod.get_grid_icon_size_left()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v == 2
+            assert v == "M"
 
-    def test_get_grid_columns_right_default(self):
-        result = settings_mod.get_grid_columns_right()
+    def test_get_grid_icon_size_right_default(self):
+        result = settings_mod.get_grid_icon_size_right()
         assert isinstance(result, dict)
         for v in result.values():
-            assert v == 2
+            assert v == "M"
 
-    def test_set_grid_columns_left_per_type(self, isolated_settings):
-        settings_mod.set_grid_columns_left({"audio": 3, "image": 1})
-        result = settings_mod.get_grid_columns_left()
-        assert result["audio"] == 3
-        assert result["image"] == 1
-
-        raw = json.loads(isolated_settings.read_text())
-        assert raw["grid_columns_left"]["audio"] == 3
-        assert raw["grid_columns_left"]["image"] == 1
-
-    def test_set_grid_columns_right_per_type(self, isolated_settings):
-        settings_mod.set_grid_columns_right({"audio": 1, "video": 3})
-        result = settings_mod.get_grid_columns_right()
-        assert result["audio"] == 1
-        assert result["video"] == 3
+    def test_set_grid_icon_size_left_per_type(self, isolated_settings):
+        settings_mod.set_grid_icon_size_left({"audio": "XS", "image": "XL"})
+        result = settings_mod.get_grid_icon_size_left()
+        assert result["audio"] == "XS"
+        assert result["image"] == "XL"
 
         raw = json.loads(isolated_settings.read_text())
-        assert raw["grid_columns_right"]["audio"] == 1
+        assert raw["grid_icon_size_left"]["audio"] == "XS"
+        assert raw["grid_icon_size_left"]["image"] == "XL"
 
-    def test_grid_columns_left_legacy_scalar(self, isolated_settings):
-        settings_mod.set_grid_columns_left(3)
-        result = settings_mod.get_grid_columns_left()
+    def test_set_grid_icon_size_right_per_type(self, isolated_settings):
+        settings_mod.set_grid_icon_size_right({"audio": "S", "video": "L"})
+        result = settings_mod.get_grid_icon_size_right()
+        assert result["audio"] == "S"
+        assert result["video"] == "L"
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["grid_icon_size_right"]["audio"] == "S"
+
+    def test_grid_icon_size_left_scalar(self, isolated_settings):
+        settings_mod.set_grid_icon_size_left("XL")
+        result = settings_mod.get_grid_icon_size_left()
         for v in result.values():
-            assert v == 3
+            assert v == "XL"
 
-    def test_grid_columns_right_legacy_scalar(self, isolated_settings):
-        settings_mod.set_grid_columns_right(1)
-        result = settings_mod.get_grid_columns_right()
+    def test_grid_icon_size_right_scalar(self, isolated_settings):
+        settings_mod.set_grid_icon_size_right("XS")
+        result = settings_mod.get_grid_icon_size_right()
         for v in result.values():
-            assert v == 1
+            assert v == "XS"
 
-    def test_grid_columns_left_persists_across_reset(self, isolated_settings):
-        settings_mod.set_grid_columns_left({"audio": 3})
+    def test_grid_icon_size_left_persists_across_reset(self, isolated_settings):
+        settings_mod.set_grid_icon_size_left({"audio": "L"})
         settings_mod.reset()
-        assert settings_mod.get_grid_columns_left()["audio"] == 3
+        assert settings_mod.get_grid_icon_size_left()["audio"] == "L"
 
-    def test_grid_columns_right_persists_across_reset(self, isolated_settings):
-        settings_mod.set_grid_columns_right({"audio": 1})
+    def test_grid_icon_size_right_persists_across_reset(self, isolated_settings):
+        settings_mod.set_grid_icon_size_right({"audio": "S"})
         settings_mod.reset()
-        assert settings_mod.get_grid_columns_right()["audio"] == 1
+        assert settings_mod.get_grid_icon_size_right()["audio"] == "S"
 
-    def test_grid_columns_left_invalid_value(self):
+    def test_grid_icon_size_left_invalid_value(self):
         with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left({"audio": "invalid"})
+            settings_mod.set_grid_icon_size_left({"audio": "HUGE"})
 
-    def test_grid_columns_right_invalid_value(self):
+    def test_grid_icon_size_right_invalid_value(self):
         with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_right({"audio": "invalid"})
+            settings_mod.set_grid_icon_size_right({"audio": "TINY"})
 
-    def test_grid_columns_invalid_scalar(self):
+    def test_grid_icon_size_invalid_scalar(self):
         with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left("invalid")
+            settings_mod.set_grid_icon_size_left("invalid")
 
-    def test_grid_columns_invalid_media_type(self):
+    def test_grid_icon_size_invalid_media_type(self):
         with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left({"nonexistent_type": 3})
+            settings_mod.set_grid_icon_size_left({"nonexistent_type": "M"})
 
-    def test_grid_columns_out_of_range(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left({"audio": 0})
-        with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left({"audio": 7})
-        with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left(0)
-        with pytest.raises(ValueError):
-            settings_mod.set_grid_columns_left(7)
+    def test_grid_icon_size_case_insensitive(self, isolated_settings):
+        settings_mod.set_grid_icon_size_left({"audio": "xs"})
+        assert settings_mod.get_grid_icon_size_left()["audio"] == "XS"
+        settings_mod.set_grid_icon_size_right("xl")
+        for v in settings_mod.get_grid_icon_size_right().values():
+            assert v == "XL"
 
-    def test_grid_columns_allows_up_to_six(self, isolated_settings):
-        settings_mod.set_grid_columns_left({"audio": 6})
-        assert settings_mod.get_grid_columns_left()["audio"] == 6
-        settings_mod.set_grid_columns_right(5)
-        for v in settings_mod.get_grid_columns_right().values():
-            assert v == 5
+    def test_grid_icon_size_all_valid_sizes(self, isolated_settings):
+        for size in ("XS", "S", "M", "L", "XL"):
+            settings_mod.set_grid_icon_size_left({"audio": size})
+            assert settings_mod.get_grid_icon_size_left()["audio"] == size
 
     def test_get_focus_mode_left_default(self):
         result = settings_mod.get_focus_mode_left()
@@ -513,12 +508,12 @@ class TestSettingsModule:
         assert isinstance(defaults["view_mode_right"], dict)
         for v in defaults["view_mode_right"].values():
             assert v == "grid"
-        assert isinstance(defaults["grid_columns_left"], dict)
-        for v in defaults["grid_columns_left"].values():
-            assert v == 2
-        assert isinstance(defaults["grid_columns_right"], dict)
-        for v in defaults["grid_columns_right"].values():
-            assert v == 2
+        assert isinstance(defaults["grid_icon_size_left"], dict)
+        for v in defaults["grid_icon_size_left"].values():
+            assert v == "M"
+        assert isinstance(defaults["grid_icon_size_right"], dict)
+        for v in defaults["grid_icon_size_right"].values():
+            assert v == "M"
         assert isinstance(defaults["focus_mode_left"], dict)
         for v in defaults["focus_mode_left"].values():
             assert v == "click"
@@ -1007,57 +1002,51 @@ class TestSettingsAPI:
         assert "view_mode_left" in data
         assert "view_mode_right" in data
 
-    def test_update_grid_columns_left_per_type(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": {"audio": 3, "image": 1}})
+    def test_update_grid_icon_size_left_per_type(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["grid_columns_left"]["audio"] == 3
-        assert data["grid_columns_left"]["image"] == 1
+        assert data["grid_icon_size_left"]["audio"] == "XS"
+        assert data["grid_icon_size_left"]["image"] == "XL"
 
         res2 = client.get("/api/settings")
-        assert res2.get_json()["grid_columns_left"]["audio"] == 3
+        assert res2.get_json()["grid_icon_size_left"]["audio"] == "XS"
 
-    def test_update_grid_columns_left_scalar(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": 3})
+    def test_update_grid_icon_size_left_scalar(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_left": "L"})
         assert res.status_code == 200
         data = res.get_json()
-        for v in data["grid_columns_left"].values():
-            assert v == 3
+        for v in data["grid_icon_size_left"].values():
+            assert v == "L"
 
-    def test_update_grid_columns_left_invalid(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": {"audio": "invalid"}})
+    def test_update_grid_icon_size_left_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "HUGE"}})
         assert res.status_code == 400
 
-    def test_update_grid_columns_left_invalid_scalar(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": "invalid"})
+    def test_update_grid_icon_size_left_invalid_scalar(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_left": "invalid"})
         assert res.status_code == 400
 
-    def test_update_grid_columns_left_out_of_range(self, client):
-        res = client.put("/api/settings", json={"grid_columns_left": 0})
-        assert res.status_code == 400
-        res = client.put("/api/settings", json={"grid_columns_left": 7})
-        assert res.status_code == 400
-
-    def test_update_grid_columns_right_per_type(self, client):
-        res = client.put("/api/settings", json={"grid_columns_right": {"audio": 1, "video": 3}})
+    def test_update_grid_icon_size_right_per_type(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_right": {"audio": "S", "video": "L"}})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["grid_columns_right"]["audio"] == 1
-        assert data["grid_columns_right"]["video"] == 3
+        assert data["grid_icon_size_right"]["audio"] == "S"
+        assert data["grid_icon_size_right"]["video"] == "L"
 
         res2 = client.get("/api/settings")
-        assert res2.get_json()["grid_columns_right"]["audio"] == 1
+        assert res2.get_json()["grid_icon_size_right"]["audio"] == "S"
 
-    def test_update_grid_columns_right_invalid(self, client):
-        res = client.put("/api/settings", json={"grid_columns_right": {"audio": "invalid"}})
+    def test_update_grid_icon_size_right_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_right": {"audio": "TINY"}})
         assert res.status_code == 400
 
-    def test_get_settings_includes_grid_columns(self, client):
+    def test_get_settings_includes_grid_icon_size(self, client):
         res = client.get("/api/settings")
         assert res.status_code == 200
         data = res.get_json()
-        assert "grid_columns_left" in data
-        assert "grid_columns_right" in data
+        assert "grid_icon_size_left" in data
+        assert "grid_icon_size_right" in data
 
     def test_update_focus_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"focus_mode_left": {"audio": "hover", "image": "click"}})

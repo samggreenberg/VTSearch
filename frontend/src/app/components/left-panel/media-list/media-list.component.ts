@@ -29,7 +29,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridColumns: number = 2;
+  @Input() gridGoalWidth: number = 80;
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() showScores = true;
 

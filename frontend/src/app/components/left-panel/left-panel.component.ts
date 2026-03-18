@@ -45,7 +45,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() sortStatus = '';
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridColumns: number = 2;
+  @Input() gridGoalWidth: number = 80;
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() loadSortLabel = '';
   @Input() textQuery = '';

@@ -43,8 +43,14 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label"># Grid Columns:</label>
-          <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns(activeViewTab)" (ngModelChange)="onGridColumnsChange(activeViewTab, $event)" min="1" max="6" />
+          <label class="form-label">Grid Icon Size:</label>
+          <select class="form-select" [ngModel]="getGridIconSize(activeViewTab)" (ngModelChange)="onGridIconSizeChange(activeViewTab, $event)">
+            <option value="XS">XS</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
+          </select>
         </div>
       </div>
     } @else {
