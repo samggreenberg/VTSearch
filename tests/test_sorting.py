@@ -121,7 +121,11 @@ class TestBuildModel:
         """build_model should NOT include sigmoid — output can be outside [0,1]."""
         from vtsearch.models.training import build_model
 
-        model = build_model(32)
+        # Use a seeded generator so the random weights are deterministic —
+        # without this, the test is flaky because random initialisation can
+        # occasionally produce weights that map extreme input into [0, 1].
+        gen = torch.Generator().manual_seed(42)
+        model = build_model(32, generator=gen)
         model.eval()
         # Use extreme input to push output well outside [0, 1]
         X = torch.ones(1, 32) * 100.0

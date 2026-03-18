@@ -38,6 +38,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() trainMode: TrainModeContext | null = null;
   @Input() focusMode: 'click' | 'hover' = 'click';
+  /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
+  @Input() mode: 'label' | 'find' = 'label';
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
