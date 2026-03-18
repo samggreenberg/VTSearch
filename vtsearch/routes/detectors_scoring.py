@@ -92,8 +92,6 @@ def find_label():
     from vtsearch.utils import (
         apply_label_with_click_time,
         get_autorun_detectors,
-        good_votes,
-        bad_votes,
     )
 
     body = request.get_json(force=True, silent=True) or {}
@@ -150,9 +148,6 @@ def find_label():
     bad_count = 0
     for entry in results:
         cid = entry["id"]
-        # Skip already-labeled items
-        if cid in good_votes or cid in bad_votes:
-            continue
         if entry["score"] >= threshold:
             apply_label_with_click_time(cid, "good")
             good_count += 1
