@@ -693,16 +693,16 @@ def compute_labeling_status(
 def calculate_diversity_level_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
+    inclusion_value: int = 0,
 ) -> list[dict[str, Any]]:
     """Return cached per-step diversity levels.
 
     Diversity levels are computed and stored by :func:`_ensure_cache` as it
-    processes each label-history step, so this function is just a read of the
-    already-populated cache.  :func:`analyze_labeling_progress` calls
-    ``_ensure_cache`` before calling this function, so the cache is always
-    current by the time we arrive here.
+    processes each label-history step, so this function ensures the cache is
+    current before reading it.
     """
     with _progress_lock:
+        _ensure_cache(clips_dict, label_history, inclusion_value)
         return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
 
 
@@ -725,7 +725,7 @@ def analyze_labeling_progress(
 
         stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
-        diversity = calculate_diversity_level_over_time(clips_dict, label_history)
+        diversity = calculate_diversity_level_over_time(clips_dict, label_history, inclusion_value)
 
     return {
         "error_cost_over_time": error_cost,

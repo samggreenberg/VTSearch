@@ -898,7 +898,7 @@ def indicator_score_history():
             data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
             return jsonify({"metric": "stable", "history": data})
         else:
-            data = calculate_diversity_level_over_time(clips, label_history)
+            data = calculate_diversity_level_over_time(clips, label_history, inclusion)
             return jsonify({"metric": "diverse", "history": data})
     except Exception:
         import logging
@@ -990,7 +990,7 @@ def eval_train_and_score():
             update_eval_progress("idle", "Done", n_total, n_total)
             return jsonify({"stability": result_data})
         else:
-            result_data = calculate_diversity_level_over_time(clips, history)
+            result_data = calculate_diversity_level_over_time(clips, history, inclusion)
             update_eval_progress("idle", "Done", n_total, n_total)
             return jsonify({"diversity": result_data})
     except Exception:
