@@ -123,7 +123,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   getCellValue(entry: LabelEntry, col: ExportColumn): string {
-    return String((entry as Record<string, unknown>)[col] ?? '');
+    return String((entry as unknown as Record<string, unknown>)[col] ?? '');
   }
 
   /** Build delimited text from labels using selected columns. */
