@@ -539,9 +539,10 @@ class TestStabilitySkipsUnchangedModel:
         # Build a minimal clips_dict with embeddings
         import numpy as np
 
+        rng = np.random.RandomState(42)
         clips = {}
         for i in range(10):
-            clips[i] = {"embedding": np.random.randn(8).astype(np.float32)}
+            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
 
         # Label history: vote good on 0, bad on 1, then vote good on 0 AGAIN
         # The third event doesn't change the training data (0 is already good).
@@ -568,9 +569,10 @@ class TestStabilitySkipsUnchangedModel:
 
         import numpy as np
 
+        rng = np.random.RandomState(43)
         clips = {}
         for i in range(20):
-            clips[i] = {"embedding": np.random.randn(8).astype(np.float32)}
+            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
 
         # Each step changes the training data
         history = [
@@ -680,7 +682,8 @@ class TestLiveModelReuse:
         from vtsearch.models.progress import clear_progress_cache
         from vtsearch.models.training import train_model
 
-        X = torch.tensor(np.random.randn(2, 8).astype(np.float32))
+        rng = np.random.RandomState(44)
+        X = torch.tensor(rng.randn(2, 8).astype(np.float32))
         y = torch.tensor([1.0, 0.0]).unsqueeze(1)
         model = train_model(X, y, 8)
 

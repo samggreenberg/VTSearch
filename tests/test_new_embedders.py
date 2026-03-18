@@ -376,7 +376,7 @@ class TestNewEmbeddersInheritance:
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
-        fake_vec = np.random.randn(768).astype(np.float32)
+        fake_vec = np.random.RandomState(42).randn(768).astype(np.float32)
         with patch.object(emb, "embed_text", return_value=fake_vec):
             result = emb.embed_text_enriched("a cat")
         assert result is not None
