@@ -358,6 +358,84 @@ class TestAutorunDetectors:
         assert "inclusion" in stored
 
 
+class TestFindLabel:
+    """Tests for POST /api/find-label — score all medias and apply Good/Bad labels."""
+
+    def _create_model_with_detector(self, client):
+        """Helper: train a detector, register it as autorun, register in model registry."""
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.utils import add_autorun_detector
+
+        reset_for_tests()
+
+        # Train a detector from votes
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        export_resp = client.post("/api/detector/export")
+        assert export_resp.status_code == 200
+        detector = export_resp.get_json()
+
+        # Register as autorun detector
+        det_name = "find-label-det"
+        add_autorun_detector(
+            det_name,
+            "audio",
+            weights=detector["weights"],
+            threshold=detector["threshold"],
+        )
+
+        # Register in model registry
+        entry = register_model(
+            name="Find Label Test Model",
+            media_type="audio",
+            trainable=False,
+            detector_name=det_name,
+        )
+
+        # Clear the training votes
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        return entry["id"]
+
+    def test_find_label_marks_all_items(self, client):
+        """find-label should mark every loaded media as good or bad."""
+        model_id = self._create_model_with_detector(client)
+        resp = client.post("/api/find-label", json={"model_id": model_id})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        total = data["good_count"] + data["bad_count"]
+        assert total == app_module.NUM_MEDIAS
+
+    def test_find_label_overwrites_existing_votes(self, client):
+        """find-label must mark ALL items even when votes already exist.
+
+        Reproduces the bug: train on Dataset A, load Dataset B (which reuses
+        integer IDs), run Find — previously, items whose IDs matched stale
+        votes were skipped and never marked.
+        """
+        model_id = self._create_model_with_detector(client)
+
+        # Simulate stale votes from a previous dataset (all IDs overlap)
+        app_module.good_votes.update({k: None for k in range(1, 11)})
+        app_module.bad_votes.update({k: None for k in range(11, 21)})
+
+        resp = client.post("/api/find-label", json={"model_id": model_id})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        total = data["good_count"] + data["bad_count"]
+        assert total == app_module.NUM_MEDIAS
+
+    def test_find_label_missing_model_id(self, client):
+        resp = client.post("/api/find-label", json={})
+        assert resp.status_code == 400
+
+    def test_find_label_unknown_model_id(self, client):
+        resp = client.post("/api/find-label", json={"model_id": "nonexistent"})
+        assert resp.status_code == 404
+
+
 class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
 
