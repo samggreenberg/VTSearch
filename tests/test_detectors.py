@@ -450,10 +450,10 @@ class TestFindLabel:
         labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
 
         # Write a trainable model file with the labelset but NO weights
-        import vtsearch.settings as _settings
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
 
-        original_dir = _settings.get_trainable_models_dir()
-        _settings._settings_cache["trainable_models_dir"] = str(tmp_path)
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
         try:
             tm_name = "test-find-trainable"
             tm_path = tmp_path / f"{tm_name}.json"
@@ -488,7 +488,7 @@ class TestFindLabel:
             total = data["good_count"] + data["bad_count"]
             assert total == app_module.NUM_MEDIAS
         finally:
-            _settings._settings_cache["trainable_models_dir"] = str(original_dir)
+            set_trainable_models_dir(original_dir)
 
     def test_find_label_missing_model_id(self, client):
         resp = client.post("/api/find-label", json={})
