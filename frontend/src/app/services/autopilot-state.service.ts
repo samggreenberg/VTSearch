@@ -72,15 +72,20 @@ export class AutopilotStateService {
     const st = this.stateSubject.value;
     let nextPhase = st.phase;
 
-    if (st.phase === 'good' && goodCount >= st.goodToStart) {
+    // Use sequential `if` (not `else if`) so phases can cascade in one call,
+    // e.g. good→bad→hard when both vote thresholds are already met.
+    if (nextPhase === 'good' && goodCount >= st.goodToStart) {
       nextPhase = 'bad';
-    } else if (st.phase === 'bad' && badCount >= st.badToStart) {
+    }
+    if (nextPhase === 'bad' && badCount >= st.badToStart) {
       nextPhase = 'hard';
-    } else if (st.phase === 'hard' && st.smartStatus === 'green' && st.stableStatus === 'green') {
+    }
+    if (nextPhase === 'hard' && st.smartStatus === 'green' && st.stableStatus === 'green') {
       nextPhase = 'new';
-    } else if (st.phase === 'new' && (st.smartStatus !== 'green' || st.stableStatus !== 'green')) {
+    }
+    if (nextPhase === 'new' && (st.smartStatus !== 'green' || st.stableStatus !== 'green')) {
       nextPhase = 'hard';
-    } else if (st.phase === 'new' && st.spanStatus === 'green') {
+    } else if (nextPhase === 'new' && st.spanStatus === 'green') {
       nextPhase = 'done';
     }
 

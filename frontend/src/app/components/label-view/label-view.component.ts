@@ -483,23 +483,40 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Autopilot ---
 
   onAutopilotStart(): void {
-    this.sortState.setSelectMode('top');
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
-    const textQuery = this.labelSession.textQuery;
-    const mediaExample = this.labelSession.mediaExample;
-    if (textQuery) {
-      if (this.mediaState.medias.length > 0) {
-        this.triggerAutopilotTextSort();
+
+    const phase = this.autopilotStateService.state.phase;
+
+    // For phases beyond 'good', the phase-transition subscription already set
+    // the correct selectMode and (for 'hard') triggered a learned sort.
+    // Only override selectMode for the initial 'good' phase.
+    if (phase === 'good') {
+      this.sortState.setSelectMode('top');
+    }
+
+    // For 'hard' and later phases the subscription already triggered learned
+    // sort; no text/media sort needed.  For 'good' and 'bad' phases, kick off
+    // the text/media sort so the user has results to vote on.
+    if (phase === 'good' || phase === 'bad') {
+      const textQuery = this.labelSession.textQuery;
+      const mediaExample = this.labelSession.mediaExample;
+      if (textQuery) {
+        if (this.mediaState.medias.length > 0) {
+          this.triggerAutopilotTextSort();
+        } else {
+          this.autopilotTextSortPending = true;
+        }
+      } else if (mediaExample) {
+        if (this.mediaState.medias.length > 0) {
+          this.triggerAutopilotMediaSort();
+        } else {
+          this.autopilotMediaSortPending = true;
+        }
       } else {
-        this.autopilotTextSortPending = true;
-      }
-    } else if (mediaExample) {
-      if (this.mediaState.medias.length > 0) {
-        this.triggerAutopilotMediaSort();
-      } else {
-        this.autopilotMediaSortPending = true;
+        // No sort query configured; try to select from existing sort results.
+        this.autoSelectNext();
       }
     }
   }
