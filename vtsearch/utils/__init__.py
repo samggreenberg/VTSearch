@@ -20,6 +20,7 @@ from vtsearch.utils.state import (
     add_textsort_suggestion,
     apply_label,
     apply_label_with_click_time,
+    apply_labels_bulk_with_click_time,
     assign_click_time,
     bad_votes,
     build_media_lookup,
@@ -158,6 +159,7 @@ __all__ = [
     "toggle_vote",
     "apply_label",
     "apply_label_with_click_time",
+    "apply_labels_bulk_with_click_time",
     # Diversity tree
     "build_diversity_tree",
     "get_diversity_tree",

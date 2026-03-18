@@ -48,6 +48,7 @@ from vtsearch.utils.state_votes import (  # noqa: F401
     add_textsort_suggestion,
     apply_label,
     apply_label_with_click_time,
+    apply_labels_bulk_with_click_time,
     clear_votes,
     get_learned_scores,
     get_textsort_suggestions,

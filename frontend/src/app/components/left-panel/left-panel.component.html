@@ -9,6 +9,14 @@
         <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
       </div>
 
+      @if (sortBusy) {
+        <vt-progress-indicators
+          [labelingStatus]="null"
+          [sortBusy]="sortBusy"
+          [sortStatus]="sortStatus"
+        />
+      }
+
       <div class="media-list-container">
         <vt-media-list
           [medias]="medias"
