@@ -1,9 +1,9 @@
 const ICON_SIZE_GOAL_WIDTH: Record<string, number> = {
-  XS: 40,
-  S: 60,
+  XS: 25,
+  S: 50,
   M: 80,
-  L: 120,
-  XL: 180,
+  L: 130,
+  XL: 200,
 };
 
 export function iconSizeToGoalWidth(size: string): number {
