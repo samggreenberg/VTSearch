@@ -1,1 +1,0 @@
-import{N as t}from"./chunk-RSHH7I3P.js";var e=class o{modelId="";modelName="";static \u0275fac=function(r){return new(r||o)};static \u0275prov=t({token:o,factory:o.\u0275fac,providedIn:"root"})};export{e as a};
