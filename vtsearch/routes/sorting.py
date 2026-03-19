@@ -345,8 +345,8 @@ def export_labels():
             else:
                 entry["is_correction"] = False
 
-        if corrections_only:
-            result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
+    if corrections_only:
+        result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
 
     enrich = request.args.get("enrich", "").lower() in ("1", "true")
     if enrich:
