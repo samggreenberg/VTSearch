@@ -275,7 +275,10 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     this.error = '';
     this.submitting = true;
 
-    const labelsData = { labels: this.filteredLabels };
+    const labelsData = {
+      labels: this.filteredLabels,
+      selected_columns: this.enabledColumns.map((c) => c.key),
+    };
     this.exportersApi
       .runExport({
         exporter_name: exporter.name,
