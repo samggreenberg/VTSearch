@@ -490,6 +490,203 @@ class TestFindLabel:
         finally:
             set_trainable_models_dir(original_dir)
 
+    def test_find_label_cross_dataset_resolves_from_origin(self, client, tmp_path):
+        """find-label should resolve labels from origin when MD5s don't match.
+
+        Simulates the true cross-dataset scenario: train on Dataset A (labels
+        saved with origins pointing to files on disk), load completely
+        different Dataset B (no MD5 overlap), click Find.  The resolver must
+        follow each label's origin trail to the original file, embed it, and
+        train an MLP on-the-fly.
+        """
+        from unittest.mock import patch
+
+        from vtsearch.datasets.labelset import LabelSet
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import medias, snapshot_medias
+
+        reset_for_tests()
+
+        # --- Phase 1: build label folder on disk (simulates Dataset A files) ---
+        label_folder = tmp_path / "dataset_a"
+        label_folder.mkdir()
+        for i in range(3):
+            (label_folder / f"good_{i}.wav").write_bytes(f"good_audio_{i}".encode())
+        for i in range(3):
+            (label_folder / f"bad_{i}.wav").write_bytes(f"bad_audio_{i}".encode())
+
+        label_origin = {
+            "importer": "folder",
+            "params": {"path": str(label_folder), "media_type": "sounds"},
+        }
+
+        # Build labelset entries with origins pointing to the folder
+        label_entries = []
+        for i in range(3):
+            label_entries.append({
+                "md5": f"dataset_a_good_{i}",
+                "label": "good",
+                "origin": label_origin,
+                "origin_name": f"good_{i}.wav",
+                "filename": f"good_{i}.wav",
+            })
+        for i in range(3):
+            label_entries.append({
+                "md5": f"dataset_a_bad_{i}",
+                "label": "bad",
+                "origin": label_origin,
+                "origin_name": f"bad_{i}.wav",
+                "filename": f"bad_{i}.wav",
+            })
+
+        # --- Phase 2: write trainable model with these labels ---
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "test-cross-dataset"
+            tm_path = tmp_path / f"{tm_name}.json"
+            _write_model(tm_path, {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Cross Dataset Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+
+            # --- Phase 3: replace medias with completely different Dataset B ---
+            # (no MD5 overlap, forcing origin resolution)
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(42)
+            for i in range(1, 21):
+                medias[i] = {
+                    "id": i,
+                    "type": "audio",
+                    "embedding": rng.standard_normal(512).astype(np.float32),
+                    "md5": f"dataset_b_md5_{i}",
+                    "filename": f"dataset_b_{i}.wav",
+                    "origin": {"importer": "folder", "params": {"path": "/other"}},
+                    "origin_name": f"dataset_b_{i}.wav",
+                }
+
+            # Mock embed_file to return deterministic vectors
+            good_emb = rng.standard_normal(512).astype(np.float32)
+            bad_emb = rng.standard_normal(512).astype(np.float32)
+
+            def fake_embed(path, media_type):
+                from pathlib import Path
+                name = Path(path).name
+                if "good" in name:
+                    return good_emb.copy()
+                return bad_emb.copy()
+
+            try:
+                with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+                    resp = client.post("/api/find-label", json={"model_id": model_id})
+
+                assert resp.status_code == 200, (
+                    f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
+                )
+                data = resp.get_json()
+                assert data["ok"] is True
+                total = data["good_count"] + data["bad_count"]
+                assert total == 20  # all Dataset B items scored
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            set_trainable_models_dir(original_dir)
+
+    def test_find_label_cross_dataset_error_includes_diagnostics(self, client, tmp_path):
+        """When origin resolution fails, the error response should include diagnostics."""
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import medias
+
+        reset_for_tests()
+
+        # Labels point to a nonexistent folder — resolution will fail
+        bad_origin = {
+            "importer": "folder",
+            "params": {"path": "/nonexistent/dataset_a"},
+        }
+        label_entries = [
+            {"md5": "no_match_g", "label": "good", "origin": bad_origin,
+             "origin_name": "good.wav", "filename": "good.wav"},
+            {"md5": "no_match_b", "label": "bad", "origin": bad_origin,
+             "origin_name": "bad.wav", "filename": "bad.wav"},
+        ]
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "test-diag"
+            _write_model(tmp_path / f"{tm_name}.json", {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Diag Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+
+            # Ensure medias have no MD5 overlap
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(99)
+            for i in range(1, 6):
+                medias[i] = {
+                    "id": i,
+                    "type": "audio",
+                    "embedding": rng.standard_normal(512).astype(np.float32),
+                    "md5": f"other_{i}",
+                    "filename": f"other_{i}.wav",
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": f"other_{i}.wav",
+                }
+
+            try:
+                resp = client.post("/api/find-label", json={"model_id": entry["id"]})
+                assert resp.status_code == 400
+                data = resp.get_json()
+
+                # Error message should describe the resolution failure
+                assert "could not be trained" in data["error"]
+                assert "failed to resolve" in data["error"]
+
+                # Should include structured diagnostics
+                diag = data["resolution_diagnostic"]
+                assert diag["total_labels"] == 2
+                assert diag["md5_matched"] == 0
+                assert diag["needed_resolution"] == 2
+                assert diag["resolved_from_origin"] == 0
+                assert diag["failed_resolution"] == 2
+                assert "sample_failures" in diag
+                assert len(diag["sample_failures"]) > 0
+                assert diag["sample_failures"][0]["origin"]["importer"] == "folder"
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            set_trainable_models_dir(original_dir)
+
     def test_find_label_does_not_overwrite_training_labels(self, client, tmp_path):
         """Running Find must NOT overwrite the model's saved training labels.
 

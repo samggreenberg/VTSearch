@@ -160,9 +160,14 @@ def find_label():
     # labelset.  This handles the cross-dataset scenario: user trains on
     # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
     # origin info lets us resolve the original files, embed them, and train.
+    _resolution_diagnostic: dict | None = None
     if weights is None and tm_data:
         label_entries = tm_data.get("labelset", {}).get("labels", [])
         if label_entries:
+            import logging as _logging
+
+            _find_log = _logging.getLogger("vtsearch.routes.detectors_scoring")
+
             from vtsearch.routes.detectors_helpers import serialize_weights as _serialize_weights, train_and_threshold
 
             update_find_progress(
@@ -192,9 +197,17 @@ def find_label():
                 else:
                     unresolved.append(entry)
 
+            _md5_matched = len(X_list)
+            _find_log.info(
+                "find-label: %d of %d labels matched by MD5 in current dataset, "
+                "%d need origin resolution",
+                _md5_matched, _md5_matched + len(unresolved), len(unresolved),
+            )
+
             # Second pass: resolve remaining entries from their origins (files
             # on disk).  Needed for the cross-dataset case where Dataset A's
             # items are not in Dataset B.
+            resolved = None
             if unresolved:
                 from vtsearch.models.resolver import resolve_label_embeddings
 
@@ -219,10 +232,72 @@ def find_label():
                     X_list, y_list, snap=snap_for_train,
                 )
                 weights = _serialize_weights(trained_model)
+            else:
+                # Build diagnostic info for the error response
+                _resolution_diagnostic = {
+                    "total_labels": _md5_matched + len(unresolved),
+                    "md5_matched": _md5_matched,
+                    "needed_resolution": len(unresolved),
+                    "resolved_from_origin": resolved.resolved_count if resolved else 0,
+                    "failed_resolution": len(resolved.missing_entries) if resolved else len(unresolved),
+                    "has_good": has_good,
+                    "has_bad": has_bad,
+                    "media_type": media_type,
+                }
+                if resolved and resolved.missing_entries:
+                    # Include first few unresolved for diagnostics
+                    samples = resolved.missing_entries[:3]
+                    _resolution_diagnostic["sample_failures"] = [
+                        {
+                            "origin": e.get("origin"),
+                            "origin_name": e.get("origin_name", ""),
+                            "filename": e.get("filename", ""),
+                            "md5": e.get("md5", "")[:12],
+                            "label": e.get("label", ""),
+                        }
+                        for e in samples
+                    ]
+                elif not unresolved and not has_good:
+                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+                elif not unresolved and not has_bad:
+                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+
+                _find_log.warning(
+                    "find-label: cannot train — resolved %d labels total "
+                    "(%d MD5, %d origin) but need both good and bad. "
+                    "has_good=%s, has_bad=%s. Diagnostic: %r",
+                    len(y_list), _md5_matched,
+                    resolved.resolved_count if resolved else 0,
+                    has_good, has_bad, _resolution_diagnostic,
+                )
 
     if weights is None:
         update_find_progress("idle", "")
-        return jsonify({"error": f"Model '{m['name']}' has no weights for scoring"}), 400
+        error_msg = f"Model '{m['name']}' has no weights for scoring"
+        if _resolution_diagnostic is not None:
+            diag = _resolution_diagnostic
+            error_msg = (
+                f"Model '{m['name']}' could not be trained: "
+                f"{diag['total_labels']} training labels found, "
+                f"{diag['md5_matched']} matched current dataset by MD5, "
+                f"{diag['needed_resolution']} needed origin resolution, "
+                f"{diag['resolved_from_origin']} resolved successfully, "
+                f"{diag['failed_resolution']} failed to resolve. "
+                f"Has good={diag['has_good']}, has bad={diag['has_bad']}."
+            )
+            if diag.get("sample_failures"):
+                first = diag["sample_failures"][0]
+                error_msg += (
+                    f" First failure: importer={first['origin'].get('importer', '?') if first['origin'] else 'None'}, "
+                    f"origin_name={first['origin_name']!r}, "
+                    f"params={first['origin'].get('params', {}) if first['origin'] else '{}'}"
+                )
+            if diag.get("hint"):
+                error_msg += f" Hint: {diag['hint']}"
+        resp = {"error": error_msg}
+        if _resolution_diagnostic is not None:
+            resp["resolution_diagnostic"] = _resolution_diagnostic
+        return jsonify(resp), 400
 
     snap = snapshot_medias()
     if not snap:
