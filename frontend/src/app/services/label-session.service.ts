@@ -16,6 +16,7 @@ export class LabelSessionService {
   textQuery = '';
   mediaExample = '';
   examples: ModelExample[] = [];
+  modelName = '';
 
   /** Total votes cast since the last re-sort prompt. */
   resortVoteCount = 0;

@@ -7,6 +7,8 @@ import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
+import { FindSessionService } from '../../../services/find-session.service';
+import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ExporterInfo, LabelEntry } from '../../../models/api.models';
 
@@ -84,8 +86,15 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     private datasetsApi: DatasetsApiService,
     private detectorsApi: DetectorsApiService,
     private exportersApi: ExportersApiService,
+    private findSession: FindSessionService,
+    private labelSession: LabelSessionService,
     private sortingApi: SortingApiService,
   ) {}
+
+  /** Detector/model name from any available source. */
+  private get effectiveDetectorName(): string {
+    return this.detectorName || this.labelSession.modelName || this.findSession.modelName || '';
+  }
 
   ngOnInit(): void {
     this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
@@ -225,7 +234,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     if (this.labelFilter === 'good') parts.push('Good');
     else if (this.labelFilter === 'bad') parts.push('Bad');
     else if (this.labelFilter === 'corrections') parts.push('Corrections');
-    if (this.detectorName) parts.push(this.detectorName);
+    const detName = this.effectiveDetectorName;
+    if (detName) parts.push(detName);
     if (this.datasetName) parts.push(this.datasetName);
     if (parts.length === 0) parts.push('labels');
     // Sanitise: replace characters unsafe for filenames with hyphens
@@ -359,7 +369,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         const a = document.createElement('a');
         a.href = url;
         const parts: string[] = [];
-        if (this.detectorName) parts.push(this.detectorName);
+        const detName = this.effectiveDetectorName;
+        if (detName) parts.push(detName);
         if (this.datasetName) parts.push(this.datasetName);
         if (parts.length === 0) parts.push('detector');
         const stem = parts.join('-').replace(/[\\/:*?"<>|]+/g, '-');
