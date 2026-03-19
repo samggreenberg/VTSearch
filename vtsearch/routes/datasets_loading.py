@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import traceback
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -434,6 +435,7 @@ def _run_origin_load_in_background(
                 total_steps=None,
             )
         except Exception as e:
+            traceback.print_exc()
             update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
 
     # Signal "loading" before the thread starts so frontend polling never
@@ -540,6 +542,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
             )
         except Exception as e:
+            traceback.print_exc()
             update_progress("idle", "", 0, 0, str(e))
 
     thread = threading.Thread(target=stage_task, daemon=True)
