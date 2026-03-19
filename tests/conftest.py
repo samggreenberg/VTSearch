@@ -58,6 +58,7 @@ _TEST_GROUPS = {
         "test_labels",
         "test_processor_importers",
         "test_pdf_import",
+        "test_corrections_export",
     ],
     "models": [
         "test_detectors",
@@ -281,6 +282,7 @@ def reset_state():
     _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
+    _core._find_initial_labels.clear()
     clear_progress_cache()
 
     # Reset progress trackers

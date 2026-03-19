@@ -50,8 +50,10 @@ from vtsearch.utils.state_votes import (  # noqa: F401
     apply_label_with_click_time,
     apply_labels_bulk_with_click_time,
     clear_votes,
+    get_find_initial_labels,
     get_learned_scores,
     get_textsort_suggestions,
+    set_find_initial_labels,
     toggle_vote,
     update_learned_scores,
 )

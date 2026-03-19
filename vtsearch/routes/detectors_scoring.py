@@ -112,6 +112,7 @@ def find_label():
     from vtsearch.utils import (
         apply_labels_bulk_with_click_time,
         get_autorun_detectors,
+        set_find_initial_labels,
     )
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
@@ -275,6 +276,10 @@ def find_label():
             label_pairs.append((entry["id"], "bad"))
             bad_count += 1
     apply_labels_bulk_with_click_time(label_pairs)
+
+    # Snapshot the detector-assigned labels so that corrections
+    # (user-changed labels) can be identified later during export.
+    set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
 
     # Mark the loaded model as being in "find mode" so that
     # sync_labels_to_loaded_model() won't overwrite the model's saved

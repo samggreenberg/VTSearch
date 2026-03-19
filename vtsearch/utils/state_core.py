@@ -60,3 +60,9 @@ autorun_extractors: dict[str, dict[str, Any]] = {}
 
 # Autorun localizers: name -> {name, localizer_type, media_type, config, created_at}
 autorun_localizers: dict[str, dict[str, Any]] = {}
+
+# Find-mode initial labels: media_id -> label assigned by the detector in find-label.
+# Populated when /api/find-label runs; cleared when votes are cleared.
+# Used to identify "corrections" — items where the user manually changed
+# the detector's original label.
+_find_initial_labels: dict[int, str] = {}

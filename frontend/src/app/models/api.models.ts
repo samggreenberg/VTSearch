@@ -95,6 +95,7 @@ export interface LabelEntry {
   origin_name?: string;
   filename?: string;
   category?: string;
+  is_correction?: boolean;
   custom_metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }

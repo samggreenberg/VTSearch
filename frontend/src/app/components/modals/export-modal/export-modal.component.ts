@@ -43,7 +43,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   columns: ColumnDef[] = [];
 
   /** Filter which labels to show/export. */
-  labelFilter: 'good' | 'bad' | 'both' = 'both';
+  labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'both';
 
   /** Delimiter for text export. */
   delimiter = ',';
@@ -143,7 +143,15 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     if (this.labelFilter === 'bad') {
       return this.labels.filter((e) => e.label === 'bad');
     }
+    if (this.labelFilter === 'corrections') {
+      return this.labels.filter((e) => e.is_correction === true);
+    }
     return this.labels;
+  }
+
+  /** Whether any labels are corrections (detector label was changed by user). */
+  get hasCorrections(): boolean {
+    return this.labels.some((e) => e.is_correction === true);
   }
 
   get previewLabels(): LabelEntry[] {

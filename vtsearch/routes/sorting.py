@@ -295,29 +295,58 @@ def export_labels():
 
     Query params:
         goods_only: If ``"1"`` or ``"true"``, only export good labels.
-        label_filter: ``"good"``, ``"bad"``, or ``"both"`` (default).
-            Overrides ``goods_only`` when present.
+        label_filter: ``"good"``, ``"bad"``, ``"both"`` (default), or
+            ``"corrections"`` (only items where the user changed the
+            detector's original label).  Overrides ``goods_only`` when
+            present.
         enrich: If ``"1"`` or ``"true"``, include per-item
             ``custom_metadata`` and a top-level ``available_columns`` list.
     """
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import get_find_initial_labels
 
     label_filter = request.args.get("label_filter", "").lower()
+    corrections_only = label_filter == "corrections"
+
     if label_filter == "good":
         goods, bads = good_votes, {}
     elif label_filter == "bad":
         goods, bads = {}, bad_votes
-    elif label_filter:
+    elif label_filter and not corrections_only:
         goods, bads = good_votes, bad_votes
     else:
-        # Backward compat: fall back to goods_only flag
-        goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
-        goods = good_votes
-        bads = {} if goods_only else bad_votes
+        if not corrections_only:
+            # Backward compat: fall back to goods_only flag
+            goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
+            goods = good_votes
+            bads = {} if goods_only else bad_votes
+        else:
+            goods, bads = good_votes, bad_votes
 
     all_medias = snapshot_medias()
     labelset = LabelSet.from_clips_and_votes(all_medias, goods, bads)
     result: dict = labelset.to_dict()
+
+    # Annotate corrections: items where the user changed the detector's label.
+    find_initial = get_find_initial_labels()
+    if find_initial:
+        for entry in result["labels"]:
+            # Match by media ID — look up from medias by MD5
+            md5 = entry.get("md5")
+            media_id = None
+            for mid, m in all_medias.items():
+                if m.get("md5") == md5:
+                    media_id = mid
+                    break
+            if media_id is not None and media_id in find_initial:
+                original = find_initial[media_id]
+                current = entry.get("label")
+                entry["is_correction"] = current != original
+            else:
+                entry["is_correction"] = False
+
+        if corrections_only:
+            result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
 
     enrich = request.args.get("enrich", "").lower() in ("1", "true")
     if enrich:
