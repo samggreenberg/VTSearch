@@ -416,6 +416,93 @@ class TestExportWithFilteredResults:
             assert "fill_from_sort" in written["results"]
 
 
+class TestExportWithSelectedColumns:
+    """Exporting labels via the API respects selected_columns."""
+
+    def test_csv_export_with_selected_columns(self, client):
+        """POST /api/exporters/export with labels + selected_columns uses those columns."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fpath = Path(tmpdir) / "cols.csv"
+            resp = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_csv_file",
+                    "field_values": {"filepath": str(fpath)},
+                    "results": {
+                        "labels": [
+                            {"label": "good", "md5": "aaa", "filename": "a.wav", "category": "x"},
+                            {"label": "bad", "md5": "bbb", "filename": "b.wav", "category": "y"},
+                        ],
+                        "selected_columns": ["label", "filename"],
+                    },
+                },
+            )
+            assert resp.status_code == 200
+            import csv
+
+            with open(fpath, newline="", encoding="utf-8") as f:
+                rows = list(csv.reader(f))
+            assert rows[0] == ["label", "filename"]
+            assert rows[1] == ["good", "a.wav"]
+            assert rows[2] == ["bad", "b.wav"]
+
+    def test_json_export_with_selected_columns(self, client):
+        """POST /api/exporters/export with labels + selected_columns filters JSON."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fpath = Path(tmpdir) / "cols.json"
+            resp = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": str(fpath)},
+                    "results": {
+                        "labels": [
+                            {"label": "good", "md5": "aaa", "filename": "a.wav", "category": "x"},
+                        ],
+                        "selected_columns": ["filename", "category"],
+                    },
+                },
+            )
+            assert resp.status_code == 200
+            written = json.loads(Path(fpath).read_text())
+            assert written["labels"] == [{"filename": "a.wav", "category": "x"}]
+
+    def test_changed_columns_between_exports(self, client):
+        """Exporting twice with different selected_columns produces different output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            labels = [{"label": "good", "md5": "aaa", "filename": "a.wav", "category": "x"}]
+
+            fpath1 = Path(tmpdir) / "v1.csv"
+            client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_csv_file",
+                    "field_values": {"filepath": str(fpath1)},
+                    "results": {"labels": labels, "selected_columns": ["label", "md5", "filename"]},
+                },
+            )
+
+            fpath2 = Path(tmpdir) / "v2.csv"
+            client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_csv_file",
+                    "field_values": {"filepath": str(fpath2)},
+                    "results": {"labels": labels, "selected_columns": ["category"]},
+                },
+            )
+
+            import csv
+
+            with open(fpath1, newline="", encoding="utf-8") as f:
+                header1 = next(csv.reader(f))
+            with open(fpath2, newline="", encoding="utf-8") as f:
+                header2 = next(csv.reader(f))
+
+            assert header1 == ["label", "md5", "filename"]
+            assert header2 == ["category"]
+
+
 class TestAvailableColumnsNoDuplicates:
     """Enriched export should not return duplicate columns differing only by case."""
 

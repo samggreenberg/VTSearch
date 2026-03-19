@@ -297,6 +297,254 @@ class TestCsvExporterExport:
         assert "2 detector(s)" in result["message"]
 
 
+# ---------------------------------------------------------------------------
+# CSV Exporter — labels format with selected columns
+# ---------------------------------------------------------------------------
+
+
+SAMPLE_LABELS = [
+    {"label": "good", "md5": "abc123", "origin_name": "dataset_a", "filename": "clip1.wav", "category": "birds", "custom_metadata": {"source": "field", "quality": "high"}},
+    {"label": "bad", "md5": "def456", "origin_name": "dataset_a", "filename": "clip2.wav", "category": "rain", "custom_metadata": {"source": "studio", "quality": "low"}},
+    {"label": "good", "md5": "ghi789", "origin_name": "dataset_b", "filename": "clip3.wav", "category": "birds", "custom_metadata": {"source": "field"}},
+]
+
+
+class TestCsvExporterLabelsFormat:
+    """Tests for CSV export of labels with selected columns."""
+
+    def test_labels_format_uses_selected_columns(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "filename", "category"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+        assert header == ["label", "filename", "category"]
+
+    def test_labels_format_correct_row_count(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "filename"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        assert len(rows) == 4  # 1 header + 3 labels
+
+    def test_labels_format_row_values(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "filename", "category"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            next(reader)  # skip header
+            first_row = next(reader)
+        assert first_row == ["good", "clip1.wav", "birds"]
+
+    def test_labels_format_includes_metadata_columns(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["filename", "source", "quality"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            first_row = next(reader)
+        assert header == ["filename", "source", "quality"]
+        assert first_row == ["clip1.wav", "field", "high"]
+
+    def test_labels_format_missing_metadata_gives_empty(self, tmp_path):
+        """When a metadata column is missing from an entry, output empty string."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["filename", "quality"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        # Third entry (clip3.wav) has no "quality" in metadata
+        assert rows[3] == ["clip3.wav", ""]
+
+    def test_labels_format_changed_columns_reflected(self, tmp_path):
+        """Changing selected_columns between exports produces different output."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+
+        # First export with all base columns
+        results1 = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "md5", "origin_name", "filename", "category"],
+        }
+        filepath1 = tmp_path / "export1.csv"
+        exp.export(results1, {"filepath": str(filepath1)})
+
+        # Second export with only a metadata column
+        results2 = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["source"],
+        }
+        filepath2 = tmp_path / "export2.csv"
+        exp.export(results2, {"filepath": str(filepath2)})
+
+        with open(filepath1, newline="", encoding="utf-8") as f:
+            header1 = next(csv.reader(f))
+        with open(filepath2, newline="", encoding="utf-8") as f:
+            header2 = next(csv.reader(f))
+
+        assert header1 == ["label", "md5", "origin_name", "filename", "category"]
+        assert header2 == ["source"]
+
+    def test_labels_format_no_selected_columns_uses_defaults(self, tmp_path):
+        """When selected_columns is absent, fall back to base columns."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {"labels": SAMPLE_LABELS}
+        filepath = tmp_path / "labels.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+        with open(filepath, newline="", encoding="utf-8") as f:
+            header = next(csv.reader(f))
+        assert header == ["label", "md5", "origin_name", "filename", "category"]
+
+    def test_labels_format_message(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "filename"],
+        }
+        filepath = tmp_path / "labels.csv"
+
+        result = exp.export(results, {"filepath": str(filepath)})
+        assert "3 label(s)" in result["message"]
+
+    def test_labels_format_empty_labels(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = {"labels": [], "selected_columns": ["label", "filename"]}
+        filepath = tmp_path / "empty.csv"
+
+        result = exp.export(results, {"filepath": str(filepath)})
+        assert "0 label(s)" in result["message"]
+        with open(filepath, newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        assert len(rows) == 1  # header only
+
+
+# ---------------------------------------------------------------------------
+# JSON Exporter — labels format with selected columns
+# ---------------------------------------------------------------------------
+
+
+class TestJsonExporterLabelsFormat:
+    """Tests for JSON export of labels with selected columns."""
+
+    def test_labels_format_filters_to_selected_columns(self, tmp_path):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["label", "filename"],
+        }
+        filepath = tmp_path / "labels.json"
+
+        exp.export(results, {"filepath": str(filepath)})
+        written = json.loads(filepath.read_text())
+        assert written["selected_columns"] == ["label", "filename"]
+        for entry in written["labels"]:
+            assert set(entry.keys()) == {"label", "filename"}
+
+    def test_labels_format_includes_metadata(self, tmp_path):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        results = {
+            "labels": SAMPLE_LABELS,
+            "selected_columns": ["filename", "source"],
+        }
+        filepath = tmp_path / "labels.json"
+
+        exp.export(results, {"filepath": str(filepath)})
+        written = json.loads(filepath.read_text())
+        assert written["labels"][0] == {"filename": "clip1.wav", "source": "field"}
+
+    def test_labels_format_no_selected_columns_keeps_all(self, tmp_path):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        results = {"labels": SAMPLE_LABELS}
+        filepath = tmp_path / "labels.json"
+
+        exp.export(results, {"filepath": str(filepath)})
+        written = json.loads(filepath.read_text())
+        assert written["labels"] == SAMPLE_LABELS
+
+    def test_labels_format_changed_columns(self, tmp_path):
+        """Changing selected_columns between exports produces different JSON."""
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+
+        results1 = {"labels": SAMPLE_LABELS, "selected_columns": ["label", "md5"]}
+        filepath1 = tmp_path / "export1.json"
+        exp.export(results1, {"filepath": str(filepath1)})
+
+        results2 = {"labels": SAMPLE_LABELS, "selected_columns": ["source"]}
+        filepath2 = tmp_path / "export2.json"
+        exp.export(results2, {"filepath": str(filepath2)})
+
+        written1 = json.loads(filepath1.read_text())
+        written2 = json.loads(filepath2.read_text())
+
+        assert set(written1["labels"][0].keys()) == {"label", "md5"}
+        assert set(written2["labels"][0].keys()) == {"source"}
+
+    def test_labels_format_message(self, tmp_path):
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        results = {"labels": SAMPLE_LABELS, "selected_columns": ["label"]}
+        filepath = tmp_path / "labels.json"
+
+        result = exp.export(results, {"filepath": str(filepath)})
+        assert "3 label(s)" in result["message"]
+
+
 class TestCsvExporterIntegration:
     """Integration: CSV exporter via _run_exporter and with real detector results."""
 
