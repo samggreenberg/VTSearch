@@ -414,3 +414,17 @@ class TestExportWithFilteredResults:
             assert fpath.exists()
             written = json.loads(fpath.read_text())
             assert "fill_from_sort" in written["results"]
+
+
+class TestAvailableColumnsNoDuplicates:
+    """Enriched export should not return duplicate columns differing only by case."""
+
+    def test_no_duplicate_category_column(self, client):
+        """Category appears once in available_columns, not twice (lowercase + capitalized)."""
+        app_module.good_votes[1] = None
+        resp = client.get("/api/labels/export?enrich=true")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        cols = data["available_columns"]
+        category_cols = [c for c in cols if c.lower() == "category"]
+        assert len(category_cols) == 1, f"Expected 1 category column, got: {category_cols}"

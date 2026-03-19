@@ -348,7 +348,9 @@ def export_labels():
                 all_meta_keys.update(meta.keys())
 
         base_columns = ["label", "md5", "origin_name", "filename", "category"]
-        result["available_columns"] = base_columns + sorted(all_meta_keys)
+        base_lower = {c.lower() for c in base_columns}
+        extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
+        result["available_columns"] = base_columns + extra_keys
 
     return jsonify(result)
 
