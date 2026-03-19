@@ -2,7 +2,7 @@
   <h3 [class]="label">
     {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length }})
   </h3>
-  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'">
+  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>
     @for (entry of sortedEntries; track trackById($index, entry)) {
       <div
         class="vote-entry"

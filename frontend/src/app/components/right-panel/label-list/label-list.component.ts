@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -18,7 +18,7 @@ export interface LabelEntry {
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
-export class LabelListComponent implements OnInit, OnChanges {
+export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
   @Input() medias: MediaItem[] = [];
@@ -31,14 +31,32 @@ export class LabelListComponent implements OnInit, OnChanges {
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
+  @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
+
   sortedEntries: LabelEntry[] = [];
+  private pendingScrollPct: number | null = null;
 
   ngOnInit(): void {
     this.sortedEntries = this.buildSortedEntries();
   }
 
-  ngOnChanges(_changes: SimpleChanges): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
+      const el = this.voteListContainer.nativeElement;
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
+    }
     this.sortedEntries = this.buildSortedEntries();
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.pendingScrollPct !== null && this.voteListContainer) {
+      const pct = this.pendingScrollPct;
+      this.pendingScrollPct = null;
+      const el = this.voteListContainer.nativeElement;
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      el.scrollTop = pct * maxScroll;
+    }
   }
 
   private buildSortedEntries(): LabelEntry[] {
