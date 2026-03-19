@@ -159,6 +159,22 @@ class DemoDatasetImporter(DatasetImporter):
                 if candidate.is_file():
                     return candidate
 
+        # Basename fallback — some demo datasets store origin_name with a
+        # category prefix (e.g. "dog/1-100032-A-0.wav") but the on-disk
+        # layout is flat (ESC-50) or uses a different hierarchy (UrbanSound8K
+        # fold dirs, Oxford Flowers flat jpg/).  Try the bare filename.
+        for name in (origin_name, filename):
+            if name:
+                basename = Path(name).name
+                # Direct child first (flat directories like ESC-50)
+                candidate = root / basename
+                if candidate.is_file():
+                    return candidate
+                # Recursive search (fold-based layouts like UrbanSound8K)
+                matches = list(root.rglob(basename))
+                if len(matches) == 1:
+                    return matches[0]
+
         return None
 
 
@@ -187,7 +203,7 @@ def _source_directory(source: str) -> Path | None:
             "esc50": DATA_DIR / "ESC-50-master" / "audio",
             "gtzan": DATA_DIR / "gtzan" / "genres",
             "speech_commands_v2": DATA_DIR / "speech_commands_v2",
-            "urbansound8k": DATA_DIR / "UrbanSound8K",
+            "urbansound8k": DATA_DIR / "UrbanSound8K" / "audio",
             # Video sources
             "ucf101": video_dir / "ucf101",
         }
