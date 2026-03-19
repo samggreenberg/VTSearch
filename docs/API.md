@@ -912,18 +912,18 @@ GET /api/dataset/progress
 ### List importers
 
 ```
-GET /api/dataset/importers
+GET /api/dataset/all-importers
 ```
 
-Returns importers excluding built-in ones (pickle, combine_datasets).
+Returns all registered importers including built-in ones (pickle, combine_datasets, demo).
 
 → `{"importers": [{"name": "...", "display_name": "...", "description": "...", "fields": [...]}]}`
 
 ```
-GET /api/dataset/all-importers
+GET /api/dataset/importers
 ```
 
-Returns all importers including built-in ones.
+Returns only importers with `ui_mode == "form"` (excludes pickle, combine_datasets, demo, and any other importers with non-form UI modes). Used by the frontend's generic form-based import dialog.
 
 → `{"importers": [...]}`
 

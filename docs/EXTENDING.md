@@ -254,8 +254,9 @@ UI.
 
 ### How it gets invoked
 
-1. `GET /api/dataset/importers` returns available importers (your importer
-   appears automatically).
+1. `GET /api/dataset/all-importers` returns all registered importers (your
+   importer appears automatically). Note: `GET /api/dataset/importers` only
+   returns importers with `ui_mode == "form"`.
 2. `POST /api/dataset/import/<name>` invokes `run()` in a background
    daemon thread.
 3. `GET /api/dataset/progress` provides progress bar data.
@@ -1410,7 +1411,7 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Create `vtsearch/datasets/importers/<name>/requirements.txt`
 - [ ] Add `-r` line to `requirements-importers.txt`
 - [ ] Add inline deps to `requirements-cpu.txt` if needed
-- [ ] Test: start the app and check `GET /api/dataset/importers` includes your importer
+- [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
 
 ### New Results Exporter Checklist
 
