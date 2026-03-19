@@ -25,22 +25,28 @@
     </div>
   </div>
 
-  <!-- Label Filter -->
+  <!-- Category Filter -->
   <div class="export-section">
-    <h3>Show Labels</h3>
+    <h3>Categories</h3>
     <div class="delimiter-row">
       <label class="delimiter-option">
         <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" />
-        Both
+        All
       </label>
       <label class="delimiter-option">
         <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" />
-        Good only
+        Good
       </label>
       <label class="delimiter-option">
         <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" />
-        Bad only
+        Bad
       </label>
+      @if (hasCorrections) {
+        <label class="delimiter-option">
+          <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" />
+          Corrections
+        </label>
+      }
     </div>
   </div>
 

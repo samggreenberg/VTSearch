@@ -38,6 +38,7 @@ def clear_votes() -> None:
         vote_click_times.clear()
         _core._click_counter = 0
         last_learned_scores.clear()
+        _core._find_initial_labels.clear()
         clear_progress_cache()
 
 
@@ -88,6 +89,23 @@ def get_learned_scores() -> dict[int, float]:
     """Return a copy of the last learned-sort scores."""
     with _state_lock:
         return last_learned_scores.copy()
+
+
+def set_find_initial_labels(labels: dict[int, str]) -> None:
+    """Store the detector-assigned labels from a find-label run.
+
+    This snapshot is used to identify "corrections" — items where the
+    user subsequently changed the label from what the detector assigned.
+    """
+    with _state_lock:
+        _core._find_initial_labels.clear()
+        _core._find_initial_labels.update(labels)
+
+
+def get_find_initial_labels() -> dict[int, str]:
+    """Return a copy of the find-label initial labels."""
+    with _state_lock:
+        return _core._find_initial_labels.copy()
 
 
 # ---------------------------------------------------------------------------
