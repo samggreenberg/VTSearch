@@ -94,10 +94,14 @@ export interface LabelEntry {
   label: 'good' | 'bad';
   origin_name?: string;
   filename?: string;
+  category?: string;
+  custom_metadata?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface LabelsExportResponse {
   labels: LabelEntry[];
+  available_columns?: string[];
 }
 
 export interface LabelsImportResponse {

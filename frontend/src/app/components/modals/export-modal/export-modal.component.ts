@@ -2,19 +2,18 @@ import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angu
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ExporterInfo, LabelEntry } from '../../../models/api.models';
 
-export type ExportColumn = 'label' | 'md5' | 'origin_name' | 'filename' | 'category';
-
 export interface ColumnDef {
-  key: ExportColumn;
+  key: string;
   label: string;
   enabled: boolean;
+  isMetadata?: boolean;
 }
 
 @Component({
@@ -40,26 +39,22 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   labels: LabelEntry[] = [];
   labelsLoaded = false;
 
-  /** Column definitions with selection state. */
-  columns: ColumnDef[] = [
-    { key: 'label', label: 'Label', enabled: true },
-    { key: 'md5', label: 'MD5', enabled: true },
-    { key: 'origin_name', label: 'Origin Name', enabled: true },
-    { key: 'filename', label: 'Filename', enabled: true },
-    { key: 'category', label: 'Category', enabled: true },
-  ];
+  /** Column definitions with selection state — built dynamically from API response. */
+  columns: ColumnDef[] = [];
+
+  /** Filter which labels to show/export. */
+  labelFilter: 'good' | 'bad' | 'both' = 'both';
 
   /** Delimiter for text export. */
   delimiter = ',';
   delimiterOptions = [
     { value: ',', label: 'Comma (,)' },
-    { value: '\t', label: 'Tab' },
+    { value: '\t', label: 'Tab (\u21E5)' },
     { value: '|', label: 'Pipe (|)' },
     { value: ';', label: 'Semicolon (;)' },
   ];
 
   /** Exporter form state. */
-  showExporterForm = false;
   selectedExporter: ExporterInfo | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
@@ -68,6 +63,15 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   copySuccess = false;
 
   private destroy$ = new Subject<void>();
+
+  /** Base columns that are always present. */
+  private static readonly BASE_COLUMNS: { key: string; label: string }[] = [
+    { key: 'label', label: 'Label' },
+    { key: 'md5', label: 'MD5' },
+    { key: 'origin_name', label: 'Origin Name' },
+    { key: 'filename', label: 'Filename' },
+    { key: 'category', label: 'Category' },
+  ];
 
   constructor(
     private detectorsApi: DetectorsApiService,
@@ -87,43 +91,83 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.sortingApi.exportLabels().subscribe({
+    this.sortingApi.exportLabels(false, { enrich: true }).subscribe({
       next: (data) => {
         this.labels = data.labels || [];
         this.labelsLoaded = true;
+        this.buildColumns(data.available_columns);
       },
       error: () => {
         this.labelsLoaded = true;
         this.error = 'Failed to load labels';
+        this.buildColumns();
       },
     });
+  }
+
+  /** Build column definitions from available_columns or fall back to defaults. */
+  private buildColumns(availableColumns?: string[]): void {
+    const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
+    // Start with base columns
+    this.columns = ExportModalComponent.BASE_COLUMNS.map((c) => ({
+      key: c.key,
+      label: c.label,
+      enabled: true,
+    }));
+    // Add metadata columns discovered from the data
+    if (availableColumns) {
+      for (const key of availableColumns) {
+        if (!baseKeys.has(key)) {
+          this.columns.push({
+            key,
+            label: key,
+            enabled: true,
+            isMetadata: true,
+          });
+        }
+      }
+    }
   }
 
   get enabledColumns(): ColumnDef[] {
     return this.columns.filter((c) => c.enabled);
   }
 
+  get filteredLabels(): LabelEntry[] {
+    if (this.labelFilter === 'good') {
+      return this.labels.filter((e) => e.label === 'good');
+    }
+    if (this.labelFilter === 'bad') {
+      return this.labels.filter((e) => e.label === 'bad');
+    }
+    return this.labels;
+  }
+
   get previewLabels(): LabelEntry[] {
-    return this.labels.slice(0, 50);
+    return this.filteredLabels.slice(0, 50);
   }
 
   get hasLabels(): boolean {
-    return this.labels.length > 0;
+    return this.filteredLabels.length > 0;
   }
 
   get showDetectorSection(): boolean {
     return this.mode === 'label';
   }
 
-  get modalTitle(): string {
-    if (this.showExporterForm && this.selectedExporter) {
-      return this.selectedExporter.display_name || this.selectedExporter.name;
-    }
-    return 'Export';
+  get hasExporterForm(): boolean {
+    return this.selectedExporter !== null;
   }
 
-  getCellValue(entry: LabelEntry, col: ExportColumn): string {
-    return String((entry as unknown as Record<string, unknown>)[col] ?? '');
+  getCellValue(entry: LabelEntry, col: ColumnDef): string {
+    if (col.isMetadata) {
+      const meta = entry.custom_metadata;
+      if (meta && col.key in meta) {
+        return String(meta[col.key] ?? '');
+      }
+      return '';
+    }
+    return String((entry as unknown as Record<string, unknown>)[col.key] ?? '');
   }
 
   /** Build delimited text from labels using selected columns. */
@@ -131,8 +175,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     const cols = this.enabledColumns;
     if (cols.length === 0) return '';
     const header = cols.map((c) => c.label).join(this.delimiter);
-    const rows = this.labels.map((entry) =>
-      cols.map((c) => this.getCellValue(entry, c.key)).join(this.delimiter),
+    const rows = this.filteredLabels.map((entry) =>
+      cols.map((c) => this.getCellValue(entry, c)).join(this.delimiter),
     );
     return [header, ...rows].join('\n');
   }
@@ -143,7 +187,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     navigator.clipboard.writeText(text).then(
       () => {
         this.copySuccess = true;
-        this.status = `Copied ${this.labels.length} rows to clipboard.`;
+        this.status = `Copied ${this.filteredLabels.length} rows to clipboard.`;
         setTimeout(() => (this.copySuccess = false), 2000);
       },
       () => {
@@ -164,13 +208,11 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     for (const f of fields) {
       this.formValues[f.key] = f.default || '';
     }
-    this.showExporterForm = true;
     this.error = '';
     this.status = '';
   }
 
-  backFromForm(): void {
-    this.showExporterForm = false;
+  cancelExporterForm(): void {
     this.selectedExporter = null;
     this.error = '';
     this.status = '';
@@ -186,8 +228,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     this.error = '';
     this.submitting = true;
 
-    // Build a results dict that includes selected columns info
-    const labelsData = { labels: this.labels };
+    const labelsData = { labels: this.filteredLabels };
     this.exportersApi
       .runExport({
         exporter_name: exporter.name,
@@ -199,7 +240,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         next: () => {
           this.status = 'Labels exported.';
           this.submitting = false;
-          this.showExporterForm = false;
+          this.selectedExporter = null;
           this.exported.emit();
         },
         error: () => {
