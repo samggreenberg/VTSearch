@@ -205,6 +205,13 @@ def find_label():
             bad_count += 1
     apply_labels_bulk_with_click_time(label_pairs)
 
+    # Mark the loaded model as being in "find mode" so that
+    # sync_labels_to_loaded_model() won't overwrite the model's saved
+    # training labels with these scoring results.
+    from vtsearch.models.registry import set_find_mode
+
+    set_find_mode(True)
+
     return jsonify({
         "ok": True,
         "results": results,

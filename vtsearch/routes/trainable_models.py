@@ -77,8 +77,15 @@ def sync_labels_to_loaded_model() -> None:
 
     Called automatically after each vote so the dashboard's "# Training"
     and "Last Trained" columns stay up to date without an explicit save.
+
+    Skipped when the model is in "find mode" (after ``/api/find-label``),
+    because the global votes reflect scoring results on a different dataset,
+    not the model's original training labels.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, update_model
+    from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
+
+    if is_find_mode():
+        return
 
     loaded_id = get_loaded_id()
     if not loaded_id:
