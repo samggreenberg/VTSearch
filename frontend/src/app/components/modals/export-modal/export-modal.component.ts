@@ -4,8 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
+import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
+import { FindSessionService } from '../../../services/find-session.service';
+import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ExporterInfo, LabelEntry } from '../../../models/api.models';
 
@@ -65,6 +68,9 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Copy feedback. */
   copySuccess = false;
 
+  /** Dataset display name for default filenames. */
+  private datasetName = '';
+
   private destroy$ = new Subject<void>();
 
   /** Base columns that are always present. */
@@ -77,12 +83,26 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
+    private datasetsApi: DatasetsApiService,
     private detectorsApi: DetectorsApiService,
     private exportersApi: ExportersApiService,
+    private findSession: FindSessionService,
+    private labelSession: LabelSessionService,
     private sortingApi: SortingApiService,
   ) {}
 
+  /** Detector/model name from any available source. */
+  private get effectiveDetectorName(): string {
+    return this.detectorName || this.labelSession.modelName || this.findSession.modelName || '';
+  }
+
   ngOnInit(): void {
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => {
+        this.datasetName = status.display_name || '';
+      },
+    });
+
     this.exportersApi.getExporters().subscribe({
       next: (list) => {
         this.exporters = list.filter((e) => !e.hidden_from_picker);
@@ -207,6 +227,34 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** Build a descriptive default filename for export.
+   *  e.g. "Good-MyDetector-MyDataset.json" */
+  private buildDefaultFilename(ext: string): string {
+    const parts: string[] = [];
+    if (this.labelFilter === 'good') parts.push('Good');
+    else if (this.labelFilter === 'bad') parts.push('Bad');
+    else if (this.labelFilter === 'corrections') parts.push('Corrections');
+    const detName = this.effectiveDetectorName;
+    if (detName) parts.push(detName);
+    if (this.datasetName) parts.push(this.datasetName);
+    if (parts.length === 0) parts.push('labels');
+    // Sanitise: replace characters unsafe for filenames with hyphens
+    const stem = parts.join('-').replace(/[\\/:*?"<>|]+/g, '-');
+    return `${stem}.${ext}`;
+  }
+
+  /** Apply the dynamic default filename to the filepath form field if present. */
+  private applyDefaultFilename(exporter: ExporterInfo): void {
+    const filepathField = (exporter.fields || []).find((f) => f.key === 'filepath');
+    if (filepathField) {
+      const staticDefault = filepathField.default || '';
+      // Derive extension from the static default (e.g. ".json", ".csv") or fall back
+      const extMatch = staticDefault.match(/\.(\w+)$/);
+      const ext = extMatch ? extMatch[1] : 'json';
+      this.formValues['filepath'] = this.buildDefaultFilename(ext);
+    }
+  }
+
   /** Start exporter flow — if no fields, export immediately. */
   startExporter(exporter: ExporterInfo): void {
     const fields = exporter.fields || [];
@@ -219,6 +267,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     for (const f of fields) {
       this.formValues[f.key] = f.default || '';
     }
+    this.applyDefaultFilename(exporter);
     this.error = '';
     this.status = '';
   }
@@ -231,8 +280,17 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     for (const f of exporter.fields || []) {
       this.formValues[f.key] = f.default || '';
     }
+    this.applyDefaultFilename(exporter);
     this.error = '';
     this.status = '';
+  }
+
+  /** Re-generate the default filename when the label filter changes. */
+  onLabelFilterChange(): void {
+    const exp = this.activeTabExporter;
+    if (exp) {
+      this.applyDefaultFilename(exp);
+    }
   }
 
   /** The exporter object for the currently active tab (null if clipboard). */
@@ -310,7 +368,13 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${this.detectorName || 'detector'}.json`;
+        const parts: string[] = [];
+        const detName = this.effectiveDetectorName;
+        if (detName) parts.push(detName);
+        if (this.datasetName) parts.push(this.datasetName);
+        if (parts.length === 0) parts.push('detector');
+        const stem = parts.join('-').replace(/[\\/:*?"<>|]+/g, '-');
+        a.download = `${stem}.json`;
         a.click();
         URL.revokeObjectURL(url);
         this.status = 'Downloaded.';
