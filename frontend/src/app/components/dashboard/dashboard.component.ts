@@ -18,6 +18,7 @@ import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
+import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -30,6 +31,7 @@ import { NewModelModalComponent } from './new-model-modal/new-model-modal.compon
     ModelCardComponent,
     DatasetImporterModalComponent,
     NewModelModalComponent,
+    DetectorExportModalComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -44,6 +46,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   newModelModalOpen = false;
+  exportModalOpen = false;
+  exportModelName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
 
@@ -257,6 +261,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
+  }
+
+  // --- Export modal ---
+
+  openExportModal(model: ModelRegistryEntry): void {
+    this.exportModelName = model.detector_name || model.name;
+    this.exportModalOpen = true;
+  }
+
+  closeExportModal(): void {
+    this.exportModalOpen = false;
+    this.exportModelName = '';
   }
 
   // --- Importer modal ---
