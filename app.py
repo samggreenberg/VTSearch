@@ -6,6 +6,16 @@ import warnings
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
+# Configure logging — respects VTSEARCH_LOG_LEVEL env var.
+# Default is WARNING.  Set to INFO or DEBUG for resolver diagnostics:
+#   VTSEARCH_LOG_LEVEL=INFO python app.py
+#   VTSEARCH_LOG_LEVEL=DEBUG python app.py
+_log_level = os.environ.get("VTSEARCH_LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(
+    level=getattr(logging, _log_level, logging.WARNING),
+    format="%(levelname)s %(name)s: %(message)s",
+)
+
 # Suppress Werkzeug request logging (GET/POST lines) — only show errors
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 # Suppress huggingface_hub "unauthenticated requests" console warning —
