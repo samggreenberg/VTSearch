@@ -30,20 +30,20 @@
     <h3>Categories</h3>
     <div class="delimiter-row">
       <label class="delimiter-option">
-        <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" />
+        <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         All
       </label>
       <label class="delimiter-option">
-        <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" />
+        <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Good
       </label>
       <label class="delimiter-option">
-        <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" />
+        <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Bad
       </label>
       @if (hasCorrections) {
         <label class="delimiter-option">
-          <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" />
+          <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
           Corrections
         </label>
       }
