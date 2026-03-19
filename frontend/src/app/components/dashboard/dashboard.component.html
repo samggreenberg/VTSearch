@@ -95,6 +95,7 @@
                 (rowClick)="toggleModelSelection(model.id, $event)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
+                (export)="openExportModal(model)"
                 (autorunToggle)="toggleAutorun(model, $event)"
               />
             }
@@ -154,6 +155,14 @@
   <vt-new-model-modal
     (closed)="closeNewModelModal()"
     (created)="onModelCreated()"
+  />
+}
+
+@if (exportModalOpen) {
+  <vt-detector-export-modal
+    [detectorName]="exportModelName"
+    (closed)="closeExportModal()"
+    (exported)="closeExportModal()"
   />
 }
 
