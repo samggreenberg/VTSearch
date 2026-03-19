@@ -90,110 +90,121 @@
     }
   </div>
 
-  <!-- Export Actions -->
+  <!-- Export Tabs -->
   <div class="export-section">
     <h3>Export Labels</h3>
-    <div class="export-buttons">
+    <div class="export-tabs">
+      <!-- Clipboard tab -->
       <button
-        class="btn btn--primary"
-        (click)="copyToClipboard()"
-        [disabled]="!hasLabels || enabledColumns.length === 0"
+        class="export-tab"
+        [class.active]="activeTab === 'clipboard'"
+        (click)="activeTab = 'clipboard'"
       >
-        @if (copySuccess) {
-          <span class="clipboard-icon">&#x2705;</span> Copied!
-        } @else {
-          <span class="clipboard-icon">&#x1F4CB;</span> Copy to Clipboard
-        }
+        <span class="tab-icon">&#x1F4CB;</span> Clipboard
       </button>
 
+      <!-- Exporter tabs -->
       @for (exp of exporters; track exp.name) {
         <button
-          class="btn btn--secondary"
-          (click)="startExporter(exp)"
-          [disabled]="!hasLabels"
+          class="export-tab"
+          [class.active]="activeTab === exp.name"
+          (click)="selectExporterTab(exp)"
         >
-          @if (exp.icon) {<span class="exporter-icon">{{ exp.icon }}</span>}{{ exp.display_name || exp.name }}
+          @if (exp.icon) {<span class="tab-icon">{{ exp.icon }}</span>}{{ exp.display_name || exp.name }}
         </button>
+      }
+    </div>
+
+    <!-- Tab content -->
+    <div class="tab-content">
+      @if (activeTab === 'clipboard') {
+        <div class="tab-pane">
+          <button
+            class="btn btn--primary"
+            (click)="copyToClipboard()"
+            [disabled]="!hasLabels || enabledColumns.length === 0"
+          >
+            @if (copySuccess) {
+              &#x2705; Copied!
+            } @else {
+              Copy
+            }
+          </button>
+        </div>
+      } @else if (activeTabExporter) {
+        <div class="tab-pane">
+          @if (activeTabExporter.fields && activeTabExporter.fields.length > 0) {
+            @for (field of activeTabExporter.fields; track field.key) {
+              <div class="tab-field">
+                <label class="form-label" [for]="'field-' + field.key">
+                  {{ field.label || field.key }}
+                  @if (field.required) {
+                    <span class="required">*</span>
+                  }
+                </label>
+
+                @if (field.field_type === 'password') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="password"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'email') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="email"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'url') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="url"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'select') {
+                  <select
+                    [id]="'field-' + field.key"
+                    class="form-select"
+                    [(ngModel)]="formValues[field.key]"
+                  >
+                    @for (opt of field.options || []; track opt) {
+                      <option [value]="opt">{{ opt }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="text"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                }
+              </div>
+            }
+          }
+
+          <button
+            class="btn btn--primary"
+            (click)="submitExporterTab()"
+            [disabled]="!hasLabels || submitting"
+          >
+            @if (submitting) {
+              Exporting...
+            } @else {
+              {{ activeTabAction }}
+            }
+          </button>
+        </div>
       }
     </div>
   </div>
-
-  <!-- Exporter Field Form (shown inline, doesn't replace the above) -->
-  @if (hasExporterForm && selectedExporter) {
-    <div class="export-section exporter-form-section">
-      <h3>{{ selectedExporter.display_name || selectedExporter.name }}</h3>
-
-      @if (selectedExporter.fields && selectedExporter.fields.length > 0) {
-        @for (field of selectedExporter.fields; track field.key) {
-          <div class="form-group">
-            <label class="form-label" [for]="'field-' + field.key">
-              {{ field.label || field.key }}
-              @if (field.required) {
-                <span class="required">*</span>
-              }
-            </label>
-
-            @if (field.field_type === 'password') {
-              <input
-                [id]="'field-' + field.key"
-                type="password"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'email') {
-              <input
-                [id]="'field-' + field.key"
-                type="email"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'url') {
-              <input
-                [id]="'field-' + field.key"
-                type="url"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'select') {
-              <select
-                [id]="'field-' + field.key"
-                class="form-select"
-                [(ngModel)]="formValues[field.key]"
-              >
-                @for (opt of field.options || []; track opt) {
-                  <option [value]="opt">{{ opt }}</option>
-                }
-              </select>
-            } @else {
-              <input
-                [id]="'field-' + field.key"
-                type="text"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            }
-          </div>
-        }
-      } @else {
-        <p class="info-text">This exporter requires no additional configuration.</p>
-      }
-
-      <div class="form-actions">
-        <button class="btn btn--secondary" (click)="cancelExporterForm()">Cancel</button>
-        <button class="btn btn--primary" (click)="submitForm()" [disabled]="submitting">
-          @if (submitting) {
-            Exporting...
-          } @else {
-            Export
-          }
-        </button>
-      </div>
-    </div>
-  }
 
   <!-- Detector Export (Labeling mode only) -->
   @if (showDetectorSection) {

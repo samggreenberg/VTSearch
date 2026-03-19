@@ -116,7 +116,7 @@
   border-bottom: none;
 }
 
-// --- Export action buttons ---
+// --- Export action buttons (detector section) ---
 
 .export-buttons {
   display: flex;
@@ -124,22 +124,69 @@
   gap: 8px;
 }
 
-.exporter-icon {
-  margin-right: 4px;
+// --- Export tabs ---
+
+.export-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 0;
 }
 
-.clipboard-icon {
-  margin-right: 2px;
+.export-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--color-accent, #4a90d9);
+    font-weight: 600;
+  }
 }
 
-// --- Exporter form (inline section) ---
+.tab-icon {
+  font-size: 1rem;
+}
 
-.exporter-form-section {
+.tab-content {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
   padding: 12px;
   background: var(--bg-subtle);
 }
+
+.tab-pane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.tab-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+// --- Form elements ---
 
 .form-group {
   display: flex;
