@@ -15,6 +15,7 @@ from vtsearch.utils import (
     get_autorun_localizers_by_media,
     snapshot_medias,
 )
+from vtsearch.utils.progress import update_find_progress
 from vtsearch.routes.detectors_crud import _build_extractor, _build_localizer
 
 detectors_scoring_bp = Blueprint("detectors_scoring", __name__)
@@ -59,17 +60,36 @@ def detector_sort():
     if not snap:
         return jsonify({"error": "no medias loaded"}), 400
 
+    n_total = len(snap)
+    update_find_progress(
+        "running", f"Scoring {n_total} items…",
+        current=0, total=n_total,
+        step=1, total_steps=1,
+    )
+
     # Score every media
     all_ids = sorted(snap.keys())
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
+    # Score in batches so the progress endpoint can report percentage
+    batch_size = max(1, min(500, n_total // 10))
+    scores: list[float] = []
     with torch.no_grad():
-        raw_logits = model(X_all)
-        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+        for start in range(0, n_total, batch_size):
+            end = min(start + batch_size, n_total)
+            batch_logits = model(X_all[start:end])
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            update_find_progress(
+                "running", f"Scoring {n_total} items…",
+                current=end, total=n_total,
+                step=1, total_steps=1,
+            )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
+
+    update_find_progress("idle", "Done", current=n_total, total=n_total, step=1, total_steps=1)
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 
@@ -94,13 +114,24 @@ def find_label():
         get_autorun_detectors,
     )
 
+    # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
+    _FIND_LABEL_STEPS = 4
+
     body = request.get_json(force=True, silent=True) or {}
     model_id = body.get("model_id")
     if not model_id:
+        update_find_progress("idle", "")
         return jsonify({"error": "model_id is required"}), 400
+
+    update_find_progress(
+        "running", "Resolving model…",
+        current=0, total=0,
+        step=1, total_steps=_FIND_LABEL_STEPS,
+    )
 
     m = reg_get_model(model_id)
     if m is None:
+        update_find_progress("idle", "")
         return jsonify({"error": f"Model '{model_id}' not found"}), 404
 
     # Resolve model weights
@@ -133,6 +164,12 @@ def find_label():
         if label_entries:
             from vtsearch.routes.detectors_helpers import serialize_weights as _serialize_weights, train_and_threshold
 
+            update_find_progress(
+                "running", "Training model from labels…",
+                current=0, total=0,
+                step=2, total_steps=_FIND_LABEL_STEPS,
+            )
+
             media_type = m.get("media_type", "image")
             X_list: list = []
             y_list: list[float] = []
@@ -160,6 +197,11 @@ def find_label():
             if unresolved:
                 from vtsearch.models.resolver import resolve_label_embeddings
 
+                update_find_progress(
+                    "running", f"Resolving {len(unresolved)} label origins…",
+                    current=0, total=0,
+                    step=2, total_steps=_FIND_LABEL_STEPS,
+                )
                 resolved = resolve_label_embeddings(unresolved, media_type)
                 X_list.extend(resolved.embeddings)
                 y_list.extend(resolved.labels)
@@ -167,17 +209,31 @@ def find_label():
             has_good = any(v == 1.0 for v in y_list)
             has_bad = any(v == 0.0 for v in y_list)
             if has_good and has_bad:
+                update_find_progress(
+                    "running", "Cross-calibrating threshold…",
+                    current=0, total=0,
+                    step=2, total_steps=_FIND_LABEL_STEPS,
+                )
                 trained_model, threshold = train_and_threshold(
                     X_list, y_list, snap=snap_for_train,
                 )
                 weights = _serialize_weights(trained_model)
 
     if weights is None:
+        update_find_progress("idle", "")
         return jsonify({"error": f"Model '{m['name']}' has no weights for scoring"}), 400
 
     snap = snapshot_medias()
     if not snap:
+        update_find_progress("idle", "")
         return jsonify({"error": "No medias loaded"}), 400
+
+    n_total = len(snap)
+    update_find_progress(
+        "running", f"Scoring {n_total} items…",
+        current=0, total=n_total,
+        step=3, total_steps=_FIND_LABEL_STEPS,
+    )
 
     # Score all medias
     model = build_model_from_weights(weights)
@@ -185,14 +241,29 @@ def find_label():
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
+    # Score in batches so the progress endpoint can report percentage
+    batch_size = max(1, min(500, n_total // 10))
+    scores: list[float] = []
     with torch.no_grad():
-        raw_logits = model(X_all)
-        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+        for start in range(0, n_total, batch_size):
+            end = min(start + batch_size, n_total)
+            batch_logits = model(X_all[start:end])
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            update_find_progress(
+                "running", f"Scoring {n_total} items…",
+                current=end, total=n_total,
+                step=3, total_steps=_FIND_LABEL_STEPS,
+            )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
 
     # Apply labels to ALL elements based on threshold (bulk for performance)
+    update_find_progress(
+        "running", f"Applying labels to {n_total} items…",
+        current=0, total=n_total,
+        step=4, total_steps=_FIND_LABEL_STEPS,
+    )
     label_pairs = []
     good_count = 0
     bad_count = 0
@@ -211,6 +282,12 @@ def find_label():
     from vtsearch.models.registry import set_find_mode
 
     set_find_mode(True)
+
+    update_find_progress(
+        "idle", "Done",
+        current=n_total, total=n_total,
+        step=_FIND_LABEL_STEPS, total_steps=_FIND_LABEL_STEPS,
+    )
 
     return jsonify({
         "ok": True,

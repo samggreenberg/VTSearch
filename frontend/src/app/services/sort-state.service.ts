@@ -17,6 +17,8 @@ export class SortStateService {
   private readonly thresholdSubject = new BehaviorSubject<number | null>(null);
   private readonly sortBusySubject = new BehaviorSubject<boolean>(false);
   private readonly sortStatusSubject = new BehaviorSubject<string>('');
+  private readonly sortProgressSubject = new BehaviorSubject<number>(0);
+  private readonly sortProgressTotalSubject = new BehaviorSubject<number>(0);
   private readonly inclusionSubject = new BehaviorSubject<number>(0);
   private readonly loadSortLabelSubject = new BehaviorSubject<string>('');
   private readonly textQuerySubject = new BehaviorSubject<string>('');
@@ -27,6 +29,8 @@ export class SortStateService {
   readonly threshold$ = this.thresholdSubject.asObservable();
   readonly sortBusy$ = this.sortBusySubject.asObservable();
   readonly sortStatus$ = this.sortStatusSubject.asObservable();
+  readonly sortProgress$ = this.sortProgressSubject.asObservable();
+  readonly sortProgressTotal$ = this.sortProgressTotalSubject.asObservable();
   readonly inclusion$ = this.inclusionSubject.asObservable();
   readonly loadSortLabel$ = this.loadSortLabelSubject.asObservable();
   readonly textQuery$ = this.textQuerySubject.asObservable();
@@ -53,6 +57,14 @@ export class SortStateService {
 
   get sortStatus(): string {
     return this.sortStatusSubject.value;
+  }
+
+  get sortProgress(): number {
+    return this.sortProgressSubject.value;
+  }
+
+  get sortProgressTotal(): number {
+    return this.sortProgressTotalSubject.value;
   }
 
   get inclusion(): number {
@@ -88,6 +100,11 @@ export class SortStateService {
     this.sortStatusSubject.next(status);
   }
 
+  setSortProgress(current: number, total: number): void {
+    this.sortProgressSubject.next(current);
+    this.sortProgressTotalSubject.next(total);
+  }
+
   setInclusion(value: number): void {
     this.inclusionSubject.next(value);
   }
@@ -107,6 +124,8 @@ export class SortStateService {
     this.thresholdSubject.next(null);
     this.sortBusySubject.next(false);
     this.sortStatusSubject.next('');
+    this.sortProgressSubject.next(0);
+    this.sortProgressTotalSubject.next(0);
     this.inclusionSubject.next(0);
     this.loadSortLabelSubject.next('');
     this.textQuerySubject.next('');

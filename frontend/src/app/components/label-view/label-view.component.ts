@@ -68,6 +68,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
+  private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
@@ -145,6 +146,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopScoringProgressPoll();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -358,14 +360,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Re-sort using existing load sort results when switching back to load mode
   }
 
+  private startScoringProgressPoll(): void {
+    this.stopScoringProgressPoll();
+    this.scoringProgressPoll$ = timer(200, 500)
+      .pipe(
+        switchMap(() => this.detectorsApi.getFindProgress()),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((prog: any) => {
+        if (prog.status === 'running') {
+          const msg = prog.message || 'Scoring with detector…';
+          const current = prog.current || 0;
+          const total = prog.total || 0;
+          this.sortState.setSortStatus(msg);
+          this.sortState.setSortProgress(current, total);
+        }
+      });
+  }
+
+  private stopScoringProgressPoll(): void {
+    if (this.scoringProgressPoll$) {
+      this.scoringProgressPoll$.unsubscribe();
+      this.scoringProgressPoll$ = null;
+    }
+  }
+
   onDetectorLoaded(data: unknown): void {
     const detector = data as Record<string, unknown>;
     const name = (detector['name'] as string) || 'Detector';
     this.sortState.setSortMode('load');
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector...');
+    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortProgress(0, 0);
+
+    this.startScoringProgressPoll();
+
     this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
+        this.stopScoringProgressPoll();
         this.sortState.setSortResults(
           response.results.map((r) => ({ id: r.id, score: r.score })),
           response.threshold,
@@ -373,11 +405,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sortState.setLoadSortLabel(name);
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
+        this.sortState.setSortProgress(0, 0);
         this.autoSelectNext();
       },
       error: () => {
+        this.stopScoringProgressPoll();
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Detector sort failed');
+        this.sortState.setSortProgress(0, 0);
       },
     });
   }

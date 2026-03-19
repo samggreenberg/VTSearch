@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, Subscription, timer } from 'rxjs';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -95,6 +95,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopProgressPolling();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -106,17 +107,49 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Find-label scoring ---
 
+  private progressPollSub: Subscription | null = null;
+
+  private startProgressPolling(): void {
+    this.stopProgressPolling();
+    this.progressPollSub = timer(200, 500)
+      .pipe(
+        switchMap(() => this.detectorsApi.getFindProgress()),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((prog: any) => {
+        if (prog.status === 'running') {
+          const msg = prog.message || 'Scoring with detector…';
+          const current = prog.current || 0;
+          const total = prog.total || 0;
+          this.sortState.setSortStatus(msg);
+          this.sortState.setSortProgress(current, total);
+        }
+      });
+  }
+
+  private stopProgressPolling(): void {
+    if (this.progressPollSub) {
+      this.progressPollSub.unsubscribe();
+      this.progressPollSub = null;
+    }
+  }
+
   private runFindLabel(): void {
     const modelId = this.findSession.modelId;
     if (!modelId) return;
 
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector...');
+    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortProgress(0, 0);
+
+    // Start polling for progress concurrently
+    this.startProgressPolling();
 
     this.detectorsApi.findLabel({ model_id: modelId })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response: any) => {
+          this.stopProgressPolling();
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score }));
           const threshold = response.threshold;
           // Set sort results for stripe display
@@ -124,6 +157,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.sortState.setLoadSortLabel(this.findSession.modelName || 'Detector');
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
+          this.sortState.setSortProgress(0, 0);
           // Select the item just above the threshold (last item with score >= threshold)
           if (threshold != null && sorted.length > 0) {
             let aboveId: number | null = null;
@@ -142,8 +176,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.voteState.loadVotes();
         },
         error: () => {
+          this.stopProgressPolling();
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('Scoring failed');
+          this.sortState.setSortProgress(0, 0);
         },
       });
   }
