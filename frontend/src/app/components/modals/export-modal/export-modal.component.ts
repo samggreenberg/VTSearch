@@ -54,6 +54,9 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     { value: ';', label: 'Semicolon (;)' },
   ];
 
+  /** Active export tab — 'clipboard' or an exporter name. */
+  activeTab = 'clipboard';
+
   /** Exporter form state. */
   selectedExporter: ExporterInfo | null = null;
   formValues: Record<string, string> = {};
@@ -210,6 +213,42 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     }
     this.error = '';
     this.status = '';
+  }
+
+  /** Select an exporter tab and initialise its form values. */
+  selectExporterTab(exporter: ExporterInfo): void {
+    this.activeTab = exporter.name;
+    this.selectedExporter = exporter;
+    this.formValues = {};
+    for (const f of exporter.fields || []) {
+      this.formValues[f.key] = f.default || '';
+    }
+    this.error = '';
+    this.status = '';
+  }
+
+  /** The exporter object for the currently active tab (null if clipboard). */
+  get activeTabExporter(): ExporterInfo | null {
+    if (this.activeTab === 'clipboard') return null;
+    return this.exporters.find((e) => e.name === this.activeTab) || null;
+  }
+
+  /** Label for the action button on the active exporter tab. */
+  get activeTabAction(): string {
+    const exp = this.activeTabExporter;
+    if (!exp) return 'Export';
+    const name = (exp.display_name || exp.name).toLowerCase();
+    if (name.includes('email') || name.includes('smtp')) return 'Send';
+    if (name.includes('csv') || name.includes('file') || name.includes('json')) return 'Save';
+    if (name.includes('webhook')) return 'Send';
+    return 'Export';
+  }
+
+  /** Submit the currently active exporter tab. */
+  submitExporterTab(): void {
+    const exp = this.activeTabExporter;
+    if (!exp) return;
+    this.exportLabelsWith(exp, { ...this.formValues });
   }
 
   cancelExporterForm(): void {
