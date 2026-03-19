@@ -490,6 +490,90 @@ class TestFindLabel:
         finally:
             set_trainable_models_dir(original_dir)
 
+    def test_find_label_does_not_overwrite_training_labels(self, client, tmp_path):
+        """Running Find must NOT overwrite the model's saved training labels.
+
+        Reproduces the bug: train on Dataset A (6 labels), load Dataset B,
+        run Find → the model's labelset on disk should still have exactly 6
+        training labels, not the N scoring labels from Dataset B.
+        """
+        from vtsearch.datasets.labelset import LabelSet
+        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+        reset_for_tests()
+
+        # --- Phase 1: simulate training on "Dataset A" (6 labels) ---
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+
+        snap = snapshot_medias()
+        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
+        original_label_count = len(labelset)
+        assert original_label_count == 6
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "persist-test"
+            tm_path = tmp_path / f"{tm_name}.json"
+            _write_model(
+                tm_path,
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "examples": [],
+                    "labelset": labelset.to_dict(),
+                },
+            )
+
+            entry = register_model(
+                name="Persist Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+            set_loaded_id(model_id)
+
+            # --- Phase 2: simulate loading Dataset B (clear votes) ---
+            good_votes.clear()
+            bad_votes.clear()
+
+            # --- Phase 3: run Find → scores all N medias, applies labels ---
+            resp = client.post("/api/find-label", json={"model_id": model_id})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True
+            total_scored = data["good_count"] + data["bad_count"]
+            assert total_scored == app_module.NUM_MEDIAS
+
+            # --- Phase 4: trigger sync (as a subsequent vote would) ---
+            sync_labels_to_loaded_model()
+
+            # --- Assert: the saved labelset must still have 6 labels ---
+            saved = _read_model(tm_path)
+            saved_labels = saved["labelset"]["labels"]
+            assert len(saved_labels) == original_label_count, (
+                f"Expected {original_label_count} training labels but got "
+                f"{len(saved_labels)} — find-label scoring overwrote training data"
+            )
+        finally:
+            set_trainable_models_dir(original_dir)
+
+    def test_find_mode_cleared_on_model_load(self, client):
+        """Loading a new model should clear find mode so training syncs resume."""
+        from vtsearch.models.registry import is_find_mode, reset_for_tests, set_find_mode, set_loaded_id
+
+        reset_for_tests()
+        set_find_mode(True)
+        assert is_find_mode()
+
+        set_loaded_id(None)
+        assert not is_find_mode()
+
     def test_find_label_missing_model_id(self, client):
         resp = client.post("/api/find-label", json={})
         assert resp.status_code == 400

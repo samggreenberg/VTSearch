@@ -36,6 +36,11 @@ _entries: list[dict[str, Any]] | None = None
 # The ``id`` of the currently loaded model, or ``None``.
 _loaded_id: str | None = None
 
+# When ``True`` the loaded model is in "find mode" — it was used for scoring
+# via ``/api/find-label`` and the resulting labels should NOT be synced back
+# to the trainable model's saved labelset.
+_find_mode: bool = False
+
 
 # ---------------------------------------------------------------------------
 # Persistence
@@ -204,14 +209,29 @@ def get_loaded_id() -> str | None:
 
 def set_loaded_id(model_id: str | None) -> None:
     """Mark *model_id* as the currently loaded model (or ``None``)."""
-    global _loaded_id
+    global _loaded_id, _find_mode
     with _lock:
         _loaded_id = model_id
+        _find_mode = False
+
+
+def is_find_mode() -> bool:
+    """Return ``True`` if the loaded model is in find/scoring mode."""
+    with _lock:
+        return _find_mode
+
+
+def set_find_mode(enabled: bool = True) -> None:
+    """Set or clear find mode for the loaded model."""
+    global _find_mode
+    with _lock:
+        _find_mode = enabled
 
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries, _loaded_id
+    global _entries, _loaded_id, _find_mode
     with _lock:
         _entries = None
         _loaded_id = None
+        _find_mode = False
