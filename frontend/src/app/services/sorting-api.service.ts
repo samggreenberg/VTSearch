@@ -63,10 +63,13 @@ export class SortingApiService {
     return this.http.post<SafeThresholdsResponse>('/api/safe-thresholds', { safe_thresholds: value });
   }
 
-  exportLabels(goodsOnly?: boolean): Observable<LabelsExportResponse> {
+  exportLabels(goodsOnly?: boolean, options?: { enrich?: boolean }): Observable<LabelsExportResponse> {
     const params: Record<string, string> = {};
     if (goodsOnly) {
       params['goods_only'] = 'true';
+    }
+    if (options?.enrich) {
+      params['enrich'] = 'true';
     }
     return this.http.get<LabelsExportResponse>('/api/labels/export', { params });
   }

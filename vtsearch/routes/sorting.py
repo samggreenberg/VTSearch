@@ -295,13 +295,61 @@ def export_labels():
 
     Query params:
         goods_only: If ``"1"`` or ``"true"``, only export good labels.
+        label_filter: ``"good"``, ``"bad"``, or ``"both"`` (default).
+            Overrides ``goods_only`` when present.
+        enrich: If ``"1"`` or ``"true"``, include per-item
+            ``custom_metadata`` and a top-level ``available_columns`` list.
     """
     from vtsearch.datasets.labelset import LabelSet
 
-    goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
-    bads = {} if goods_only else bad_votes
-    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bads)
+    label_filter = request.args.get("label_filter", "").lower()
+    if label_filter == "good":
+        goods, bads = good_votes, {}
+    elif label_filter == "bad":
+        goods, bads = {}, bad_votes
+    elif label_filter:
+        goods, bads = good_votes, bad_votes
+    else:
+        # Backward compat: fall back to goods_only flag
+        goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
+        goods = good_votes
+        bads = {} if goods_only else bad_votes
+
+    all_medias = snapshot_medias()
+    labelset = LabelSet.from_clips_and_votes(all_medias, goods, bads)
     result: dict = labelset.to_dict()
+
+    enrich = request.args.get("enrich", "").lower() in ("1", "true")
+    if enrich:
+        from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+        md5_to_media: dict = {}
+        for m in all_medias.values():
+            md5_val = m.get("md5")
+            if md5_val:
+                md5_to_media[md5_val] = m
+
+        all_meta_keys: set[str] = set()
+        for entry in result["labels"]:
+            media = md5_to_media.get(entry.get("md5"))
+            if not media:
+                continue
+            media_type_id = media.get("type", "audio")
+            try:
+                mt = get_media_type(media_type_id)
+                meta = mt.display_metadata(media)
+            except KeyError:
+                meta = {}
+            importer_custom = media.get("custom_metadata")
+            if importer_custom:
+                meta.update(importer_custom)
+            if meta:
+                entry["custom_metadata"] = meta
+                all_meta_keys.update(meta.keys())
+
+        base_columns = ["label", "md5", "origin_name", "filename", "category"]
+        result["available_columns"] = base_columns + sorted(all_meta_keys)
+
     return jsonify(result)
 
 
