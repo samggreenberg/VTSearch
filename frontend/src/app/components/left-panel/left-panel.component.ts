@@ -43,6 +43,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() inclusion: number = 0;
   @Input() sortBusy = false;
   @Input() sortStatus = '';
+  @Input() sortProgress = 0;
+  @Input() sortProgressTotal = 0;
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() viewMode: 'grid' | 'list' = 'list';
   @Input() gridGoalWidth: number = 80;

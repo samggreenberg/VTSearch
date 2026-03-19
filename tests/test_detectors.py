@@ -582,6 +582,127 @@ class TestFindLabel:
         resp = client.post("/api/find-label", json={"model_id": "nonexistent"})
         assert resp.status_code == 404
 
+    def test_find_label_reports_progress(self, client):
+        """find-label should update find_progress with discrete steps."""
+        from vtsearch.utils.progress import find_progress
+
+        model_id = self._create_model_with_detector(client)
+
+        # Capture progress snapshots by monkey-patching update
+        snapshots = []
+        original_update = find_progress.update
+
+        def capturing_update(*args, **kwargs):
+            original_update(*args, **kwargs)
+            snapshots.append(find_progress.get())
+
+        find_progress.update = capturing_update
+        try:
+            resp = client.post("/api/find-label", json={"model_id": model_id})
+        finally:
+            find_progress.update = original_update
+
+        assert resp.status_code == 200
+
+        # Should have progress snapshots from each phase
+        assert len(snapshots) >= 3
+
+        # Step 1: resolving model
+        step1 = [s for s in snapshots if s.get("step") == 1]
+        assert len(step1) >= 1
+        assert step1[0]["status"] == "running"
+        assert step1[0]["total_steps"] == 4
+
+        # Step 3: scoring (step 2 skipped when weights exist)
+        step3 = [s for s in snapshots if s.get("step") == 3]
+        assert len(step3) >= 1
+        assert "Scoring" in step3[0]["message"]
+        assert step3[0]["total"] == app_module.NUM_MEDIAS
+
+        # Step 4: applying labels
+        step4 = [s for s in snapshots if s.get("step") == 4]
+        assert len(step4) >= 1
+        assert "Applying labels" in step4[0]["message"]
+
+        # Final state should be idle
+        final = find_progress.get()
+        assert final["status"] == "idle"
+
+    def test_find_label_progress_resets_on_error(self, client):
+        """find_progress should reset to idle when find-label returns an error."""
+        from vtsearch.models.registry import reset_for_tests
+        from vtsearch.utils.progress import find_progress
+
+        reset_for_tests()
+        resp = client.post("/api/find-label", json={})
+        assert resp.status_code == 400
+        data = find_progress.get()
+        assert data["status"] == "idle"
+
+    def test_find_label_progress_resets_on_not_found(self, client):
+        """find_progress should reset to idle when model is not found."""
+        from vtsearch.utils.progress import find_progress
+
+        resp = client.post("/api/find-label", json={"model_id": "nonexistent"})
+        assert resp.status_code == 404
+        data = find_progress.get()
+        assert data["status"] == "idle"
+
+    def test_find_label_progress_visible_via_endpoint(self, client):
+        """GET /api/find/progress should reflect find-label progress."""
+        resp = client.get("/api/find/progress")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Should be idle when nothing is running
+        assert data["status"] == "idle"
+
+
+class TestDetectorSortProgress:
+    """Tests for progress reporting during POST /api/detector-sort."""
+
+    def test_detector_sort_reports_progress(self, client):
+        """detector-sort should update find_progress while scoring."""
+        from vtsearch.utils.progress import find_progress
+
+        # Train a detector
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        export_resp = client.post("/api/detector/export")
+        assert export_resp.status_code == 200
+        detector = export_resp.get_json()
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+
+        # Capture progress snapshots
+        snapshots = []
+        original_update = find_progress.update
+
+        def capturing_update(*args, **kwargs):
+            original_update(*args, **kwargs)
+            snapshots.append(find_progress.get())
+
+        find_progress.update = capturing_update
+        try:
+            resp = client.post("/api/detector-sort", json={"detector": detector})
+        finally:
+            find_progress.update = original_update
+
+        assert resp.status_code == 200
+
+        # Should have scoring progress snapshots
+        scoring = [s for s in snapshots if s.get("step") == 1 and s["status"] == "running"]
+        assert len(scoring) >= 1
+        assert "Scoring" in scoring[0]["message"]
+        assert scoring[0]["total"] == app_module.NUM_MEDIAS
+
+        # Should end with complete progress
+        final_running = [s for s in snapshots if s["current"] == app_module.NUM_MEDIAS and s["status"] == "running"]
+        assert len(final_running) >= 1
+
+        # Final state should be idle
+        final = find_progress.get()
+        assert final["status"] == "idle"
+
 
 class TestAutoDetect:
     """Tests for POST /api/auto-detect."""
