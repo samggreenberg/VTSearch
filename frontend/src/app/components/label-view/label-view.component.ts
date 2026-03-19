@@ -93,6 +93,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     this.autopilotStateService.clear();
+    this.voteState.clear();
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
