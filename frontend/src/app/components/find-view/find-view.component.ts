@@ -117,14 +117,27 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response: any) => {
+          const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score }));
+          const threshold = response.threshold;
           // Set sort results for stripe display
-          this.sortState.setSortResults(
-            response.results.map((r: any) => ({ id: r.id, score: r.score })),
-            response.threshold,
-          );
+          this.sortState.setSortResults(sorted, threshold);
           this.sortState.setLoadSortLabel(this.findSession.modelName || 'Detector');
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
+          // Select the item just above the threshold (last item with score >= threshold)
+          if (threshold != null && sorted.length > 0) {
+            let aboveId: number | null = null;
+            for (const item of sorted) {
+              if (item.score >= threshold) {
+                aboveId = item.id;
+              } else {
+                break;
+              }
+            }
+            if (aboveId != null) {
+              this.mediaState.selectMedia(aboveId);
+            }
+          }
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
