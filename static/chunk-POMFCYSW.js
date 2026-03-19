@@ -1,1 +1,0 @@
-import{N as t}from"./chunk-RSHH7I3P.js";var r=class e{textQuery="";mediaExample="";examples=[];resortVoteCount=0;resortNextThreshold=0;static \u0275fac=function(o){return new(o||e)};static \u0275prov=t({token:e,factory:e.\u0275fac,providedIn:"root"})};export{r as a};
