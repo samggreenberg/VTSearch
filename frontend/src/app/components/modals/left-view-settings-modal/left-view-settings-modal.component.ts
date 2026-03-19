@@ -2,7 +2,6 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -11,7 +10,7 @@ import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 @Component({
   selector: 'vt-left-view-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './left-view-settings-modal.component.html',
   styleUrl: './left-view-settings-modal.component.scss',
 })
