@@ -1,4 +1,5 @@
-<vt-modal title="Scroll View" [open]="true" (closed)="close()">
+<div class="view-menu-backdrop" (click)="close()"></div>
+<div class="view-menu">
   @if (loading) {
     <p class="empty-state">Loading...</p>
   } @else {
@@ -61,8 +62,4 @@
       <p class="error-text">{{ error }}</p>
     }
   }
-
-  <div class="view-actions" modal-footer>
-    <button class="btn btn--primary" (click)="close()">Close</button>
-  </div>
-</vt-modal>
+</div>

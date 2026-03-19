@@ -6,7 +6,12 @@
         <h3 class="images-header-title">
           {{ mediaTypeName }}s ({{ medias.length }})
         </h3>
-        <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+        <div class="view-btn-wrapper">
+          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+          @if (showLeftViewSettings) {
+            <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
+          }
+        </div>
       </div>
 
       @if (sortBusy) {
@@ -108,7 +113,12 @@
           <h3 class="images-header-title">
             {{ mediaTypeName }}s ({{ medias.length }})
           </h3>
-          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+          <div class="view-btn-wrapper">
+            <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+            @if (showLeftViewSettings) {
+              <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
+            }
+          </div>
         </div>
 
         <div class="media-list-container">
@@ -153,6 +163,3 @@
   }
 </div>
 
-@if (showLeftViewSettings) {
-  <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
-}

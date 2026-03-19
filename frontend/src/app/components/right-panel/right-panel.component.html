@@ -14,7 +14,12 @@
       [mode]="sortMode"
       (modeChange)="onSortModeChange($event)"
     />
-    <button class="view-btn" (click)="onViewSettings()">View</button>
+    <div class="view-btn-wrapper">
+      <button class="view-btn" (click)="onViewSettings()">View</button>
+      @if (showViewSettings) {
+        <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
+      }
+    </div>
   </div>
 
   <vt-label-list
@@ -63,8 +68,4 @@
     (closed)="showExport = false"
     (exported)="showExport = false"
   />
-}
-
-@if (showViewSettings) {
-  <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
 }
