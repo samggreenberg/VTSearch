@@ -38,7 +38,10 @@ COPY vtsearch/exporters/email_smtp/requirements.txt vtsearch/exporters/email_smt
 COPY vtsearch/exporters/webhook/requirements.txt vtsearch/exporters/webhook/requirements.txt
 COPY vtsearch/datasets/importers/combine_datasets/requirements.txt vtsearch/datasets/importers/combine_datasets/requirements.txt
 
+# Pre-install numpy/scipy as binary-only wheels so the PyTorch extra-index
+# cannot pull in source tarballs that require g++.
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir --only-binary numpy,scipy "numpy==1.26.4" scipy && \
     pip install --no-cache-dir -r requirements-gpu.txt
 
 # ---------- application layer ----------

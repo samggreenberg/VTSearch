@@ -15,7 +15,8 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
-- **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
+- **Install deps (CPU)**: `pip install -r requirements-cpu.txt`
+- **Install deps (GPU)**: `bash install-gpu.sh` (or `bash install-gpu.sh cu121` for CUDA 12.1)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend tests**: `cd frontend && ng test --watch=false` (requires Chrome/Chromium; see Environment Notes below)

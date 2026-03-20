@@ -137,6 +137,17 @@ pip install -r requirements-cpu.txt
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
+bash install-gpu.sh          # defaults to CUDA 11.8
+bash install-gpu.sh cu121    # for CUDA 12.1
+bash install-gpu.sh cu124    # for CUDA 12.4
+```
+
+The install script pre-installs numpy/scipy as binary wheels before processing
+`requirements-gpu.txt`, avoiding C++ compiler errors from PyTorch's extra index.
+
+If you prefer raw pip, ensure g++ is installed first:
+
+```bash
 pip install -r requirements-gpu.txt
 ```
 
