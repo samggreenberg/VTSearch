@@ -46,6 +46,9 @@ gpu = ["torch>=2.0.0", "vtsearch[all-media]", "vtsearch[email]", "vtsearch[eval]
 # ── Development ───────────────────────────────────────────────────────
 dev = ["pytest", "ruff"]
 
+[tool.setuptools.packages.find]
+include = ["vtsearch*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
