@@ -1378,6 +1378,24 @@ def read_pkl_embedder(pkl_path: Path) -> str | None:
     return None
 
 
+def _stamp_demo_origin(
+    medias: dict[int, dict[str, Any]],
+    dataset_name: str,
+    converter_name: str = "",
+) -> None:
+    """Stamp the demo origin on all medias (fresh dict per media).
+
+    Ensures every media has ``origin = {"importer": "demo", "params": {"name": ...}}``.
+    Called both for freshly-embedded medias and for pickle-cached loads so
+    that old pickles (created before origin stamping was added) get corrected.
+    """
+    demo_origin_params: dict[str, str] = {"name": dataset_name}
+    if converter_name:
+        demo_origin_params["converter"] = converter_name
+    for media in medias.values():
+        media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
+
+
 def load_demo_dataset(
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
@@ -1452,6 +1470,11 @@ def load_demo_dataset(
             pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
             pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
         else:
+            # Stamp demo origin on cached medias so that cross-dataset
+            # resolution always has the dataset name in the origin params.
+            # Old pickles (created before origin stamping) may have empty
+            # params — this ensures they are corrected on load.
+            _stamp_demo_origin(medias, dataset_name, converter_name)
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
@@ -1487,12 +1510,8 @@ def load_demo_dataset(
         embedder=embedder,
     )
 
-    # Stamp the demo origin on all medias (fresh dict per media to avoid shared-reference mutation bugs)
-    demo_origin_params: dict[str, str] = {"name": dataset_name}
-    if converter_name:
-        demo_origin_params["converter"] = converter_name
-    for media in medias.values():
-        media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
+    # Stamp the demo origin on all medias
+    _stamp_demo_origin(medias, dataset_name, converter_name)
 
     # --- Apply converter if requested ---
     if converter_name:

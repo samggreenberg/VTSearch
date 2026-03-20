@@ -854,6 +854,227 @@ class TestFindLabel:
         assert data["status"] == "idle"
 
 
+class TestFindLabelDemoOrigin:
+    """Tests for find-label with demo dataset origins — cross-dataset resolution."""
+
+    def test_find_label_demo_origin_resolves(self, client, tmp_path):
+        """find-label should resolve labels from demo origins when MD5s don't match.
+
+        Simulates: train on demo dataset A, load dataset B, click Find.
+        The resolver follows the demo origin to find files on disk.
+        """
+        from unittest.mock import patch
+
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import medias, snapshot_medias
+
+        reset_for_tests()
+
+        # --- Phase 1: set up demo-like files on disk ---
+        img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
+        (img_dir / "kangaroo").mkdir(parents=True)
+        for i in range(3):
+            (img_dir / "kangaroo" / f"image_{i:04d}.jpg").write_bytes(f"good_img_{i}".encode())
+        (img_dir / "butterfly").mkdir(parents=True)
+        for i in range(3):
+            (img_dir / "butterfly" / f"image_{i:04d}.jpg").write_bytes(f"bad_img_{i}".encode())
+
+        # Build labelset with demo origins
+        demo_origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
+        label_entries = []
+        for i in range(3):
+            label_entries.append({
+                "md5": f"demo_a_good_{i}",
+                "label": "good",
+                "origin": demo_origin,
+                "origin_name": f"kangaroo/image_{i:04d}.jpg",
+                "filename": f"kangaroo/image_{i:04d}.jpg",
+            })
+        for i in range(3):
+            label_entries.append({
+                "md5": f"demo_a_bad_{i}",
+                "label": "bad",
+                "origin": demo_origin,
+                "origin_name": f"butterfly/image_{i:04d}.jpg",
+                "filename": f"butterfly/image_{i:04d}.jpg",
+            })
+
+        # --- Phase 2: write trainable model ---
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+
+        import vtsearch.datasets.importers.demo as demo_mod
+        old_source_dirs = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
+
+        try:
+            tm_name = "test-demo-cross"
+            _write_model(tmp_path / f"{tm_name}.json", {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "image",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Demo Cross Dataset Test",
+                media_type="image",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+
+            # --- Phase 3: load completely different dataset B ---
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(42)
+            for i in range(1, 11):
+                medias[i] = {
+                    "id": i,
+                    "type": "image",
+                    "embedding": rng.standard_normal(512).astype(np.float32),
+                    "md5": f"dataset_b_md5_{i}",
+                    "filename": f"dataset_b_{i}.jpg",
+                    "origin": {"importer": "demo", "params": {"name": "food101_a"}},
+                    "origin_name": f"dataset_b_{i}.jpg",
+                }
+
+            # Mock embed_file to return deterministic vectors
+            good_emb = rng.standard_normal(512).astype(np.float32)
+            bad_emb = rng.standard_normal(512).astype(np.float32)
+
+            def fake_embed(path, media_type):
+                name = path.name
+                if "kangaroo" in str(path):
+                    return good_emb.copy()
+                return bad_emb.copy()
+
+            try:
+                with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+                    resp = client.post("/api/find-label", json={"model_id": model_id})
+
+                assert resp.status_code == 200, (
+                    f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
+                )
+                data = resp.get_json()
+                assert data["ok"] is True
+                total = data["good_count"] + data["bad_count"]
+                assert total == 10  # all Dataset B items scored
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            demo_mod._SOURCE_DIRS = old_source_dirs
+            set_trainable_models_dir(original_dir)
+
+    def test_find_label_demo_origin_empty_params_fails_with_warning(self, client, tmp_path):
+        """Demo labels with empty origin params should produce a user-friendly warning.
+
+        Simulates old pickles that stored demo origins without the dataset name.
+        """
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import medias
+
+        reset_for_tests()
+
+        # Origin with empty params (simulates old pickle bug)
+        bad_origin = {"importer": "demo", "params": {}}
+        label_entries = [
+            {"md5": "old_good", "label": "good", "origin": bad_origin,
+             "origin_name": "cat/img_001.jpg", "filename": "cat/img_001.jpg"},
+            {"md5": "old_bad", "label": "bad", "origin": bad_origin,
+             "origin_name": "dog/img_002.jpg", "filename": "dog/img_002.jpg"},
+        ]
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "test-empty-demo"
+            _write_model(tmp_path / f"{tm_name}.json", {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "image",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Empty Demo Test",
+                media_type="image",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(99)
+            for i in range(1, 6):
+                medias[i] = {
+                    "id": i,
+                    "type": "image",
+                    "embedding": rng.standard_normal(512).astype(np.float32),
+                    "md5": f"other_{i}",
+                    "filename": f"other_{i}.jpg",
+                    "origin": {"importer": "demo", "params": {"name": "eurosat_a"}},
+                    "origin_name": f"other_{i}.jpg",
+                }
+
+            try:
+                resp = client.post("/api/find-label", json={"model_id": entry["id"]})
+                assert resp.status_code == 400
+                data = resp.get_json()
+
+                # Should have a user-friendly warning field
+                assert "warning" in data
+                assert "could not be resolved" in data["warning"]
+                assert "2" in data["warning"]  # total labels
+
+                # Error message should mention resolution failure
+                assert "failed to resolve" in data["error"]
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            set_trainable_models_dir(original_dir)
+
+
+class TestStampDemoOrigin:
+    """Tests for _stamp_demo_origin ensuring pickle-cached loads get correct origins."""
+
+    def test_stamps_origin_with_dataset_name(self):
+        from vtsearch.datasets.loader import _stamp_demo_origin
+
+        medias = {
+            1: {"id": 1, "origin": {"importer": "demo", "params": {}}},
+            2: {"id": 2, "origin": None},
+        }
+        _stamp_demo_origin(medias, "caltech101_s")
+        for media in medias.values():
+            assert media["origin"]["importer"] == "demo"
+            assert media["origin"]["params"]["name"] == "caltech101_s"
+
+    def test_stamps_converter_when_provided(self):
+        from vtsearch.datasets.loader import _stamp_demo_origin
+
+        medias = {1: {"id": 1, "origin": None}}
+        _stamp_demo_origin(medias, "caltech101_s", converter_name="image2text")
+        assert medias[1]["origin"]["params"]["converter"] == "image2text"
+
+    def test_each_media_gets_independent_dict(self):
+        from vtsearch.datasets.loader import _stamp_demo_origin
+
+        medias = {1: {"id": 1, "origin": None}, 2: {"id": 2, "origin": None}}
+        _stamp_demo_origin(medias, "caltech101_s")
+        # Mutating one should not affect the other
+        medias[1]["origin"]["params"]["extra"] = "test"
+        assert "extra" not in medias[2]["origin"]["params"]
+
+
 class TestDetectorSortProgress:
     """Tests for progress reporting during POST /api/detector-sort."""
 
