@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -12,7 +13,7 @@ import { Theme, ThemeService } from '../../../services/theme.service';
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })

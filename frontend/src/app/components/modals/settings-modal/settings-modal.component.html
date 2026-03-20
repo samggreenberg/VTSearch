@@ -208,7 +208,7 @@
                   <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
                   <span class="embedder-name">{{ embedder.name }}</span>
                   <span class="embedder-media-type">{{ embedder.media_type_id }}</span>
-                  <span class="embedder-icon">{{ getMediaTypeIcon(embedder.media_type_id) }}</span>
+                  <span class="embedder-icon"><vt-icon [icon]="getMediaTypeIcon(embedder.media_type_id)"></vt-icon></span>
                 </label>
               }
             </div>

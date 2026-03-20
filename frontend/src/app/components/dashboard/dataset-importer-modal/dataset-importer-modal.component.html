@@ -6,18 +6,18 @@
       }
       @for (imp of importers; track imp.name) {
         <button class="importer-card" (click)="selectImporter(imp)">
-          <span class="importer-name">@if (imp.icon) {<span class="importer-icon">{{ imp.icon }}</span> }{{ imp.display_name || imp.name }}</span>
+          <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
           @if (imp.description) {
             <span class="importer-desc">{{ imp.description }}</span>
           }
         </button>
       }
       <button class="importer-card" (click)="openServerFolderBrowser()">
-        <span class="importer-name"><span class="importer-icon">🖥️</span> Import from Server Folder</span>
+        <span class="importer-name"><span class="importer-icon"><vt-icon type="server"></vt-icon></span> Import from Server Folder</span>
         <span class="importer-desc">Browse directories on the server and import media files</span>
       </button>
       <button class="importer-card demo-card" (click)="openDemoPicker()">
-        <span class="importer-name"><span class="importer-icon">🎓</span> Load Demo Dataset</span>
+        <span class="importer-name"><span class="importer-icon"><vt-icon type="graduation"></vt-icon></span> Load Demo Dataset</span>
         <span class="importer-desc">Choose from a selection of pre-configured demo datasets</span>
       </button>
     </div>
@@ -286,13 +286,13 @@
           }
           @if (sfBrowsePath) {
             <button class="sf-dir-item" (click)="sfGoUp()">
-              <span class="sf-dir-icon">⬆️</span>
+              <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
               <span class="sf-dir-name">..</span>
             </button>
           }
           @for (dir of sfBrowseDirs; track dir.path) {
             <button class="sf-dir-item" (click)="sfEnterDirectory(dir)">
-              <span class="sf-dir-icon">📁</span>
+              <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
               <span class="sf-dir-name">{{ dir.name }}</span>
             </button>
           }
