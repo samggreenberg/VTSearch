@@ -60,8 +60,25 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopPlayback();
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
+  }
+
+  /** Stop all media playback (used on navigation away). */
+  stopPlayback(): void {
+    if (this.audioPlayer) {
+      const audio = this.audioPlayer.audioRef?.nativeElement;
+      if (audio) {
+        audio.pause();
+      }
+    }
+    if (this.videoPlayer) {
+      const video = this.videoPlayer.videoRef?.nativeElement;
+      if (video) {
+        video.pause();
+      }
+    }
   }
 
   /** Initialize: load settings, start keyboard listener. */
