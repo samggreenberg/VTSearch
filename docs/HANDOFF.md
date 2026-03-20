@@ -244,7 +244,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `Dockerfile.gpu` or `pip install -e ".[gpu,dev]"`
+- [ ] Use `Dockerfile.gpu` or `bash install-gpu.sh`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 

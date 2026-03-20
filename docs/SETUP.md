@@ -126,7 +126,7 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Dependencies are declared in `pyproject.toml` with optional extras.
+Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document) are included in the base install — you just pick CPU or GPU for PyTorch.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
@@ -142,25 +142,7 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-**Selective install** (only the media types you need):
-
-```bash
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[audio,text,dev]"
-```
-
-**Minimal install** (core only, no media type extras):
-
-```bash
-pip install -e "."
-```
-
-This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies (including importers and exporters).
-
-**For development tools only** (adds pytest and other dev tools):
-
-```bash
-pip install -e ".[dev]"
-```
+The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version.
 
 ## Building the frontend (optional)
 

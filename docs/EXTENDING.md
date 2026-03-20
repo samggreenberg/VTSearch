@@ -1335,51 +1335,26 @@ class ObjectExtractor(Extractor):
 
 ## Dependency Management
 
-VTSearch declares all dependencies in `pyproject.toml` using optional extras:
+VTSearch declares all dependencies in `pyproject.toml`:
 
 ```
 pyproject.toml
-  [project.dependencies]          # Core deps (Flask, PyTorch, NumPy, transformers)
+  [project.dependencies]          # All app deps (Flask, NumPy, transformers, media types, etc.)
   [project.optional-dependencies]
     cpu                           # CPU-only PyTorch wheel
     gpu                           # GPU PyTorch wheel
     dev                           # Dev tools (pytest, ruff)
-    audio                         # Audio media type deps
-    video                         # Video media type deps
-    image                         # Image media type deps
-    text                          # Text media type deps
-    document                      # Document media type deps
-    all-media                     # All media type extras combined
-    email                         # Email exporter deps
-    eval                          # Evaluation framework deps
 ```
 
-### For a new media type
+All media types, importers/exporters, and eval deps are in the base
+`[project.dependencies]`. The only optional extras are `cpu`/`gpu` (for
+choosing the right PyTorch build) and `dev` (for test/lint tools).
 
-Add your packages to an existing extra or create a new one in
-`[project.optional-dependencies]` in `pyproject.toml`. You can also keep a
-`requirements.txt` in the plugin directory for documentation purposes.
+### For a new media type, importer, or exporter
 
-### For a new data importer
-
-Add any extra packages to `[project.optional-dependencies]` in
-`pyproject.toml`. If the importer's dependencies are niche, consider
-creating a new named extra for it.
-
-### For a new exporter
-
-Add any extra packages to `[project.optional-dependencies]` in
-`pyproject.toml` (e.g. to the `email` extra for email-related deps, or
-create a new extra).
-
-### Why extras?
-
-- Each extra groups the packages for a specific feature (media type,
-  exporter, etc.) so users can install only what they need.
-- `pip install -e ".[audio,text,dev]"` installs only audio and text
-  support plus dev tools.
-- Failed imports of a plugin's sub-package emit a warning rather than
-  crashing, so missing optional dependencies degrade gracefully.
+Add your packages to `[project.dependencies]` in `pyproject.toml`.
+Failed imports of a plugin's sub-package emit a warning rather than
+crashing, so missing system-level dependencies degrade gracefully.
 
 ---
 
