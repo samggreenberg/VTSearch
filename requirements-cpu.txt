@@ -2,7 +2,7 @@
 
 # Core packages
 flask
-numpy<2
+numpy
 torch>=2.0.0
 requests
 tqdm

@@ -1,6 +1,11 @@
+# GPU PyTorch index — install the CUDA build matching your system.
+# Adjust the cu* suffix for your CUDA version (cu118, cu121, cu124, etc.):
+#   pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cu118
+--extra-index-url https://download.pytorch.org/whl/cu118
+
 # Core packages
 flask
-numpy<2
+numpy
 torch>=2.0.0
 requests
 tqdm
