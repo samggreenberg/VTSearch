@@ -174,6 +174,41 @@ class TestImporterBaseContentMD5s:
         assert imp.content_md5s["test.wav"] == "d41d8cd98f00b204e9800998ecf8427e"
 
 
+class TestImporterBaseCustomMetadataMap:
+    def test_base_class_instance_has_custom_metadata_map(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class MinimalImporter(DatasetImporter):
+            name = "minimal"
+            display_name = "Minimal"
+            description = "Minimal importer."
+            fields = []
+
+            def run(self, field_values, medias):
+                pass
+
+        imp = MinimalImporter()
+        assert hasattr(imp, "custom_metadata_map")
+        assert imp.custom_metadata_map == {}
+
+    def test_custom_metadata_map_independent_across_instances(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class Imp(DatasetImporter):
+            name = "t"
+            display_name = "T"
+            description = "T"
+            fields = []
+
+            def run(self, field_values, medias):
+                pass
+
+        a = Imp()
+        b = Imp()
+        a.custom_metadata_map["file.wav"] = {"md5": "abc123"}
+        assert b.custom_metadata_map == {}
+
+
 class TestImporterBaseIcon:
     def test_base_class_has_icon_attribute(self):
         from vtsearch.datasets.importers.base import DatasetImporter

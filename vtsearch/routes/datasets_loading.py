@@ -11,6 +11,7 @@ from uuid import uuid4
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
+from vtsearch.datasets.loader import apply_custom_metadata_md5
 from vtsearch.datasets.registry import (
     get_saved_datasets_dir,
     register_dataset as _reg_register,
@@ -365,6 +366,9 @@ def _run_origin_load_in_background(
             gc.collect()
             load_fn()
             dataset_progress.check_cancelled()
+            # Use MD5 hashes from custom_metadata when the importer
+            # provides them, before duplicate collapsing relies on them.
+            apply_custom_metadata_md5(medias)
             # _stepped_progress (the progress callback injected by
             # _run_importer_in_background) filters out "idle" so that
             # inner functions like load_demo_dataset cannot prematurely
@@ -505,6 +509,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         try:
             temp_medias: dict = {}
             importer.run(field_values, temp_medias)
+            apply_custom_metadata_md5(temp_medias)
 
             if not temp_medias:
                 update_progress("idle", "", 0, 0, "Import produced no medias.")

@@ -225,6 +225,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         try:
             load_dataset_from_folder(
                 extract_dir, media_type, medias, on_progress=progress, thin=thin, embedder_name=emb_name,
+                custom_metadata_map=self.custom_metadata_map or None,
             )
             # Run any user-selected converters on the extracted folder.
             _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
@@ -281,6 +282,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         try:
             yield from load_dataset_from_folder_chunked(
                 extract_dir, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                custom_metadata_map=self.custom_metadata_map or None,
             )
             # Run converters on the extracted folder and yield as a chunk.
             converters_str = field_values.get("converters", "")
