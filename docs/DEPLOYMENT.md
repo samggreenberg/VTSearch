@@ -365,7 +365,7 @@ bash install-gpu.sh
 | `torch` | `>=2.0.0` | Neural network training and inference |
 | `transformers` | latest | HuggingFace model loading (CLAP, CLIP, X-CLIP) |
 | `sentence-transformers` | latest | E5 text embeddings |
-| `numpy` | `<2` | Numeric arrays (numpy 2.x has breaking changes) |
+| `numpy` | latest | Numeric arrays |
 | `flask` | latest | Web server |
 | `opencv-python-headless` | `<4.10` | Video frame extraction |
 | `ultralytics` | latest | YOLO-based image processing |

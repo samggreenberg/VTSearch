@@ -23,7 +23,7 @@ echo "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})..."
 echo "Pre-installing binary-only wheels (numpy, scipy)..."
 pip install --only-binary :all: \
   --index-url https://pypi.org/simple \
-  "numpy<2" \
+  "numpy" \
   "scipy" \
   -q
 

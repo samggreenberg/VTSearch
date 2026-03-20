@@ -7,7 +7,7 @@ description = "Media explorer for browsing and voting on audio, images, text, vi
 # Core dependencies — everything needed to run VTSearch with all media types.
 dependencies = [
     "flask",
-    "numpy<2",
+    "numpy",
     "requests",
     "tqdm",
     "scikit-learn",
