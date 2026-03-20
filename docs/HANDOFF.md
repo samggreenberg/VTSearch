@@ -326,9 +326,4 @@ the cost of slower individual operations.
 This is an intentional design choice throughout the codebase. Always use
 `votes[id] = None` syntax, not `votes.add(id)`.
 
-### numpy < 2 constraint
-
-The `numpy<2` pin avoids breaking changes in numpy 2.x that affect
-PyTorch and other dependencies. Upgrading requires testing across the full
-dependency chain.
 
