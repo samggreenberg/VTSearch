@@ -81,10 +81,15 @@
   white-space: nowrap;
   transition: all 0.15s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--bg-hover);
     color: var(--text-primary);
     border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 

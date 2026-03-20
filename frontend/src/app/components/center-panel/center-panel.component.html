@@ -79,7 +79,7 @@
     <vt-voting-overlay
       [isGood]="isGood"
       [isBad]="isBad"
-      [disabled]="isVoting"
+      [disabled]="isVoting || disabled"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
   }
