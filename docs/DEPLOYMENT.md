@@ -337,23 +337,15 @@ Add `--no-cache` after dependency changes to force a full rebuild.
 
 ## Dependency structure
 
-Dependencies are declared in `pyproject.toml` using optional extras:
+Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document), importers/exporters, and eval deps are included in the base install. The only optional extras are:
 
 ```
 pyproject.toml
-  [project.dependencies]          ← Core deps (Flask, PyTorch, NumPy, transformers)
+  [project.dependencies]          ← All app deps (Flask, NumPy, transformers, media types, etc.)
   [project.optional-dependencies]
     cpu                           ← CPU-only PyTorch wheel
     gpu                           ← GPU PyTorch wheel
     dev                           ← Dev tools (pytest, ruff)
-    audio                         ← Audio media type deps (librosa, laion_clap, etc.)
-    video                         ← Video media type deps (opencv, etc.)
-    image                         ← Image media type deps (ultralytics, etc.)
-    text                          ← Text media type deps (sentence-transformers, etc.)
-    document                      ← Document media type deps (PyMuPDF, etc.)
-    all-media                     ← All media type extras combined
-    email                         ← Email exporter deps
-    eval                          ← Evaluation framework deps
 ```
 
 Install commands:
@@ -364,12 +356,6 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev
 
 # GPU
 bash install-gpu.sh
-
-# Selective media types
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[audio,text,dev]"
-
-# Minimal (core only)
-pip install -e "."
 ```
 
 ### Key dependencies
@@ -435,9 +421,7 @@ via the folder or pickle importer instead.
 
 **Symptom**: `ModuleNotFoundError` for a media type or importer package.
 
-**Fix**: Install with all extras:
+**Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,all-media,email,dev]"
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 ```
-
-For specific media types only, install selective extras (e.g. `.[audio,text]`).

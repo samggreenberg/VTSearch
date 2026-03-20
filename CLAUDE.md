@@ -17,8 +17,6 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
 - **Install deps (CPU)**: `pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"`
 - **Install deps (GPU)**: `bash install-gpu.sh` (or `bash install-gpu.sh cu121` for CUDA 12.1)
-- **Install minimal (no media types)**: `pip install -e "."` (Flask UI only, media types error on first use)
-- **Install selective media types**: `pip install -e ".[audio,text,dev]"` (only audio + text support)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend tests**: `cd frontend && ng test --watch=false` (requires Chrome/Chromium; see Environment Notes below)
