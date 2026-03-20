@@ -217,6 +217,7 @@ def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
 def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
+    progress_callback: Any | None = None,
 ) -> ResolvedLabels:
     """Resolve label entries to embeddings by following their origin trails.
 
@@ -245,9 +246,13 @@ def resolve_label_embeddings(
         len(labels), media_type,
     )
 
+    _total_entries = len(labels)
+
     for i, entry in enumerate(labels):
         label_val = entry.get("label", "")
         if label_val not in ("good", "bad"):
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         result.total_count += 1
@@ -275,6 +280,8 @@ def resolve_label_embeddings(
                     i, origin.get("importer", "?"), origin_name, filename,
                     origin.get("params", {}),
                 )
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         embedding = embed_file(file_path, media_type)
@@ -286,6 +293,8 @@ def resolve_label_embeddings(
                 "embedding returned None for media_type=%r",
                 i, file_path, media_type,
             )
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         result.embeddings.append(embedding)
@@ -295,6 +304,8 @@ def resolve_label_embeddings(
             "  label[%d] OK: %s → %s (label=%s)",
             i, origin_name or filename, file_path.name, label_val,
         )
+        if progress_callback is not None:
+            progress_callback(current=i + 1, total=_total_entries)
 
     # --- Summary ---
     n_good = sum(1 for v in result.labels if v == 1.0)

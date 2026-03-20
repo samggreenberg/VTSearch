@@ -211,12 +211,23 @@ def find_label():
             if unresolved:
                 from vtsearch.models.resolver import resolve_label_embeddings
 
+                _n_unresolved = len(unresolved)
                 update_find_progress(
-                    "running", f"Resolving {len(unresolved)} label origins…",
-                    current=0, total=0,
+                    "running", f"Resolving {_n_unresolved} label origins…",
+                    current=0, total=_n_unresolved,
                     step=2, total_steps=_FIND_LABEL_STEPS,
                 )
-                resolved = resolve_label_embeddings(unresolved, media_type)
+
+                def _origin_progress(current: int, total: int) -> None:
+                    update_find_progress(
+                        "running", f"Resolving {_n_unresolved} label origins…",
+                        current=current, total=total,
+                        step=2, total_steps=_FIND_LABEL_STEPS,
+                    )
+
+                resolved = resolve_label_embeddings(
+                    unresolved, media_type, progress_callback=_origin_progress,
+                )
                 X_list.extend(resolved.embeddings)
                 y_list.extend(resolved.labels)
 
