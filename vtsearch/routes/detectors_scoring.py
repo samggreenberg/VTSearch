@@ -305,9 +305,16 @@ def find_label():
                 )
             if diag.get("hint"):
                 error_msg += f" Hint: {diag['hint']}"
-        resp = {"error": error_msg}
+        resp: dict = {"error": error_msg}
         if _resolution_diagnostic is not None:
             resp["resolution_diagnostic"] = _resolution_diagnostic
+            # Concise user-facing warning for the frontend status bar
+            failed = _resolution_diagnostic["failed_resolution"]
+            total = _resolution_diagnostic["total_labels"]
+            mt = _resolution_diagnostic.get("media_type", "items")
+            # Pluralise: "images", "sounds", etc. — fall back to media_type + "s"
+            mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
+            resp["warning"] = f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
         return jsonify(resp), 400
 
     snap = snapshot_medias()

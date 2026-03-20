@@ -175,10 +175,13 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
-        error: () => {
+        error: (err: any) => {
           this.stopProgressPolling();
           this.sortState.setSortBusy(false);
-          this.sortState.setSortStatus('Scoring failed');
+          // Extract the server error message so the user sees why scoring failed
+          const body = err?.error;
+          const warning = body?.warning || body?.error || 'Scoring failed';
+          this.sortState.setSortStatus(warning);
           this.sortState.setSortProgress(0, 0);
         },
       });
