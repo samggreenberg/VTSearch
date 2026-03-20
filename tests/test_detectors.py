@@ -868,7 +868,7 @@ class TestFindLabelDemoOrigin:
         from vtsearch.models.registry import register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import medias, snapshot_medias
+        from vtsearch.utils import medias
 
         reset_for_tests()
 
@@ -947,7 +947,6 @@ class TestFindLabelDemoOrigin:
             bad_emb = rng.standard_normal(512).astype(np.float32)
 
             def fake_embed(path, media_type):
-                name = path.name
                 if "kangaroo" in str(path):
                     return good_emb.copy()
                 return bad_emb.copy()
