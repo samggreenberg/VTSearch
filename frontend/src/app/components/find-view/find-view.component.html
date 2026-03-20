@@ -32,8 +32,14 @@
     (mousedown)="onDividerMouseDown($event)"
   ></div>
   <div class="panel-center">
+    @if (sortState.sortBusy) {
+      <div class="find-wait-overlay">
+        <p class="find-wait-message">Please wait — scoring dataset with detector…</p>
+      </div>
+    }
     <vt-center-panel
       [media]="mediaState.selectedMedia"
+      [disabled]="sortState.sortBusy"
       (mediaVoted)="onMediaVoted($event)"
     />
   </div>
@@ -45,6 +51,7 @@
     <vt-right-panel
       [medias]="mediaState.medias"
       [focusMode]="focusModeRight"
+      [disabled]="sortState.sortBusy"
       mode="find"
       (mediaSelected)="onMediaSelect($event)"
       (mediaVoted)="onHoverVote($event)"

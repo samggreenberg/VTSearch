@@ -304,6 +304,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    if (this.sortState.sortBusy) return;
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.onMediaVoted(event);

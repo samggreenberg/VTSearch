@@ -40,6 +40,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() focusMode: 'click' | 'hover' = 'click';
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
   @Input() mode: 'label' | 'find' = 'label';
+  /** Disable interactive buttons (used during Find scoring). */
+  @Input() disabled = false;
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
