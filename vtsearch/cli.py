@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 
-from vtsearch.datasets.loader import load_dataset_from_pickle
+from vtsearch.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtsearch.utils.hits import build_media_hit
 
 
@@ -171,6 +171,7 @@ def run_autodetect_with_importer(
     # Use thin mode — CLI only needs embeddings for scoring, not media bytes
     medias: dict[int, dict[str, Any]] = {}
     importer.run_cli(field_values, medias, thin=True)
+    apply_custom_metadata_md5(medias)
 
     if not medias:
         raise ValueError(f"No medias loaded by importer '{importer_name}'")
@@ -395,6 +396,7 @@ def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> It
 
     medias: dict[int, dict[str, Any]] = {}
     importer.run_cli(field_values, medias, thin=True)
+    apply_custom_metadata_md5(medias)
     if not medias:
         raise ValueError(f"No medias loaded by importer '{importer_name}'")
     yield medias
@@ -449,6 +451,7 @@ def _run_pipeline(
         if not chunk_medias:
             continue
 
+        apply_custom_metadata_md5(chunk_medias)
         total_medias += len(chunk_medias)
 
         if media_type is None:

@@ -630,6 +630,32 @@ def load_dataset_from_folder(
     on_progress("idle", f"Loaded {len(medias)} {media_type} medias from folder")
 
 
+def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
+    """Use MD5 hashes from custom_metadata when available.
+
+    If a media item's ``custom_metadata`` contains a non-empty ``"md5"`` key,
+    that value is used as the item's ``"md5"`` instead of whatever was
+    calculated during loading.  This lets importers supply authoritative hashes
+    from their data source without recalculation.
+
+    Args:
+        media_dict: The mutable medias dict.  Modified in place.
+
+    Returns:
+        The number of media items whose MD5 was replaced.
+    """
+    count = 0
+    for media in media_dict.values():
+        cm = media.get("custom_metadata")
+        if not cm:
+            continue
+        cm_md5 = cm.get("md5")
+        if cm_md5:
+            media["md5"] = cm_md5
+            count += 1
+    return count
+
+
 def load_dataset_from_folder_chunked(
     folder_path: Path,
     media_type: str,

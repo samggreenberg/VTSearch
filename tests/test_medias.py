@@ -73,6 +73,66 @@ class TestMediaMD5:
         assert hashlib.md5(wav_bytes).hexdigest() == media["md5"]
 
 
+class TestApplyCustomMetadataMD5:
+    """Tests for apply_custom_metadata_md5: use MD5 from custom_metadata when provided."""
+
+    def test_replaces_md5_from_custom_metadata(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": "provided_hash", "title": "foo"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 1
+        assert media_dict[1]["md5"] == "provided_hash"
+
+    def test_skips_when_no_custom_metadata(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash"},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_skips_when_custom_metadata_has_no_md5(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"title": "foo"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_skips_when_custom_metadata_md5_is_empty(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": ""}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_handles_mixed_medias(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calc1", "custom_metadata": {"md5": "provided1"}},
+            2: {"md5": "calc2", "custom_metadata": {"title": "no md5 here"}},
+            3: {"md5": "calc3"},
+            4: {"md5": "calc4", "custom_metadata": {"md5": "provided4"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 2
+        assert media_dict[1]["md5"] == "provided1"
+        assert media_dict[2]["md5"] == "calc2"
+        assert media_dict[3]["md5"] == "calc3"
+        assert media_dict[4]["md5"] == "provided4"
+
+
 class TestListMedias:
     def test_returns_all_medias(self, client):
         resp = client.get("/api/medias")
