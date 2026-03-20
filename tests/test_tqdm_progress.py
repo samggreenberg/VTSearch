@@ -129,6 +129,27 @@ class TestInterceptTqdmProgress:
 
         assert len(calls) == 0
 
+    def test_suppresses_console_output(self, capsys):
+        """Intercepted bars should not write to stdout/stderr."""
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((status, message, current, total))
+
+        with intercept_tqdm_progress(cb):
+            bar = tqdm.auto.tqdm(total=100, desc="Loading weights")
+            bar.update(50)
+            bar.update(50)
+            bar.close()
+
+        captured = capsys.readouterr()
+        # The native tqdm output (e.g. "Loading weights: 100%|███|")
+        # should NOT appear on stdout or stderr
+        assert "Loading weights" not in captured.out
+        assert "Loading weights" not in captured.err
+        # But the callback should still have received the progress
+        assert len(calls) >= 3
+
     def test_callback_receives_status_loading(self):
         """All forwarded calls should use status='loading'."""
         calls = []
