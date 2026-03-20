@@ -58,7 +58,7 @@ export class ViewSettingsModalComponent implements OnInit {
     dict[typeId] = value;
     const updated = { ...dict };
     (this.settings as Record<string, unknown>)['view_mode_right'] = updated;
-    this.saveField({ view_mode_right: updated });
+    this.saveField({ view_mode_right: updated as Record<string, 'grid' | 'list'> });
   }
 
   getViewMode(typeId: string): string {
@@ -86,7 +86,7 @@ export class ViewSettingsModalComponent implements OnInit {
     dict[typeId] = value;
     const updated = { ...dict };
     (this.settings as Record<string, unknown>)['focus_mode_right'] = updated;
-    this.saveField({ focus_mode_right: updated });
+    this.saveField({ focus_mode_right: updated as Record<string, 'click' | 'hover'> });
   }
 
   getFocusMode(typeId: string): string {
