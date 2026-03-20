@@ -95,10 +95,11 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
     _devnull = open(os.devnull, "w")  # noqa: SIM115
 
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Inject file=devnull so tqdm wraps it in its DisableOnWriteError
+        # wrapper during init — suppresses all console output from the bar.
+        if "file" not in kwargs:
+            kwargs["file"] = _devnull
         _orig_init(self, *args, **kwargs)
-        if not getattr(self, "disable", False):
-            # Suppress native tqdm console output — progress goes via callback
-            self.fp = _devnull
         total = getattr(self, "total", None)
         if total and total > 0 and not getattr(self, "disable", False):
             _bars.append(self)
