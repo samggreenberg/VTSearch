@@ -2,6 +2,7 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
@@ -10,7 +11,7 @@ type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })

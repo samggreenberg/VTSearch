@@ -36,7 +36,7 @@ class ServerCsvLabelImporter(LabelImporter):
         LabelImporterField(
             key="filepath",
             label="Server File Path",
-            field_type="text",
+            field_type="server_path",
             description=(
                 "Absolute or relative path to a CSV file with md5 and label columns on the server filesystem."
             ),

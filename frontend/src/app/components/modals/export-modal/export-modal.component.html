@@ -149,7 +149,14 @@
                   }
                 </label>
 
-                @if (field.field_type === 'password') {
+                @if (field.field_type === 'server_path') {
+                  <vt-file-browser
+                    [value]="formValues[field.key] || ''"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                    [extensions]="field.accept || ''"
+                    (pathSelected)="formValues[field.key] = $event"
+                  />
+                } @else if (field.field_type === 'password') {
                   <input
                     [id]="'field-' + field.key"
                     type="password"
