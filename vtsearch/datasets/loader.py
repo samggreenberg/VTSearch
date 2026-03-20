@@ -433,6 +433,7 @@ def load_dataset_from_folder(
     origin: dict[str, Any] | None = None,
     thin: bool = False,
     embedder_name: str = "",
+    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -479,6 +480,12 @@ def load_dataset_from_folder(
         embedder_name: Optional name of a registered embedder to use.
             When empty, the first registered embedder for the media type
             is used.
+        custom_metadata_map: Optional mapping of filename to a metadata dict.
+            Keys follow the same lookup logic as ``content_vectors`` (relative
+            path first, then basename).  When a metadata dict contains a
+            non-empty ``"md5"`` key, that value is used as the media's MD5
+            instead of computing it from the file contents.  The metadata dict
+            is also attached to the media as ``custom_metadata``.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
@@ -558,10 +565,24 @@ def load_dataset_from_folder(
 
             embedder_id = emb.name if emb else ""
 
+            # Look up per-file custom metadata (relative path first, then
+            # basename fallback — same lookup order as content_vectors).
+            file_cm: dict[str, Any] | None = None
+            if custom_metadata_map:
+                if rel_path in custom_metadata_map:
+                    file_cm = custom_metadata_map[rel_path]
+                elif file_path.name in custom_metadata_map:
+                    file_cm = custom_metadata_map[file_path.name]
+
+            # Resolve MD5: custom_metadata > content_md5s > computed
+            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+
             if thin:
                 # Thin mode: store file path reference, skip loading bytes.
                 # Use stat for file_size and streaming hash for MD5.
-                if content_md5s and rel_path in content_md5s:
+                if cm_md5:
+                    md5 = cm_md5
+                elif content_md5s and rel_path in content_md5s:
                     md5 = content_md5s[rel_path]
                 elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
@@ -587,7 +608,9 @@ def load_dataset_from_folder(
                 with open(file_path, "rb") as f:
                     file_bytes = f.read()
 
-                if content_md5s and rel_path in content_md5s:
+                if cm_md5:
+                    md5 = cm_md5
+                elif content_md5s and rel_path in content_md5s:
                     md5 = content_md5s[rel_path]
                 elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
@@ -616,6 +639,9 @@ def load_dataset_from_folder(
 
                 # Merge in media-specific fields from the media type
                 media_data.update(mt.load_media_data(file_path))
+
+            if file_cm:
+                media_data["custom_metadata"] = file_cm
 
             medias[media_id] = media_data
             media_id += 1
@@ -666,6 +692,7 @@ def load_dataset_from_folder_chunked(
     origin: dict[str, Any] | None = None,
     thin: bool = False,
     embedder_name: str = "",
+    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -688,6 +715,8 @@ def load_dataset_from_folder_chunked(
         embedder_name: Optional name of a registered embedder to use.
             When empty, the first registered embedder for the media type
             is used.
+        custom_metadata_map: Optional mapping of filename to a metadata dict.
+            Same semantics as in :func:`load_dataset_from_folder`.
 
     Yields:
         A dict mapping int media IDs (starting at 1) to media data dicts.
@@ -770,8 +799,20 @@ def load_dataset_from_folder_chunked(
                 if embedding is None:
                     continue
 
+            # Look up per-file custom metadata (same logic as non-chunked).
+            file_cm: dict[str, Any] | None = None
+            if custom_metadata_map:
+                if rel_path in custom_metadata_map:
+                    file_cm = custom_metadata_map[rel_path]
+                elif file_path.name in custom_metadata_map:
+                    file_cm = custom_metadata_map[file_path.name]
+
+            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+
             if thin:
-                if content_md5s and rel_path in content_md5s:
+                if cm_md5:
+                    md5 = cm_md5
+                elif content_md5s and rel_path in content_md5s:
                     md5 = content_md5s[rel_path]
                 elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
@@ -797,7 +838,9 @@ def load_dataset_from_folder_chunked(
                 with open(file_path, "rb") as f:
                     file_bytes = f.read()
 
-                if content_md5s and rel_path in content_md5s:
+                if cm_md5:
+                    md5 = cm_md5
+                elif content_md5s and rel_path in content_md5s:
                     md5 = content_md5s[rel_path]
                 elif content_md5s and file_path.name in content_md5s:
                     md5 = content_md5s[file_path.name]
@@ -821,6 +864,9 @@ def load_dataset_from_folder_chunked(
                     "duration": 0,
                 }
                 media_data.update(mt.load_media_data(file_path))
+
+            if file_cm:
+                media_data["custom_metadata"] = file_cm
 
             chunk_medias[media_id] = media_data
             media_id += 1
