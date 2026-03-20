@@ -402,6 +402,20 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Map an exporter's emoji icon to an SVG icon type. */
+  getExporterIconType(exp: ExporterInfo): string {
+    const icon = exp.icon || '';
+    if (icon === '📧' || icon.includes('📧')) return 'email';
+    if (icon === '🖥️' || icon === '\uD83D\uDDA5' || icon === '\uD83D\uDDA5\uFE0F') return 'server';
+    if (icon === '🌐' || icon === '\uD83C\uDF10') return 'webhook';
+    // Also match by name as fallback
+    const name = (exp.name || '').toLowerCase();
+    if (name.includes('email') || name.includes('smtp')) return 'email';
+    if (name.includes('webhook')) return 'webhook';
+    if (name.includes('server') || name.includes('file')) return 'server';
+    return 'upload';
+  }
+
   close(): void {
     this.closed.emit();
   }
