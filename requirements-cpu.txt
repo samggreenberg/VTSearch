@@ -1,5 +1,10 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
+# Prefer pre-built wheels over source distributions.  The PyTorch extra
+# index sometimes serves source tarballs for packages like numpy, which
+# fail to build without a C++ compiler (g++).
+--prefer-binary
+
 # Core packages
 flask
 numpy==1.26.4

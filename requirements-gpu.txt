@@ -3,6 +3,11 @@
 #   pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cu118
 --extra-index-url https://download.pytorch.org/whl/cu118
 
+# Prefer pre-built wheels over source distributions.  The PyTorch extra
+# index sometimes serves source tarballs for packages like numpy, which
+# fail to build without a C++ compiler (g++).
+--prefer-binary
+
 # Core packages
 flask
 numpy==1.26.4
