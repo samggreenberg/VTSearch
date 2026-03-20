@@ -18,6 +18,7 @@ the registry.
 from __future__ import annotations
 
 import contextlib
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,8 +90,15 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
         callback("loading", desc, current, int(total))
 
+    # Redirect intercepted bars' output to devnull so they don't print
+    # to the console.  The callback receives all progress updates instead.
+    _devnull = open(os.devnull, "w")  # noqa: SIM115
+
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
         _orig_init(self, *args, **kwargs)
+        if not getattr(self, "disable", False):
+            # Suppress native tqdm console output — progress goes via callback
+            self.fp = _devnull
         total = getattr(self, "total", None)
         if total and total > 0 and not getattr(self, "disable", False):
             _bars.append(self)
@@ -116,6 +124,7 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
         tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
         tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
+        _devnull.close()
 
 
 @contextlib.contextmanager

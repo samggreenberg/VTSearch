@@ -21,13 +21,16 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 # Suppress huggingface_hub "unauthenticated requests" console warning —
 # all models we use are public, so no token is needed.
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
 
 # All HF models we use are public — no token needed.  Each from_pretrained()
 # call passes token=False to signal this explicitly.  The env var + warnings
 # filter below are belt-and-suspenders in case any transitive HF code still
 # warns about missing tokens.
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
-warnings.filterwarnings("ignore", message=".*unauthenticated requests.*HF Hub.*")
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
+warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 
 # Visual feedback for startup
 print("⏳ Initializing VTSearch...", flush=True)
