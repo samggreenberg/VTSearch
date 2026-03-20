@@ -648,6 +648,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.onResortKeep();
   }
 
+  onAutopilotRefocus(): void {
+    this.autoSelectNext();
+  }
+
   onAutopilotToggleCollapse(): void {
     const newVal = !this.autopilotCollapsed;
     this.setAutopilotCollapsed(newVal);

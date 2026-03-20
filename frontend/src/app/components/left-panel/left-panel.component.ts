@@ -69,6 +69,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Output() indicatorClick = new EventEmitter<string>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
+  @Output() autopilotRefocus = new EventEmitter<void>();
   @Output() autopilotToggleCollapse = new EventEmitter<void>();
   @Output() autopilotEnabledChange = new EventEmitter<boolean>();
 
@@ -122,7 +123,12 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   setTab(tab: 'manual' | 'autopilot'): void {
-    if (tab === this.activeTab) return;
+    if (tab === this.activeTab) {
+      if (tab === 'autopilot') {
+        this.autopilotRefocus.emit();
+      }
+      return;
+    }
     const previous = this.activeTab;
     this.activeTab = tab;
     if (previous === 'autopilot') {

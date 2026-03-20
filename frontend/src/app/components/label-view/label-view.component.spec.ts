@@ -473,6 +473,25 @@ describe('LabelViewComponent', () => {
     expect(component.showResortPrompt).toBeFalse();
   });
 
+  it('should re-select autopilot suggestion on refocus', () => {
+    flushInitialRequests();
+
+    // Set up sort order and select mode
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
+      0.5,
+    );
+    component.sortState.setSelectMode('top');
+
+    // Manually select a different media (simulating user clicking right panel)
+    component.onMediaSelect(1);
+    expect(component.mediaState.selectedId).toBe(1);
+
+    // Refocus should re-select the autopilot suggestion (top unlabeled = id 2)
+    component.onAutopilotRefocus();
+    expect(component.mediaState.selectedId).toBe(2);
+  });
+
   it('should clear stale autopilot state from previous session on init', () => {
     const autopilot = TestBed.inject(AutopilotStateService);
     // Simulate leftover state from a previous detector session
