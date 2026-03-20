@@ -10,11 +10,22 @@ Covers:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+
+def _make_browse_root(tmp_path: Path) -> Path:
+    """Create a clean subdirectory to use as the browse root.
+
+    The ``tmp_path`` fixture is shared with autouse fixtures (e.g.
+    ``isolated_settings``) which create their own files there.  Using a
+    dedicated subdirectory avoids those files appearing in browse results.
+    """
+    root = tmp_path / "browse_root"
+    root.mkdir()
+    return root
 
 
 class TestBrowseEndpoint:
@@ -22,11 +33,12 @@ class TestBrowseEndpoint:
 
     def test_browse_root(self, client, tmp_path):
         """Listing root returns directories and files."""
-        (tmp_path / "subdir").mkdir()
-        (tmp_path / "file.csv").write_text("a,b\n1,2")
-        (tmp_path / "file.json").write_text("{}")
+        root = _make_browse_root(tmp_path)
+        (root / "subdir").mkdir()
+        (root / "file.csv").write_text("a,b\n1,2")
+        (root / "file.json").write_text("{}")
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200
@@ -37,16 +49,17 @@ class TestBrowseEndpoint:
         assert "file.csv" in file_names
         assert "file.json" in file_names
         assert data["current_path"] == ""
-        assert data["root"] == str(tmp_path)
+        assert data["root"] == str(root)
 
     def test_browse_subdir(self, client, tmp_path):
         """Navigating into a subdirectory lists its contents."""
-        sub = tmp_path / "data"
+        root = _make_browse_root(tmp_path)
+        sub = root / "data"
         sub.mkdir()
         (sub / "labels.csv").write_text("md5,label\nabc,good")
         (sub / "nested").mkdir()
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse?path=data")
 
         assert resp.status_code == 200
@@ -59,11 +72,12 @@ class TestBrowseEndpoint:
 
     def test_extension_filter(self, client, tmp_path):
         """Extension parameter filters files by suffix."""
-        (tmp_path / "file.csv").write_text("data")
-        (tmp_path / "file.json").write_text("{}")
-        (tmp_path / "file.txt").write_text("hello")
+        root = _make_browse_root(tmp_path)
+        (root / "file.csv").write_text("data")
+        (root / "file.json").write_text("{}")
+        (root / "file.txt").write_text("hello")
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse?extensions=.csv,.json")
 
         assert resp.status_code == 200
@@ -75,10 +89,11 @@ class TestBrowseEndpoint:
 
     def test_extension_filter_without_dot(self, client, tmp_path):
         """Extensions without leading dot are accepted."""
-        (tmp_path / "file.csv").write_text("data")
-        (tmp_path / "file.txt").write_text("hello")
+        root = _make_browse_root(tmp_path)
+        (root / "file.csv").write_text("data")
+        (root / "file.txt").write_text("hello")
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse?extensions=csv")
 
         assert resp.status_code == 200
@@ -89,7 +104,8 @@ class TestBrowseEndpoint:
 
     def test_path_traversal_blocked(self, client, tmp_path):
         """Attempting to escape the root via .. is rejected."""
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        root = _make_browse_root(tmp_path)
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse?path=../../etc")
 
         assert resp.status_code == 400
@@ -97,18 +113,20 @@ class TestBrowseEndpoint:
 
     def test_nonexistent_dir(self, client, tmp_path):
         """Browsing a path that doesn't exist returns 404."""
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        root = _make_browse_root(tmp_path)
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse?path=no_such_dir")
 
         assert resp.status_code == 404
 
     def test_hidden_files_excluded(self, client, tmp_path):
         """Files and dirs starting with '.' are not listed."""
-        (tmp_path / ".hidden_dir").mkdir()
-        (tmp_path / ".hidden_file").write_text("secret")
-        (tmp_path / "visible.csv").write_text("data")
+        root = _make_browse_root(tmp_path)
+        (root / ".hidden_dir").mkdir()
+        (root / ".hidden_file").write_text("secret")
+        (root / "visible.csv").write_text("data")
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200
@@ -120,10 +138,11 @@ class TestBrowseEndpoint:
 
     def test_file_size_reported(self, client, tmp_path):
         """Files include their size in bytes."""
+        root = _make_browse_root(tmp_path)
         content = "hello world"
-        (tmp_path / "file.txt").write_text(content)
+        (root / "file.txt").write_text(content)
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200
@@ -133,12 +152,13 @@ class TestBrowseEndpoint:
 
     def test_no_extensions_shows_all_files(self, client, tmp_path):
         """Without extensions param, all files are shown."""
-        (tmp_path / "a.csv").write_text("")
-        (tmp_path / "b.json").write_text("")
-        (tmp_path / "c.pkl").write_bytes(b"")
-        (tmp_path / "d.txt").write_text("")
+        root = _make_browse_root(tmp_path)
+        (root / "a.csv").write_text("")
+        (root / "b.json").write_text("")
+        (root / "c.pkl").write_bytes(b"")
+        (root / "d.txt").write_text("")
 
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200
@@ -148,7 +168,8 @@ class TestBrowseEndpoint:
 
     def test_empty_directory(self, client, tmp_path):
         """Browsing an empty directory returns empty lists."""
-        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=tmp_path):
+        root = _make_browse_root(tmp_path)
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200

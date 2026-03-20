@@ -248,7 +248,7 @@ class TestLabelImporterRegistry:
     def test_each_importer_fields_are_valid(self):
         from vtsearch.labels.importers import list_label_importers
 
-        valid_types = ("file", "text", "password", "select")
+        valid_types = ("file", "text", "password", "select", "server_path")
         for imp in list_label_importers():
             for f in imp.fields:
                 assert f.key, f"{imp.name} has a field without a key"
@@ -788,7 +788,7 @@ class TestServerJsonLabelImporter:
     def test_has_filepath_field(self):
         fields = {f.key: f for f in self._get_importer().fields}
         assert "filepath" in fields
-        assert fields["filepath"].field_type == "text"
+        assert fields["filepath"].field_type == "server_path"
 
     def test_run_reads_server_file(self, tmp_path):
         payload = {"labels": [{"md5": "abc", "label": "good"}, {"md5": "def", "label": "bad"}]}
@@ -861,7 +861,7 @@ class TestServerCsvLabelImporter:
     def test_has_filepath_field(self):
         fields = {f.key: f for f in self._get_importer().fields}
         assert "filepath" in fields
-        assert fields["filepath"].field_type == "text"
+        assert fields["filepath"].field_type == "server_path"
 
     def test_run_reads_server_file(self, tmp_path):
         p = tmp_path / "labels.csv"
