@@ -58,7 +58,7 @@ export class LeftViewSettingsModalComponent implements OnInit {
     dict[typeId] = value;
     const updated = { ...dict };
     (this.settings as Record<string, unknown>)['view_mode_left'] = updated;
-    this.saveField({ view_mode_left: updated });
+    this.saveField({ view_mode_left: updated as Record<string, 'grid' | 'list'> });
   }
 
   getViewMode(typeId: string): string {
@@ -86,7 +86,7 @@ export class LeftViewSettingsModalComponent implements OnInit {
     dict[typeId] = value;
     const updated = { ...dict };
     (this.settings as Record<string, unknown>)['focus_mode_left'] = updated;
-    this.saveField({ focus_mode_left: updated });
+    this.saveField({ focus_mode_left: updated as Record<string, 'click' | 'hover'> });
   }
 
   getFocusMode(typeId: string): string {
