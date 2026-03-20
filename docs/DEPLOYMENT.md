@@ -335,33 +335,41 @@ Add `--no-cache` after dependency changes to force a full rebuild.
 
 ---
 
-## Requirements file structure
+## Dependency structure
 
-Dependencies are organized in a layered structure:
-
-```
-requirements-cpu.txt          ← Main CPU deps (Flask, PyTorch CPU, all media types)
-  └── requirements-importers.txt  ← All importer deps (aggregates per-importer files)
-  └── (inline) per-media-type packages
-
-requirements-gpu.txt          ← Main GPU deps (PyTorch GPU, all media types)
-  └── requirements-importers.txt
-
-requirements-exporters.txt    ← All exporter deps (aggregates per-exporter files)
-
-requirements-dev.txt          ← Dev tools (pytest)
-
-requirements.txt              ← Generic (includes all)
-```
-
-Each plugin has its own `requirements.txt` in its subdirectory:
+Dependencies are declared in `pyproject.toml` using optional extras:
 
 ```
-vtsearch/media/{audio,image,text,video,document}/requirements.txt
-vtsearch/datasets/importers/{folder,pickle,http_zip,combine_datasets}/requirements.txt
-vtsearch/exporters/{server_json_file,server_csv_file,gui,email_smtp,webhook}/requirements.txt
-vtsearch/labels/importers/{server_json_file,server_csv_file}/requirements.txt
-vtsearch/processors/importers/server_detector_file/requirements.txt
+pyproject.toml
+  [project.dependencies]          ← Core deps (Flask, PyTorch, NumPy, transformers)
+  [project.optional-dependencies]
+    cpu                           ← CPU-only PyTorch wheel
+    gpu                           ← GPU PyTorch wheel
+    dev                           ← Dev tools (pytest, ruff)
+    audio                         ← Audio media type deps (librosa, laion_clap, etc.)
+    video                         ← Video media type deps (opencv, etc.)
+    image                         ← Image media type deps (ultralytics, etc.)
+    text                          ← Text media type deps (sentence-transformers, etc.)
+    document                      ← Document media type deps (PyMuPDF, etc.)
+    all-media                     ← All media type extras combined
+    email                         ← Email exporter deps
+    eval                          ← Evaluation framework deps
+```
+
+Install commands:
+
+```bash
+# CPU with all features + dev tools
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+
+# GPU
+bash install-gpu.sh
+
+# Selective media types
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[audio,text,dev]"
+
+# Minimal (core only)
+pip install -e "."
 ```
 
 ### Key dependencies
@@ -427,11 +435,9 @@ via the folder or pickle importer instead.
 
 **Symptom**: `ModuleNotFoundError` for a media type or importer package.
 
-**Fix**: Install the full requirements:
+**Fix**: Install with all extras:
 ```bash
-pip install -r requirements-cpu.txt    # or requirements-gpu.txt
-pip install -r requirements-exporters.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,all-media,email,dev]"
 ```
 
-For specific importers or media types, install their individual
-`requirements.txt` as well.
+For specific media types only, install selective extras (e.g. `.[audio,text]`).

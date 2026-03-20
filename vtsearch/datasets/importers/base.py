@@ -42,8 +42,9 @@ Example – a minimal SFTP importer skeleton::
 
     IMPORTER = SftpImporter()
 
-Then add ``-r vtsearch/datasets/importers/sftp/requirements.txt`` to
-``requirements-importers.txt`` (creating the file first with ``paramiko``).
+If the importer needs extra packages, add them to the ``[project.optional-dependencies]``
+section of ``pyproject.toml`` (or document them in a ``requirements.txt`` inside the
+importer's directory for reference).
 """
 
 from __future__ import annotations

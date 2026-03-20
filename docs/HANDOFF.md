@@ -59,7 +59,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-pip install -r requirements-cpu.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 python app.py --local        # lazy model loading, faster startup
 ```
 
@@ -178,15 +178,15 @@ argument parsing. Key startup sequence:
   and dataset functions generally accept state as parameters, though
   some modules import specific helpers (e.g. `update_progress`,
   `next_media_id`) for progress reporting and ID generation.
-- **Each plugin is self-contained** in its own subdirectory with its own
-  `requirements.txt`.
+- **Each plugin is self-contained** in its own subdirectory. Dependencies
+  are declared in `pyproject.toml` under `[project.optional-dependencies]`.
 
 ---
 
 ## Running the test suite
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ -v
@@ -228,7 +228,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `pip install -r requirements-cpu.txt` (or build Docker image)
+- [ ] `pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
@@ -244,7 +244,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `Dockerfile.gpu` or `requirements-gpu.txt`
+- [ ] Use `Dockerfile.gpu` or `pip install -e ".[gpu,dev]"`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 

@@ -1,3 +1,51 @@
+[project]
+name = "vtsearch"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
+
+# Core dependencies — enough to start the Flask app and serve the UI.
+# Media-type packages (audio, video, image, text, document) are optional;
+# models load lazily so missing packages only error when that media type
+# is actually used.
+dependencies = [
+    "flask",
+    "numpy<2",
+    "requests",
+    "tqdm",
+    "scikit-learn",
+    "transformers",
+    "pandas",
+]
+
+[project.optional-dependencies]
+# ── Media types (install only what you need) ──────────────────────────
+audio = ["librosa", "soundfile"]
+video = ["opencv-python-headless<4.10"]
+image = ["Pillow", "ultralytics"]
+text  = ["sentence-transformers"]
+document = ["PyMuPDF"]
+all-media = [
+    "vtsearch[audio]",
+    "vtsearch[video]",
+    "vtsearch[image]",
+    "vtsearch[text]",
+    "vtsearch[document]",
+]
+
+# ── Importers / exporters with extra deps ─────────────────────────────
+email = ["dnspython>=2.0.0"]
+
+# ── Eval / visualization ──────────────────────────────────────────────
+eval = ["matplotlib", "scipy"]
+
+# ── PyTorch: pick ONE of cpu / gpu ────────────────────────────────────
+cpu = ["torch>=2.0.0", "vtsearch[all-media]", "vtsearch[email]", "vtsearch[eval]"]
+gpu = ["torch>=2.0.0", "vtsearch[all-media]", "vtsearch[email]", "vtsearch[eval]"]
+
+# ── Development ───────────────────────────────────────────────────────
+dev = ["pytest", "ruff"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

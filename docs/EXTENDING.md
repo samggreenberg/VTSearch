@@ -282,10 +282,10 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-1. Create `vtsearch/datasets/importers/<name>/requirements.txt`
-2. Add `-r vtsearch/datasets/importers/<name>/requirements.txt` to
-   `requirements-importers.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
+Add any extra packages to `[project.optional-dependencies]` in
+`pyproject.toml` (either to an existing extra or a new one). You can also
+document them in a `requirements.txt` inside the plugin directory for
+reference.
 
 ---
 
@@ -417,10 +417,10 @@ endpoints:
 
 ### Wiring up dependencies
 
-1. Create `vtsearch/exporters/<name>/requirements.txt`
-2. Add `-r vtsearch/exporters/<name>/requirements.txt` to
-   `requirements-exporters.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
+Add any extra packages to `[project.optional-dependencies]` in
+`pyproject.toml` (either to an existing extra or a new one). You can also
+document them in a `requirements.txt` inside the plugin directory for
+reference.
 
 ---
 
