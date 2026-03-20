@@ -126,12 +126,12 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Choose the appropriate requirements file based on your system:
+Dependencies are declared in `pyproject.toml` with optional extras.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
-pip install -r requirements-cpu.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
@@ -142,21 +142,24 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-The install script pre-installs numpy/scipy as binary wheels before processing
-`requirements-gpu.txt`, avoiding C++ compiler errors from PyTorch's extra index.
-
-If you prefer raw pip, ensure g++ is installed first:
+**Selective install** (only the media types you need):
 
 ```bash
-pip install -r requirements-gpu.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[audio,text,dev]"
+```
+
+**Minimal install** (core only, no media type extras):
+
+```bash
+pip install -e "."
 ```
 
 This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies (including importers and exporters).
 
-**For development** (adds pytest and other dev tools):
+**For development tools only** (adds pytest and other dev tools):
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 ## Building the frontend (optional)
@@ -284,7 +287,7 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 Install dev dependencies (includes pytest):
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 Then run:

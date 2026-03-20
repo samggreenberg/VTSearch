@@ -18,18 +18,16 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements change) ----------
-COPY requirements-cpu.txt requirements-importers.txt requirements-exporters.txt ./
-COPY vtsearch/datasets/importers/pickle/requirements.txt  vtsearch/datasets/importers/pickle/requirements.txt
-COPY vtsearch/datasets/importers/folder/requirements.txt  vtsearch/datasets/importers/folder/requirements.txt
-COPY vtsearch/datasets/importers/http_zip/requirements.txt vtsearch/datasets/importers/http_zip/requirements.txt
-COPY vtsearch/exporters/gui/requirements.txt  vtsearch/exporters/gui/requirements.txt
-COPY vtsearch/exporters/email_smtp/requirements.txt vtsearch/exporters/email_smtp/requirements.txt
-COPY vtsearch/exporters/webhook/requirements.txt vtsearch/exporters/webhook/requirements.txt
-COPY vtsearch/datasets/importers/combine_datasets/requirements.txt vtsearch/datasets/importers/combine_datasets/requirements.txt
+# ---------- dependency layer (cached unless pyproject.toml changes) ----------
+# Copy just enough for pip to resolve deps without the full source tree.
+COPY pyproject.toml ./
+COPY vtsearch/__init__.py vtsearch/__init__.py
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
-    pip install --no-cache-dir -r requirements-cpu.txt
+    pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        --prefer-binary \
+        ".[cpu]"
 
 # ---------- application layer ----------
 COPY . .

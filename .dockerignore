@@ -27,8 +27,6 @@ data/
 # Tests (not needed at runtime)
 tests/
 run-tests.sh
-requirements-dev.txt
-pyproject.toml
 
 # Frontend source (build output is in static/)
 frontend/

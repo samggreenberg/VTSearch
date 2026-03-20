@@ -22,36 +22,15 @@ echo "Installing project dependencies (first test run this session)..."
 # (progressbar, wget) needed by laion_clap.
 pip install --upgrade setuptools -q
 
-# Install Python dependencies (CPU-only PyTorch).
-# --ignore-installed blinker: the system blinker (debian-managed) has no
-# RECORD file so pip cannot uninstall it; force-installing a fresh copy
-# lets Flask pick it up cleanly.
-pip install --extra-index-url https://download.pytorch.org/whl/cpu \
-  flask \
-  "numpy<2" \
-  "torch>=2.0.0" \
-  requests \
-  tqdm \
-  scikit-learn \
-  transformers \
-  laion_clap \
-  librosa \
-  "opencv-python-headless<4.10" \
-  Pillow \
-  ultralytics \
-  sentence-transformers \
-  pandas \
-  PyMuPDF \
-  scipy \
-  soundfile \
-  feedparser \
-  yt-dlp \
-  dnspython \
-  --ignore-installed blinker \
-  -q
+# Work around debian-managed blinker (no RECORD file, so pip cannot
+# uninstall it).  Force-installing a fresh copy lets Flask pick it up.
+pip install --ignore-installed blinker -q
 
-# Install dev tools (linter + test runner)
-pip install pytest ruff -q
+# Install the project with CPU PyTorch and dev tools.
+pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+  --prefer-binary \
+  -e ".[cpu,dev]" \
+  -q
 
 # Install frontend (Angular) dependencies if not already present
 if [ -f "frontend/package.json" ] && [ ! -d "frontend/node_modules" ]; then
