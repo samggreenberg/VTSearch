@@ -230,6 +230,48 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     return seeded
 
 
+def _restore_labels_from_trainable_model(tm_data: dict) -> int:
+    """Restore saved labels from a trainable model's labelset into votes.
+
+    Matches labelset entries to loaded medias by origin+origin_name and MD5,
+    then applies each label.  Returns the number of labels successfully
+    restored.
+    """
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import (
+        apply_label,
+        build_media_lookup,
+        resolve_media_ids,
+        snapshot_medias,
+    )
+
+    labelset_dict = tm_data.get("labelset")
+    if not labelset_dict:
+        return 0
+
+    labelset = LabelSet.from_dict(labelset_dict)
+    if not labelset.elements:
+        return 0
+
+    snap = snapshot_medias()
+    if not snap:
+        return 0
+
+    origin_lookup, md5_lookup = build_media_lookup(snap)
+
+    restored = 0
+    for elem in labelset.elements:
+        if elem.label not in ("good", "bad"):
+            continue
+        cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup)
+        for cid in cids:
+            apply_label(cid, elem.label)
+        if cids:
+            restored += 1
+
+    return restored
+
+
 def _list_all() -> list[dict]:
     """Return summary info for every trainable model on disk."""
     tm_dir = get_trainable_models_dir()
@@ -574,12 +616,15 @@ def load_model_route():
 
     Pass ``model_id: null`` to unload.
 
-    When loading a model that has media examples, any example files whose
-    MD5 matches a loaded media item are automatically added to
-    ``good_votes`` so that the labeling session starts with those examples
-    pre-labeled as Good.
+    When loading a trainable model:
+
+    1. The current model's labels are saved (auto-sync).
+    2. All votes are cleared so labels from the previous session don't leak.
+    3. The new model's saved labelset is restored into votes.
+    4. Media examples are seeded as good votes.
     """
-    from vtsearch.models.registry import get_model, set_loaded_id
+    from vtsearch.models.registry import get_loaded_id, get_model, set_loaded_id
+    from vtsearch.utils import clear_votes
 
     data = request.get_json(force=True, silent=True) or {}
     model_id = data.get("model_id")
@@ -589,20 +634,32 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
+    # Save current model's labels before switching.
+    sync_labels_to_loaded_model()
+
+    # Clear votes so labels from the previous session don't carry over.
+    clear_votes()
+
     set_loaded_id(model_id)
 
-    # Seed good votes from media examples on the loaded model.
+    # Restore saved labels and seed examples from the newly loaded model.
+    labels_restored = 0
     examples_seeded = 0
     if model_id is not None and entry is not None:
         tm_name = entry.get("trainable_model_name", "")
         if tm_name:
             tm_data = _read_model(_model_path(tm_name))
             if tm_data:
+                labels_restored = _restore_labels_from_trainable_model(tm_data)
                 examples_seeded = _seed_good_votes_from_examples(
                     tm_data.get("examples", [])
                 )
 
-    return jsonify({"ok": True, "examples_seeded": examples_seeded})
+    return jsonify({
+        "ok": True,
+        "labels_restored": labels_restored,
+        "examples_seeded": examples_seeded,
+    })
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

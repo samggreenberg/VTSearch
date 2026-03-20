@@ -435,6 +435,76 @@ class TestLoadModelEndpoint:
         res = client.post("/api/models/registry/load", json={"model_id": "nope"})
         assert res.status_code == 404
 
+    def test_load_clears_previous_labels(self, client):
+        """Loading model B must not carry over labels from model A."""
+        from vtsearch.utils import bad_votes, good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create two trainable models + registry entries.
+        for name in ("ModelA", "ModelB"):
+            client.post(
+                "/api/trainable-models",
+                json={"name": name, "media_type": "audio", "text_query": "test"},
+            )
+        res_a = client.post(
+            "/api/models/registry",
+            json={"name": "ModelA", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid_a = res_a.get_json()["model"]["id"]
+        res_b = client.post(
+            "/api/models/registry",
+            json={"name": "ModelB", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid_b = res_b.get_json()["model"]["id"]
+
+        # Load model A and cast some votes.
+        client.post("/api/models/registry/load", json={"model_id": mid_a})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        assert ids[0] in good_votes
+        assert ids[1] in bad_votes
+
+        # Now load model B — votes from A must be gone.
+        client.post("/api/models/registry/load", json={"model_id": mid_b})
+        assert ids[0] not in good_votes, "good vote from model A leaked into model B"
+        assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
+
+    def test_load_restores_saved_labels(self, client):
+        """Loading a model that has a saved labelset should restore its labels."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create model, load it, vote, then save labels.
+        client.post(
+            "/api/trainable-models",
+            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "Persist", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": mid})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        # Labels auto-sync on vote, so the trainable model file now has 1 label.
+
+        # Unload to clear votes, then reload — label should be restored.
+        client.post("/api/models/registry/load", json={"model_id": None})
+        assert ids[0] not in good_votes
+
+        res = client.post("/api/models/registry/load", json={"model_id": mid})
+        assert res.status_code == 200
+        assert res.get_json().get("labels_restored", 0) >= 1
+        assert ids[0] in good_votes, "saved label was not restored on model load"
+
 
 class TestVoteSyncsToLoadedModel:
     """Voting while a trainable model is loaded should auto-update the model's labelset."""
