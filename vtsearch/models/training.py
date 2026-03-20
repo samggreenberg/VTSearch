@@ -523,12 +523,16 @@ def train_and_score(
     # scores (same capacity, same score distribution shape).
     hidden_dim = _auto_hidden_dim(len(X_list))
 
-    # Calculate threshold using k-fold calibration
+    # Calculate threshold using k-fold calibration.
+    # Use a seeded RNG so that train/calibrate splits are deterministic —
+    # without this, the global np.random state makes results non-reproducible.
+    cal_rng = np.random.RandomState(42)
     threshold = calculate_cross_calibration_threshold(
         X_list,
         y_list,
         input_dim,
         inclusion_value,
+        rng=cal_rng,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
