@@ -110,8 +110,7 @@ changes to routes or core code are needed.
 
 ```
 vtsearch/datasets/importers/<your_importer>/
-├── __init__.py       # Importer class + IMPORTER instance (required)
-└── requirements.txt  # Pip dependencies, even if empty (required)
+└── __init__.py       # Importer class + IMPORTER instance (required)
 ```
 
 ### What to implement
@@ -254,8 +253,9 @@ UI.
 
 ### How it gets invoked
 
-1. `GET /api/dataset/importers` returns available importers (your importer
-   appears automatically).
+1. `GET /api/dataset/all-importers` returns all registered importers (your
+   importer appears automatically). Note: `GET /api/dataset/importers` only
+   returns importers with `ui_mode == "form"`.
 2. `POST /api/dataset/import/<name>` invokes `run()` in a background
    daemon thread.
 3. `GET /api/dataset/progress` provides progress bar data.
@@ -281,10 +281,10 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-1. Create `vtsearch/datasets/importers/<name>/requirements.txt`
-2. Add `-r vtsearch/datasets/importers/<name>/requirements.txt` to
-   `requirements-importers.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
+Add any extra packages to `[project.optional-dependencies]` in
+`pyproject.toml` (either to an existing extra or a new one). You can also
+document them in a `requirements.txt` inside the plugin directory for
+reference.
 
 ---
 
@@ -297,8 +297,7 @@ webhook, email, etc.). Auto-discovered — no changes to routes needed.
 
 ```
 vtsearch/exporters/<your_exporter>/
-├── __init__.py       # Exporter class + EXPORTER instance (required)
-└── requirements.txt  # Pip dependencies, even if empty (required)
+└── __init__.py       # Exporter class + EXPORTER instance (required)
 ```
 
 ### What to implement
@@ -416,10 +415,10 @@ endpoints:
 
 ### Wiring up dependencies
 
-1. Create `vtsearch/exporters/<name>/requirements.txt`
-2. Add `-r vtsearch/exporters/<name>/requirements.txt` to
-   `requirements-exporters.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
+Add any extra packages to `[project.optional-dependencies]` in
+`pyproject.toml` (either to an existing extra or a new one). You can also
+document them in a `requirements.txt` inside the plugin directory for
+reference.
 
 ---
 
@@ -432,8 +431,7 @@ external sources. Auto-discovered at runtime.
 
 ```
 vtsearch/labels/importers/<your_importer>/
-├── __init__.py       # Importer class + LABEL_IMPORTER instance (required)
-└── requirements.txt  # Pip dependencies, even if empty (required)
+└── __init__.py       # Importer class + LABEL_IMPORTER instance (required)
 ```
 
 ### What to implement
@@ -520,8 +518,7 @@ is then saved as an autorun detector.
 
 ```
 vtsearch/processors/importers/<your_importer>/
-├── __init__.py       # Importer class + PROCESSOR_IMPORTER instance (required)
-└── requirements.txt  # Pip dependencies, even if empty (required)
+└── __init__.py       # Importer class + PROCESSOR_IMPORTER instance (required)
 ```
 
 ### What to implement
@@ -650,8 +647,7 @@ datasets are available, and how to load media-specific fields from files.
 ```
 vtsearch/media/<your_type>/
 ├── __init__.py       # Can be empty
-├── media_type.py     # Your MediaType subclass (required)
-└── requirements.txt  # Pip dependencies (required, even if empty)
+└── media_type.py     # Your MediaType subclass (required)
 ```
 
 ### What to implement
@@ -822,8 +818,7 @@ media type may have multiple embedders.
 ```
 vtsearch/media/<type>/
 ├── embedder.py              # Default embedder (required for new media types)
-├── embedder_<variant>.py    # Alternative embedder (optional, e.g. embedder_siglip.py)
-└── requirements.txt         # Dependencies (already exists for the media type)
+└── embedder_<variant>.py    # Alternative embedder (optional, e.g. embedder_siglip.py)
 ```
 
 Each media type has one default embedder in `embedder.py`. To add an
@@ -1340,62 +1335,26 @@ class ObjectExtractor(Extractor):
 
 ## Dependency Management
 
-VTSearch uses a layered requirements file structure:
+VTSearch declares all dependencies in `pyproject.toml`:
 
 ```
-requirements.txt              # Core deps + includes per-media + per-importer + per-exporter
-├── vtsearch/media/audio/requirements.txt
-├── vtsearch/media/video/requirements.txt
-├── vtsearch/media/image/requirements.txt
-├── vtsearch/media/text/requirements.txt
-├── vtsearch/media/document/requirements.txt
-├── requirements-importers.txt          # Aggregates all data importer deps
-│   ├── vtsearch/datasets/importers/pickle/requirements.txt
-│   ├── vtsearch/datasets/importers/folder/requirements.txt
-│   ├── vtsearch/datasets/importers/http_zip/requirements.txt
-│   └── vtsearch/datasets/importers/combine_datasets/requirements.txt
-├── requirements-exporters.txt          # Aggregates all exporter deps
-│   ├── vtsearch/exporters/gui/requirements.txt
-│   ├── vtsearch/exporters/server_json_file/requirements.txt
-│   ├── vtsearch/exporters/server_csv_file/requirements.txt
-│   ├── vtsearch/exporters/email_smtp/requirements.txt
-│   └── vtsearch/exporters/webhook/requirements.txt
-├── vtsearch/labels/importers/server_json_file/requirements.txt
-├── vtsearch/labels/importers/server_csv_file/requirements.txt
-├── vtsearch/processors/importers/server_detector_file/requirements.txt
-requirements-cpu.txt          # CPU-specific pins (lists packages INLINE)
-requirements-gpu.txt          # GPU-specific (minimal, includes importers)
-requirements-dev.txt          # Dev tools (pytest)
+pyproject.toml
+  [project.dependencies]          # All app deps (Flask, NumPy, transformers, media types, etc.)
+  [project.optional-dependencies]
+    cpu                           # CPU-only PyTorch wheel
+    gpu                           # GPU PyTorch wheel
+    dev                           # Dev tools (pytest, ruff)
 ```
 
-### For a new media type
+All media types, importers/exporters, and eval deps are in the base
+`[project.dependencies]`. The only optional extras are `cpu`/`gpu` (for
+choosing the right PyTorch build) and `dev` (for test/lint tools).
 
-1. Create `vtsearch/media/<type>/requirements.txt`
-2. Add `-r vtsearch/media/<type>/requirements.txt` to `requirements.txt`
-3. Add packages inline to `requirements-cpu.txt`
+### For a new media type, importer, or exporter
 
-### For a new data importer
-
-1. Create `vtsearch/datasets/importers/<name>/requirements.txt`
-2. Add `-r` line to `requirements-importers.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
-
-### For a new exporter
-
-1. Create `vtsearch/exporters/<name>/requirements.txt`
-2. Add `-r` line to `requirements-exporters.txt`
-3. Add packages inline to `requirements-cpu.txt` if needed
-
-### Why the layered structure?
-
-- Each component owns its own `requirements.txt` so it's obvious which
-  packages belong to which feature.
-- The aggregator files tie everything together for `pip install -r
-  requirements.txt`.
-- `requirements-cpu.txt` duplicates packages inline with version pins
-  because CPU-only PyTorch wheels require a special `--extra-index-url`.
-- Failed imports of a plugin's sub-package emit a warning rather than
-  crashing, so missing optional dependencies degrade gracefully.
+Add your packages to `[project.dependencies]` in `pyproject.toml`.
+Failed imports of a plugin's sub-package emit a warning rather than
+crashing, so missing system-level dependencies degrade gracefully.
 
 ---
 
@@ -1407,10 +1366,8 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
-- [ ] Create `vtsearch/datasets/importers/<name>/requirements.txt`
-- [ ] Add `-r` line to `requirements-importers.txt`
-- [ ] Add inline deps to `requirements-cpu.txt` if needed
-- [ ] Test: start the app and check `GET /api/dataset/importers` includes your importer
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
 
 ### New Results Exporter Checklist
 
@@ -1418,9 +1375,7 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `export(self, results, field_values)` — return a dict with a `"message"` key
 - [ ] Expose `EXPORTER = YourExporter()` at module level
-- [ ] Create `vtsearch/exporters/<name>/requirements.txt`
-- [ ] Add `-r` line to `requirements-exporters.txt`
-- [ ] Add inline deps to `requirements-cpu.txt` if needed
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
 - [ ] Test: start the app and check `GET /api/exporters` includes your exporter
 
 ### New Label Importer Checklist
@@ -1429,7 +1384,7 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
-- [ ] Create `vtsearch/labels/importers/<name>/requirements.txt`
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 
 ### New Processor Importer Checklist
@@ -1438,16 +1393,15 @@ requirements-dev.txt          # Dev tools (pytest)
 - [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a dict with `media_type`, `weights`, `threshold`
 - [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
-- [ ] Create `vtsearch/processors/importers/<name>/requirements.txt`
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
 - [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
 
 ### New Media Type Checklist
 
-- [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`, `requirements.txt`
+- [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
 - [ ] Register in `vtsearch/media/__init__.py` with `register(YourType())`
-- [ ] Add `-r` line to `requirements.txt` pointing to your `requirements.txt`
-- [ ] Add inline deps to `requirements-cpu.txt`
+- [ ] Add deps to `[project.optional-dependencies]` in `pyproject.toml`
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
 

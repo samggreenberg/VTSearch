@@ -85,21 +85,18 @@
 
 .images-header-title {
   font-size: 0.8rem;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0;
   color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.images-header-count {
-  font-size: 0.75rem;
-  color: var(--text-muted);
   font-weight: normal;
 }
 
-.view-btn {
+.view-btn-wrapper {
+  position: relative;
   margin-left: auto;
+}
+
+.view-btn {
   background: none;
   border: 1px solid var(--border);
   border-radius: 3px;

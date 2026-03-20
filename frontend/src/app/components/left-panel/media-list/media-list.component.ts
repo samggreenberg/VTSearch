@@ -29,7 +29,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridColumns: number = 2;
+  @Input() gridGoalWidth: number = 80;
   @Input() focusMode: 'click' | 'hover' = 'click';
   @Input() showScores = true;
 
@@ -38,10 +38,16 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
 
   private pendingScrollToSelected = false;
+  private pendingScrollPct: number | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selectedId'] && !changes['selectedId'].firstChange) {
       this.pendingScrollToSelected = true;
+    }
+    if (changes['viewMode'] && !changes['viewMode'].firstChange && this.listContainer) {
+      const el = this.listContainer.nativeElement;
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
     }
   }
 
@@ -87,7 +93,14 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   }
 
   ngAfterViewChecked(): void {
-    if (this.pendingScrollToSelected && this.listContainer) {
+    if (this.pendingScrollPct !== null && this.listContainer) {
+      const pct = this.pendingScrollPct;
+      this.pendingScrollPct = null;
+      this.pendingScrollToSelected = false;
+      const el = this.listContainer.nativeElement;
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      el.scrollTop = pct * maxScroll;
+    } else if (this.pendingScrollToSelected && this.listContainer) {
       this.pendingScrollToSelected = false;
       const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
       if (activeEl) {

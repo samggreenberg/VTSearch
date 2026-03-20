@@ -55,10 +55,11 @@ describe('AutopilotPanelComponent', () => {
 
   it('should transition from bad to hard phase', () => {
     // Advance to bad phase first
+    component.goodVotes = new Set([1, 2, 3]);
     autopilotState.checkPhaseTransition(3, 0);
     expect(component.state.phase).toBe('bad');
 
-    component.badVotes = new Set([1, 2, 3, 4]);
+    component.badVotes = new Set([4, 5, 6, 7]);
     component.ngOnChanges({
       badVotes: { currentValue: component.badVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
     });
@@ -67,6 +68,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should transition from hard to new when smart+stable are green', () => {
     // Advance to hard phase
+    component.goodVotes = new Set([1, 2, 3]);
+    component.badVotes = new Set([4, 5, 6, 7]);
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     expect(component.state.phase).toBe('hard');
@@ -84,6 +87,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should transition from new to done when span is green', () => {
     // Advance to new phase
+    component.goodVotes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    component.badVotes = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     autopilotState.updateFromLabelingStatus({
@@ -107,6 +112,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should bounce from new back to hard when smart drops to yellow', () => {
     // Advance to new phase
+    component.goodVotes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    component.badVotes = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     autopilotState.updateFromLabelingStatus({
@@ -170,6 +177,33 @@ describe('AutopilotPanelComponent', () => {
     spyOn(component.started, 'emit');
     component.activate();
     expect(component.started.emit).not.toHaveBeenCalled();
+  });
+
+  it('should regress from hard to good when vote counts drop to zero', () => {
+    // Advance to hard phase with sufficient votes
+    autopilotState.checkPhaseTransition(3, 4);
+    expect(component.state.phase).toBe('hard');
+
+    // Votes are cleared (e.g. new detector session) — phase should regress
+    component.goodVotes = new Set();
+    component.badVotes = new Set();
+    component.ngOnChanges({
+      goodVotes: { currentValue: component.goodVotes, previousValue: new Set([1, 2, 3]), firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.state.phase).toBe('good');
+  });
+
+  it('should regress from hard to bad when good count drops below threshold', () => {
+    autopilotState.checkPhaseTransition(3, 4);
+    expect(component.state.phase).toBe('hard');
+
+    // Good votes drop below threshold but bad are still sufficient
+    component.goodVotes = new Set([1]);
+    component.badVotes = new Set([4, 5, 6, 7]);
+    component.ngOnChanges({
+      goodVotes: { currentValue: component.goodVotes, previousValue: new Set([1, 2, 3]), firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.state.phase).toBe('good');
   });
 
   it('should show tooltip on each step label via title attribute', () => {

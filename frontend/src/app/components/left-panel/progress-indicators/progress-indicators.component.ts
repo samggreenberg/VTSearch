@@ -14,8 +14,14 @@ export class ProgressIndicatorsComponent {
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() sortBusy = false;
   @Input() sortStatus = '';
+  @Input() sortProgress = 0;
+  @Input() sortProgressTotal = 0;
 
   @Output() indicatorClick = new EventEmitter<string>();
+
+  get isIndeterminate(): boolean {
+    return this.sortProgressTotal <= 0;
+  }
 
   get smartStatus(): string {
     return (this.labelingStatus?.smart?.status as string) || '';

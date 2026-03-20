@@ -1,9 +1,8 @@
 <div class="vote-section">
   <h3 [class]="label">
-    {{ label === 'good' ? 'Good' : 'Bad' }}
-    <span class="label-count">({{ ids.length }})</span>
+    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length }})
   </h3>
-  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-columns]="gridColumns">
+  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>
     @for (entry of sortedEntries; track trackById($index, entry)) {
       <div
         class="vote-entry"

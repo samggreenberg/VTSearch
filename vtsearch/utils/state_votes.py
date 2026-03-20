@@ -38,6 +38,7 @@ def clear_votes() -> None:
         vote_click_times.clear()
         _core._click_counter = 0
         last_learned_scores.clear()
+        _core._find_initial_labels.clear()
         clear_progress_cache()
 
 
@@ -88,6 +89,23 @@ def get_learned_scores() -> dict[int, float]:
     """Return a copy of the last learned-sort scores."""
     with _state_lock:
         return last_learned_scores.copy()
+
+
+def set_find_initial_labels(labels: dict[int, str]) -> None:
+    """Store the detector-assigned labels from a find-label run.
+
+    This snapshot is used to identify "corrections" — items where the
+    user subsequently changed the label from what the detector assigned.
+    """
+    with _state_lock:
+        _core._find_initial_labels.clear()
+        _core._find_initial_labels.update(labels)
+
+
+def get_find_initial_labels() -> dict[int, str]:
+    """Return a copy of the find-label initial labels."""
+    with _state_lock:
+        return _core._find_initial_labels.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -195,3 +213,29 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
+
+
+def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]]) -> None:
+    """Apply many labels in a single lock acquisition (for find-label scoring).
+
+    Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
+    ``"bad"``.  All labels are applied atomically with click-time ordinals
+    assigned in order.
+    """
+    import time as _time
+
+    with _state_lock:
+        tree = _core._diversity_tree
+        for media_id, label in labels:
+            if label == "good":
+                bad_votes.pop(media_id, None)
+                good_votes[media_id] = None
+                label_history.append((media_id, "good", _time.time()))
+            else:
+                good_votes.pop(media_id, None)
+                bad_votes[media_id] = None
+                label_history.append((media_id, "bad", _time.time()))
+            _core._click_counter += 1
+            vote_click_times[media_id] = _core._click_counter
+            if tree is not None and media_id in tree.vector_to_leaf:
+                tree.label(media_id)

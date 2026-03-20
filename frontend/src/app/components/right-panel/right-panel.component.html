@@ -6,7 +6,7 @@
   />
 
   <div class="import-row">
-    <button class="panel-btn import-btn" (click)="onImportLabels()">Import Labels</button>
+    <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()">Import Labels</button>
   </div>
 
   <div class="sort-row">
@@ -14,7 +14,12 @@
       [mode]="sortMode"
       (modeChange)="onSortModeChange($event)"
     />
-    <button class="view-btn" (click)="onViewSettings()">View</button>
+    <div class="view-btn-wrapper">
+      <button class="view-btn" (click)="onViewSettings()">View</button>
+      @if (showViewSettings) {
+        <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
+      }
+    </div>
   </div>
 
   <vt-label-list
@@ -25,7 +30,7 @@
     [learnedScores]="learnedScores"
     [sortMode]="sortMode"
     [viewMode]="viewMode"
-    [gridColumns]="gridColumns"
+    [gridGoalWidth]="gridGoalWidth"
     [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
     (mediaVote)="onMediaVote($event)"
@@ -41,14 +46,14 @@
     [learnedScores]="learnedScores"
     [sortMode]="sortMode"
     [viewMode]="viewMode"
-    [gridColumns]="gridColumns"
+    [gridGoalWidth]="gridGoalWidth"
     [focusMode]="focusMode"
     (mediaSelected)="onMediaSelected($event)"
     (mediaVote)="onMediaVote($event)"
   />
 
   <div class="export-row">
-    <button class="panel-btn export-btn" (click)="onExport()">Export</button>
+    <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()">Export</button>
   </div>
 </aside>
 
@@ -59,11 +64,8 @@
 @if (showExport) {
   <vt-export-modal
     [detectorName]="trainMode?.model?.name ?? ''"
+    [mode]="mode"
     (closed)="showExport = false"
     (exported)="showExport = false"
   />
-}
-
-@if (showViewSettings) {
-  <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
 }

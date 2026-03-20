@@ -18,6 +18,7 @@ import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
+import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -30,6 +31,7 @@ import { NewModelModalComponent } from './new-model-modal/new-model-modal.compon
     ModelCardComponent,
     DatasetImporterModalComponent,
     NewModelModalComponent,
+    DetectorExportModalComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -44,6 +46,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   newModelModalOpen = false;
+  exportModalOpen = false;
+  exportModelName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
 
@@ -91,7 +95,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
         if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
-          // Items were added after initial load — select the new ones
+          // Items were added after initial load — select only the new ones
+          this.selectedDatasetIds.clear();
           for (const id of newIds) {
             this.selectedDatasetIds.add(id);
           }
@@ -249,6 +254,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.datasetState.refresh();
       },
     });
+  }
+
+  toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
+    const detectorName = model.detector_name || model.name;
+    this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
+  // --- Export modal ---
+
+  openExportModal(model: ModelRegistryEntry): void {
+    this.exportModelName = model.detector_name || model.name;
+    this.exportModalOpen = true;
+  }
+
+  closeExportModal(): void {
+    this.exportModalOpen = false;
+    this.exportModelName = '';
   }
 
   // --- Importer modal ---
@@ -490,6 +514,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.labelSession.textQuery = model?.text_query || '';
     this.labelSession.mediaExample = model?.media_example || '';
     this.labelSession.examples = (model?.['examples'] as { type: string; value: string }[]) || [];
+    this.labelSession.modelName = model?.name || '';
   }
 
   onLabel(): void {

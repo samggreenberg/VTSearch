@@ -68,17 +68,34 @@ def resolve_file_from_origin(
     Returns the file path if found, or ``None``.
     """
     if origin is None:
+        log.debug("resolve_file: origin is None — cannot resolve")
         return None
 
     importer_name = origin.get("importer", "")
+    params = origin.get("params", {})
+
+    log.debug(
+        "resolve_file: importer=%r, origin_name=%r, filename=%r, params=%r",
+        importer_name, origin_name, filename, params,
+    )
 
     # -- Synthetic origins that delegate to real importers --
 
     if importer_name == "dupe_set":
-        return _resolve_dupe_set(origin)
+        result = _resolve_dupe_set(origin)
+        if result is None:
+            members = origin.get("members", [])
+            log.debug("resolve_file: dupe_set with %d members — none resolved", len(members))
+        return result
 
     if importer_name == "converter":
-        return _resolve_converter(origin.get("params", {}))
+        result = _resolve_converter(params)
+        if result is None:
+            log.debug(
+                "resolve_file: converter origin failed — source_file=%r, parent_importer=%r",
+                params.get("source_file", ""), params.get("parent_importer", ""),
+            )
+        return result
 
     # -- Source-based dispatch (preferred) --
 
@@ -88,7 +105,12 @@ def resolve_file_from_origin(
     if source is not None:
         result = source.resolve_path(origin_name, filename)
         if result is not None:
+            log.debug("resolve_file: source-based dispatch succeeded → %s", result)
             return result
+        log.debug(
+            "resolve_file: source %s returned None for origin_name=%r, filename=%r",
+            type(source).__name__, origin_name, filename,
+        )
 
     # -- Registry-based dispatch (fallback for importers without a source) --
 
@@ -98,16 +120,31 @@ def resolve_file_from_origin(
     if importer is not None:
         result = importer.resolve_file(origin, origin_name, filename)
         if result is not None:
+            log.debug("resolve_file: registry dispatch (%s) succeeded → %s", importer_name, result)
             return result
+        log.debug(
+            "resolve_file: %s.resolve_file() returned None "
+            "(origin_name=%r, filename=%r, params=%r)",
+            type(importer).__name__, origin_name, filename, params,
+        )
+    else:
+        log.debug("resolve_file: no importer registered for %r", importer_name)
 
     # -- Generic fallback for unregistered origins with a path param --
     # Handles synthetic origins like "pdf" that store a direct file path.
-    path = origin.get("params", {}).get("path", "")
+    path = params.get("path", "")
     if path:
         p = Path(path)
         if p.is_file():
+            log.debug("resolve_file: generic path fallback succeeded → %s", p)
             return p
+        log.debug("resolve_file: generic path fallback — %r is not a file", path)
 
+    log.debug(
+        "resolve_file: ALL dispatch methods failed for importer=%r, "
+        "origin_name=%r, filename=%r",
+        importer_name, origin_name, filename,
+    )
     return None
 
 
@@ -148,13 +185,39 @@ def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
 
     avail = embedders_for_type(media_type)
     if not avail:
+        log.warning(
+            "embed_file: no embedders registered for media_type=%r — "
+            "cannot embed %s",
+            media_type, file_path,
+        )
         return None
-    return avail[0].embed_media(file_path)
+    embedder = avail[0]
+    try:
+        result = embedder.embed_media(file_path)
+    except Exception:
+        log.warning(
+            "embed_file: %s.embed_media(%s) raised an exception",
+            type(embedder).__name__, file_path,
+            exc_info=True,
+        )
+        return None
+    if result is None:
+        log.warning(
+            "embed_file: %s.embed_media(%s) returned None",
+            type(embedder).__name__, file_path,
+        )
+    else:
+        log.debug(
+            "embed_file: embedded %s with %s → shape %s",
+            file_path.name, type(embedder).__name__, result.shape,
+        )
+    return result
 
 
 def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
+    progress_callback: Any | None = None,
 ) -> ResolvedLabels:
     """Resolve label entries to embeddings by following their origin trails.
 
@@ -172,9 +235,24 @@ def resolve_label_embeddings(
     """
     result = ResolvedLabels()
 
-    for entry in labels:
+    # Track failure reasons for the summary log
+    _no_origin = 0
+    _file_not_found = 0
+    _embed_failed = 0
+
+    log.info(
+        "resolve_label_embeddings: starting resolution of %d label entries "
+        "for media_type=%r",
+        len(labels), media_type,
+    )
+
+    _total_entries = len(labels)
+
+    for i, entry in enumerate(labels):
         label_val = entry.get("label", "")
         if label_val not in ("good", "bad"):
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         result.total_count += 1
@@ -186,23 +264,70 @@ def resolve_label_embeddings(
         file_path = resolve_file_from_origin(origin, origin_name, filename)
         if file_path is None:
             result.missing_entries.append(entry)
+            if origin is None:
+                _no_origin += 1
+                log.info(
+                    "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
+                    "filename=%r — this label has no origin trail and cannot "
+                    "be resolved to a file",
+                    i, entry.get("md5", "?")[:12], origin_name, filename,
+                )
+            else:
+                _file_not_found += 1
+                log.info(
+                    "  label[%d] FAILED (file not found): importer=%r, "
+                    "origin_name=%r, filename=%r, params=%r",
+                    i, origin.get("importer", "?"), origin_name, filename,
+                    origin.get("params", {}),
+                )
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         embedding = embed_file(file_path, media_type)
         if embedding is None:
             result.missing_entries.append(entry)
+            _embed_failed += 1
+            log.info(
+                "  label[%d] FAILED (embed): file resolved to %s but "
+                "embedding returned None for media_type=%r",
+                i, file_path, media_type,
+            )
+            if progress_callback is not None:
+                progress_callback(current=i + 1, total=_total_entries)
             continue
 
         result.embeddings.append(embedding)
         result.labels.append(1.0 if label_val == "good" else 0.0)
         result.resolved_count += 1
+        log.debug(
+            "  label[%d] OK: %s → %s (label=%s)",
+            i, origin_name or filename, file_path.name, label_val,
+        )
+        if progress_callback is not None:
+            progress_callback(current=i + 1, total=_total_entries)
+
+    # --- Summary ---
+    n_good = sum(1 for v in result.labels if v == 1.0)
+    n_bad = sum(1 for v in result.labels if v == 0.0)
+    _summary = (
+        f"resolve_label_embeddings: {result.resolved_count} of "
+        f"{result.total_count} labels resolved "
+        f"({n_good} good, {n_bad} bad)"
+    )
+    if result.missing_entries:
+        _summary += (
+            f" | {len(result.missing_entries)} FAILED: "
+            f"{_no_origin} had no origin, "
+            f"{_file_not_found} file not found, "
+            f"{_embed_failed} embed failed"
+        )
 
     if result.total_count > 0 and result.resolved_count == 0:
         log.warning(
-            "Label resolution failed: 0 of %d labels resolved. "
-            "This usually means the importer's resolve_file() method is missing or "
-            "the source files are no longer on disk.",
-            result.total_count,
+            "%s. This usually means the importer's resolve_file() method "
+            "is missing or the source files are no longer on disk.",
+            _summary,
         )
         if result.missing_entries:
             first = result.missing_entries[0]
@@ -213,11 +338,8 @@ def resolve_label_embeddings(
                 first.get("filename", ""),
             )
     elif result.missing_entries:
-        log.warning(
-            "Partial label resolution: %d of %d labels resolved (%d missing).",
-            result.resolved_count,
-            result.total_count,
-            len(result.missing_entries),
-        )
+        log.warning("%s", _summary)
+    else:
+        log.info("%s", _summary)
 
     return result

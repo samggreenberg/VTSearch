@@ -94,10 +94,15 @@ export interface LabelEntry {
   label: 'good' | 'bad';
   origin_name?: string;
   filename?: string;
+  category?: string;
+  is_correction?: boolean;
+  custom_metadata?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface LabelsExportResponse {
   labels: LabelEntry[];
+  available_columns?: string[];
 }
 
 export interface LabelsImportResponse {
@@ -260,8 +265,8 @@ export interface AppSettings {
   show_metadata?: boolean;
   view_mode_left?: Record<string, 'grid' | 'list'>;
   view_mode_right?: Record<string, 'grid' | 'list'>;
-  grid_columns_left?: Record<string, number>;
-  grid_columns_right?: Record<string, number>;
+  grid_icon_size_left?: Record<string, string>;
+  grid_icon_size_right?: Record<string, string>;
   focus_mode_left?: Record<string, 'click' | 'hover'>;
   focus_mode_right?: Record<string, 'click' | 'hover'>;
   panel_pct_left?: Record<string, number>;
@@ -287,6 +292,7 @@ export interface AutorunProcessor {
 
 export interface ExporterInfo {
   name: string;
+  label?: string;
   display_name?: string;
   description?: string;
   icon?: string;

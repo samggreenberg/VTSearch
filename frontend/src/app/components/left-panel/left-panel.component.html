@@ -4,11 +4,25 @@
     <div class="tab-panel-manual" role="region" aria-label="Find results">
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}
-          <span class="images-header-count">({{ medias.length }})</span>
+          {{ mediaTypeName }}s ({{ medias.length }})
         </h3>
-        <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+        <div class="view-btn-wrapper">
+          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+          @if (showLeftViewSettings) {
+            <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
+          }
+        </div>
       </div>
+
+      @if (sortBusy) {
+        <vt-progress-indicators
+          [labelingStatus]="null"
+          [sortBusy]="sortBusy"
+          [sortStatus]="sortStatus"
+          [sortProgress]="sortProgress"
+          [sortProgressTotal]="sortProgressTotal"
+        />
+      }
 
       <div class="media-list-container">
         <vt-media-list
@@ -19,7 +33,7 @@
           [goodVotes]="goodVotes"
           [badVotes]="badVotes"
           [viewMode]="viewMode"
-          [gridColumns]="gridColumns"
+          [gridGoalWidth]="gridGoalWidth"
           [focusMode]="focusMode"
           [showScores]="false"
           (mediaSelect)="mediaSelect.emit($event)"
@@ -83,6 +97,8 @@
           [labelingStatus]="labelingStatus"
           [sortBusy]="sortBusy"
           [sortStatus]="sortStatus"
+          [sortProgress]="sortProgress"
+          [sortProgressTotal]="sortProgressTotal"
           (indicatorClick)="indicatorClick.emit($event)"
         />
 
@@ -95,10 +111,14 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName }}
-            <span class="images-header-count">({{ medias.length }})</span>
+            {{ mediaTypeName }}s ({{ medias.length }})
           </h3>
-          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+          <div class="view-btn-wrapper">
+            <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+            @if (showLeftViewSettings) {
+              <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
+            }
+          </div>
         </div>
 
         <div class="media-list-container">
@@ -110,7 +130,7 @@
             [goodVotes]="goodVotes"
             [badVotes]="badVotes"
             [viewMode]="viewMode"
-            [gridColumns]="gridColumns"
+            [gridGoalWidth]="gridGoalWidth"
             [focusMode]="focusMode"
             [showScores]="false"
             (mediaSelect)="mediaSelect.emit($event)"
@@ -143,6 +163,3 @@
   }
 </div>
 
-@if (showLeftViewSettings) {
-  <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
-}

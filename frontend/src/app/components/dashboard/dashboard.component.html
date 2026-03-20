@@ -81,6 +81,7 @@
               <th (click)="sortModels('media_type')" class="sortable text-center" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
               <th (click)="sortModels('num_training')" class="sortable text-center" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
               <th class="text-center" title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
+              <th (click)="sortModels('autodetect')" class="sortable text-center" title="Include this model in CLI autorun (click to sort)">Autorun<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span></th>
               <th (click)="sortModels('last_trained_at')" class="sortable text-center" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
               <th (click)="sortModels('created_at')" class="sortable text-center" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
               <th class="text-center" title="Available operations for this model">Actions</th>
@@ -94,6 +95,8 @@
                 (rowClick)="toggleModelSelection(model.id, $event)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
+                (export)="openExportModal(model)"
+                (autorunToggle)="toggleAutorun(model, $event)"
               />
             }
           </tbody>
@@ -152,6 +155,14 @@
   <vt-new-model-modal
     (closed)="closeNewModelModal()"
     (created)="onModelCreated()"
+  />
+}
+
+@if (exportModalOpen) {
+  <vt-detector-export-modal
+    [detectorName]="exportModelName"
+    (closed)="closeExportModal()"
+    (exported)="closeExportModal()"
   />
 }
 

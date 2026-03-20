@@ -174,6 +174,41 @@ class TestImporterBaseContentMD5s:
         assert imp.content_md5s["test.wav"] == "d41d8cd98f00b204e9800998ecf8427e"
 
 
+class TestImporterBaseCustomMetadataMap:
+    def test_base_class_instance_has_custom_metadata_map(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class MinimalImporter(DatasetImporter):
+            name = "minimal"
+            display_name = "Minimal"
+            description = "Minimal importer."
+            fields = []
+
+            def run(self, field_values, medias):
+                pass
+
+        imp = MinimalImporter()
+        assert hasattr(imp, "custom_metadata_map")
+        assert imp.custom_metadata_map == {}
+
+    def test_custom_metadata_map_independent_across_instances(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class Imp(DatasetImporter):
+            name = "t"
+            display_name = "T"
+            description = "T"
+            fields = []
+
+            def run(self, field_values, medias):
+                pass
+
+        a = Imp()
+        b = Imp()
+        a.custom_metadata_map["file.wav"] = {"md5": "abc123"}
+        assert b.custom_metadata_map == {}
+
+
 class TestImporterBaseIcon:
     def test_base_class_has_icon_attribute(self):
         from vtsearch.datasets.importers.base import DatasetImporter
@@ -1098,3 +1133,61 @@ class TestImporterResolveFileContract:
             "Cross-dataset label resolution will silently fail for media "
             "loaded by these importers. See DatasetImporter.resolve_file docstring."
         )
+
+
+# ---------------------------------------------------------------------------
+# Symlinked importer discovery
+# ---------------------------------------------------------------------------
+
+
+class TestSymlinkedImporterDiscovery:
+    """PluginRegistry should discover importers in symlinked directories."""
+
+    def test_symlinked_package_is_discovered(self, tmp_path):
+        """A symlink inside the importers directory pointing to a valid
+        package should be discovered exactly like a regular directory."""
+        import os
+        import sys
+
+        from vtsearch.utils.registry import PluginRegistry
+
+        # Create a minimal importer package outside the importers tree.
+        ext_pkg = tmp_path / "my_custom_importer"
+        ext_pkg.mkdir()
+        (ext_pkg / "__init__.py").write_text(
+            "from vtsearch.datasets.importers.base import DatasetImporter\n"
+            "from vtsearch.utils.registry import PluginField\n"
+            "\n"
+            "class _Imp(DatasetImporter):\n"
+            '    name = "symlink_test_imp"\n'
+            '    display_name = "Symlink Test"\n'
+            '    description = "Test importer via symlink"\n'
+            "    fields = [PluginField(key='path', label='Path', field_type='folder')]\n"
+            "    def run(self, field_values, medias): return []\n"
+            "\n"
+            "IMPORTER = _Imp()\n"
+        )
+
+        # Symlink it into the real importers directory.
+        import importlib
+
+        parent = importlib.import_module("vtsearch.datasets.importers")
+        pkg_dir = os.path.dirname(parent.__file__)
+        link = os.path.join(pkg_dir, "symlink_test_pkg")
+        os.symlink(str(ext_pkg), link)
+
+        try:
+            # Build a fresh registry so discovery runs from scratch.
+            reg = PluginRegistry(
+                package="vtsearch.datasets.importers",
+                sentinel="IMPORTER",
+                label="dataset importer",
+            )
+            names = [p.name for p in reg.list()]
+            assert "symlink_test_imp" in names
+        finally:
+            os.unlink(link)
+            # Clean up cached module so other tests are unaffected.
+            for key in list(sys.modules):
+                if "symlink_test_pkg" in key:
+                    del sys.modules[key]

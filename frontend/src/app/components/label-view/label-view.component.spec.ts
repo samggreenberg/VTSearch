@@ -491,4 +491,32 @@ describe('LabelViewComponent', () => {
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
   });
+
+  it('should clear stale vote state so autopilot starts in good phase', () => {
+    const autopilot = TestBed.inject(AutopilotStateService);
+    const voteState = TestBed.inject(VoteStateService);
+
+    // Simulate leftover votes from a previous session (e.g. old detector)
+    voteState.applyOptimisticVote(1, 'good');
+    voteState.applyOptimisticVote(2, 'good');
+    voteState.applyOptimisticVote(3, 'good');
+    voteState.applyOptimisticVote(4, 'bad');
+    voteState.applyOptimisticVote(5, 'bad');
+    voteState.applyOptimisticVote(6, 'bad');
+    voteState.applyOptimisticVote(7, 'bad');
+    expect(voteState.goodVotes.size).toBe(3);
+    expect(voteState.badVotes.size).toBe(4);
+
+    // Creating a new label-view should clear stale votes before autopilot
+    // activates, so it starts in 'good' phase — NOT 'hard' (Refine Boundary)
+    const freshFixture = TestBed.createComponent(LabelViewComponent);
+    freshFixture.detectChanges();
+
+    expect(voteState.goodVotes.size).toBe(0);
+    expect(voteState.badVotes.size).toBe(0);
+    expect(autopilot.state.phase).toBe('good');
+
+    freshFixture.componentInstance.ngOnDestroy();
+    httpMock.match(() => true);
+  });
 });

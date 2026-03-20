@@ -36,6 +36,7 @@ type ModalView = 'prompt' | 'media-picker';
 export class ResortPromptModalComponent {
   @Input() currentExampleType: 'text' | 'media' = 'text';
   @Input() currentExampleDisplay = '';
+  @Input() keepLabelsCount = 0;
   @Output() closed = new EventEmitter<void>();
   @Output() keepExample = new EventEmitter<void>();
   @Output() newExample = new EventEmitter<ResortResult>();

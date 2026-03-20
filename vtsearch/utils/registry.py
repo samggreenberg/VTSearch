@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import pkgutil
 import threading
 import warnings
 from dataclasses import dataclass, field
@@ -213,12 +212,24 @@ class PluginRegistry(Generic[T]):
     # -- Discovery ----------------------------------------------------------
 
     def _discover(self) -> None:
-        """Scan sub-packages for sentinel objects and register them."""
+        """Scan sub-packages for sentinel objects and register them.
+
+        Uses direct filesystem scanning instead of :func:`pkgutil.iter_modules`
+        so that symlinked directories are reliably discovered.  A symlink to a
+        package directory (containing ``__init__.py``) is treated identically to
+        a regular sub-package.
+        """
         parent = importlib.import_module(self._package)
         package_dir = Path(parent.__file__).parent
-        for _, module_name, is_pkg in pkgutil.iter_modules([str(package_dir)]):
-            if not is_pkg:
+        for entry in sorted(package_dir.iterdir()):
+            # Accept both real directories and symlinks that resolve to
+            # directories.  entry.is_dir() follows symlinks by default.
+            if not entry.is_dir() or entry.name.startswith((".", "_")):
                 continue
+            # Must contain __init__.py to be a proper Python package.
+            if not (entry / "__init__.py").exists():
+                continue
+            module_name = entry.name
             try:
                 mod = importlib.import_module(f"{self._package}.{module_name}")
                 plugin = getattr(mod, self._sentinel, None)

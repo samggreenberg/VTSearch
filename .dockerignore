@@ -24,6 +24,13 @@ data/
 *.swp
 *.swo
 
+# Tests (not needed at runtime)
+tests/
+run-tests.sh
+
+# Frontend source (build output is in static/)
+frontend/
+
 # Docker files (no need to copy into the image)
 Dockerfile
 Dockerfile.gpu
@@ -31,7 +38,14 @@ docker-compose*.yml
 
 # Docs (not needed at runtime)
 docs/
+README.md
 
 # Claude config
 .claude/
 CLAUDE.md
+
+# Scripts (not needed at runtime)
+download_models.sh
+
+# Local virtual environment
+venv/

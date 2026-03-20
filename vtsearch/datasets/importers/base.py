@@ -42,8 +42,9 @@ Example – a minimal SFTP importer skeleton::
 
     IMPORTER = SftpImporter()
 
-Then add ``-r vtsearch/datasets/importers/sftp/requirements.txt`` to
-``requirements-importers.txt`` (creating the file first with ``paramiko``).
+If the importer needs extra packages, add them to the ``[project.optional-dependencies]``
+section of ``pyproject.toml`` (or document them in a ``requirements.txt`` inside the
+importer's directory for reference).
 """
 
 from __future__ import annotations
@@ -93,6 +94,15 @@ class DatasetImporter(PluginBase):
     will skip its own MD5 calculation for any file whose name appears in
     this mapping.
 
+    Custom metadata map
+    -------------------
+    Importers can populate :attr:`custom_metadata_map` with a mapping of
+    ``filename`` to a metadata dict.  When a metadata dict contains a
+    non-empty ``"md5"`` key, that value is used as the media's content hash
+    (taking priority over both :attr:`content_md5s` and on-the-fly
+    calculation).  The metadata dict is also attached to the media as
+    ``custom_metadata``.
+
     CLI support
     -----------
     Every importer is automatically usable from the command line via
@@ -123,6 +133,14 @@ class DatasetImporter(PluginBase):
         #: :func:`~vtsearch.datasets.loader.load_dataset_from_folder` will
         #: skip its own MD5 calculation for any file whose name appears here.
         self.content_md5s: dict[str, str] = {}
+
+        #: Mapping of filename to a per-file custom metadata dict.  When a
+        #: metadata dict contains a non-empty ``"md5"`` key, that value is
+        #: used as the media's MD5 hash (skipping the normal calculation).
+        #: The metadata dict is also attached to the media as
+        #: ``custom_metadata``.  Keys follow the same lookup order as
+        #: :attr:`content_vectors` (relative path first, then basename).
+        self.custom_metadata_map: dict[str, dict[str, Any]] = {}
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.

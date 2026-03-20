@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, Subscription, timer } from 'rxjs';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -12,6 +12,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-find-view',
@@ -25,11 +26,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   viewModeLeft: 'grid' | 'list' = 'list';
-  gridColumnsLeft: number = 2;
+  gridGoalWidthLeft: number = 80;
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsLeftDict: Record<string, number> = {};
+  private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private panelPxLeftDict: Record<string, number> = {};
@@ -77,7 +78,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
             this.applyPanelPx(newType);
@@ -94,6 +95,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopProgressPolling();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -105,31 +107,79 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Find-label scoring ---
 
+  private progressPollSub: Subscription | null = null;
+
+  private startProgressPolling(): void {
+    this.stopProgressPolling();
+    this.progressPollSub = timer(200, 500)
+      .pipe(
+        switchMap(() => this.detectorsApi.getFindProgress()),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((prog: any) => {
+        if (prog.status === 'running') {
+          const msg = prog.message || 'Scoring with detector…';
+          const current = prog.current || 0;
+          const total = prog.total || 0;
+          this.sortState.setSortStatus(msg);
+          this.sortState.setSortProgress(current, total);
+        }
+      });
+  }
+
+  private stopProgressPolling(): void {
+    if (this.progressPollSub) {
+      this.progressPollSub.unsubscribe();
+      this.progressPollSub = null;
+    }
+  }
+
   private runFindLabel(): void {
     const modelId = this.findSession.modelId;
     if (!modelId) return;
 
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector...');
+    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortProgress(0, 0);
+
+    // Start polling for progress concurrently
+    this.startProgressPolling();
 
     this.detectorsApi.findLabel({ model_id: modelId })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response: any) => {
+          this.stopProgressPolling();
+          const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score }));
+          const threshold = response.threshold;
           // Set sort results for stripe display
-          this.sortState.setSortResults(
-            response.results.map((r: any) => ({ id: r.id, score: r.score })),
-            response.threshold,
-          );
+          this.sortState.setSortResults(sorted, threshold);
           this.sortState.setLoadSortLabel(this.findSession.modelName || 'Detector');
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
+          this.sortState.setSortProgress(0, 0);
+          // Select the item just above the threshold (last item with score >= threshold)
+          if (threshold != null && sorted.length > 0) {
+            let aboveId: number | null = null;
+            for (const item of sorted) {
+              if (item.score >= threshold) {
+                aboveId = item.id;
+              } else {
+                break;
+              }
+            }
+            if (aboveId != null) {
+              this.mediaState.selectMedia(aboveId);
+            }
+          }
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
         error: () => {
+          this.stopProgressPolling();
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('Scoring failed');
+          this.sortState.setSortProgress(0, 0);
         },
       });
   }
@@ -209,11 +259,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
           }
         }
-        const colsDict = settings.grid_columns_left;
-        if (colsDict && typeof colsDict === 'object') {
-          this.gridColumnsLeftDict = colsDict as Record<string, number>;
+        const sizeDict = settings.grid_icon_size_left;
+        if (sizeDict && typeof sizeDict === 'object') {
+          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
           if (this.currentMediaType) {
-            this.gridColumnsLeft = this.gridColumnsLeftDict[this.currentMediaType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
           }
         }
         const fmLeft = settings.focus_mode_left;
@@ -254,6 +304,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    if (this.sortState.sortBusy) return;
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.onMediaVoted(event);

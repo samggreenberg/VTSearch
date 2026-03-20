@@ -49,8 +49,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_metadata": True,
     "view_mode_left": {},
     "view_mode_right": {},
-    "grid_columns_left": {},
-    "grid_columns_right": {},
+    "grid_icon_size_left": {},
+    "grid_icon_size_right": {},
     "focus_mode_left": {},
     "focus_mode_right": {},
     "panel_pct_left": {},
@@ -58,6 +58,7 @@ _DEFAULTS: dict[str, Any] = {
     "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
+    "autorun_detector_names": [],
     "autopilot_enabled": True,
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
@@ -71,7 +72,13 @@ _DEFAULTS: dict[str, Any] = {
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
-_EXCLUDE_FROM_DEFAULTS = {"autorun_processors", "saved_datasets_dir", "detectors_dir", "trainable_models_dir"}
+_EXCLUDE_FROM_DEFAULTS = {
+    "autorun_processors",
+    "autorun_detector_names",
+    "saved_datasets_dir",
+    "detectors_dir",
+    "trainable_models_dir",
+}
 
 # In-memory cache — loaded once, written on every mutation.
 _settings: dict[str, Any] | None = None
@@ -129,8 +136,8 @@ def get_defaults() -> dict[str, Any]:
     valid_types = _valid_media_types()
     result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
     result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
-    result["grid_columns_left"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
-    result["grid_columns_right"] = {tid: _GRID_COLUMNS_DEFAULT for tid in valid_types}
+    result["grid_icon_size_left"] = {tid: _GRID_ICON_SIZE_DEFAULT for tid in valid_types}
+    result["grid_icon_size_right"] = {tid: _GRID_ICON_SIZE_DEFAULT for tid in valid_types}
     # Expand focus mode defaults to per-media-type dicts
     result["focus_mode_left"] = {tid: _FOCUS_MODE_DEFAULTS["left"] for tid in valid_types}
     result["focus_mode_right"] = {tid: _FOCUS_MODE_DEFAULTS["right"] for tid in valid_types}
@@ -149,8 +156,8 @@ def get_all() -> dict[str, Any]:
         # Always return expanded per-media-type view mode dicts
         result["view_mode_left"] = get_view_mode_left()
         result["view_mode_right"] = get_view_mode_right()
-        result["grid_columns_left"] = get_grid_columns_left()
-        result["grid_columns_right"] = get_grid_columns_right()
+        result["grid_icon_size_left"] = get_grid_icon_size_left()
+        result["grid_icon_size_right"] = get_grid_icon_size_right()
         # Always return expanded per-media-type focus mode dicts
         result["focus_mode_left"] = get_focus_mode_left()
         result["focus_mode_right"] = get_focus_mode_right()
@@ -162,7 +169,7 @@ def get_all() -> dict[str, Any]:
 
 VALID_THEMES = ("dark", "light", "highviz")
 VALID_VIEW_MODES = ("grid", "list")
-VALID_GRID_COLUMNS = range(1, 7)  # 1–6 inclusive
+VALID_GRID_ICON_SIZES = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES = ("click", "hover")
 
 
@@ -250,7 +257,7 @@ del _key, _cast, _coerce, _g, _s
 # -------------------------------------------------------------------
 
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
-_GRID_COLUMNS_DEFAULT = 2
+_GRID_ICON_SIZE_DEFAULT = "M"
 _FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
 _PANEL_PX_DEFAULTS: dict[str, int] = {"left": 260, "right": 300}
 VALID_PANEL_PX = (150, 500)  # pixel range matching frontend LEFT/RIGHT_MIN/MAX
@@ -320,79 +327,72 @@ def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
         _save(s)
 
 
-def _get_grid_columns_dict(key: str) -> dict[str, int]:
-    """Return the per-media-type grid columns dict for *key*.
+def _get_grid_icon_size_dict(key: str) -> dict[str, str]:
+    """Return the per-media-type grid icon size dict for *key*.
 
     Handles backward compatibility: if the stored value is a plain string
-    or int, it is treated as the column count for all known media types.
+    (not a dict), it is treated as the size for all known media types.
+    Legacy integer values (old grid_columns format) fall back to the default.
     """
     with _settings_lock:
         raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    if isinstance(raw, (str, int)):
-        try:
-            val = int(raw)
-        except (ValueError, TypeError):
-            val = _GRID_COLUMNS_DEFAULT
-        if val not in VALID_GRID_COLUMNS:
-            val = _GRID_COLUMNS_DEFAULT
+    if isinstance(raw, str):
+        val = raw.upper()
+        if val not in VALID_GRID_ICON_SIZES:
+            val = _GRID_ICON_SIZE_DEFAULT
         return {tid: val for tid in _valid_media_types()}
     if isinstance(raw, dict):
         result = {}
         for tid in _valid_media_types():
-            v = raw.get(tid, _GRID_COLUMNS_DEFAULT)
-            try:
-                v = int(v)
-            except (ValueError, TypeError):
-                v = _GRID_COLUMNS_DEFAULT
-            result[tid] = v if v in VALID_GRID_COLUMNS else _GRID_COLUMNS_DEFAULT
+            v = raw.get(tid, _GRID_ICON_SIZE_DEFAULT)
+            if isinstance(v, str):
+                v = v.upper()
+            if v not in VALID_GRID_ICON_SIZES:
+                v = _GRID_ICON_SIZE_DEFAULT
+            result[tid] = v
         return result
-    return {tid: _GRID_COLUMNS_DEFAULT for tid in _valid_media_types()}
+    return {tid: _GRID_ICON_SIZE_DEFAULT for tid in _valid_media_types()}
 
 
-def get_grid_columns_left() -> dict[str, int]:
-    """Return a dict mapping media type ID -> grid columns for the left panel."""
-    return _get_grid_columns_dict("grid_columns_left")
+def get_grid_icon_size_left() -> dict[str, str]:
+    """Return a dict mapping media type ID -> grid icon size for the left panel."""
+    return _get_grid_icon_size_dict("grid_icon_size_left")
 
 
-def get_grid_columns_right() -> dict[str, int]:
-    """Return a dict mapping media type ID -> grid columns for the right panel."""
-    return _get_grid_columns_dict("grid_columns_right")
+def get_grid_icon_size_right() -> dict[str, str]:
+    """Return a dict mapping media type ID -> grid icon size for the right panel."""
+    return _get_grid_icon_size_dict("grid_icon_size_right")
 
 
-def set_grid_columns_left(value: dict[str, int] | int) -> None:
-    """Set the left panel grid columns (per-media-type dict or scalar)."""
-    _set_grid_columns_dict("grid_columns_left", value)
+def set_grid_icon_size_left(value: dict[str, str] | str) -> None:
+    """Set the left panel grid icon size (per-media-type dict or scalar)."""
+    _set_grid_icon_size_dict("grid_icon_size_left", value)
 
 
-def set_grid_columns_right(value: dict[str, int] | int) -> None:
-    """Set the right panel grid columns (per-media-type dict or scalar)."""
-    _set_grid_columns_dict("grid_columns_right", value)
+def set_grid_icon_size_right(value: dict[str, str] | str) -> None:
+    """Set the right panel grid icon size (per-media-type dict or scalar)."""
+    _set_grid_icon_size_dict("grid_icon_size_right", value)
 
 
-def _set_grid_columns_dict(key: str, value: dict[str, int] | int) -> None:
-    """Persist the per-media-type grid columns dict for *key*."""
+def _set_grid_icon_size_dict(key: str, value: dict[str, str] | str) -> None:
+    """Persist the per-media-type grid icon size dict for *key*."""
     valid_types = _valid_media_types()
-    if isinstance(value, (str, int)):
-        try:
-            value = int(value)
-        except (ValueError, TypeError):
-            raise ValueError(f"Invalid {key}: {value!r}")
-        if value not in VALID_GRID_COLUMNS:
+    if isinstance(value, str):
+        value = value.upper()
+        if value not in VALID_GRID_ICON_SIZES:
             raise ValueError(f"Invalid {key}: {value!r}")
         value = {tid: value for tid in valid_types}
     if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or int")
+        raise ValueError(f"{key} must be a dict or string")
     coerced = {}
-    for tid, cols in value.items():
+    for tid, size in value.items():
         if tid not in valid_types:
             raise ValueError(f"Invalid media type: {tid!r}")
-        try:
-            cols = int(cols)
-        except (ValueError, TypeError):
-            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
-        if cols not in VALID_GRID_COLUMNS:
-            raise ValueError(f"Invalid {key} value for {tid}: {cols!r}")
-        coerced[tid] = cols
+        if isinstance(size, str):
+            size = size.upper()
+        if size not in VALID_GRID_ICON_SIZES:
+            raise ValueError(f"Invalid {key} value for {tid}: {size!r}")
+        coerced[tid] = size
     with _settings_lock:
         s = _ensure_loaded()
         s[key] = coerced
@@ -719,6 +719,48 @@ def to_settings_json(entry: dict[str, Any]) -> str:
         "field_values": entry.get("field_values", {}),
     }
     return json.dumps(snippet)
+
+
+def get_autorun_detector_names() -> list[str]:
+    """Return the list of detector names flagged for autorun."""
+    with _settings_lock:
+        raw = _ensure_loaded().get("autorun_detector_names", [])
+        if isinstance(raw, list):
+            return list(raw)
+        return []
+
+
+def set_autorun_detector_names(value: list[str]) -> None:
+    """Set and persist the full list of autorun detector names."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autorun_detector_names"] = list(dict.fromkeys(value))  # deduplicate, preserve order
+        _save(s)
+
+
+def add_autorun_detector_name(name: str) -> None:
+    """Add a detector name to the autorun list (idempotent)."""
+    with _settings_lock:
+        current = get_autorun_detector_names()
+        if name not in current:
+            current.append(name)
+            set_autorun_detector_names(current)
+
+
+def remove_autorun_detector_name(name: str) -> bool:
+    """Remove a detector name from the autorun list. Returns True if found."""
+    with _settings_lock:
+        current = get_autorun_detector_names()
+        if name in current:
+            current.remove(name)
+            set_autorun_detector_names(current)
+            return True
+        return False
+
+
+def is_autorun_detector(name: str) -> bool:
+    """Check whether a detector name is in the autorun list."""
+    return name in get_autorun_detector_names()
 
 
 def ensure_autorun_processors_imported() -> list[str]:

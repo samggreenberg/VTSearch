@@ -73,6 +73,165 @@ class TestMediaMD5:
         assert hashlib.md5(wav_bytes).hexdigest() == media["md5"]
 
 
+class TestApplyCustomMetadataMD5:
+    """Tests for apply_custom_metadata_md5: use MD5 from custom_metadata when provided."""
+
+    def test_replaces_md5_from_custom_metadata(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": "provided_hash", "title": "foo"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 1
+        assert media_dict[1]["md5"] == "provided_hash"
+
+    def test_skips_when_no_custom_metadata(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash"},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_skips_when_custom_metadata_has_no_md5(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"title": "foo"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_skips_when_custom_metadata_md5_is_empty(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": ""}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+    def test_handles_mixed_medias(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calc1", "custom_metadata": {"md5": "provided1"}},
+            2: {"md5": "calc2", "custom_metadata": {"title": "no md5 here"}},
+            3: {"md5": "calc3"},
+            4: {"md5": "calc4", "custom_metadata": {"md5": "provided4"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 2
+        assert media_dict[1]["md5"] == "provided1"
+        assert media_dict[2]["md5"] == "calc2"
+        assert media_dict[3]["md5"] == "calc3"
+        assert media_dict[4]["md5"] == "provided4"
+
+    def test_skips_when_custom_metadata_md5_is_none(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": None}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 0
+        assert media_dict[1]["md5"] == "calculated_hash"
+
+
+class TestCustomMetadataMapInLoader:
+    """Tests that custom_metadata_map in load_dataset_from_folder skips MD5 calculation."""
+
+    def test_md5_from_custom_metadata_map_used(self, tmp_path):
+        """When custom_metadata_map provides md5, the loader uses it."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.audio.generator import generate_wav
+
+        # Create a WAV file in tmp_path
+        wav_path = tmp_path / "test.wav"
+        wav_path.write_bytes(generate_wav(440, 0.5))
+
+        medias_dict: dict = {}
+        custom_md5 = "custom_provided_md5_value_here"
+        cm_map = {"test.wav": {"md5": custom_md5, "source": "external_db"}}
+
+        load_dataset_from_folder(
+            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+        )
+
+        assert len(medias_dict) == 1
+        media = next(iter(medias_dict.values()))
+        # MD5 should be from custom_metadata_map, not computed from file bytes
+        assert media["md5"] == custom_md5
+        # custom_metadata should be attached to the media
+        assert media["custom_metadata"]["md5"] == custom_md5
+        assert media["custom_metadata"]["source"] == "external_db"
+
+    def test_empty_md5_in_custom_metadata_map_falls_through(self, tmp_path):
+        """When custom_metadata_map has empty md5, the loader computes it."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.audio.generator import generate_wav
+
+        wav_path = tmp_path / "test.wav"
+        wav_bytes = generate_wav(440, 0.5)
+        wav_path.write_bytes(wav_bytes)
+
+        medias_dict: dict = {}
+        cm_map = {"test.wav": {"md5": "", "source": "external_db"}}
+
+        load_dataset_from_folder(
+            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+        )
+
+        media = next(iter(medias_dict.values()))
+        expected_md5 = hashlib.md5(wav_bytes).hexdigest()
+        assert media["md5"] == expected_md5
+        # custom_metadata should still be attached
+        assert media["custom_metadata"]["source"] == "external_db"
+
+    def test_no_custom_metadata_map_computes_md5(self, tmp_path):
+        """Without custom_metadata_map, md5 is computed normally."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.audio.generator import generate_wav
+
+        wav_path = tmp_path / "test.wav"
+        wav_bytes = generate_wav(440, 0.5)
+        wav_path.write_bytes(wav_bytes)
+
+        medias_dict: dict = {}
+        load_dataset_from_folder(tmp_path, "sounds", medias_dict)
+
+        media = next(iter(medias_dict.values()))
+        expected_md5 = hashlib.md5(wav_bytes).hexdigest()
+        assert media["md5"] == expected_md5
+        assert "custom_metadata" not in media
+
+    def test_custom_metadata_map_with_relative_path_key(self, tmp_path):
+        """custom_metadata_map keys can be relative paths (subdir/file.wav)."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.audio.generator import generate_wav
+
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        wav_path = subdir / "test.wav"
+        wav_path.write_bytes(generate_wav(440, 0.5))
+
+        medias_dict: dict = {}
+        custom_md5 = "relpath_provided_md5"
+        cm_map = {"sub/test.wav": {"md5": custom_md5}}
+
+        load_dataset_from_folder(
+            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+        )
+
+        media = next(iter(medias_dict.values()))
+        assert media["md5"] == custom_md5
+
+
 class TestListMedias:
     def test_returns_all_medias(self, client):
         resp = client.get("/api/medias")

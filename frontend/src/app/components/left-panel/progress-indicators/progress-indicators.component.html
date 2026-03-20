@@ -4,7 +4,11 @@
       @if (sortStatus) {
         <span class="sort-overlay-status">{{ sortStatus }}</span>
       }
-      <vt-progress-bar [indeterminate]="true" />
+      <vt-progress-bar
+        [indeterminate]="isIndeterminate"
+        [value]="sortProgress"
+        [max]="sortProgressTotal"
+      />
     </div>
   } @else {
     <button

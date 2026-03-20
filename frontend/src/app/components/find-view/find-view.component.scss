@@ -33,6 +33,7 @@
   background: var(--bg-panel);
   display: flex;
   min-width: 100px;
+  position: relative;
 }
 
 .divider-right {
@@ -52,4 +53,24 @@
   background: var(--bg-panel);
   min-width: 150px;
   padding: 0;
+}
+
+// "Please wait" overlay shown in Find mode while detector scoring is running
+.find-wait-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  background: var(--bg-panel);
+  opacity: 0.85;
+  pointer-events: all;
+}
+
+.find-wait-message {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 0 24px;
 }

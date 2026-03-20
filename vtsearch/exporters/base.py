@@ -37,12 +37,9 @@ Example – a minimal SFTP exporter skeleton::
 
     EXPORTER = SftpLabelsetExporter()
 
-Then create ``vtsearch/exporters/sftp/requirements.txt`` containing
-``paramiko>=2.0.0`` and add::
-
-    -r vtsearch/exporters/sftp/requirements.txt
-
-to ``requirements-exporters.txt``.
+If the exporter needs extra packages, add them to the ``[project.optional-dependencies]``
+section of ``pyproject.toml`` (or document them in a ``requirements.txt`` inside the
+exporter's directory for reference).
 """
 
 from __future__ import annotations

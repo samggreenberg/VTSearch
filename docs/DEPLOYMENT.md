@@ -235,8 +235,8 @@ and auto-saved on every change. Schema:
   "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
-  "grid_columns_left": {},
-  "grid_columns_right": {},
+  "grid_icon_size_left": {},
+  "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_types": [],
@@ -264,7 +264,7 @@ Notable fields:
 - `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
-- `view_mode_*`, `grid_columns_*`, `focus_mode_*`, `panel_pct_*` —
+- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*` —
   per-media-type UI layout preferences (keyed by media type ID)
 - `autopilot_enabled` — whether the autopilot feature is active
 
@@ -335,33 +335,27 @@ Add `--no-cache` after dependency changes to force a full rebuild.
 
 ---
 
-## Requirements file structure
+## Dependency structure
 
-Dependencies are organized in a layered structure:
-
-```
-requirements-cpu.txt          ← Main CPU deps (Flask, PyTorch CPU, all media types)
-  └── requirements-importers.txt  ← All importer deps (aggregates per-importer files)
-  └── (inline) per-media-type packages
-
-requirements-gpu.txt          ← Main GPU deps (PyTorch GPU, all media types)
-  └── requirements-importers.txt
-
-requirements-exporters.txt    ← All exporter deps (aggregates per-exporter files)
-
-requirements-dev.txt          ← Dev tools (pytest)
-
-requirements.txt              ← Generic (includes all)
-```
-
-Each plugin has its own `requirements.txt` in its subdirectory:
+Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document), importers/exporters, and eval deps are included in the base install. The only optional extras are:
 
 ```
-vtsearch/media/{audio,image,text,video,document}/requirements.txt
-vtsearch/datasets/importers/{folder,pickle,http_zip,combine_datasets}/requirements.txt
-vtsearch/exporters/{server_json_file,server_csv_file,gui,email_smtp,webhook}/requirements.txt
-vtsearch/labels/importers/{server_json_file,server_csv_file}/requirements.txt
-vtsearch/processors/importers/server_detector_file/requirements.txt
+pyproject.toml
+  [project.dependencies]          ← All app deps (Flask, NumPy, transformers, media types, etc.)
+  [project.optional-dependencies]
+    cpu                           ← CPU-only PyTorch wheel
+    gpu                           ← GPU PyTorch wheel
+    dev                           ← Dev tools (pytest, ruff)
+```
+
+Install commands:
+
+```bash
+# CPU with all features + dev tools
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+
+# GPU
+bash install-gpu.sh
 ```
 
 ### Key dependencies
@@ -371,7 +365,7 @@ vtsearch/processors/importers/server_detector_file/requirements.txt
 | `torch` | `>=2.0.0` | Neural network training and inference |
 | `transformers` | latest | HuggingFace model loading (CLAP, CLIP, X-CLIP) |
 | `sentence-transformers` | latest | E5 text embeddings |
-| `numpy` | `<2` | Numeric arrays (numpy 2.x has breaking changes) |
+| `numpy` | latest | Numeric arrays |
 | `flask` | latest | Web server |
 | `opencv-python-headless` | `<4.10` | Video frame extraction |
 | `ultralytics` | latest | YOLO-based image processing |
@@ -427,11 +421,7 @@ via the folder or pickle importer instead.
 
 **Symptom**: `ModuleNotFoundError` for a media type or importer package.
 
-**Fix**: Install the full requirements:
+**Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-pip install -r requirements-cpu.txt    # or requirements-gpu.txt
-pip install -r requirements-exporters.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 ```
-
-For specific importers or media types, install their individual
-`requirements.txt` as well.

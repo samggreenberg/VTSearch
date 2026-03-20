@@ -51,6 +51,12 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
 
         filepath = Path(filepath_str)
         filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Labels format (from the export modal UI) — filter to selected columns
+        if "labels" in results:
+            return self._export_labels(results, filepath)
+
+        # Autodetect results format (from CLI / fill-from-sort)
         filepath.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
@@ -60,6 +66,32 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
                 f"{results.get('detectors_run', 0)} detector(s) "
                 f"to {filepath.resolve()}."
             ),
+            "filepath": str(filepath.resolve()),
+        }
+
+    def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
+        """Export labels, filtering to selected columns when provided."""
+        labels = results.get("labels", [])
+        selected_columns: list[str] | None = results.get("selected_columns")
+
+        if selected_columns is not None:
+            filtered_labels = []
+            for entry in labels:
+                row: dict[str, Any] = {}
+                meta = entry.get("custom_metadata") or {}
+                for col in selected_columns:
+                    if col in entry:
+                        row[col] = entry[col]
+                    elif col in meta:
+                        row[col] = meta[col]
+                filtered_labels.append(row)
+            output = {"labels": filtered_labels, "selected_columns": selected_columns}
+        else:
+            output = {"labels": labels}
+
+        filepath.write_text(json.dumps(output, indent=2), encoding="utf-8")
+        return {
+            "message": f"Saved {len(labels)} label(s) to {filepath.resolve()}.",
             "filepath": str(filepath.resolve()),
         }
 

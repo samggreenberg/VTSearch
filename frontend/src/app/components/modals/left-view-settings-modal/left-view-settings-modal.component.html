@@ -1,4 +1,5 @@
-<vt-modal title="Scroll View" [open]="true" (closed)="close()">
+<div class="view-menu-backdrop" (click)="close()"></div>
+<div class="view-menu">
   @if (loading) {
     <p class="empty-state">Loading...</p>
   } @else {
@@ -43,8 +44,14 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label"># Grid Columns:</label>
-          <input type="number" class="form-input grid-columns-input" [ngModel]="getGridColumns(activeViewTab)" (ngModelChange)="onGridColumnsChange(activeViewTab, $event)" min="1" max="6" />
+          <label class="form-label">Grid Icon Size:</label>
+          <select class="form-select" [ngModel]="getGridIconSize(activeViewTab)" (ngModelChange)="onGridIconSizeChange(activeViewTab, $event)">
+            <option value="XS">XS</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
+          </select>
         </div>
       </div>
     } @else {
@@ -55,8 +62,4 @@
       <p class="error-text">{{ error }}</p>
     }
   }
-
-  <div class="view-actions" modal-footer>
-    <button class="btn btn--primary" (click)="close()">Close</button>
-  </div>
-</vt-modal>
+</div>

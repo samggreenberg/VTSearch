@@ -70,18 +70,20 @@ export class AutopilotStateService {
 
   checkPhaseTransition(goodCount: number, badCount: number): void {
     const st = this.stateSubject.value;
-    let nextPhase = st.phase;
+    if (st.phase === 'idle') return;
 
-    if (st.phase === 'good' && goodCount >= st.goodToStart) {
+    // Derive the correct phase from current counts and indicator statuses.
+    // This allows both forward and backward transitions (e.g. if votes are
+    // cleared or un-toggled, the phase regresses to match).
+    let nextPhase: AutopilotPhase;
+    if (goodCount < st.goodToStart) {
+      nextPhase = 'good';
+    } else if (badCount < st.badToStart) {
       nextPhase = 'bad';
-    } else if (st.phase === 'bad' && badCount >= st.badToStart) {
+    } else if (st.smartStatus === 'green' && st.stableStatus === 'green') {
+      nextPhase = st.spanStatus === 'green' ? 'done' : 'new';
+    } else {
       nextPhase = 'hard';
-    } else if (st.phase === 'hard' && st.smartStatus === 'green' && st.stableStatus === 'green') {
-      nextPhase = 'new';
-    } else if (st.phase === 'new' && (st.smartStatus !== 'green' || st.stableStatus !== 'green')) {
-      nextPhase = 'hard';
-    } else if (st.phase === 'new' && st.spanStatus === 'green') {
-      nextPhase = 'done';
     }
 
     if (nextPhase !== st.phase) {

@@ -2,7 +2,6 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { ModalComponent } from '../../modal/modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -11,7 +10,7 @@ import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 @Component({
   selector: 'vt-left-view-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './left-view-settings-modal.component.html',
   styleUrl: './left-view-settings-modal.component.scss',
 })
@@ -67,18 +66,17 @@ export class LeftViewSettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'list';
   }
 
-  onGridColumnsChange(typeId: string, value: number): void {
-    const clamped = Math.max(1, Math.min(6, Math.round(value)));
-    const dict = (this.settings.grid_columns_left as Record<string, number>) || {};
-    dict[typeId] = clamped;
-    (this.settings as Record<string, unknown>)['grid_columns_left'] = { ...dict };
+  onGridIconSizeChange(typeId: string, value: string): void {
+    const dict = (this.settings.grid_icon_size_left as Record<string, string>) || {};
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)['grid_icon_size_left'] = { ...dict };
     this.save();
   }
 
-  getGridColumns(typeId: string): number {
-    const dict = this.settings.grid_columns_left;
-    if (!dict) return 2;
-    return dict[typeId] ?? 2;
+  getGridIconSize(typeId: string): string {
+    const dict = this.settings.grid_icon_size_left;
+    if (!dict) return 'M';
+    return dict[typeId] ?? 'M';
   }
 
   onFocusModeChange(typeId: string, value: string): void {

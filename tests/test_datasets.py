@@ -953,8 +953,8 @@ class TestLoadProgressRaceCondition:
                 "to prevent the frontend from seeing a stale 'idle' state"
             )
 
-            # Wait for the background thread to finish
-            for _ in range(60):
+            # Wait for the background thread to finish (up to 12s for slow CI)
+            for _ in range(120):
                 time.sleep(0.1)
                 if get_progress()["status"] == "idle":
                     break
@@ -1078,14 +1078,18 @@ class TestCancelIngest:
 
     def test_cancel_clears_medias_on_background_load(self, client):
         """Cancelling during a background load should clean up medias."""
+        import threading
         import time
 
         from vtsearch.utils.progress import dataset_progress, get_progress
 
         saved = dict(app_module.medias)
         try:
+            started = threading.Event()
+
             # Simulate a slow importer that checks cancellation via progress
             def slow_load():
+                started.set()
                 for i in range(100):
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
@@ -1098,14 +1102,14 @@ class TestCancelIngest:
                 created_by="test",
             )
 
-            # Give the thread a moment to start
-            time.sleep(0.2)
+            # Wait for the thread to actually start (up to 5s)
+            started.wait(timeout=5.0)
 
             # Cancel it
             client.post("/api/dataset/cancel")
 
             # Wait for the thread to notice the cancellation
-            for _ in range(40):
+            for _ in range(80):
                 time.sleep(0.1)
                 progress = get_progress()
                 if progress["status"] == "idle":

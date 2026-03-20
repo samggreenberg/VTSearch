@@ -126,27 +126,23 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Choose the appropriate requirements file based on your system:
+Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document) are included in the base install — you just pick CPU or GPU for PyTorch.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
-pip install -r requirements-cpu.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-pip install -r requirements-gpu.txt
+bash install-gpu.sh          # defaults to CUDA 11.8
+bash install-gpu.sh cu121    # for CUDA 12.1
+bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-This installs Flask, NumPy, PyTorch, and other ML / media processing dependencies (including importers and exporters).
-
-**For development** (adds pytest and other dev tools):
-
-```bash
-pip install -r requirements-dev.txt
-```
+The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version.
 
 ## Building the frontend (optional)
 
@@ -273,7 +269,7 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 Install dev dependencies (includes pytest):
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 Then run:

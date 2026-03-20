@@ -20,6 +20,8 @@ export class ModelCardComponent {
   }
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
+  @Output() export = new EventEmitter<void>();
+  @Output() autorunToggle = new EventEmitter<boolean>();
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
@@ -56,6 +58,17 @@ export class ModelCardComponent {
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();
+  }
+
+  onExport(event: MouseEvent): void {
+    event.stopPropagation();
+    this.export.emit();
+  }
+
+  onAutorunToggle(event: Event): void {
+    event.stopPropagation();
+    const checked = (event.target as HTMLInputElement).checked;
+    this.autorunToggle.emit(checked);
   }
 
   formatDate(timestamp: number | null): string {

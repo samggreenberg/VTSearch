@@ -295,13 +295,92 @@ def export_labels():
 
     Query params:
         goods_only: If ``"1"`` or ``"true"``, only export good labels.
+        label_filter: ``"good"``, ``"bad"``, ``"both"`` (default), or
+            ``"corrections"`` (only items where the user changed the
+            detector's original label).  Overrides ``goods_only`` when
+            present.
+        enrich: If ``"1"`` or ``"true"``, include per-item
+            ``custom_metadata`` and a top-level ``available_columns`` list.
     """
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import get_find_initial_labels
 
-    goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
-    bads = {} if goods_only else bad_votes
-    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bads)
+    label_filter = request.args.get("label_filter", "").lower()
+    corrections_only = label_filter == "corrections"
+
+    if label_filter == "good":
+        goods, bads = good_votes, {}
+    elif label_filter == "bad":
+        goods, bads = {}, bad_votes
+    elif label_filter and not corrections_only:
+        goods, bads = good_votes, bad_votes
+    else:
+        if not corrections_only:
+            # Backward compat: fall back to goods_only flag
+            goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
+            goods = good_votes
+            bads = {} if goods_only else bad_votes
+        else:
+            goods, bads = good_votes, bad_votes
+
+    all_medias = snapshot_medias()
+    labelset = LabelSet.from_clips_and_votes(all_medias, goods, bads)
     result: dict = labelset.to_dict()
+
+    # Annotate corrections: items where the user changed the detector's label.
+    find_initial = get_find_initial_labels()
+    if find_initial:
+        for entry in result["labels"]:
+            # Match by media ID — look up from medias by MD5
+            md5 = entry.get("md5")
+            media_id = None
+            for mid, m in all_medias.items():
+                if m.get("md5") == md5:
+                    media_id = mid
+                    break
+            if media_id is not None and media_id in find_initial:
+                original = find_initial[media_id]
+                current = entry.get("label")
+                entry["is_correction"] = current != original
+            else:
+                entry["is_correction"] = False
+
+    if corrections_only:
+        result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
+
+    enrich = request.args.get("enrich", "").lower() in ("1", "true")
+    if enrich:
+        from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+        md5_to_media: dict = {}
+        for m in all_medias.values():
+            md5_val = m.get("md5")
+            if md5_val:
+                md5_to_media[md5_val] = m
+
+        all_meta_keys: set[str] = set()
+        for entry in result["labels"]:
+            media = md5_to_media.get(entry.get("md5"))
+            if not media:
+                continue
+            media_type_id = media.get("type", "audio")
+            try:
+                mt = get_media_type(media_type_id)
+                meta = mt.display_metadata(media)
+            except KeyError:
+                meta = {}
+            importer_custom = media.get("custom_metadata")
+            if importer_custom:
+                meta.update(importer_custom)
+            if meta:
+                entry["custom_metadata"] = meta
+                all_meta_keys.update(meta.keys())
+
+        base_columns = ["label", "md5", "origin_name", "filename", "category"]
+        base_lower = {c.lower() for c in base_columns}
+        extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
+        result["available_columns"] = base_columns + extra_keys
+
     return jsonify(result)
 
 
@@ -898,7 +977,7 @@ def indicator_score_history():
             data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
             return jsonify({"metric": "stable", "history": data})
         else:
-            data = calculate_diversity_level_over_time(clips, label_history)
+            data = calculate_diversity_level_over_time(clips, label_history, inclusion)
             return jsonify({"metric": "diverse", "history": data})
     except Exception:
         import logging
@@ -990,7 +1069,7 @@ def eval_train_and_score():
             update_eval_progress("idle", "Done", n_total, n_total)
             return jsonify({"stability": result_data})
         else:
-            result_data = calculate_diversity_level_over_time(clips, history)
+            result_data = calculate_diversity_level_over_time(clips, history, inclusion)
             update_eval_progress("idle", "Done", n_total, n_total)
             return jsonify({"diversity": result_data})
     except Exception:

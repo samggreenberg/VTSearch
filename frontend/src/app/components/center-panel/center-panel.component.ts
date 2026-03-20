@@ -30,6 +30,7 @@ import { VotingOverlayComponent } from './voting-overlay/voting-overlay.componen
 })
 export class CenterPanelComponent implements OnChanges, OnDestroy {
   @Input() media: MediaItem | null = null;
+  @Input() disabled = false;
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
   @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
@@ -71,7 +72,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.keyboard.action$.subscribe((action) => {
         switch (action.type) {
           case 'vote':
-            if (this.media && action.direction) {
+            if (this.media && action.direction && !this.disabled) {
               this.castVote(action.direction);
             }
             break;

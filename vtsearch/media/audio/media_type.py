@@ -144,19 +144,19 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="esc50_s", label="ESC-50 (S)",
                 description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
+                categories=cats, source="esc50", required_folder=folder,
                 slice_start=0, slice_end=7, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_m", label="ESC-50 (M)",
                 description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
+                categories=cats, source="esc50", required_folder=folder,
                 slice_start=7, slice_end=20, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_l", label="ESC-50 (L)",
                 description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
-                categories=cats, required_folder=folder,
+                categories=cats, source="esc50", required_folder=folder,
                 slice_start=20, slice_end=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(

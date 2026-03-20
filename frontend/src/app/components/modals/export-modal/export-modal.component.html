@@ -1,120 +1,232 @@
-<vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
-  @if (view === 'picker') {
-    <div class="export-section">
-      <h3>Export Labels</h3>
-      @if (loading) {
-        <p class="empty-state">Loading exporters...</p>
-      } @else if (exporters.length === 0) {
-        <p class="empty-state">No exporters available.</p>
-      } @else {
-        <div class="exporter-picker">
-          @for (exp of exporters; track exp.name) {
-            <button class="exporter-card" (click)="selectExporter(exp)">
-              <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon">{{ exp.icon }}</span> }{{ exp.display_name || exp.name }}</span>
-              @if (exp.description) {
-                <span class="exporter-desc">{{ exp.description }}</span>
+<vt-modal title="Export" [open]="true" (closed)="close()">
+  <!-- Column Selection -->
+  <div class="export-section">
+    <h3>Columns</h3>
+    <div class="column-checkboxes">
+      @for (col of columns; track col.key) {
+        <label class="column-toggle">
+          <input type="checkbox" [(ngModel)]="col.enabled" />
+          {{ col.label }}
+        </label>
+      }
+    </div>
+  </div>
+
+  <!-- Delimiter -->
+  <div class="export-section">
+    <h3>Delimiter</h3>
+    <div class="delimiter-row">
+      @for (opt of delimiterOptions; track opt.value) {
+        <label class="delimiter-option">
+          <input type="radio" name="delimiter" [value]="opt.value" [(ngModel)]="delimiter" />
+          {{ opt.label }}
+        </label>
+      }
+    </div>
+  </div>
+
+  <!-- Category Filter -->
+  <div class="export-section">
+    <h3>Categories</h3>
+    <div class="delimiter-row">
+      <label class="delimiter-option">
+        <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
+        All
+      </label>
+      <label class="delimiter-option">
+        <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
+        Good
+      </label>
+      <label class="delimiter-option">
+        <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
+        Bad
+      </label>
+      @if (hasCorrections) {
+        <label class="delimiter-option">
+          <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
+          Corrections
+        </label>
+      }
+    </div>
+  </div>
+
+  <!-- Data Preview -->
+  <div class="export-section">
+    <h3>
+      Preview
+      @if (labelsLoaded) {
+        <span class="preview-count">({{ filteredLabels.length }} rows)</span>
+      }
+    </h3>
+    @if (!labelsLoaded) {
+      <p class="empty-state">Loading labels...</p>
+    } @else if (filteredLabels.length === 0) {
+      <p class="empty-state">No labeled items to export.</p>
+    } @else {
+      <div class="table-scroll">
+        <table class="export-table">
+          <thead>
+            <tr>
+              @for (col of enabledColumns; track col.key) {
+                <th>{{ col.label }}</th>
               }
-            </button>
-          }
-        </div>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of previewLabels; track entry.md5) {
+              <tr>
+                @for (col of enabledColumns; track col.key) {
+                  <td [class.label-good]="col.key === 'label' && entry.label === 'good'"
+                      [class.label-bad]="col.key === 'label' && entry.label === 'bad'">
+                    {{ getCellValue(entry, col) }}
+                  </td>
+                }
+              </tr>
+            }
+            @if (filteredLabels.length > 50) {
+              <tr class="truncated-row">
+                <td [attr.colspan]="enabledColumns.length">
+                  ... {{ filteredLabels.length - 50 }} more rows
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <!-- Export Tabs -->
+  <div class="export-section">
+    <h3>Export Labels</h3>
+    <div class="export-tabs">
+      <!-- Clipboard tab -->
+      <button
+        class="export-tab"
+        [class.active]="activeTab === 'clipboard'"
+        (click)="activeTab = 'clipboard'"
+      >
+        <span class="tab-icon">&#x1F4CB;</span> Clipboard
+      </button>
+
+      <!-- Exporter tabs -->
+      @for (exp of exporters; track exp.name) {
+        <button
+          class="export-tab"
+          [class.active]="activeTab === exp.name"
+          (click)="selectExporterTab(exp)"
+        >
+          @if (exp.icon) {<span class="tab-icon">{{ exp.icon }}</span>}{{ exp.display_name || exp.name }}
+        </button>
       }
     </div>
 
+    <!-- Tab content -->
+    <div class="tab-content">
+      @if (activeTab === 'clipboard') {
+        <div class="tab-pane">
+          <button
+            class="btn btn--primary"
+            (click)="copyToClipboard()"
+            [disabled]="!hasLabels || enabledColumns.length === 0"
+          >
+            @if (copySuccess) {
+              &#x2705; Copied!
+            } @else {
+              Copy
+            }
+          </button>
+        </div>
+      } @else if (activeTabExporter) {
+        <div class="tab-pane">
+          @if (activeTabExporter.fields && activeTabExporter.fields.length > 0) {
+            @for (field of activeTabExporter.fields; track field.key) {
+              <div class="tab-field">
+                <label class="form-label" [for]="'field-' + field.key">
+                  {{ field.label || field.key }}
+                  @if (field.required) {
+                    <span class="required">*</span>
+                  }
+                </label>
+
+                @if (field.field_type === 'password') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="password"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'email') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="email"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'url') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="url"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                } @else if (field.field_type === 'select') {
+                  <select
+                    [id]="'field-' + field.key"
+                    class="form-select"
+                    [(ngModel)]="formValues[field.key]"
+                  >
+                    @for (opt of field.options || []; track opt) {
+                      <option [value]="opt">{{ opt }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="text"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
+                }
+              </div>
+            }
+          }
+
+          <button
+            class="btn btn--primary"
+            (click)="submitExporterTab()"
+            [disabled]="!hasLabels || submitting"
+          >
+            @if (submitting) {
+              Exporting...
+            } @else {
+              {{ activeTabAction }}
+            }
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Detector Export (Labeling mode only) -->
+  @if (showDetectorSection) {
     <div class="export-section">
       <h3>Export Detector Weights</h3>
-      <div class="export-options">
+      <div class="export-buttons">
         <button class="btn btn--primary" (click)="exportDetectorBrowser()">Browser Download</button>
         <button class="btn btn--secondary" (click)="exportDetectorServer()">Save to Server</button>
       </div>
     </div>
   }
 
-  @if (view === 'form' && selectedExporter) {
-    <div class="exporter-form">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
-
-      @if (selectedExporter.fields && selectedExporter.fields.length > 0) {
-        @for (field of selectedExporter.fields; track field.key) {
-          <div class="form-group">
-            <label class="form-label" [for]="'field-' + field.key">
-              {{ field.label || field.key }}
-              @if (field.required) {
-                <span class="required">*</span>
-              }
-            </label>
-
-            @if (field.field_type === 'password') {
-              <input
-                [id]="'field-' + field.key"
-                type="password"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'email') {
-              <input
-                [id]="'field-' + field.key"
-                type="email"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'url') {
-              <input
-                [id]="'field-' + field.key"
-                type="url"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'select') {
-              <select
-                [id]="'field-' + field.key"
-                class="form-select"
-                [(ngModel)]="formValues[field.key]"
-              >
-                @for (opt of field.options || []; track opt) {
-                  <option [value]="opt">{{ opt }}</option>
-                }
-              </select>
-            } @else {
-              <input
-                [id]="'field-' + field.key"
-                type="text"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
-            }
-          </div>
-        }
-      } @else {
-        <p class="info-text">This exporter requires no additional configuration.</p>
-      }
-
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
-      }
-
-      <div class="form-actions" modal-footer>
-        <button class="btn btn--secondary" (click)="back()">Cancel</button>
-        <button class="btn btn--primary" (click)="submitForm()" [disabled]="submitting">
-          @if (submitting) {
-            Exporting...
-          } @else {
-            Export
-          }
-        </button>
-      </div>
-    </div>
+  @if (status) {
+    <p class="status-text">{{ status }}</p>
   }
-
-  @if (view === 'picker') {
-    @if (status) {
-      <p class="status-text">{{ status }}</p>
-    }
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
-    }
+  @if (error) {
+    <p class="error-text">{{ error }}</p>
   }
 </vt-modal>

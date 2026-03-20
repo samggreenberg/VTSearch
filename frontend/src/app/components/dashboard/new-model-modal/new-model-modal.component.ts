@@ -85,17 +85,19 @@ export class NewModelModalComponent implements OnInit {
   }
 
   get hasExample(): boolean {
-    return this.exampleType !== null;
+    return this.exampleType === 'media' || !!this.pendingText.trim();
   }
 
-  // --- Text example ---
+  get hasMediaExample(): boolean {
+    return this.exampleType === 'media';
+  }
 
-  setTextExample(): void {
-    const text = this.pendingText.trim();
-    if (!text) return;
-    this.exampleType = 'text';
-    this.exampleValue = text;
-    this.exampleDisplay = text;
+  get hasPendingText(): boolean {
+    return !!this.pendingText.trim();
+  }
+
+  get canSubmit(): boolean {
+    return !!this.name.trim() && this.hasExample && !this.submitting;
   }
 
   // --- Media example ---
@@ -168,6 +170,7 @@ export class NewModelModalComponent implements OnInit {
     this.exampleType = 'media';
     this.exampleValue = item.key;
     this.exampleDisplay = item.display || item.key;
+    this.pendingText = '';
     this.view = 'main';
   }
 
@@ -226,6 +229,7 @@ export class NewModelModalComponent implements OnInit {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
         this.exampleDisplay = res.original_name || entry.name;
+        this.pendingText = '';
         this.fileLoading = false;
         this.view = 'main';
       },
@@ -252,6 +256,7 @@ export class NewModelModalComponent implements OnInit {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
         this.exampleDisplay = res.original_name || res.filename;
+        this.pendingText = '';
       },
       error: () => {
         this.error = 'Failed to upload file';
@@ -281,7 +286,16 @@ export class NewModelModalComponent implements OnInit {
       this.error = 'Name is required';
       return;
     }
-    if (!this.hasExample) {
+
+    // Accept pending text as the text example on submit
+    const pendingTrimmed = this.pendingText.trim();
+    if (this.exampleType !== 'media' && pendingTrimmed) {
+      this.exampleType = 'text';
+      this.exampleValue = pendingTrimmed;
+      this.exampleDisplay = pendingTrimmed;
+    }
+
+    if (!this.exampleType) {
       this.error = 'An example (text or media) is required';
       return;
     }

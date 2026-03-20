@@ -208,7 +208,10 @@ class FolderDatasetImporter(DatasetImporter):
         emb_name = field_values.get("embedder", "")
         has_regular = True
         try:
-            load_dataset_from_folder(folder, media_type, medias, thin=thin, embedder_name=emb_name)
+            load_dataset_from_folder(
+                folder, media_type, medias, thin=thin, embedder_name=emb_name,
+                custom_metadata_map=self.custom_metadata_map or None,
+            )
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
             if media_type != "images" and not field_values.get("converters"):
@@ -244,6 +247,7 @@ class FolderDatasetImporter(DatasetImporter):
         try:
             yield from load_dataset_from_folder_chunked(
                 folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                custom_metadata_map=self.custom_metadata_map or None,
             )
         except ValueError:
             if media_type != "images" and not field_values.get("converters"):

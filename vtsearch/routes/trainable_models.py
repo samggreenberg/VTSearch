@@ -77,8 +77,15 @@ def sync_labels_to_loaded_model() -> None:
 
     Called automatically after each vote so the dashboard's "# Training"
     and "Last Trained" columns stay up to date without an explicit save.
+
+    Skipped when the model is in "find mode" (after ``/api/find-label``),
+    because the global votes reflect scoring results on a different dataset,
+    not the model's original training labels.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, update_model
+    from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
+
+    if is_find_mode():
+        return
 
     loaded_id = get_loaded_id()
     if not loaded_id:
@@ -474,16 +481,22 @@ def save_trainable_model_labels(name: str):
 def list_registered_models():
     """Return all registered models with their loaded state and autodetect flag."""
     from vtsearch.models.registry import get_loaded_id, list_models
+    from vtsearch.settings import get_autorun_detector_names
     from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
     loaded_id = get_loaded_id()
     detectors = get_autorun_detectors()
+    autorun_names = set(get_autorun_detector_names())
     for entry in entries:
         entry["loaded"] = entry["id"] == loaded_id
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
-        entry["autodetect"] = bool(det.get("autodetect")) if det else False
+        if det:
+            entry["autodetect"] = bool(det.get("autodetect"))
+        else:
+            # Fall back to the persisted settings list
+            entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
     return jsonify({"models": entries})
 

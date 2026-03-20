@@ -44,6 +44,9 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         ),
     ]
 
+    #: Base columns for label exports (used when no selected_columns provided).
+    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
+
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         filepath_str = field_values.get("filepath", "").strip()
         if not filepath_str:
@@ -52,6 +55,43 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         filepath = Path(filepath_str)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
+        # Labels format (from the export modal UI)
+        if "labels" in results:
+            return self._export_labels(results, filepath)
+
+        # Autodetect results format (from CLI / fill-from-sort)
+        return self._export_autodetect(results, filepath)
+
+    def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
+        """Export labels with user-selected columns."""
+        labels = results.get("labels", [])
+        columns: list[str] = results.get("selected_columns") or self._LABEL_BASE_COLUMNS
+
+        total_rows = 0
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(columns)
+
+            for entry in labels:
+                meta = entry.get("custom_metadata") or {}
+                row = []
+                for col in columns:
+                    if col in entry:
+                        row.append(str(entry[col] if entry[col] is not None else ""))
+                    elif col in meta:
+                        row.append(str(meta[col] if meta[col] is not None else ""))
+                    else:
+                        row.append("")
+                writer.writerow(row)
+                total_rows += 1
+
+        return {
+            "message": f"Saved {total_rows} label(s) to {filepath.resolve()}.",
+            "filepath": str(filepath.resolve()),
+        }
+
+    def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
+        """Export autodetect results (detector hits)."""
         total_hits = 0
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)

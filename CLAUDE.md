@@ -15,7 +15,8 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings <settings.json>`
-- **Install deps**: `pip install -r requirements-cpu.txt` (or `requirements-gpu.txt`)
+- **Install deps (CPU)**: `pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"`
+- **Install deps (GPU)**: `bash install-gpu.sh` (or `bash install-gpu.sh cu121` for CUDA 12.1)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend tests**: `cd frontend && ng test --watch=false` (requires Chrome/Chromium; see Environment Notes below)
@@ -28,7 +29,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/config.py` — Constants (CLAP_SAMPLE_RATE, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_columns_left, grid_columns_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir); auto-saves to `data/settings.json`
+- `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir); auto-saves to `data/settings.json`
 - `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`; shared utilities in `helpers.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets/demo); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name)
@@ -184,13 +185,51 @@ All mutable global state is reset automatically before each test via two autouse
   ```
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
+## Avoiding Flaky Tests (IMPORTANT)
+
+When writing new tests, avoid these two common sources of flakiness:
+
+### 1. Always seed random number generators
+Never call `np.random.randn()`, `np.random.rand()`, `torch.randn()`, or similar without a fixed seed. Random embeddings feed into neural net training and sorting, where different values cause non-deterministic convergence — making assertions pass or fail depending on the random draw.
+
+**Do this:**
+```python
+rng = np.random.default_rng(42)
+fake_embeddings = rng.standard_normal((n, dim)).astype(np.float32)
+```
+
+**Not this:**
+```python
+fake_embeddings = np.random.randn(n, dim).astype(np.float32)  # FLAKY — unseeded
+```
+
+### 2. Never use `time.sleep()` for thread synchronization
+`time.sleep(0.2)` to "wait for a thread to start" is unreliable on loaded machines. Use `threading.Event` for deterministic synchronization, and set generous polling timeouts.
+
+**Do this:**
+```python
+started = threading.Event()
+def target():
+    started.set()
+    # ... work ...
+thread = threading.Thread(target=target)
+thread.start()
+started.wait(timeout=5)
+```
+
+**Not this:**
+```python
+thread.start()
+time.sleep(0.2)  # FLAKY — may not be enough on a loaded machine
+```
+
 ## Environment Notes (Claude Code on the web)
 - **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
 ## Key Details
 - Global state lives in `vtsearch/utils/state.py`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `inclusion`, `textsort_suggestions`, `autorun_detectors`, `autorun_extractors`, `autorun_localizers`, `_dataset_display_name`, `_diversity_tree` are module-level dicts/lists; all protected by `_state_lock` (RLock)
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_columns_left, grid_columns_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir
+- Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir
 - Each media item has `origin` (dict or None) and `origin_name` (str) for per-element provenance tracking
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format)

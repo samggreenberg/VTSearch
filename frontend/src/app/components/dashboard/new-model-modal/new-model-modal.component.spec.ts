@@ -26,6 +26,7 @@ describe('NewModelModalComponent', () => {
         { type_id: 'image', name: 'Image' },
       ],
     });
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
   });
 
   afterEach(() => {
@@ -42,24 +43,24 @@ describe('NewModelModalComponent', () => {
 
   it('should show error when name is empty', () => {
     component.name = '';
-    component.textQuery = 'test';
+    component.pendingText = 'test';
     component.submit();
     expect(component.error).toBe('Name is required');
   });
 
-  it('should show error when query is empty', () => {
+  it('should show error when no example provided', () => {
     component.name = 'Test Model';
-    component.textQuery = '';
+    component.pendingText = '';
     component.submit();
-    expect(component.error).toBe('At least one text query or example is required');
+    expect(component.error).toBe('An example (text or media) is required');
   });
 
-  it('should submit to models registry API', () => {
+  it('should accept pending text as text example on submit', () => {
     spyOn(component.created, 'emit');
 
     component.name = 'Dog Barks';
     component.mediaType = 'audio';
-    component.textQuery = 'dog barking sounds';
+    component.pendingText = 'dog barking sounds';
     component.submit();
 
     const req = httpMock.expectOne('/api/models/registry');
@@ -73,9 +74,40 @@ describe('NewModelModalComponent', () => {
     expect(component.created.emit).toHaveBeenCalled();
   });
 
+  it('should disable Create button when not ready', () => {
+    component.name = '';
+    component.pendingText = '';
+    expect(component.canSubmit).toBeFalse();
+
+    component.name = 'Test';
+    expect(component.canSubmit).toBeFalse();
+
+    component.pendingText = 'query';
+    expect(component.canSubmit).toBeTrue();
+  });
+
+  it('should disable media buttons when text is entered', () => {
+    component.pendingText = '';
+    expect(component.hasPendingText).toBeFalse();
+
+    component.pendingText = 'some text';
+    expect(component.hasPendingText).toBeTrue();
+  });
+
+  it('should clear pending text when media example is set', () => {
+    component.pendingText = 'some text';
+    component.exampleType = 'media';
+    component.exampleValue = 'file.wav';
+    component.exampleDisplay = 'file.wav';
+    component.pendingText = '';
+
+    expect(component.hasMediaExample).toBeTrue();
+    expect(component.pendingText).toBe('');
+  });
+
   it('should show server error on failure', () => {
     component.name = 'Test';
-    component.textQuery = 'test';
+    component.pendingText = 'test';
     component.submit();
 
     httpMock.expectOne('/api/models/registry').flush(

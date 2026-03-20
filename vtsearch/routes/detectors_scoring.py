@@ -15,6 +15,7 @@ from vtsearch.utils import (
     get_autorun_localizers_by_media,
     snapshot_medias,
 )
+from vtsearch.utils.progress import update_find_progress
 from vtsearch.routes.detectors_crud import _build_extractor, _build_localizer
 
 detectors_scoring_bp = Blueprint("detectors_scoring", __name__)
@@ -59,17 +60,36 @@ def detector_sort():
     if not snap:
         return jsonify({"error": "no medias loaded"}), 400
 
+    n_total = len(snap)
+    update_find_progress(
+        "running", f"Scoring {n_total} items…",
+        current=0, total=n_total,
+        step=1, total_steps=1,
+    )
+
     # Score every media
     all_ids = sorted(snap.keys())
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
+    # Score in batches so the progress endpoint can report percentage
+    batch_size = max(1, min(500, n_total // 10))
+    scores: list[float] = []
     with torch.no_grad():
-        raw_logits = model(X_all)
-        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+        for start in range(0, n_total, batch_size):
+            end = min(start + batch_size, n_total)
+            batch_logits = model(X_all[start:end])
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            update_find_progress(
+                "running", f"Scoring {n_total} items…",
+                current=end, total=n_total,
+                step=1, total_steps=1,
+            )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
+
+    update_find_progress("idle", "Done", current=n_total, total=n_total, step=1, total_steps=1)
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 
@@ -90,19 +110,29 @@ def find_label():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
     from vtsearch.utils import (
-        apply_label_with_click_time,
+        apply_labels_bulk_with_click_time,
         get_autorun_detectors,
-        good_votes,
-        bad_votes,
+        set_find_initial_labels,
     )
+
+    # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
+    _FIND_LABEL_STEPS = 4
 
     body = request.get_json(force=True, silent=True) or {}
     model_id = body.get("model_id")
     if not model_id:
+        update_find_progress("idle", "")
         return jsonify({"error": "model_id is required"}), 400
+
+    update_find_progress(
+        "running", "Resolving model…",
+        current=0, total=0,
+        step=1, total_steps=_FIND_LABEL_STEPS,
+    )
 
     m = reg_get_model(model_id)
     if m is None:
+        update_find_progress("idle", "")
         return jsonify({"error": f"Model '{model_id}' not found"}), 404
 
     # Resolve model weights
@@ -117,6 +147,7 @@ def find_label():
             weights = det["weights"]
             threshold = det.get("threshold", 0.5)
 
+    tm_data = None
     if weights is None and tm_name:
         # Trainable model with saved weights in its data
         tm_path = _model_path(tm_name)
@@ -125,12 +156,171 @@ def find_label():
             weights = tm_data["weights"]
             threshold = tm_data.get("threshold", 0.5)
 
+    # If still no weights, try training on-the-fly from the trainable model's
+    # labelset.  This handles the cross-dataset scenario: user trains on
+    # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
+    # origin info lets us resolve the original files, embed them, and train.
+    _resolution_diagnostic: dict | None = None
+    if weights is None and tm_data:
+        label_entries = tm_data.get("labelset", {}).get("labels", [])
+        if label_entries:
+            import logging as _logging
+
+            _find_log = _logging.getLogger("vtsearch.routes.detectors_scoring")
+
+            from vtsearch.routes.detectors_helpers import serialize_weights as _serialize_weights, train_and_threshold
+
+            update_find_progress(
+                "running", "Training model from labels…",
+                current=0, total=0,
+                step=2, total_steps=_FIND_LABEL_STEPS,
+            )
+
+            media_type = m.get("media_type", "image")
+            X_list: list = []
+            y_list: list[float] = []
+
+            # First pass: match labelset MD5s against currently loaded medias.
+            # This covers the common case where medias are still loaded (same
+            # dataset) or overlap between datasets.
+            snap_for_train = snapshot_medias()
+            md5_to_emb = {c["md5"]: c["embedding"] for c in snap_for_train.values()}
+            unresolved: list[dict] = []
+            for entry in label_entries:
+                label_val = entry.get("label", "")
+                if label_val not in ("good", "bad"):
+                    continue
+                md5 = entry.get("md5", "")
+                if md5 and md5 in md5_to_emb:
+                    X_list.append(md5_to_emb[md5])
+                    y_list.append(1.0 if label_val == "good" else 0.0)
+                else:
+                    unresolved.append(entry)
+
+            _md5_matched = len(X_list)
+            _find_log.info(
+                "find-label: %d of %d labels matched by MD5 in current dataset, "
+                "%d need origin resolution",
+                _md5_matched, _md5_matched + len(unresolved), len(unresolved),
+            )
+
+            # Second pass: resolve remaining entries from their origins (files
+            # on disk).  Needed for the cross-dataset case where Dataset A's
+            # items are not in Dataset B.
+            resolved = None
+            if unresolved:
+                from vtsearch.models.resolver import resolve_label_embeddings
+
+                _n_unresolved = len(unresolved)
+                update_find_progress(
+                    "running", f"Resolving {_n_unresolved} label origins…",
+                    current=0, total=_n_unresolved,
+                    step=2, total_steps=_FIND_LABEL_STEPS,
+                )
+
+                def _origin_progress(current: int, total: int) -> None:
+                    update_find_progress(
+                        "running", f"Resolving {_n_unresolved} label origins…",
+                        current=current, total=total,
+                        step=2, total_steps=_FIND_LABEL_STEPS,
+                    )
+
+                resolved = resolve_label_embeddings(
+                    unresolved, media_type, progress_callback=_origin_progress,
+                )
+                X_list.extend(resolved.embeddings)
+                y_list.extend(resolved.labels)
+
+            has_good = any(v == 1.0 for v in y_list)
+            has_bad = any(v == 0.0 for v in y_list)
+            if has_good and has_bad:
+                update_find_progress(
+                    "running", "Cross-calibrating threshold…",
+                    current=0, total=0,
+                    step=2, total_steps=_FIND_LABEL_STEPS,
+                )
+                trained_model, threshold = train_and_threshold(
+                    X_list, y_list, snap=snap_for_train,
+                )
+                weights = _serialize_weights(trained_model)
+            else:
+                # Build diagnostic info for the error response
+                _resolution_diagnostic = {
+                    "total_labels": _md5_matched + len(unresolved),
+                    "md5_matched": _md5_matched,
+                    "needed_resolution": len(unresolved),
+                    "resolved_from_origin": resolved.resolved_count if resolved else 0,
+                    "failed_resolution": len(resolved.missing_entries) if resolved else len(unresolved),
+                    "has_good": has_good,
+                    "has_bad": has_bad,
+                    "media_type": media_type,
+                }
+                if resolved and resolved.missing_entries:
+                    # Include first few unresolved for diagnostics
+                    samples = resolved.missing_entries[:3]
+                    _resolution_diagnostic["sample_failures"] = [
+                        {
+                            "origin": e.get("origin"),
+                            "origin_name": e.get("origin_name", ""),
+                            "filename": e.get("filename", ""),
+                            "md5": e.get("md5", "")[:12],
+                            "label": e.get("label", ""),
+                        }
+                        for e in samples
+                    ]
+                elif not unresolved and not has_good:
+                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+                elif not unresolved and not has_bad:
+                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+
+                _find_log.warning(
+                    "find-label: cannot train — resolved %d labels total "
+                    "(%d MD5, %d origin) but need both good and bad. "
+                    "has_good=%s, has_bad=%s. Diagnostic: %r",
+                    len(y_list), _md5_matched,
+                    resolved.resolved_count if resolved else 0,
+                    has_good, has_bad, _resolution_diagnostic,
+                )
+
     if weights is None:
-        return jsonify({"error": f"Model '{m['name']}' has no weights for scoring"}), 400
+        update_find_progress("idle", "")
+        error_msg = f"Model '{m['name']}' has no weights for scoring"
+        if _resolution_diagnostic is not None:
+            diag = _resolution_diagnostic
+            error_msg = (
+                f"Model '{m['name']}' could not be trained: "
+                f"{diag['total_labels']} training labels found, "
+                f"{diag['md5_matched']} matched current dataset by MD5, "
+                f"{diag['needed_resolution']} needed origin resolution, "
+                f"{diag['resolved_from_origin']} resolved successfully, "
+                f"{diag['failed_resolution']} failed to resolve. "
+                f"Has good={diag['has_good']}, has bad={diag['has_bad']}."
+            )
+            if diag.get("sample_failures"):
+                first = diag["sample_failures"][0]
+                error_msg += (
+                    f" First failure: importer={first['origin'].get('importer', '?') if first['origin'] else 'None'}, "
+                    f"origin_name={first['origin_name']!r}, "
+                    f"params={first['origin'].get('params', {}) if first['origin'] else '{}'}"
+                )
+            if diag.get("hint"):
+                error_msg += f" Hint: {diag['hint']}"
+        resp = {"error": error_msg}
+        if _resolution_diagnostic is not None:
+            resp["resolution_diagnostic"] = _resolution_diagnostic
+        return jsonify(resp), 400
 
     snap = snapshot_medias()
     if not snap:
+        update_find_progress("idle", "")
         return jsonify({"error": "No medias loaded"}), 400
+
+    n_total = len(snap)
+    update_find_progress(
+        "running", f"Scoring {n_total} items…",
+        current=0, total=n_total,
+        step=3, total_steps=_FIND_LABEL_STEPS,
+    )
 
     # Score all medias
     model = build_model_from_weights(weights)
@@ -138,27 +328,57 @@ def find_label():
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
+    # Score in batches so the progress endpoint can report percentage
+    batch_size = max(1, min(500, n_total // 10))
+    scores: list[float] = []
     with torch.no_grad():
-        raw_logits = model(X_all)
-        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+        for start in range(0, n_total, batch_size):
+            end = min(start + batch_size, n_total)
+            batch_logits = model(X_all[start:end])
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            update_find_progress(
+                "running", f"Scoring {n_total} items…",
+                current=end, total=n_total,
+                step=3, total_steps=_FIND_LABEL_STEPS,
+            )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
     results.sort(key=lambda x: x["score"], reverse=True)
 
-    # Apply labels to ALL elements based on threshold
+    # Apply labels to ALL elements based on threshold (bulk for performance)
+    update_find_progress(
+        "running", f"Applying labels to {n_total} items…",
+        current=0, total=n_total,
+        step=4, total_steps=_FIND_LABEL_STEPS,
+    )
+    label_pairs = []
     good_count = 0
     bad_count = 0
     for entry in results:
-        cid = entry["id"]
-        # Skip already-labeled items
-        if cid in good_votes or cid in bad_votes:
-            continue
         if entry["score"] >= threshold:
-            apply_label_with_click_time(cid, "good")
+            label_pairs.append((entry["id"], "good"))
             good_count += 1
         else:
-            apply_label_with_click_time(cid, "bad")
+            label_pairs.append((entry["id"], "bad"))
             bad_count += 1
+    apply_labels_bulk_with_click_time(label_pairs)
+
+    # Snapshot the detector-assigned labels so that corrections
+    # (user-changed labels) can be identified later during export.
+    set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
+
+    # Mark the loaded model as being in "find mode" so that
+    # sync_labels_to_loaded_model() won't overwrite the model's saved
+    # training labels with these scoring results.
+    from vtsearch.models.registry import set_find_mode
+
+    set_find_mode(True)
+
+    update_find_progress(
+        "idle", "Done",
+        current=n_total, total=n_total,
+        step=_FIND_LABEL_STEPS, total_steps=_FIND_LABEL_STEPS,
+    )
 
     return jsonify({
         "ok": True,

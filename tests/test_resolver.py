@@ -211,6 +211,78 @@ class TestResolveDemoOrigin:
         origin = {"importer": "demo", "params": {"name": "nonexistent_dataset"}}
         assert importer.resolve_file(origin, origin_name="foo.jpg") is None
 
+    def test_resolves_flat_dir_with_category_prefix(self, tmp_path):
+        """ESC-50 style: origin_name has category prefix but dir is flat."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        # Create a flat audio directory (like ESC-50-master/audio/)
+        audio_dir = tmp_path / "ESC-50-master" / "audio"
+        audio_dir.mkdir(parents=True)
+        target = audio_dir / "1-100032-A-0.wav"
+        target.write_bytes(b"fake_audio")
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "esc50_s"}}
+
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"esc50": audio_dir}
+        try:
+            # origin_name includes category prefix, but file is flat
+            result = importer.resolve_file(origin, origin_name="dog/1-100032-A-0.wav")
+            assert result == target
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
+    def test_resolves_fold_dir_with_category_prefix(self, tmp_path):
+        """UrbanSound8K style: origin_name has category prefix, files in fold subdirs."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        # Create fold-based directory structure (like UrbanSound8K/audio/)
+        audio_dir = tmp_path / "UrbanSound8K" / "audio"
+        fold_dir = audio_dir / "fold3"
+        fold_dir.mkdir(parents=True)
+        target = fold_dir / "100032-3-0-0.wav"
+        target.write_bytes(b"fake_audio")
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "urbansound8k_a"}}
+
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"urbansound8k": audio_dir}
+        try:
+            # origin_name has category prefix, actual file in fold subdir
+            result = importer.resolve_file(origin, origin_name="car_horn/100032-3-0-0.wav")
+            assert result == target
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
+    def test_basename_fallback_skips_ambiguous(self, tmp_path):
+        """When multiple files share the same basename, fallback returns None."""
+        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+
+        audio_dir = tmp_path / "audio"
+        (audio_dir / "fold1").mkdir(parents=True)
+        (audio_dir / "fold2").mkdir(parents=True)
+        (audio_dir / "fold1" / "same.wav").write_bytes(b"a")
+        (audio_dir / "fold2" / "same.wav").write_bytes(b"b")
+
+        importer = DemoDatasetImporter()
+        origin = {"importer": "demo", "params": {"name": "esc50_s"}}
+
+        import vtsearch.datasets.importers.demo as demo_mod
+
+        old = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"esc50": audio_dir}
+        try:
+            result = importer.resolve_file(origin, origin_name="cat/same.wav")
+            assert result is None
+        finally:
+            demo_mod._SOURCE_DIRS = old
+
     def test_dispatches_through_resolver(self, tmp_path):
         """resolve_file_from_origin dispatches to DemoDatasetImporter.resolve_file."""
         img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
@@ -228,6 +300,28 @@ class TestResolveDemoOrigin:
             assert result == target
         finally:
             demo_mod._SOURCE_DIRS = old
+
+
+class TestAudioDemoDatasetSources:
+    """Verify all audio demo datasets have source fields for proper resolution."""
+
+    def test_esc50_datasets_have_source(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        for ds_id in ("esc50_s", "esc50_m", "esc50_l"):
+            assert ds_id in DEMO_DATASETS, f"{ds_id} not in DEMO_DATASETS"
+            assert "source" in DEMO_DATASETS[ds_id], f"{ds_id} missing 'source' field"
+            assert DEMO_DATASETS[ds_id]["source"] == "esc50"
+
+    def test_all_audio_demos_have_source(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        audio_demos = {k: v for k, v in DEMO_DATASETS.items() if v.get("media_type") == "audio"}
+        for ds_id, info in audio_demos.items():
+            assert "source" in info, (
+                f"Audio demo dataset {ds_id!r} is missing a 'source' field — "
+                f"resolve_file() won't be able to map it to a download directory"
+            )
 
 
 class TestResolveNoneOrigin:

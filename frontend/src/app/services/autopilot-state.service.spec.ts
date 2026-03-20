@@ -188,6 +188,19 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('new');
   });
 
+  it('should cascade good→bad→hard in a single checkPhaseTransition call', () => {
+    service.activate();
+    // Both thresholds met at once (user labeled in Manual before switching to Autopilot)
+    service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('hard');
+  });
+
+  it('should cascade good→bad in one call when only good threshold met', () => {
+    service.activate();
+    service.checkPhaseTransition(5, 2); // enough goods, not enough bads
+    expect(service.state.phase).toBe('bad');
+  });
+
   it('updateFromLabelingStatus should update status fields', () => {
     service.activate();
     const status: LabelingStatusResponse = {

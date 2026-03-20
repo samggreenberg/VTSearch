@@ -17,6 +17,7 @@ import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
+import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-label-view',
@@ -31,11 +32,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
-  gridColumnsLeft: number = 2;
+  gridGoalWidthLeft: number = 80;
   focusModeLeft: 'click' | 'hover' = 'click';
   focusModeRight: 'click' | 'hover' = 'click';
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
-  private gridColumnsLeftDict: Record<string, number> = {};
+  private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
   private panelPxLeftDict: Record<string, number> = {};
@@ -55,6 +56,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
 
+  get nextResortThreshold(): number {
+    return Math.round(this.resortNextThreshold * 1.5);
+  }
+
   private readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
   private readonly LEFT_MIN = 180;
@@ -63,6 +68,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
+  private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
@@ -88,6 +94,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     this.autopilotStateService.clear();
+    this.voteState.clear();
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
@@ -103,7 +110,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridColumnsLeft = this.gridColumnsLeftDict[newType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
             this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
             this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
             this.applyPanelPx(newType);
@@ -139,6 +146,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopScoringProgressPoll();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -228,11 +236,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
           }
         }
-        const colsDict = settings.grid_columns_left;
-        if (colsDict && typeof colsDict === 'object') {
-          this.gridColumnsLeftDict = colsDict as Record<string, number>;
+        const sizeDict = settings.grid_icon_size_left;
+        if (sizeDict && typeof sizeDict === 'object') {
+          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
           if (this.currentMediaType) {
-            this.gridColumnsLeft = this.gridColumnsLeftDict[this.currentMediaType] ?? 2;
+            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
           }
         }
         const fmLeft = settings.focus_mode_left;
@@ -352,14 +360,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Re-sort using existing load sort results when switching back to load mode
   }
 
+  private startScoringProgressPoll(): void {
+    this.stopScoringProgressPoll();
+    this.scoringProgressPoll$ = timer(200, 500)
+      .pipe(
+        switchMap(() => this.detectorsApi.getFindProgress()),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((prog: any) => {
+        if (prog.status === 'running') {
+          const msg = prog.message || 'Scoring with detector…';
+          const current = prog.current || 0;
+          const total = prog.total || 0;
+          this.sortState.setSortStatus(msg);
+          this.sortState.setSortProgress(current, total);
+        }
+      });
+  }
+
+  private stopScoringProgressPoll(): void {
+    if (this.scoringProgressPoll$) {
+      this.scoringProgressPoll$.unsubscribe();
+      this.scoringProgressPoll$ = null;
+    }
+  }
+
   onDetectorLoaded(data: unknown): void {
     const detector = data as Record<string, unknown>;
     const name = (detector['name'] as string) || 'Detector';
     this.sortState.setSortMode('load');
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector...');
+    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortProgress(0, 0);
+
+    this.startScoringProgressPoll();
+
     this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
+        this.stopScoringProgressPoll();
         this.sortState.setSortResults(
           response.results.map((r) => ({ id: r.id, score: r.score })),
           response.threshold,
@@ -367,11 +405,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sortState.setLoadSortLabel(name);
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
+        this.sortState.setSortProgress(0, 0);
         this.autoSelectNext();
       },
       error: () => {
+        this.stopScoringProgressPoll();
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Detector sort failed');
+        this.sortState.setSortProgress(0, 0);
       },
     });
   }
@@ -478,23 +519,40 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Autopilot ---
 
   onAutopilotStart(): void {
-    this.sortState.setSelectMode('top');
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
-    const textQuery = this.labelSession.textQuery;
-    const mediaExample = this.labelSession.mediaExample;
-    if (textQuery) {
-      if (this.mediaState.medias.length > 0) {
-        this.triggerAutopilotTextSort();
+
+    const phase = this.autopilotStateService.state.phase;
+
+    // For phases beyond 'good', the phase-transition subscription already set
+    // the correct selectMode and (for 'hard') triggered a learned sort.
+    // Only override selectMode for the initial 'good' phase.
+    if (phase === 'good') {
+      this.sortState.setSelectMode('top');
+    }
+
+    // For 'hard' and later phases the subscription already triggered learned
+    // sort; no text/media sort needed.  For 'good' and 'bad' phases, kick off
+    // the text/media sort so the user has results to vote on.
+    if (phase === 'good' || phase === 'bad') {
+      const textQuery = this.labelSession.textQuery;
+      const mediaExample = this.labelSession.mediaExample;
+      if (textQuery) {
+        if (this.mediaState.medias.length > 0) {
+          this.triggerAutopilotTextSort();
+        } else {
+          this.autopilotTextSortPending = true;
+        }
+      } else if (mediaExample) {
+        if (this.mediaState.medias.length > 0) {
+          this.triggerAutopilotMediaSort();
+        } else {
+          this.autopilotMediaSortPending = true;
+        }
       } else {
-        this.autopilotTextSortPending = true;
-      }
-    } else if (mediaExample) {
-      if (this.mediaState.medias.length > 0) {
-        this.triggerAutopilotMediaSort();
-      } else {
-        this.autopilotMediaSortPending = true;
+        // No sort query configured; try to select from existing sort results.
+        this.autoSelectNext();
       }
     }
   }
