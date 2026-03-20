@@ -2,10 +2,10 @@
 # Run tests with minimal output and a clear PASS/FAIL summary.
 #
 # Usage:
-#   ./run-tests.sh              # run all fast tests (default)
-#   ./run-tests.sh core         # run only core group
+#   ./run-tests.sh              # run all fast tests (default) + frontend build check
+#   ./run-tests.sh core         # run only core group + frontend build check
 #   ./run-tests.sh sorting      # run only sorting group
-#   ./run-tests.sh core sorting # run core + sorting groups
+#   ./run-tests.sh core sorting # run core + sorting groups + frontend build check
 #
 # Available groups: core, api, sorting, datasets, io, models,
 #                   downloads, integration, cli, converters
@@ -35,6 +35,39 @@ for arg in "$@"; do
         TEST_GROUPS+=("$arg")
     fi
 done
+
+# Run frontend TypeScript build check for full suite or when core/frontend groups are requested.
+# Catches compilation errors without needing a browser (ng test requires Chrome, build:prod does not).
+_run_frontend_check=false
+if [[ ${#TEST_GROUPS[@]} -eq 0 ]]; then
+    _run_frontend_check=true
+else
+    for _g in "${TEST_GROUPS[@]}"; do
+        if [[ "$_g" == "core" || "$_g" == "frontend" ]]; then
+            _run_frontend_check=true
+            break
+        fi
+    done
+fi
+
+if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
+    echo "Checking frontend TypeScript build..."
+    _fe_log=$(mktemp)
+    if (cd frontend && npm run build:prod 2>&1) > "$_fe_log"; then
+        echo "Frontend build OK"
+    else
+        echo ""
+        echo "======================================================================"
+        echo "FRONTEND BUILD FAILED"
+        echo "======================================================================"
+        cat "$_fe_log"
+        rm -f "$_fe_log"
+        exit 1
+    fi
+    rm -f "$_fe_log"
+elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
+    echo "Skipping frontend build check (node_modules not installed; run: cd frontend && npm install)"
+fi
 
 # Build the pytest marker expression
 if [[ ${#TEST_GROUPS[@]} -eq 0 ]]; then
