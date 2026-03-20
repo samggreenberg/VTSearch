@@ -23,8 +23,16 @@ echo "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})..."
 # Step 1: Pre-install packages that the PyTorch index may serve as source
 # tarballs.  Using --only-binary ensures we get pre-built wheels from PyPI,
 # avoiding the need for a C++ compiler.
+#
+# Notes:
+# - We use --only-binary :all: (not comma-separated package names) for
+#   compatibility with pip >= 25, which deprecated the comma syntax.
+# - We explicitly set --index-url to PyPI so that any extra-index-url
+#   configured elsewhere (pip.conf, env vars, etc.) doesn't interfere
+#   with finding the correct binary wheels.
 echo "Pre-installing binary-only wheels (numpy, scipy)..."
-pip install --only-binary numpy,scipy \
+pip install --only-binary :all: \
+  --index-url https://pypi.org/simple \
   "numpy==1.26.4" \
   "scipy" \
   -q
