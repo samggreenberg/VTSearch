@@ -37,7 +37,10 @@ function emojiToType(icon: string): string {
     '\u274C': 'x-circle',           // ❌
     '\u2139': 'info',               // ℹ
   };
-  return map[norm] || 'file';
+  if (map[norm]) return map[norm];
+  // Single capital letter → pass through as letter icon
+  if (/^[A-Z]$/.test(norm)) return norm;
+  return 'file';
 }
 
 @Component({
@@ -45,7 +48,9 @@ function emojiToType(icon: string): string {
   standalone: true,
   imports: [CommonModule],
   template: `
-    @switch (iconType) {
+    @if (letterChar) {
+      <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><text [attr.x]="12" [attr.y]="17" text-anchor="middle" font-size="14" font-weight="600" font-family="system-ui, sans-serif" fill="currentColor" stroke="none">{{ letterChar }}</text></svg>
+    } @else { @switch (iconType) {
       @case ('audio') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       }
@@ -112,7 +117,7 @@ function emojiToType(icon: string): string {
       @case ('file') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
       }
-    }
+    } }
   `,
   styles: [`
     :host {
@@ -134,5 +139,11 @@ export class IconComponent {
   get iconType(): string {
     if (this.type) return this.type;
     return emojiToType(this.icon);
+  }
+
+  /** Non-empty if iconType is a single capital letter (A–Z). */
+  get letterChar(): string {
+    const t = this.iconType;
+    return /^[A-Z]$/.test(t) ? t : '';
   }
 }
