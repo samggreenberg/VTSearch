@@ -2,6 +2,7 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -24,7 +25,7 @@ type ModalView = 'main' | 'media-picker';
 @Component({
   selector: 'vt-new-model-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './new-model-modal.component.html',
   styleUrl: './new-model-modal.component.scss',
 })

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -22,7 +23,7 @@ export interface ColumnDef {
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })

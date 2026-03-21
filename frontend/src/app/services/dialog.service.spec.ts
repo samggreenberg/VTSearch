@@ -59,14 +59,14 @@ describe('VtDialogService', () => {
     expect(result).toBeNull();
   });
 
-  it('getIcon should return correct icon', () => {
+  it('getIconType should return correct icon type', () => {
     service.dialogType = 'warning';
-    expect(service.getIcon()).toBe('\u26A0\uFE0F');
+    expect(service.getIconType()).toBe('warning');
 
     service.dialogType = 'error';
-    expect(service.getIcon()).toBe('\u274C');
+    expect(service.getIconType()).toBe('x-circle');
 
     service.dialogType = 'success';
-    expect(service.getIcon()).toBe('\u2705');
+    expect(service.getIconType()).toBe('check');
   });
 });
