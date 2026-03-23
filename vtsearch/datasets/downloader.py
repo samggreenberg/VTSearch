@@ -421,7 +421,17 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         if inner_tar.exists() and not categories_dir.exists():
             on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
-                tar_ref.extractall(extract_dir, filter="data")
+                members = tar_ref.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading",
+                            f"Extracting 101_ObjectCategories ({i + 1}/{total})...",
+                            i + 1,
+                            total,
+                        )
+                    tar_ref.extract(member, extract_dir, filter="data")
             inner_tar.unlink(missing_ok=True)
 
     return categories_dir
@@ -820,7 +830,17 @@ def download_bbc_news(
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             # The zip may contain a top-level folder (e.g. "bbc/"); extract
             # all members and then locate category directories below.
-            zip_ref.extractall(DATA_DIR / "bbc-fulltext-raw")
+            members = zip_ref.namelist()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress(
+                        "downloading",
+                        f"Extracting BBC News dataset ({i + 1}/{total})...",
+                        i + 1,
+                        total,
+                    )
+                zip_ref.extract(member, DATA_DIR / "bbc-fulltext-raw")
 
         # Find the directory that contains the category subfolders.
         raw_root = DATA_DIR / "bbc-fulltext-raw"
