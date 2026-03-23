@@ -126,7 +126,9 @@
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  white-space: normal;
+  word-break: break-word;
 
   &:hover {
     background: var(--bg-hover);
