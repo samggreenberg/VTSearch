@@ -93,12 +93,21 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
     if "md5" not in normalised or "label" not in normalised:
         raise ValueError("CSV must have 'md5' and 'label' column headers.")
 
+    # Optional columns that enrich resolution (origin_name, filename, category)
+    optional_cols = ("origin_name", "filename", "category")
+
     results = []
     for row in reader:
         md5 = row.get(normalised["md5"], "").strip()
         label = row.get(normalised["label"], "").strip().lower()
         if md5 and label:
-            results.append({"md5": md5, "label": label})
+            entry: dict[str, str] = {"md5": md5, "label": label}
+            for col in optional_cols:
+                if col in normalised:
+                    val = row.get(normalised[col], "").strip()
+                    if val:
+                        entry[col] = val
+            results.append(entry)
     return results
 
 

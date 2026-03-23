@@ -449,7 +449,7 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
 
     # Check if a media with this MD5 already exists
     snap = snapshot_medias()
-    _, md5_lookup = build_media_lookup(snap)
+    _, md5_lookup, _ = build_media_lookup(snap)
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:
