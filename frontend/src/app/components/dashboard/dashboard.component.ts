@@ -152,6 +152,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.progressMessage;
   }
 
+  get errorMessage(): string {
+    return this.datasetState.errorMessage;
+  }
+
+  dismissError(): void {
+    this.datasetState.setErrorMessage('');
+  }
+
   refresh(): void {
     this.datasetState.refresh();
   }
@@ -350,6 +358,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   startProgressPolling(onComplete?: () => void): void {
     this.datasetState.setLoading(true);
+    this.datasetState.setErrorMessage('');
     this.progressIndeterminate = true;
     this.polling$.next(); // cancel previous polling
 
@@ -386,8 +395,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.datasetState.setLoading(false);
             this.progressIndeterminate = false;
             this.polling$.next();
+            if (progress.error) {
+              this.datasetState.setErrorMessage(progress.error);
+            }
             this.datasetState.refresh();
-            if (progress.status === 'idle' && onComplete) {
+            if (progress.status === 'idle' && !progress.error && onComplete) {
               onComplete();
             }
           }

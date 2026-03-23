@@ -14,6 +14,12 @@
           <button class="btn btn--cancel btn--sm" (click)="onCancelIngest()" title="Cancel dataset loading">Cancel</button>
         </div>
       }
+      @if (errorMessage) {
+        <div class="dashboard-error">
+          <span class="error-msg">{{ errorMessage }}</span>
+          <button class="btn btn--cancel btn--sm" (click)="dismissError()" title="Dismiss error">Dismiss</button>
+        </div>
+      }
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm" (click)="openImporterModal()" title="Import a new dataset">+</button>
       </div>

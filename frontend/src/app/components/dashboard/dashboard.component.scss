@@ -69,6 +69,39 @@
   }
 }
 
+.dashboard-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--error-bg, #fef2f2);
+  border: 1px solid var(--error-border, #fca5a5);
+  border-radius: 6px;
+  padding: 6px 12px;
+
+  .error-msg {
+    flex: 1;
+    font-size: 0.8rem;
+    color: var(--error-text, #991b1b);
+  }
+
+  .btn--cancel {
+    flex-shrink: 0;
+    background: transparent;
+    color: var(--error-text, #991b1b);
+    border: 1px solid var(--error-border, #fca5a5);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+
+    &:hover {
+      background: var(--error-border, #fca5a5);
+      color: #fff;
+    }
+  }
+}
+
 .dashboard-section-actions {
   margin-left: auto;
 }

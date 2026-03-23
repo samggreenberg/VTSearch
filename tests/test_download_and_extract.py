@@ -306,6 +306,136 @@ class TestDownloadAndExtract:
         assert last_cur == last_tot, "Final progress should show completion"
 
 
+class TestCorruptArchiveValidation:
+    """Corrupt or non-archive downloads are detected and cleaned up."""
+
+    def test_corrupt_tar_gz_deleted_and_raises(self, tmp_path):
+        """An HTML page saved as .tar.gz is detected, deleted, and raises."""
+        from vtsearch.datasets import downloader as dl_module
+
+        def fake_download(url, dest, size, cb):
+            dest.write_text("<html>404 Not Found</html>")
+
+        with (
+            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module, "download_file_with_progress", fake_download),
+        ):
+            with pytest.raises(RuntimeError, match="invalid file"):
+                dl_module._download_and_extract(
+                    url="http://example.com/test.tar.gz",
+                    archive_name="test.tar.gz",
+                    extract_to=tmp_path / "extracted",
+                    check_path=tmp_path / "nonexistent",
+                    download_size_mb=1,
+                    dataset_name="Test Dataset",
+                    on_progress=lambda *a: None,
+                )
+
+        # The corrupt file should have been deleted so retries re-download.
+        assert not (tmp_path / "test.tar.gz").exists()
+
+    def test_corrupt_zip_deleted_and_raises(self, tmp_path):
+        """Non-zip content saved as .zip is detected and cleaned up."""
+        from vtsearch.datasets import downloader as dl_module
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"this is not a zip file")
+
+        with (
+            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module, "download_file_with_progress", fake_download),
+        ):
+            with pytest.raises(RuntimeError, match="invalid file"):
+                dl_module._download_and_extract(
+                    url="http://example.com/test.zip",
+                    archive_name="test.zip",
+                    extract_to=tmp_path / "extracted",
+                    check_path=tmp_path / "nonexistent",
+                    download_size_mb=1,
+                    dataset_name="Test Dataset",
+                    on_progress=lambda *a: None,
+                )
+
+        assert not (tmp_path / "test.zip").exists()
+
+    def test_valid_tar_gz_passes_validation(self, tmp_path):
+        """A valid .tar.gz file passes validation and extracts normally."""
+        from vtsearch.datasets import downloader as dl_module
+
+        tar_path = _make_tar_gz(tmp_path, arcname="data_dir")
+        extract_to = tmp_path / "extracted"
+        check_path = extract_to / "data_dir"
+
+        with (
+            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: tar_path.rename(dest),
+            ),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.tar.gz",
+                archive_name="test.tar.gz",
+                extract_to=extract_to,
+                check_path=check_path,
+                download_size_mb=1,
+                dataset_name="Test",
+                on_progress=lambda *a: None,
+            )
+
+        assert check_path.exists()
+        assert (check_path / "file.txt").read_text() == "hello"
+
+    def test_corrupt_pre_existing_archive_detected(self, tmp_path):
+        """A corrupt file left from a previous failed download is caught."""
+        from vtsearch.datasets import downloader as dl_module
+
+        # Simulate a corrupt file already on disk (download is skipped).
+        corrupt_file = tmp_path / "test.tar.gz"
+        corrupt_file.write_bytes(b"UCF101 fake html page content")
+
+        with patch.object(dl_module, "DATA_DIR", tmp_path):
+            with pytest.raises(RuntimeError, match="invalid file"):
+                dl_module._download_and_extract(
+                    url="http://example.com/test.tar.gz",
+                    archive_name="test.tar.gz",
+                    extract_to=tmp_path / "extracted",
+                    check_path=tmp_path / "nonexistent",
+                    download_size_mb=1,
+                    dataset_name="UCF-101 subset",
+                    on_progress=lambda *a: None,
+                )
+
+        # Corrupt file removed so next attempt will re-download.
+        assert not corrupt_file.exists()
+
+    def test_error_message_is_user_friendly(self, tmp_path):
+        """The error message mentions the dataset name and suggests retrying."""
+        from vtsearch.datasets import downloader as dl_module
+
+        def fake_download(url, dest, size, cb):
+            dest.write_text("<html>Service Unavailable</html>")
+
+        with (
+            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module, "download_file_with_progress", fake_download),
+        ):
+            with pytest.raises(RuntimeError, match="My Dataset") as exc_info:
+                dl_module._download_and_extract(
+                    url="http://example.com/test.tar.gz",
+                    archive_name="test.tar.gz",
+                    extract_to=tmp_path / "extracted",
+                    check_path=tmp_path / "nonexistent",
+                    download_size_mb=1,
+                    dataset_name="My Dataset",
+                    on_progress=lambda *a: None,
+                )
+
+        msg = str(exc_info.value)
+        assert "try again" in msg.lower()
+
+
 class TestCaltech101ExtractionProgress:
     """Caltech-101 inner tar extraction reports determinate progress."""
 
