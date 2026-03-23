@@ -422,7 +422,7 @@ class TestCsvExporterLabelsFormat:
         with open(filepath2, newline="", encoding="utf-8") as f:
             header2 = next(csv.reader(f))
 
-        assert header1 == ["label", "md5", "origin_name", "filename", "category", "origin"]
+        assert header1 == ["label", "md5", "origin_name", "filename", "category"]
         assert header2 == ["source"]
 
     def test_labels_format_no_selected_columns_uses_defaults(self, tmp_path):
