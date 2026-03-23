@@ -324,7 +324,8 @@ class TestCaltech101ExtractionProgress:
 
         outer_zip_path = tmp_path / "caltech-101.zip"
         with zipfile.ZipFile(outer_zip_path, "w") as zf:
-            zf.write(inner_tar_path, "101_ObjectCategories.tar.gz")
+            # Real zip extracts to DATA_DIR; inner tar must land under caltech-101/
+            zf.write(inner_tar_path, "caltech-101/101_ObjectCategories.tar.gz")
 
         progress_calls = []
 
@@ -390,7 +391,9 @@ class TestBbcNewsExtractionProgress:
         ):
             result = dl_module.download_bbc_news(on_progress=track)
 
-        assert result.exists()
+        # download_bbc_news returns a dict of category -> articles
+        assert isinstance(result, dict)
+        assert len(result) > 0
 
         # The zip extraction should report determinate progress
         extract_progress = [
