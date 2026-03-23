@@ -56,11 +56,15 @@ class WebhookLabelsetExporter(LabelsetExporter):
         resp = requests.post(url, json=results, headers=headers, timeout=30)
         resp.raise_for_status()
 
-        total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
+        if "labels" in results:
+            total_items = len(results.get("labels", []))
+            detail = f"Posted {total_items} label(s)"
+        else:
+            total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
+            detail = f"Posted {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)"
         return {
             "message": (
-                f"Posted {total_hits} hit(s) across "
-                f"{results.get('detectors_run', 0)} detector(s) "
+                f"{detail} "
                 f"to {url} (HTTP {resp.status_code})."
             ),
             "status_code": resp.status_code,

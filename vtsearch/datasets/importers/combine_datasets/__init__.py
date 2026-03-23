@@ -185,7 +185,7 @@ class CombineDatasetsImporter(DatasetImporter):
                 i + 1,
                 len(paths),
             )
-            source_clips = _load_clips_from_pickle(pkl_path)
+            source_clips = _load_clips_from_pickle(pkl_path, thin=thin)
 
             if not source_clips:
                 continue
