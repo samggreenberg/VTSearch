@@ -19,7 +19,7 @@ interface LabelImporterInfo {
   hidden_from_picker?: boolean;
 }
 
-type ModalView = 'picker' | 'form' | 'missing';
+type ModalView = 'picker' | 'form';
 
 @Component({
   selector: 'vt-label-importer-modal',
@@ -47,7 +47,9 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
+  /** @deprecated No longer used — auto-resolve happens server-side. */
   missingEntries: unknown[] = [];
+  /** @deprecated No longer used — auto-resolve happens server-side. */
   ingesting = false;
 
   constructor(
@@ -57,9 +59,6 @@ export class LabelImporterModalComponent implements OnInit {
   ) {}
 
   get modalTitle(): string {
-    if (this.view === 'missing') {
-      return 'Missing Media';
-    }
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
@@ -128,11 +127,11 @@ export class LabelImporterModalComponent implements OnInit {
         this.imported.emit();
 
         if (res.missing_count > 0 && res.missing?.length) {
-          this.missingEntries = res.missing;
-          this.view = 'missing';
-        } else {
-          setTimeout(() => this.close(), 1500);
+          // Show unresolved elements as a warning but don't prompt — the
+          // backend already tried to auto-resolve them.
+          this.error = `${res.missing_count} element(s) could not be resolved from their original sources.`;
         }
+        setTimeout(() => this.close(), res.missing_count > 0 ? 3000 : 1500);
       },
       error: (err) => {
         this.submitting = false;
@@ -141,30 +140,6 @@ export class LabelImporterModalComponent implements OnInit {
     });
   }
 
-  ingestMissing(): void {
-    if (!this.missingEntries.length) return;
-    this.ingesting = true;
-    this.error = '';
-
-    this.labelImportersApi.ingestMissing(this.missingEntries).subscribe({
-      next: (res: any) => {
-        this.ingesting = false;
-        this.successMessage = res.message || `Ingested ${res.ingested ?? 0} media(s), applied ${res.applied ?? 0} label(s).`;
-        this.missingEntries = [];
-        this.imported.emit();
-        setTimeout(() => this.close(), 1500);
-      },
-      error: (err) => {
-        this.ingesting = false;
-        this.error = err.error?.error || 'Failed to ingest missing media';
-      },
-    });
-  }
-
-  skipMissing(): void {
-    this.missingEntries = [];
-    this.close();
-  }
 
   triggerAddGood(): void {
     this.addGoodInput.nativeElement.click();
