@@ -12,6 +12,12 @@
   }
 }
 
+td {
+  padding: 6px 10px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .name-cell {
   display: inline-flex;
   align-items: center;
