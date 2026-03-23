@@ -19,6 +19,7 @@ import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { IconComponent } from '../icon/icon.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -32,6 +33,7 @@ import { DetectorExportModalComponent } from '../modals/detector-export-modal/de
     DatasetImporterModalComponent,
     NewModelModalComponent,
     DetectorExportModalComponent,
+    IconComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
