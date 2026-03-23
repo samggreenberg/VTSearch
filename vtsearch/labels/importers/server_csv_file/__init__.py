@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,7 @@ class ServerCsvLabelImporter(LabelImporter):
         ),
     ]
 
-    def run(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def run(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
         """Read and parse the CSV labels file from the server filesystem."""
         filepath = (field_values.get("filepath") or "").strip()
         if not filepath:
@@ -59,7 +60,7 @@ class ServerCsvLabelImporter(LabelImporter):
         raw = path.read_bytes()
         return _parse_csv_bytes(raw)
 
-    def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
         """Load labels from a file-path string (CLI usage)."""
         return self.run(field_values)
 
@@ -72,7 +73,7 @@ class ServerCsvLabelImporter(LabelImporter):
         )
 
 
-def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
+def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:
     """Decode *raw* bytes as CSV and extract ``md5``/``label`` pairs."""
     try:
         text = raw.decode("utf-8-sig")  # strip BOM if present
@@ -93,7 +94,7 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
     if "md5" not in normalised or "label" not in normalised:
         raise ValueError("CSV must have 'md5' and 'label' column headers.")
 
-    # Optional columns that enrich resolution (origin_name, filename, category)
+    # Optional columns that enrich resolution (origin_name, filename, category, origin)
     optional_cols = ("origin_name", "filename", "category")
 
     results = []
@@ -101,12 +102,22 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, str]]:
         md5 = row.get(normalised["md5"], "").strip()
         label = row.get(normalised["label"], "").strip().lower()
         if md5 and label:
-            entry: dict[str, str] = {"md5": md5, "label": label}
+            entry: dict[str, Any] = {"md5": md5, "label": label}
             for col in optional_cols:
                 if col in normalised:
                     val = row.get(normalised[col], "").strip()
                     if val:
                         entry[col] = val
+            # Parse origin dict from JSON if present
+            if "origin" in normalised:
+                origin_raw = row.get(normalised["origin"], "").strip()
+                if origin_raw:
+                    try:
+                        origin = json.loads(origin_raw)
+                        if isinstance(origin, dict):
+                            entry["origin"] = origin
+                    except (json.JSONDecodeError, ValueError):
+                        pass
             results.append(entry)
     return results
 

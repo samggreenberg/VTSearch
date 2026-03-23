@@ -11,6 +11,7 @@ No additional pip packages are required; uses only Python's ``csv`` and
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,7 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
     ]
 
     #: Base columns for label exports (used when no selected_columns provided).
-    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
+    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category", "origin"]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         filepath_str = field_values.get("filepath", "").strip()
@@ -77,7 +78,13 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 row = []
                 for col in columns:
                     if col in entry:
-                        row.append(str(entry[col] if entry[col] is not None else ""))
+                        val = entry[col]
+                        # Serialize dicts (e.g. origin) as JSON so they
+                        # survive the CSV round-trip.
+                        if isinstance(val, dict):
+                            row.append(json.dumps(val, sort_keys=True))
+                        else:
+                            row.append(str(val if val is not None else ""))
                     elif col in meta:
                         row.append(str(meta[col] if meta[col] is not None else ""))
                     else:

@@ -441,6 +441,28 @@ class TestServerCsvLabelImporter:
         assert result[0]["filename"] == "clip.wav"
         assert result[0]["category"] == "music"
 
+    def test_csv_importer_parses_origin_json(self, tmp_path):
+        """CSV importer parses a JSON-serialised origin dict column."""
+        import json
+
+        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+
+        origin = {"importer": "demo", "params": {"name": "flowers102"}}
+        origin_json = json.dumps(origin, sort_keys=True)
+        csv_text = f'label,md5,origin_name,origin\ngood,abc123,rose.jpg,"{origin_json.replace(chr(34), chr(34)+chr(34))}"\n'
+        result = _parse_csv_bytes(csv_text.encode())
+        assert len(result) == 1
+        assert result[0]["origin"] == origin
+
+    def test_csv_importer_ignores_invalid_origin_json(self, tmp_path):
+        """Non-JSON origin column values are silently ignored."""
+        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+
+        csv_text = "label,md5,origin_name,origin\ngood,abc123,rose.jpg,not-json\n"
+        result = _parse_csv_bytes(csv_text.encode())
+        assert len(result) == 1
+        assert "origin" not in result[0]
+
     def test_csv_cross_dataset_import_matches_by_origin_name(self, client, tmp_path):
         """CSV labels with different MD5s match current dataset elements by origin_name."""
         origin_name_1 = app_module.medias[1].get("origin_name", "")

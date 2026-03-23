@@ -436,7 +436,7 @@ class TestCsvExporterLabelsFormat:
         exp.export(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             header = next(csv.reader(f))
-        assert header == ["label", "md5", "origin_name", "filename", "category"]
+        assert header == ["label", "md5", "origin_name", "filename", "category", "origin"]
 
     def test_labels_format_message(self, tmp_path):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -463,6 +463,25 @@ class TestCsvExporterLabelsFormat:
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
         assert len(rows) == 1  # header only
+
+    def test_labels_format_origin_dict_serialised_as_json(self, tmp_path):
+        """Origin dicts are JSON-serialised in CSV so they survive round-trip."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        origin = {"importer": "demo", "params": {"name": "flowers102"}}
+        labels = [{"label": "good", "md5": "abc", "origin_name": "rose.jpg", "filename": "rose.jpg", "category": "", "origin": origin}]
+        results = {"labels": labels}
+        filepath = tmp_path / "with_origin.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+
+        # Read back and verify origin column is valid JSON
+        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+
+        parsed = _parse_csv_bytes(filepath.read_bytes())
+        assert len(parsed) == 1
+        assert parsed[0]["origin"] == origin
 
 
 # ---------------------------------------------------------------------------
