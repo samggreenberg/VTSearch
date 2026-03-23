@@ -626,7 +626,7 @@ class TestXCLIPEmbeddingGPU:
 
         # Create 8 dummy frames
         frames = [Image.new("RGB", (224, 224), color=(i * 30, 100, 200)) for i in range(8)]
-        inputs = processor(videos=list(frames), return_tensors="pt")
+        inputs = processor(images=[list(frames)], return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
             from vtsearch.media.video.media_type import _extract_tensor
