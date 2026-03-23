@@ -792,6 +792,102 @@ class TestIngestMissingClips:
         groups = _group_by_origin(entries)
         assert len(groups) == 0
 
+    def test_media_type_from_origin_folder(self):
+        """Folder origins resolve media type from params."""
+        from vtsearch.datasets.ingest import _media_type_from_origin
+
+        origin = {"importer": "folder", "params": {"path": "/tmp/x", "media_type": "paragraphs"}}
+        assert _media_type_from_origin(origin) == "paragraph"
+
+    def test_media_type_from_origin_demo(self):
+        """Demo origins resolve media type from DEMO_DATASETS config."""
+        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.ingest import _media_type_from_origin
+
+        # Find a real demo dataset name from the config
+        for name, info in DEMO_DATASETS.items():
+            expected = info.get("media_type", "")
+            if expected:
+                origin = {"importer": "demo", "params": {"name": name}}
+                assert _media_type_from_origin(origin) == expected
+                break
+
+    def test_media_type_from_origin_unknown(self):
+        """Unknown origins return empty string."""
+        from vtsearch.datasets.ingest import _media_type_from_origin
+
+        origin = {"importer": "unknown_xyz", "params": {}}
+        assert _media_type_from_origin(origin) == ""
+
+    def test_ingest_via_resolver_with_demo_origin(self, tmp_path):
+        """_ingest_via_resolver resolves demo origin files item-by-item."""
+        import numpy as np
+
+        from vtsearch.datasets.ingest import _ingest_via_resolver
+
+        rng = np.random.default_rng(42)
+
+        # Create a fake image file
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        cat_dir = img_dir / "cat"
+        cat_dir.mkdir()
+        # Create a minimal valid JPEG (just enough bytes for PIL to open)
+        from PIL import Image
+
+        img = Image.new("RGB", (32, 32), color=(255, 0, 0))
+        img_path = cat_dir / "test_001.jpg"
+        img.save(img_path, format="JPEG")
+
+        origin = {"importer": "demo", "params": {"name": "test_demo_dataset"}}
+        entries = [
+            {
+                "origin": origin,
+                "origin_name": "cat/test_001.jpg",
+                "md5": "some_md5",
+                "label": "good",
+            }
+        ]
+
+        existing: dict = {}
+
+        def noop_progress(status, message, current, total):
+            pass
+
+        fake_embedding = rng.standard_normal(512).astype(np.float32)
+
+        # Patch resolve_file_from_origin to return our test file,
+        # embed_file to return a fake embedding, and _media_type_from_origin
+        # to return "image".  The resolver imports are lazy (inside the
+        # function), so patch at the source module.
+        from unittest.mock import patch
+
+        with (
+            patch("vtsearch.datasets.ingest._media_type_from_origin", return_value="image"),
+            patch("vtsearch.models.resolver.resolve_file_from_origin", return_value=img_path),
+            patch("vtsearch.models.resolver.embed_file", return_value=fake_embedding),
+        ):
+            result = _ingest_via_resolver(origin, entries, existing, noop_progress)
+
+        assert result == 1
+        assert 1 in existing
+        assert existing[1]["origin_name"] == "cat/test_001.jpg"
+        assert existing[1]["origin"] == origin
+        assert existing[1]["embedding"] is fake_embedding
+
+    def test_ingest_via_resolver_returns_neg1_for_unknown_media_type(self):
+        """_ingest_via_resolver returns -1 when media type can't be determined."""
+        from vtsearch.datasets.ingest import _ingest_via_resolver
+
+        origin = {"importer": "unknown_xyz", "params": {}}
+        entries = [{"origin": origin, "origin_name": "x", "md5": "m", "label": "good"}]
+
+        def noop_progress(status, message, current, total):
+            pass
+
+        result = _ingest_via_resolver(origin, entries, {}, noop_progress)
+        assert result == -1
+
     def test_ingest_with_folder_importer(self, tmp_path):
         """Ingest missing medias from a real folder origin."""
         import hashlib
