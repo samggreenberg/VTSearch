@@ -31,16 +31,21 @@ _BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
 
 
 def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
-    """Transcode video bytes to browser-playable MP4 using ffmpeg.
+    """Transcode video bytes to browser-playable MP4.
 
-    Returns the MP4 bytes on success, or ``None`` if ffmpeg is not available
-    or the transcoding fails.
+    Tries ffmpeg first (preserves audio, H.264 output).  Falls back to OpenCV
+    (video-only, MPEG-4 Part 2) so that videos are at least viewable when
+    ffmpeg is not installed.
+
+    Returns the MP4 bytes on success, or ``None`` if transcoding fails.
     """
     ext = Path(filename).suffix or ".avi"
     with tempfile.TemporaryDirectory() as tmpdir:
         src_path = Path(tmpdir) / f"input{ext}"
         dst_path = Path(tmpdir) / "output.mp4"
         src_path.write_bytes(src_bytes)
+
+        # --- Attempt 1: ffmpeg (best quality, preserves audio) -----------
         try:
             subprocess.run(
                 [
@@ -58,11 +63,50 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
                 check=True,
             )
         except FileNotFoundError:
-            return None
+            pass  # ffmpeg not installed — fall through to cv2
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            return None
-        if dst_path.exists() and dst_path.stat().st_size > 0:
-            return dst_path.read_bytes()
+            pass
+        else:
+            if dst_path.exists() and dst_path.stat().st_size > 0:
+                return dst_path.read_bytes()
+
+        # --- Attempt 2: OpenCV (video-only, no audio) --------------------
+        try:
+            import cv2  # noqa: PLC0415
+
+            cap = cv2.VideoCapture(str(src_path))
+            if not cap.isOpened():
+                return None
+            try:
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if fps <= 0:
+                    fps = 25.0
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                if w <= 0 or h <= 0:
+                    return None
+
+                fourcc = cv2.VideoWriter.fourcc(*"mp4v")
+                cv2_dst = Path(tmpdir) / "cv2_output.mp4"
+                writer = cv2.VideoWriter(str(cv2_dst), fourcc, fps, (w, h))
+                if not writer.isOpened():
+                    return None
+                try:
+                    while True:
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        writer.write(frame)
+                finally:
+                    writer.release()
+            finally:
+                cap.release()
+
+            if cv2_dst.exists() and cv2_dst.stat().st_size > 0:
+                return cv2_dst.read_bytes()
+        except Exception:
+            pass
+
     return None
 
 
