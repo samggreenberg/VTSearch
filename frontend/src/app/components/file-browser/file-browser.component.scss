@@ -1,0 +1,127 @@
+.file-browser-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-browser-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.file-browser-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-browser-browse-btn {
+  white-space: nowrap;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+}
+
+.file-browser-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-browser-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  background: var(--bg-hover);
+}
+
+.file-browser-crumb {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.8rem;
+
+  &:hover {
+    background: var(--bg-subtle);
+    text-decoration: underline;
+  }
+
+  &.active {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+}
+
+.file-browser-sep {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.file-browser-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.file-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.file-browser-dir .file-browser-name {
+  font-weight: 500;
+}
+
+.file-browser-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.file-browser-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-browser-size {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.file-browser-empty,
+.file-browser-error {
+  padding: 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.file-browser-error {
+  color: var(--color-bad);
+}

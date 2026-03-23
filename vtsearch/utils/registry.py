@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar
 
-FieldType = Literal["file", "folder", "url", "text", "password", "email", "select"]
+FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path"]
 
 __all__ = [
     "FieldType",
@@ -66,6 +66,7 @@ class PluginField:
     - ``"password"`` – Text input whose characters are masked.
     - ``"email"``    – Text input pre-validated as an e-mail address.
     - ``"select"``   – Drop-down; ``options`` must be populated.
+    - ``"server_path"`` – File-browser picker for server filesystem paths.
     """
 
     key: str

@@ -1,0 +1,71 @@
+<div class="file-browser-field">
+  <div class="file-browser-input-row">
+    <input
+      type="text"
+      class="form-input file-browser-input"
+      [(ngModel)]="inputValue"
+      (ngModelChange)="onInputChange()"
+      [placeholder]="placeholder"
+    />
+    <button
+      type="button"
+      class="btn btn--secondary file-browser-browse-btn"
+      (click)="browserOpen ? closeBrowser() : openBrowser()"
+      title="Browse server files"
+    >Browse</button>
+  </div>
+
+  @if (browserOpen) {
+    <div class="file-browser-panel">
+      <div class="file-browser-breadcrumbs">
+        <button
+          class="file-browser-crumb"
+          [class.active]="!currentPath"
+          (click)="loadDirectory('')"
+        >Root</button>
+        @for (crumb of breadcrumbs; track $index) {
+          <span class="file-browser-sep">/</span>
+          <button
+            class="file-browser-crumb"
+            [class.active]="$index === breadcrumbs.length - 1"
+            (click)="navigateBreadcrumb($index)"
+          >{{ crumb }}</button>
+        }
+      </div>
+
+      <div class="file-browser-list">
+        @if (loading) {
+          <div class="file-browser-empty">Loading...</div>
+        } @else if (error) {
+          <div class="file-browser-error">{{ error }}</div>
+        } @else {
+          @if (currentPath) {
+            <button class="file-browser-item file-browser-dir" (click)="goUp()">
+              <span class="file-browser-icon">&#x2B06;&#xFE0F;</span>
+              <span class="file-browser-name">..</span>
+            </button>
+          }
+          @for (dir of directories; track dir.path) {
+            <button class="file-browser-item file-browser-dir" (click)="enterDirectory(dir)">
+              <span class="file-browser-icon">&#x1F4C1;</span>
+              <span class="file-browser-name">{{ dir.name }}</span>
+            </button>
+          }
+          @for (file of files; track file.path) {
+            <button class="file-browser-item file-browser-file" (click)="selectFile(file)">
+              <span class="file-browser-icon">&#x1F4C4;</span>
+              <span class="file-browser-name">{{ file.name }}</span>
+              <span class="file-browser-size">{{ formatSize(file.size_bytes) }}</span>
+            </button>
+          }
+          @if (!loading && directories.length === 0 && files.length === 0 && !currentPath) {
+            <div class="file-browser-empty">No files or directories found.</div>
+          }
+          @if (!loading && directories.length === 0 && files.length === 0 && currentPath) {
+            <div class="file-browser-empty">Empty directory.</div>
+          }
+        }
+      </div>
+    </div>
+  }
+</div>
