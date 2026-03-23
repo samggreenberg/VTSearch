@@ -85,6 +85,9 @@ class TestApplyCustomMetadataMD5:
         count = apply_custom_metadata_md5(media_dict)
         assert count == 1
         assert media_dict[1]["md5"] == "provided_hash"
+        # md5 should be removed from custom_metadata to avoid duplicate display
+        assert "md5" not in media_dict[1]["custom_metadata"]
+        assert media_dict[1]["custom_metadata"]["title"] == "foo"
 
     def test_skips_when_no_custom_metadata(self):
         from vtsearch.datasets.loader import apply_custom_metadata_md5
@@ -128,9 +131,11 @@ class TestApplyCustomMetadataMD5:
         count = apply_custom_metadata_md5(media_dict)
         assert count == 2
         assert media_dict[1]["md5"] == "provided1"
+        assert "md5" not in media_dict[1]["custom_metadata"]
         assert media_dict[2]["md5"] == "calc2"
         assert media_dict[3]["md5"] == "calc3"
         assert media_dict[4]["md5"] == "provided4"
+        assert "md5" not in media_dict[4]["custom_metadata"]
 
     def test_skips_when_custom_metadata_md5_is_none(self):
         from vtsearch.datasets.loader import apply_custom_metadata_md5

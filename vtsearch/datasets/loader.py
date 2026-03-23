@@ -681,6 +681,7 @@ def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
         cm_md5 = cm.get("md5")
         if cm_md5:
             media["md5"] = cm_md5
+            del cm["md5"]
             count += 1
     return count
 
