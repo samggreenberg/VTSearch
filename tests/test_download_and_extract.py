@@ -262,3 +262,145 @@ class TestDownloadAndExtract:
         messages = [msg for _, msg in progress_calls]
         assert any("Starting MyDataset download" in m for m in messages)
         assert any("Extracting MyDataset" in m for m in messages)
+
+    def test_extraction_progress_has_total(self, tmp_path):
+        """Extraction progress reports current/total counts (not indeterminate 0/0)."""
+        from vtsearch.datasets import downloader as dl_module
+
+        staging = tmp_path / "staging_area"
+        staging.mkdir()
+        tar_path = _make_tar_gz(staging, arcname="data_dir")
+        progress_calls = []
+
+        def track_progress(status, msg, cur, tot):
+            progress_calls.append((status, msg, cur, tot))
+
+        data_dir = tmp_path / "data"
+
+        with (
+            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: tar_path.rename(dest),
+            ),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.tar.gz",
+                archive_name="test.tar.gz",
+                extract_to=data_dir / "extracted",
+                check_path=data_dir / "extracted" / "data_dir",
+                download_size_mb=1,
+                dataset_name="MyDataset",
+                on_progress=track_progress,
+            )
+
+        # Find extraction progress calls (not the initial 0/0 announcement)
+        extract_progress = [
+            (msg, cur, tot)
+            for _, msg, cur, tot in progress_calls
+            if "Extracting" in msg and tot > 0
+        ]
+        assert len(extract_progress) > 0, "Expected determinate extraction progress"
+        last_msg, last_cur, last_tot = extract_progress[-1]
+        assert last_cur == last_tot, "Final progress should show completion"
+
+
+class TestCaltech101ExtractionProgress:
+    """Caltech-101 inner tar extraction reports determinate progress."""
+
+    def test_inner_tar_reports_progress(self, tmp_path):
+        from vtsearch.datasets import downloader as dl_module
+
+        # Build a fake caltech-101.zip containing a nested tar.gz
+        inner_staging = tmp_path / "inner_staging" / "101_ObjectCategories"
+        inner_staging.mkdir(parents=True)
+        for i in range(5):
+            (inner_staging / f"img_{i}.jpg").write_bytes(b"fake")
+
+        inner_tar_path = tmp_path / "101_ObjectCategories.tar.gz"
+        with tarfile.open(inner_tar_path, "w:gz") as tf:
+            tf.add(inner_staging, arcname="101_ObjectCategories")
+
+        outer_zip_path = tmp_path / "caltech-101.zip"
+        with zipfile.ZipFile(outer_zip_path, "w") as zf:
+            # Real zip extracts to DATA_DIR; inner tar must land under caltech-101/
+            zf.write(inner_tar_path, "caltech-101/101_ObjectCategories.tar.gz")
+
+        progress_calls = []
+
+        def track(status, msg, cur, tot):
+            progress_calls.append((status, msg, cur, tot))
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+
+        with (
+            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module, "IMAGE_DIR", data_dir / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: __import__("shutil").copy(str(outer_zip_path), str(dest)),
+            ),
+        ):
+            result = dl_module.download_caltech101(on_progress=track)
+
+        assert result.exists()
+
+        # The inner tar extraction should report determinate progress
+        inner_progress = [
+            (msg, cur, tot)
+            for _, msg, cur, tot in progress_calls
+            if "Extracting 101_ObjectCategories" in msg and tot > 0
+        ]
+        assert len(inner_progress) > 0, "Inner tar extraction should report progress with total"
+        last_msg, last_cur, last_tot = inner_progress[-1]
+        assert last_cur == last_tot
+
+
+class TestBbcNewsExtractionProgress:
+    """BBC News zip extraction reports determinate progress."""
+
+    def test_zip_reports_progress(self, tmp_path):
+        from vtsearch.datasets import downloader as dl_module
+
+        # Build a fake BBC News zip
+        zip_path = tmp_path / "bbc-news.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for cat in ("business", "entertainment", "politics", "sport", "tech"):
+                for i in range(3):
+                    zf.writestr(f"bbc/{cat}/{i:03d}.txt", f"Article {cat} {i}")
+
+        progress_calls = []
+
+        def track(status, msg, cur, tot):
+            progress_calls.append((status, msg, cur, tot))
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+
+        with (
+            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module, "IMAGE_DIR", data_dir / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: __import__("shutil").copy(str(zip_path), str(dest)),
+            ),
+        ):
+            result = dl_module.download_bbc_news(on_progress=track)
+
+        # download_bbc_news returns a dict of category -> articles
+        assert isinstance(result, dict)
+        assert len(result) > 0
+
+        # The zip extraction should report determinate progress
+        extract_progress = [
+            (msg, cur, tot)
+            for _, msg, cur, tot in progress_calls
+            if "Extracting BBC News dataset" in msg and tot > 0
+        ]
+        assert len(extract_progress) > 0, "BBC News extraction should report progress with total"
+        last_msg, last_cur, last_tot = extract_progress[-1]
+        assert last_cur == last_tot
