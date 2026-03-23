@@ -237,7 +237,7 @@ class TestProcessorImporterRegistry:
     def test_each_importer_fields_are_valid(self):
         from vtsearch.processors.importers import list_processor_importers
 
-        valid_types = ("file", "text", "password", "select")
+        valid_types = ("file", "text", "password", "select", "server_path")
         for imp in list_processor_importers():
             for f in imp.fields:
                 assert f.key, f"{imp.name} has a field without a key"
@@ -273,7 +273,7 @@ class TestServerFileProcessorImporter:
     def test_has_filepath_field(self):
         fields = {f.key: f for f in self._get_importer().fields}
         assert "filepath" in fields
-        assert fields["filepath"].field_type == "text"
+        assert fields["filepath"].field_type == "server_path"
 
     def test_run_with_valid_file(self, tmp_path):
         payload = {
@@ -628,6 +628,6 @@ class TestLabelImporterFieldMetadata:
                 assert "field_type" in field, (
                     f"Label importer '{entry['name']}' field '{field.get('key', '?')}' missing field_type"
                 )
-                assert field["field_type"] in ("file", "text", "password", "select"), (
+                assert field["field_type"] in ("file", "text", "password", "select", "server_path"), (
                     f"Label importer '{entry['name']}' field '{field.get('key', '?')}' has unknown field_type"
                 )

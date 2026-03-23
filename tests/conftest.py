@@ -25,6 +25,7 @@ _TEST_GROUPS = {
         "test_api_contracts",
         "test_error_recovery",
         "test_dashboard",
+        "test_file_browser",
         "test_path_validation",
         "test_multi_user_security",
         "test_multi_user_dataset_access",
