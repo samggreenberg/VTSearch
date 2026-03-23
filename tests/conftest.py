@@ -58,6 +58,8 @@ _TEST_GROUPS = {
         "test_export_options",
         "test_importers",
         "test_label_importers",
+        "test_label_import_endpoint",
+        "test_label_import_ingestion",
         "test_labels",
         "test_processor_importers",
         "test_pdf_import",
