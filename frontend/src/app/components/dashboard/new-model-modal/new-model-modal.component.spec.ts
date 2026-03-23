@@ -22,8 +22,8 @@ describe('NewModelModalComponent', () => {
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
-        { type_id: 'audio', name: 'Audio' },
-        { type_id: 'image', name: 'Image' },
+        { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Sounds' },
+        { type_id: 'image', name: 'Image', icon: 'image', tab_title: 'Images' },
       ],
     });
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
@@ -116,6 +116,12 @@ describe('NewModelModalComponent', () => {
     );
 
     expect(component.error).toBe('Model already exists');
+  });
+
+  it('should return media type icon', () => {
+    expect(component.getMediaTypeIcon('audio')).toBe('audio');
+    expect(component.getMediaTypeIcon('image')).toBe('image');
+    expect(component.getMediaTypeIcon('unknown')).toBe('');
   });
 
   it('should emit closed on close', () => {

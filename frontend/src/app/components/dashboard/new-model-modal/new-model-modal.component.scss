@@ -242,3 +242,72 @@
   font-size: 0.85rem;
   flex-shrink: 0;
 }
+
+// Custom select dropdown (supports icons inside options)
+.custom-select {
+  position: relative;
+}
+
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  background: var(--bg-input, var(--bg-subtle));
+}
+
+.select-option-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.select-arrow {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: transform 0.15s;
+
+  .custom-select.open & {
+    transform: rotate(180deg);
+  }
+}
+
+.custom-select-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin-top: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary, var(--bg-subtle));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-size: inherit;
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.selected {
+    background: var(--bg-active, var(--bg-hover));
+    font-weight: 600;
+  }
+}
