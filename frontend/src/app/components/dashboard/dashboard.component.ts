@@ -518,7 +518,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
-    return 'Label the selected dataset to train the selected model';
+    return 'Open Train Mode with the selected dataset and model';
   }
 
   private storeSelectedModelTextQuery(): void {
