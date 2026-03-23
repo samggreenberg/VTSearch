@@ -110,6 +110,44 @@ def download_file_with_progress(
             on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
 
 
+_GZIP_MAGIC = b"\x1f\x8b"
+_ZIP_MAGIC = b"PK"
+# Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
+# but a simpler heuristic is that the file does NOT start with common
+# non-archive signatures (HTML, JSON, plain text error pages).
+_HTML_SIGNATURES = (b"<", b"<!",  b"{", b"UC")
+
+
+def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) -> None:
+    """Check that a downloaded file looks like a genuine archive.
+
+    Deletes the file and raises ``RuntimeError`` with a user-friendly
+    message when the content does not match the expected format.
+    """
+    suffix = archive_name.lower()
+    try:
+        header = archive_path.read_bytes()[:4]
+    except OSError:
+        return  # file vanished – let the caller deal with it
+
+    ok = True
+    if suffix.endswith((".tar.gz", ".tgz")):
+        ok = header[:2] == _GZIP_MAGIC
+    elif suffix.endswith(".zip"):
+        ok = header[:2] == _ZIP_MAGIC
+    elif suffix.endswith(".tar"):
+        # For plain tar we just check it doesn't look like HTML/text
+        ok = not any(header.startswith(sig) for sig in _HTML_SIGNATURES)
+
+    if not ok:
+        archive_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Failed to download {dataset_name}: the server returned an invalid file "
+            f"instead of the expected archive. This usually means the download URL is "
+            f"temporarily unavailable or has changed. Please try again later."
+        )
+
+
 def _download_and_extract(
     *,
     url: str,
@@ -146,6 +184,11 @@ def _download_and_extract(
     if not archive_path.exists():
         on_progress("downloading", f"Starting {dataset_name} download...", 0, 0)
         download_file_with_progress(url, archive_path, download_size_mb * 1024 * 1024, on_progress)
+
+    # Validate the downloaded file looks like a real archive before trying
+    # to extract it.  A common failure mode is the server returning an HTML
+    # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
+    _validate_archive(archive_path, archive_name, dataset_name)
 
     on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
     extract_to.mkdir(parents=True, exist_ok=True)
