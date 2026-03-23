@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ImporterInfo } from '../../../models/api.models';
@@ -29,7 +30,7 @@ type ModalView = 'prompt' | 'media-picker';
 @Component({
   selector: 'vt-resort-prompt-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './resort-prompt-modal.component.html',
   styleUrl: './resort-prompt-modal.component.scss',
 })

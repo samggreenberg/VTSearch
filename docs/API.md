@@ -34,10 +34,6 @@ Endpoints for embedders, clippers, and converters are under
 [Datasets](#datasets). Indicator score history and evaluation endpoints
 are under [Labeling Progress](#labeling-progress).
 
-Endpoints for embedders, clippers, and converters are under
-[Datasets](#datasets). Indicator score history and evaluation endpoints
-are under [Labeling Progress](#labeling-progress).
-
 ---
 
 ## Conventions

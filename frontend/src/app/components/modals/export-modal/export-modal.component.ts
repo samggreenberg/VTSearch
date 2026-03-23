@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -23,7 +24,7 @@ export interface ColumnDef {
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -401,6 +402,20 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         this.status = '';
       },
     });
+  }
+
+  /** Map an exporter's emoji icon to an SVG icon type. */
+  getExporterIconType(exp: ExporterInfo): string {
+    const icon = exp.icon || '';
+    if (icon === '📧' || icon.includes('📧')) return 'email';
+    if (icon === '🖥️' || icon === '\uD83D\uDDA5' || icon === '\uD83D\uDDA5\uFE0F') return 'server';
+    if (icon === '🌐' || icon === '\uD83C\uDF10') return 'webhook';
+    // Also match by name as fallback
+    const name = (exp.name || '').toLowerCase();
+    if (name.includes('email') || name.includes('smtp')) return 'email';
+    if (name.includes('webhook')) return 'webhook';
+    if (name.includes('server') || name.includes('file')) return 'server';
+    return 'upload';
   }
 
   close(): void {

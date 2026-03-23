@@ -8,7 +8,7 @@
       } @else {
         @for (imp of importers; track imp.name) {
           <button class="importer-card" (click)="selectImporter(imp)">
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon">{{ imp.icon }}</span> }{{ imp.display_name || imp.name }}</span>
+            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
               <span class="importer-desc">{{ imp.description }}</span>
             }

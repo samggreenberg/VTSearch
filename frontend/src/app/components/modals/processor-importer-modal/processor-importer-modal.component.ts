@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import { IconComponent } from '../../icon/icon.component';
 import { ProcessorImportersApiService } from '../../../services/processor-importers-api.service';
 import { ImporterField } from '../../../models/api.models';
 
@@ -20,7 +21,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-processor-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
   templateUrl: './processor-importer-modal.component.html',
   styleUrl: './processor-importer-modal.component.scss',
 })
