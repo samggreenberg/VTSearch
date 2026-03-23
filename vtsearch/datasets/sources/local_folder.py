@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterator
 
@@ -40,13 +41,13 @@ class LocalFolderSource(MediaSource):
 
         ext_set = {e.lower() for e in extensions} if extensions else None
 
-        for file_path in sorted(self._folder.rglob("*")):
-            if not file_path.is_file():
-                continue
-            if ext_set is not None and file_path.suffix.lower() not in ext_set:
-                continue
+        for dirpath, _dirnames, filenames in os.walk(self._folder, followlinks=True):
+            for fname in sorted(filenames):
+                file_path = Path(dirpath) / fname
+                if ext_set is not None and file_path.suffix.lower() not in ext_set:
+                    continue
 
-            key = file_path.relative_to(self._folder).as_posix()
+                key = file_path.relative_to(self._folder).as_posix()
             yield MediaItem(
                 key=key,
                 filename=file_path.name,
