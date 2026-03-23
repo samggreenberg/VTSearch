@@ -20,7 +20,7 @@
           <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen">
             <span class="select-option-content">
               @if (getMediaTypeIcon(mediaType)) {
-                <vt-icon [type]="getMediaTypeIcon(mediaType)" size="14"></vt-icon>
+                <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
               }
               <span>{{ getMediaTypeLabel(mediaType) }}</span>
             </span>
@@ -31,7 +31,7 @@
               @for (mt of mediaTypes; track mt) {
                 <button type="button" class="custom-select-option" [class.selected]="mt === mediaType" (click)="mediaType = mt; mediaTypeDropdownOpen = false">
                   @if (getMediaTypeIcon(mt)) {
-                    <vt-icon [type]="getMediaTypeIcon(mt)" size="14"></vt-icon>
+                    <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
                   }
                   <span>{{ getMediaTypeLabel(mt) }}</span>
                 </button>
