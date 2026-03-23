@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,45 @@ from vtsearch.utils import (
 )
 
 medias_bp = Blueprint("medias", __name__)
+
+# Extensions the browser's <video> element can play natively.
+_BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
+
+
+def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
+    """Transcode video bytes to browser-playable MP4 using ffmpeg.
+
+    Returns the MP4 bytes on success, or ``None`` if ffmpeg is not available
+    or the transcoding fails.
+    """
+    ext = Path(filename).suffix or ".avi"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = Path(tmpdir) / f"input{ext}"
+        dst_path = Path(tmpdir) / "output.mp4"
+        src_path.write_bytes(src_bytes)
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(src_path),
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "23",
+                    "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    str(dst_path),
+                ],
+                capture_output=True,
+                timeout=120,
+                check=True,
+            )
+        except FileNotFoundError:
+            return None
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+        if dst_path.exists() and dst_path.stat().st_size > 0:
+            return dst_path.read_bytes()
+    return None
 
 
 def _resolve_bytes(media: dict) -> bytes | None:
@@ -148,22 +189,50 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
     if c.get("type") != "video":
         return jsonify({"error": "not a video"}), 400
 
+    filename = c.get("filename", "")
+    ext = Path(filename).suffix.lower() if filename else ".mp4"
+
+    # For browser-incompatible formats (e.g. .avi), transcode to MP4 and
+    # cache the result so subsequent requests are instant.
+    if ext not in _BROWSER_VIDEO_EXTS:
+        cached = c.get("_transcoded_mp4")
+        if cached is not None:
+            return send_file(
+                io.BytesIO(cached),
+                mimetype="video/mp4",
+                download_name=f"media_{media_id}.mp4",
+            )
+
+        media_bytes = _resolve_bytes(c)
+        if media_bytes is None:
+            return jsonify({"error": "media not available"}), 404
+
+        transcoded = _transcode_to_mp4(media_bytes, filename)
+        if transcoded is not None:
+            c["_transcoded_mp4"] = transcoded
+            return send_file(
+                io.BytesIO(transcoded),
+                mimetype="video/mp4",
+                download_name=f"media_{media_id}.mp4",
+            )
+        # ffmpeg unavailable — serve raw bytes as best-effort fallback
+        return send_file(
+            io.BytesIO(media_bytes),
+            mimetype="video/mp4",
+            download_name=f"media_{media_id}{ext}",
+        )
+
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
         return jsonify({"error": "media not available"}), 404
 
-    # Determine mimetype based on filename extension
-    filename = c.get("filename", "")
-    if filename.endswith(".webm"):
+    if ext == ".webm":
         mimetype = "video/webm"
-    elif filename.endswith(".mov"):
-        mimetype = "video/quicktime"
-    elif filename.endswith(".avi"):
-        mimetype = "video/x-msvideo"
+    elif ext in (".ogg", ".ogv"):
+        mimetype = "video/ogg"
     else:
         mimetype = "video/mp4"
 
-    ext = Path(filename).suffix if filename else ".mp4"
     return send_file(
         io.BytesIO(media_bytes),
         mimetype=mimetype,
