@@ -656,27 +656,27 @@ def compute_labeling_status(
         }
     else:
         level = span_info["level"]
-        total = span_info["depth"]  # total nodes
-        green_at = min(SPAN_GREEN, total)
+        tree_total = span_info["depth"]  # total nodes
+        green_at = min(SPAN_GREEN, tree_total)
         yellow_at = min(SPAN_YELLOW, green_at)
-        if total <= 0:
+        if tree_total <= 0:
             span = {"status": "green", "reason": "Degenerate tree.", **span_info}
         elif level >= green_at:
             span = {
                 "status": "green",
-                "reason": "All tree nodes covered." if level >= total else f"{level}/{total} nodes covered.",
+                "reason": "All tree nodes covered." if level >= tree_total else f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
         elif level >= yellow_at:
             span = {
                 "status": "yellow",
-                "reason": f"{level}/{total} nodes covered.",
+                "reason": f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
         else:
             span = {
                 "status": "red",
-                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
+                "reason": "No tree coverage yet." if level == 0 else f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
 

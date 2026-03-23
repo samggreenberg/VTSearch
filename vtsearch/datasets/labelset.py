@@ -230,10 +230,9 @@ def _clip_to_elements(
     if expand_dupes and isinstance(origin, dict) and origin.get("importer") == "dupe_set":
         members = origin.get("members", [])
         if members:
-            md5 = media["md5"]
             return [
                 LabeledElement(
-                    md5=md5,
+                    md5=m.get("md5", media["md5"]),
                     label=label,
                     origin=m.get("origin"),
                     origin_name=m.get("origin_name", m.get("filename", "")),

@@ -104,7 +104,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.exportersApi.getExporters().subscribe({
+    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
         this.exporters = list.filter((e) => !e.hidden_from_picker);
         this.loading = false;
@@ -115,7 +115,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.sortingApi.exportLabels(false, { enrich: true }).subscribe({
+    this.sortingApi.exportLabels(false, { enrich: true }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (data) => {
         this.labels = data.labels || [];
         this.labelsLoaded = true;
