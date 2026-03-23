@@ -236,8 +236,17 @@
   flex-shrink: 0;
 }
 
-.entry-size {
+.entry-date {
   margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.entry-size {
+  margin-left: 0;
+  padding-left: 0.5rem;
   color: var(--text-muted);
   font-size: 0.85rem;
   flex-shrink: 0;

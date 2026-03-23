@@ -119,3 +119,17 @@ def get_request_field(key: str, has_file_fields: bool) -> str:
     if has_file_fields:
         return request.form.get(key, "")
     return (request.get_json(force=True, silent=True) or {}).get(key, "")
+
+
+def format_mtime(entry) -> str:
+    """Return the file/directory modification time as an ISO-8601 string.
+
+    *entry* should be a :class:`pathlib.Path`.  Returns ``""`` on error.
+    """
+    import datetime
+
+    try:
+        ts = entry.stat().st_mtime
+        return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    except OSError:
+        return ""

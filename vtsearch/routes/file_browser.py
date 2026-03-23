@@ -16,6 +16,8 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from vtsearch.routes.helpers import format_mtime
+
 import vtsearch.utils.paths as _paths
 
 file_browser_bp = Blueprint("file_browser", __name__)
@@ -98,7 +100,7 @@ def browse():
             continue
         rel = str(entry.relative_to(root))
         if entry.is_dir():
-            directories.append({"name": entry.name, "path": rel})
+            directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})
         elif entry.is_file():
             if allowed_exts is not None and entry.suffix.lower() not in allowed_exts:
                 continue
@@ -106,7 +108,7 @@ def browse():
                 size = entry.stat().st_size
             except OSError:
                 size = 0
-            files.append({"name": entry.name, "path": rel, "size_bytes": size})
+            files.append({"name": entry.name, "path": rel, "size_bytes": size, "modified_at": format_mtime(entry)})
 
     current_path = str(target.relative_to(root)) if target != root else ""
 

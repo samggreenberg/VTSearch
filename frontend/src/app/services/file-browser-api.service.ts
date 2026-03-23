@@ -6,6 +6,7 @@ export interface BrowseEntry {
   name: string;
   path: string;
   size_bytes?: number;
+  modified_at?: string;
 }
 
 export interface BrowseResponse {
