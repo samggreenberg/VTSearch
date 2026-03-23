@@ -48,11 +48,11 @@ class LocalFolderSource(MediaSource):
                     continue
 
                 key = file_path.relative_to(self._folder).as_posix()
-            yield MediaItem(
-                key=key,
-                filename=file_path.name,
-                source_name=self.name,
-            )
+                yield MediaItem(
+                    key=key,
+                    filename=file_path.name,
+                    source_name=self.name,
+                )
 
     def fetch_item(self, key: str) -> Path | None:
         """Return the file path for *key* (a relative path within the folder).
