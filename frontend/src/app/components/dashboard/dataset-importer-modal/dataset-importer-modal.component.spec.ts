@@ -63,8 +63,8 @@ describe('DatasetImporterModalComponent', () => {
   ];
 
   const mockMediaTypes = [
-    { type_id: 'audio', name: 'Audio', icon: '\uD83C\uDFB5', tab_title: 'Audio' },
-    { type_id: 'images', name: 'Images', icon: '\uD83D\uDDBC\uFE0F', tab_title: 'Images' },
+    { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Audio' },
+    { type_id: 'images', name: 'Images', icon: 'image', tab_title: 'Images' },
   ];
 
   beforeEach(async () => {

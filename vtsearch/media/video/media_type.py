@@ -45,7 +45,7 @@ class VideoMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "🎬"
+        return "video"
 
     # ------------------------------------------------------------------
     # File import

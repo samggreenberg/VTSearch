@@ -5,17 +5,21 @@ import { CommonModule } from '@angular/common';
  * Maps emoji strings (from backend or hardcoded) to an SVG icon type.
  * Falls back to a generic "file" icon for unrecognised values.
  */
+const KNOWN_TYPES = new Set([
+  'audio', 'image', 'file-text', 'video', 'document',
+  'server', 'globe', 'email', 'satellite',
+  'folder', 'folder-open', 'upload',
+  'graduation', 'arrow-up', 'shuffle', 'elephant', 'cloud',
+  'check', 'warning', 'x-circle', 'info', 'file',
+]);
+
 function emojiToType(icon: string): string {
   if (!icon) return '';
+  // Pass through known SVG type names directly
+  if (KNOWN_TYPES.has(icon)) return icon;
   // Normalise: strip variation selectors (U+FE0E, U+FE0F)
   const norm = icon.replace(/[\uFE0E\uFE0F]/g, '');
   const map: Record<string, string> = {
-    // Media types
-    '\uD83D\uDD0A': 'audio',       // 🔊
-    '\uD83D\uDDBC': 'image',       // 🖼
-    '\uD83D\uDCC4': 'file-text',   // 📄
-    '\uD83C\uDFAC': 'video',       // 🎬
-    '\uD83D\uDCD1': 'document',    // 📑
     // Infrastructure
     '\uD83D\uDDA5': 'server',      // 🖥
     '\uD83C\uDF10': 'globe',       // 🌐

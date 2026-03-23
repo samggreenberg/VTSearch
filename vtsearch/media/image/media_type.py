@@ -48,7 +48,7 @@ class ImageMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "🖼️"
+        return "image"
 
     # ------------------------------------------------------------------
     # File import

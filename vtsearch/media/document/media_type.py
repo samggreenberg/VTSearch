@@ -51,7 +51,7 @@ class DocumentMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "📑"
+        return "document"
 
     # ------------------------------------------------------------------
     # File import

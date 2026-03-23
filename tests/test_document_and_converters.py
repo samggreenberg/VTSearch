@@ -103,7 +103,7 @@ class TestDocumentMediaType:
 
     def test_icon(self):
         mt = DocumentMediaType()
-        assert mt.icon == "📑"
+        assert mt.icon == "document"
 
     def test_file_extensions(self):
         mt = DocumentMediaType()
