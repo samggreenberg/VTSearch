@@ -59,6 +59,28 @@ class TestLocalFolderSource:
         assert "b.mp3" not in keys
         assert "sub/d.txt" not in keys
 
+    def test_list_items_follows_symlinked_directories(self, tmp_path):
+        """Files inside symlinked subdirectories must be discovered."""
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"audio_a")
+
+        # Create an external directory with media files.
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "b.wav").write_bytes(b"audio_b")
+        (external / "c.mp3").write_bytes(b"audio_c")
+
+        # Symlink external into root.
+        (root / "linked").symlink_to(external)
+
+        source = LocalFolderSource(root)
+        items = list(source.list_items())
+        keys = {i.key for i in items}
+        assert "a.wav" in keys
+        assert "linked/b.wav" in keys
+        assert "linked/c.mp3" in keys
+
     def test_list_items_empty_folder(self, tmp_path):
         empty = tmp_path / "empty"
         empty.mkdir()

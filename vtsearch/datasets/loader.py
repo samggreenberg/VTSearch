@@ -23,6 +23,7 @@ from PIL import Image
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets.config import DEMO_DATASETS
+from vtsearch.utils.paths import rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -530,7 +531,7 @@ def load_dataset_from_folder(
     # subdirectory structures are preserved).
     media_files = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.rglob(ext))
+        media_files.extend(rglob_follow_symlinks(folder_path, ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -767,7 +768,7 @@ def load_dataset_from_folder_chunked(
     # subdirectory structures are preserved).
     media_files: list[Path] = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.rglob(ext))
+        media_files.extend(rglob_follow_symlinks(folder_path, ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")

@@ -23,6 +23,7 @@ from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
+from vtsearch.utils.paths import rglob_follow_symlinks
 
 
 def _load_pdf_images(
@@ -38,7 +39,7 @@ def _load_pdf_images(
     maximum.  The ``origin`` is set to ``{"importer": "pdf", "params":
     {"path": ...}}`` so the provenance points back to the source document.
     """
-    pdf_files = sorted(folder.rglob("*.pdf"))
+    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf"))
     if not pdf_files:
         return
 

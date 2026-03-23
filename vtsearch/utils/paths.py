@@ -7,6 +7,8 @@ for server-file importers and exporters.
 
 from __future__ import annotations
 
+import fnmatch
+import os
 from pathlib import Path
 
 
@@ -71,3 +73,19 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
         )
 
     return resolved
+
+
+def rglob_follow_symlinks(root: Path, pattern: str) -> list[Path]:
+    """Like ``Path.rglob(pattern)`` but follows symlinks into directories.
+
+    ``Path.rglob()`` does not descend into symlinked directories, which means
+    media files inside symlinked sub-folders are silently skipped during
+    dataset import.  This helper uses :func:`os.walk` with
+    ``followlinks=True`` to ensure symlinked directory trees are traversed.
+    """
+    results: list[Path] = []
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
+        for filename in filenames:
+            if fnmatch.fnmatch(filename, pattern):
+                results.append(Path(dirpath) / filename)
+    return results

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.converters import get_converter
+from vtsearch.utils.paths import rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -105,7 +106,7 @@ def run_converters_on_folder(
         # Scan folder for source files.
         source_files: list[Path] = []
         for ext in source_mt.file_extensions:
-            source_files.extend(folder_path.rglob(ext))
+            source_files.extend(rglob_follow_symlinks(folder_path, ext))
         source_files.sort()
 
         if not source_files:

@@ -532,6 +532,41 @@ class TestRunConvertersOnFolder:
 
         assert medias == {}
 
+    def test_converter_follows_symlinked_directories(self, tmp_path):
+        """Source files in a symlinked subdirectory must be discovered."""
+        from vtsearch.converters.runner import run_converters_on_folder
+
+        root = tmp_path / "root"
+        root.mkdir()
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "clip.mp4").write_bytes(b"fake-video-data")
+
+        (root / "linked").symlink_to(external)
+
+        fake_embedding = np.ones(768, dtype=np.float32)
+        mock_converter = self._mock_video2image_converter()
+
+        medias: dict = {}
+        with (
+            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
+            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=root,
+                converter_names=["video2image"],
+                target_media_type="images",
+                medias=medias,
+                on_progress=lambda *a: None,
+                base_origin={"importer": "folder", "params": {"path": str(root), "media_type": "images"}},
+            )
+
+        assert len(medias) == 1
+        media = medias[1]
+        assert media["origin"]["params"]["source_file"] == "linked/clip.mp4"
+
 
 # ===========================================================================
 # _embed_converted_output and _compute_md5

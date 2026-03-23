@@ -1191,3 +1191,114 @@ class TestSymlinkedImporterDiscovery:
             for key in list(sys.modules):
                 if "symlink_test_pkg" in key:
                     del sys.modules[key]
+
+
+class TestRglobFollowSymlinks:
+    """rglob_follow_symlinks should descend into symlinked directories."""
+
+    def test_finds_files_through_symlinked_directory(self, tmp_path):
+        from vtsearch.utils.paths import rglob_follow_symlinks
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"a")
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "b.wav").write_bytes(b"b")
+
+        (root / "linked").symlink_to(external)
+
+        results = rglob_follow_symlinks(root, "*.wav")
+        names = {p.name for p in results}
+        assert "a.wav" in names
+        assert "b.wav" in names
+
+    def test_no_matches_returns_empty(self, tmp_path):
+        from vtsearch.utils.paths import rglob_follow_symlinks
+
+        root = tmp_path / "empty"
+        root.mkdir()
+        assert rglob_follow_symlinks(root, "*.wav") == []
+
+
+class TestSymlinkedFolderImport:
+    """load_dataset_from_folder must discover files inside symlinked subdirs."""
+
+    def _write_wav(self, path):
+        path.write_bytes(_make_wav_bytes())
+
+    def _make_fake_media_type(self):
+        import unittest.mock as mock
+
+        import numpy as np
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.embed_media.return_value = np.zeros(3)
+        mt.load_media_data.return_value = {"duration": 1.0}
+        mt._mock_embedder = mock.MagicMock()
+        mt._mock_embedder.name = "clap"
+        mt._mock_embedder.media_type_id = "audio"
+        mt._mock_embedder._model = True
+        mt._mock_embedder.embed_media.return_value = np.zeros(3)
+        return mt
+
+    def _patch_media_registry(self, mt):
+        import unittest.mock as mock
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        return stack
+
+    def test_load_dataset_from_folder_follows_symlinks(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        root = tmp_path / "root"
+        root.mkdir()
+        self._write_wav(root / "a.wav")
+
+        external = tmp_path / "external"
+        external.mkdir()
+        self._write_wav(external / "b.wav")
+
+        (root / "linked").symlink_to(external)
+
+        mt = self._make_fake_media_type()
+        medias: dict = {}
+        with self._patch_media_registry(mt):
+            load_dataset_from_folder(root, "sounds", medias, on_progress=lambda *a: None)
+
+        filenames = {m["filename"] for m in medias.values()}
+        assert "a.wav" in filenames
+        assert "linked/b.wav" in filenames
+
+    def test_load_dataset_from_folder_chunked_follows_symlinks(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        root = tmp_path / "root"
+        root.mkdir()
+        self._write_wav(root / "a.wav")
+
+        external = tmp_path / "external"
+        external.mkdir()
+        self._write_wav(external / "b.wav")
+
+        (root / "linked").symlink_to(external)
+
+        mt = self._make_fake_media_type()
+        with self._patch_media_registry(mt):
+            chunks = list(load_dataset_from_folder_chunked(
+                root, "sounds", chunk_size=10, on_progress=lambda *a: None,
+            ))
+
+        all_medias = {}
+        for chunk in chunks:
+            all_medias.update(chunk)
+
+        filenames = {m["filename"] for m in all_medias.values()}
+        assert "a.wav" in filenames
+        assert "linked/b.wav" in filenames
