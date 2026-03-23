@@ -55,6 +55,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() autopilotEnabled = true;
   /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
   @Input() panelMode: 'label' | 'find' = 'label';
+  /** Disable all interaction (used during Find scoring). */
+  @Input() disabled = false;
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();

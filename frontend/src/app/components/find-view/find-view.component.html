@@ -21,6 +21,7 @@
       [loadSortLabel]="sortState.loadSortLabel"
       [textQuery]="sortState.textQuery"
       [panelMode]="'find'"
+      [disabled]="sortState.sortBusy"
       [autopilotCollapsed]="false"
       [autopilotEnabled]="false"
       (mediaSelect)="onMediaSelect($event)"
