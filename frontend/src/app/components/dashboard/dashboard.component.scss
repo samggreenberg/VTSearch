@@ -85,6 +85,10 @@
   overflow: auto;
 }
 
+.table-fixed {
+  table-layout: fixed;
+}
+
 .dash-table {
   width: 100%;
   border-collapse: collapse;
@@ -112,6 +116,7 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     user-select: none;
+    overflow: hidden;
 
     &.sortable {
       cursor: pointer;
@@ -129,6 +134,32 @@
 
       &.active {
         visibility: visible;
+      }
+    }
+
+    .col-resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 5px;
+      cursor: col-resize;
+      z-index: 2;
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 20%;
+        bottom: 20%;
+        right: 0;
+        width: 2px;
+        background: var(--accent, #5b8fff);
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+
+      &:hover::after {
+        opacity: 0.5;
       }
     }
   }
