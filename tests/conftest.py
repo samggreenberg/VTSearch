@@ -27,6 +27,7 @@ _TEST_GROUPS = {
         "test_dashboard",
         "test_path_validation",
         "test_multi_user_security",
+        "test_multi_user_dataset_access",
         "test_ssrf_validation",
     ],
     "sorting": [
@@ -48,6 +49,7 @@ _TEST_GROUPS = {
         "test_chunked_loading",
         "test_memory_errors",
         "test_pickle_safety",
+        "test_media_sources",
     ],
     "io": [
         "test_exporters",
