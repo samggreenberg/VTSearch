@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, make_response, request, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
@@ -78,6 +78,42 @@ def _resolve_bytes(media: dict) -> bytes | None:
             with open(p, "rb") as f:
                 return f.read()
     return None
+
+
+def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Response:
+    """Serve video bytes with HTTP range-request support.
+
+    Browsers require range requests to read video metadata (duration, codecs)
+    and to support seeking.  Without this, ``<video>`` elements show "0:00".
+    """
+    total = len(data)
+    range_header = request.headers.get("Range")
+
+    if range_header:
+        # Parse "bytes=START-END" (END is optional)
+        try:
+            byte_range = range_header.replace("bytes=", "").strip()
+            parts = byte_range.split("-", 1)
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else total - 1
+        except (ValueError, IndexError):
+            start, end = 0, total - 1
+
+        end = min(end, total - 1)
+        length = end - start + 1
+
+        resp = make_response(data[start : end + 1])
+        resp.status_code = 206
+        resp.headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        resp.headers["Content-Length"] = str(length)
+    else:
+        resp = make_response(data)
+        resp.headers["Content-Length"] = str(total)
+
+    resp.headers["Content-Type"] = mimetype
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Disposition"] = f'inline; filename="{download_name}"'
+    return resp
 
 
 def _resolve_string(media: dict) -> str | None:
@@ -197,11 +233,7 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
     if ext not in _BROWSER_VIDEO_EXTS:
         cached = c.get("_transcoded_mp4")
         if cached is not None:
-            return send_file(
-                io.BytesIO(cached),
-                mimetype="video/mp4",
-                download_name=f"media_{media_id}.mp4",
-            )
+            return _send_video_bytes(cached, "video/mp4", f"media_{media_id}.mp4")
 
         media_bytes = _resolve_bytes(c)
         if media_bytes is None:
@@ -210,17 +242,9 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
         transcoded = _transcode_to_mp4(media_bytes, filename)
         if transcoded is not None:
             c["_transcoded_mp4"] = transcoded
-            return send_file(
-                io.BytesIO(transcoded),
-                mimetype="video/mp4",
-                download_name=f"media_{media_id}.mp4",
-            )
+            return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
         # ffmpeg unavailable — serve raw bytes as best-effort fallback
-        return send_file(
-            io.BytesIO(media_bytes),
-            mimetype="video/mp4",
-            download_name=f"media_{media_id}{ext}",
-        )
+        return _send_video_bytes(media_bytes, "video/mp4", f"media_{media_id}{ext}")
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
@@ -233,11 +257,7 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
     else:
         mimetype = "video/mp4"
 
-    return send_file(
-        io.BytesIO(media_bytes),
-        mimetype=mimetype,
-        download_name=f"media_{media_id}{ext}",
-    )
+    return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
