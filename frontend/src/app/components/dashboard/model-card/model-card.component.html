@@ -34,15 +34,15 @@
   }
   {{ capitalizeType(model.media_type) }}
 </td>
-<td class="text-right">{{ model.num_training ?? 0 }}</td>
-<td class="text-center">
+<td>{{ model.num_training ?? 0 }}</td>
+<td>
   @if (model.trainable) {
     <span class="check" aria-label="Trainable">&#10003;</span>
   } @else {
     <span class="dim">-</span>
   }
 </td>
-<td class="text-center">
+<td>
   <input
     type="checkbox"
     [checked]="model.autodetect"
@@ -54,7 +54,7 @@
 </td>
 <td>{{ formatDate(model.last_trained_at) }}</td>
 <td>{{ formatDate(model.created_at) }}</td>
-<td class="actions-cell text-center">
+<td class="actions-cell">
   <button class="edit-btn" (click)="startRename($event)" aria-label="Rename model" title="Rename">
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
