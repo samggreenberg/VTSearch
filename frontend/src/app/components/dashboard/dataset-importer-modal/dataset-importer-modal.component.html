@@ -38,7 +38,7 @@
               class="demo-tab"
               [class.active]="activeTab === tab"
               (click)="selectDemoTabWithEmbedder(tab)"
-            >{{ getTabLabel(tab) }}</button>
+            >@if (getTabIcon(tab)) {<vt-icon [icon]="getTabIcon(tab)" [size]="14"></vt-icon> }{{ getTabText(tab) }}</button>
           }
         </div>
 

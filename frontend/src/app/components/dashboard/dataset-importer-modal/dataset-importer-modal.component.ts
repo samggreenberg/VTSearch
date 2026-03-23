@@ -369,6 +369,19 @@ export class DatasetImporterModalComponent implements OnInit {
     return mediaType;
   }
 
+  getTabIcon(mediaType: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    return mt?.icon || '';
+  }
+
+  getTabText(mediaType: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    if (mt) {
+      return mt.tab_title || mt.name;
+    }
+    return mediaType;
+  }
+
   statusBadgeClass(status: string): string {
     if (status === 'ready') return 'badge-ready';
     if (status === 'needs_embedding') return 'badge-embedding';
