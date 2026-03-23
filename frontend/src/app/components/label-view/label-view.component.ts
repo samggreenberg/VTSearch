@@ -748,14 +748,26 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
     } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
+      const threshold = this.sortState.threshold!;
+      // Find the index where the threshold falls in the sorted (descending) list.
+      // This is the first position whose score is at or below the threshold.
+      let thresholdIndex = sortOrder.length;
+      for (let i = 0; i < sortOrder.length; i++) {
+        if (sortOrder[i].score <= threshold) {
+          thresholdIndex = i;
+          break;
+        }
+      }
+      // Pick the unlabeled item whose index is closest to the threshold index.
+      // This avoids biasing toward one side when scores cluster unevenly.
       let best: SortedItem | null = null;
       let bestDist = Infinity;
-      for (const s of sortOrder) {
-        if (isVoted(s.id)) continue;
-        const dist = Math.abs(s.score - this.sortState.threshold!);
+      for (let i = 0; i < sortOrder.length; i++) {
+        if (isVoted(sortOrder[i].id)) continue;
+        const dist = Math.abs(i - thresholdIndex);
         if (dist < bestDist) {
           bestDist = dist;
-          best = s;
+          best = sortOrder[i];
         }
       }
       if (best) this.mediaState.selectMedia(best.id);
