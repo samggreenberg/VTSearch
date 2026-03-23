@@ -57,7 +57,7 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedDemoClipper = '';
 
   // Server folder browser state
-  sfBrowseDirs: { name: string; path: string }[] = [];
+  sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
   sfBrowsePath = '';
   sfBrowseRootPath = '';
   sfBrowseLoading = false;
