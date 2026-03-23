@@ -27,6 +27,7 @@ function emojiToType(icon: string): string {
     '\uD83D\uDCE4': 'upload',      // 📤
     // Actions & misc
     '\uD83C\uDF93': 'graduation',  // 🎓
+    '\uD83D\uDDC4': 'database',     // 🗄
     '\u2B06': 'arrow-up',          // ⬆
     '\uD83D\uDD00': 'shuffle',     // 🔀
     '\uD83D\uDC18': 'elephant',    // 🐘
@@ -86,6 +87,9 @@ function emojiToType(icon: string): string {
       }
       @case ('upload') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      }
+      @case ('database') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
       }
       @case ('graduation') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10l-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/><line x1="22" y1="10" x2="22" y2="16"/></svg>
