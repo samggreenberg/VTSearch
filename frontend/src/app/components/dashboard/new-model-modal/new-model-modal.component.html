@@ -15,12 +15,30 @@
       </div>
 
       <div class="form-group">
-        <label for="model-media-type" title="The type of media this model will process">Media Type</label>
-        <select id="model-media-type" class="form-input" [(ngModel)]="mediaType" name="mediaType" title="The type of media this model will process">
-          @for (mt of mediaTypes; track mt) {
-            <option [value]="mt">{{ getMediaTypeLabel(mt) }}</option>
+        <label title="The type of media this model will process">Media Type</label>
+        <div class="custom-select" [class.open]="mediaTypeDropdownOpen" title="The type of media this model will process">
+          <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen">
+            <span class="select-option-content">
+              @if (getMediaTypeIcon(mediaType)) {
+                <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
+              }
+              <span>{{ getMediaTypeLabel(mediaType) }}</span>
+            </span>
+            <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+          </button>
+          @if (mediaTypeDropdownOpen) {
+            <div class="custom-select-options">
+              @for (mt of mediaTypes; track mt) {
+                <button type="button" class="custom-select-option" [class.selected]="mt === mediaType" (click)="mediaType = mt; mediaTypeDropdownOpen = false">
+                  @if (getMediaTypeIcon(mt)) {
+                    <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
+                  }
+                  <span>{{ getMediaTypeLabel(mt) }}</span>
+                </button>
+              }
+            </div>
           }
-        </select>
+        </div>
       </div>
 
       @if (hasMediaExample) {

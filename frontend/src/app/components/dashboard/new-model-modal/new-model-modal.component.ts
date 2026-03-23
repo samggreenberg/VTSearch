@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -41,6 +41,7 @@ export class NewModelModalComponent implements OnInit {
   mediaTypeInfos: MediaTypeInfo[] = [];
   submitting = false;
   error = '';
+  mediaTypeDropdownOpen = false;
 
   // Single example (text or media, not both)
   exampleType: 'text' | 'media' | null = null;
@@ -65,6 +66,14 @@ export class NewModelModalComponent implements OnInit {
     private datasetsApi: DatasetsApiService,
     private sortingApi: SortingApiService,
   ) {}
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (this.mediaTypeDropdownOpen && !target.closest('.custom-select')) {
+      this.mediaTypeDropdownOpen = false;
+    }
+  }
 
   ngOnInit(): void {
     this.datasetsApi.getMediaTypes().subscribe({
@@ -335,6 +344,11 @@ export class NewModelModalComponent implements OnInit {
       return (mt.tab_title || mt.name).trim();
     }
     return typeId;
+  }
+
+  getMediaTypeIcon(typeId: string): string {
+    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
+    return mt?.icon || '';
   }
 
   close(): void {
