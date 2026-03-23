@@ -15,7 +15,7 @@
     </span>
   }
 </td>
-<td class="type-cell text-center">
+<td class="type-cell">
   @switch (dataset.media_type) {
     @case ('audio') {
       <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -35,15 +35,15 @@
   }
   {{ capitalizeType(dataset.media_type) }}
 </td>
-<td class="text-center">{{ dataset.num_items ?? '-' }}</td>
-<td class="text-center">{{ dataset.num_dupes ?? 0 }}</td>
-<td class="text-center">{{ formatDate(dataset.created_at) }}</td>
+<td class="text-right">{{ dataset.num_items ?? '-' }}</td>
+<td class="text-right">{{ dataset.num_dupes ?? 0 }}</td>
+<td>{{ formatDate(dataset.created_at) }}</td>
 <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
-<td class="clipper-cell text-center">{{ dataset.clipper || '-' }}</td>
-<td class="embedder-cell text-center">{{ dataset.embedder || '-' }}</td>
+<td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
+<td class="embedder-cell">{{ dataset.embedder || '-' }}</td>
 @if (!isDefaultLogin) {
-  <td class="text-center">{{ dataset.created_by || '-' }}</td>
-  <td class="text-center" [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
+  <td>{{ dataset.created_by || '-' }}</td>
+  <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
 }
 <td class="text-center">
   @if (dataset.loaded) {
