@@ -142,16 +142,39 @@ def run_label_import(importer_name: str):
     # by _apply_labels, but we report them separately now.
     skipped -= len(missing)
 
-    msg = f"Applied {applied} label(s), skipped {skipped}."
+    # Auto-resolve: try to ingest missing medias from their origins
+    ingested = 0
+    resolved_applied = 0
+    unresolved: list[dict] = []
     if missing:
-        msg += f" {len(missing)} element(s) not found in dataset."
+        from vtsearch.datasets.ingest import ingest_missing_medias
+
+        ingested = ingest_missing_medias(missing, medias)
+
+        if ingested > 0:
+            # Re-apply labels now that new medias are available
+            origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
+            resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup)
+            applied += resolved_applied
+
+        # Check which entries still couldn't be resolved
+        if ingested < len(missing):
+            origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
+            unresolved = find_missing_entries(missing, origin_lookup, md5_lookup)
+
+    msg = f"Applied {applied} label(s), skipped {skipped}."
+    if ingested > 0:
+        msg += f" Auto-resolved {ingested} missing element(s) from their sources."
+    if unresolved:
+        msg += f" {len(unresolved)} element(s) could not be resolved."
 
     return jsonify(
         {
             "applied": applied,
             "skipped": skipped,
-            "missing_count": len(missing),
-            "missing": missing,
+            "missing_count": len(unresolved),
+            "missing": unresolved,
+            "ingested": ingested,
             "message": msg,
         }
     )

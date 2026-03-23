@@ -633,6 +633,87 @@ class TestLabelImportMissingElements:
         assert result["missing_count"] == 0
         assert result["missing"] == []
 
+    def test_auto_resolve_ingests_and_applies(self, client, tmp_path):
+        """Missing elements are auto-resolved from their origin during import."""
+        import hashlib
+
+        # Save/restore medias since auto-resolve adds new entries
+        saved = dict(app_module.medias)
+        try:
+            # Create a text file that can be ingested
+            text_dir = tmp_path / "texts"
+            text_dir.mkdir()
+            content = "Hello world, this is a test paragraph for auto-resolve embedding."
+            (text_dir / "hello.txt").write_text(content)
+            md5 = hashlib.md5(content.encode()).hexdigest()
+
+            origin = {"importer": "folder", "params": {"path": str(text_dir), "media_type": "paragraphs"}}
+
+            known_md5 = app_module.medias[1]["md5"]
+            payload = json.dumps(
+                {
+                    "labels": [
+                        {"md5": known_md5, "label": "good"},
+                        {
+                            "md5": md5,
+                            "label": "bad",
+                            "origin": origin,
+                            "origin_name": "hello.txt",
+                            "filename": "hello.txt",
+                        },
+                    ]
+                }
+            )
+            p = tmp_path / "labels.json"
+            p.write_text(payload)
+            res = client.post(
+                "/api/label-importers/import/server_json_file",
+                json={"filepath": str(p)},
+            )
+            assert res.status_code == 200
+            result = res.get_json()
+            # Both labels should be applied (1 existing + 1 auto-resolved)
+            assert result["applied"] == 2
+            assert result["ingested"] == 1
+            assert result["missing_count"] == 0
+            assert result["missing"] == []
+            # The new media should be in the dataset and labeled
+            new_ids = [cid for cid, m in app_module.medias.items() if m.get("md5") == md5]
+            assert len(new_ids) == 1
+            assert new_ids[0] in app_module.bad_votes
+        finally:
+            app_module.medias.clear()
+            app_module.medias.update(saved)
+
+    def test_auto_resolve_reports_unresolvable(self, client, tmp_path):
+        """Elements that can't be resolved are reported in the response."""
+        known_md5 = app_module.medias[1]["md5"]
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": known_md5, "label": "good"},
+                    {
+                        "md5": "totally_unknown_md5",
+                        "label": "bad",
+                        "origin": {"importer": "folder", "params": {"path": "/nonexistent/path"}},
+                        "origin_name": "ghost.wav",
+                    },
+                ]
+            }
+        )
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
+        res = client.post(
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
+        )
+        assert res.status_code == 200
+        result = res.get_json()
+        assert result["applied"] == 1
+        assert result["missing_count"] == 1
+        assert result["missing"][0]["md5"] == "totally_unknown_md5"
+        assert "could not be resolved" in result["message"]
+
 
 # ---------------------------------------------------------------------------
 # API – POST /api/label-importers/ingest-missing
