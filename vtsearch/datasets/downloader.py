@@ -115,7 +115,7 @@ _ZIP_MAGIC = b"PK"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
 # but a simpler heuristic is that the file does NOT start with common
 # non-archive signatures (HTML, JSON, plain text error pages).
-_HTML_SIGNATURES = (b"<", b"<!",  b"{", b"UC")
+_HTML_SIGNATURES = (b"<", b"<!",  b"{")
 
 
 def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) -> None:
@@ -132,7 +132,9 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
 
     ok = True
     if suffix.endswith((".tar.gz", ".tgz")):
-        ok = header[:2] == _GZIP_MAGIC
+        # Accept genuine gzip OR a raw tar that the CDN decompressed on the
+        # fly (HuggingFace Xet storage does this).
+        ok = header[:2] == _GZIP_MAGIC or tarfile.is_tarfile(archive_path)
     elif suffix.endswith(".zip"):
         ok = header[:2] == _ZIP_MAGIC
     elif suffix.endswith(".tar"):
@@ -195,7 +197,9 @@ def _download_and_extract(
 
     suffix = archive_name.lower()
     if suffix.endswith((".tar.gz", ".tgz")):
-        with tarfile.open(archive_path, "r:gz") as tar_ref:
+        # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
+        # Xet) transparently decompress .tar.gz files during transfer.
+        with tarfile.open(archive_path, "r:*") as tar_ref:
             members = tar_ref.getmembers()
             total = len(members)
             for i, member in enumerate(members):

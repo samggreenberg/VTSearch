@@ -393,7 +393,7 @@ class TestCorruptArchiveValidation:
 
         # Simulate a corrupt file already on disk (download is skipped).
         corrupt_file = tmp_path / "test.tar.gz"
-        corrupt_file.write_bytes(b"UCF101 fake html page content")
+        corrupt_file.write_bytes(b"this is not a valid archive at all")
 
         with patch.object(dl_module, "DATA_DIR", tmp_path):
             with pytest.raises(RuntimeError, match="invalid file"):
@@ -434,6 +434,56 @@ class TestCorruptArchiveValidation:
 
         msg = str(exc_info.value)
         assert "try again" in msg.lower()
+
+
+class TestCdnDecompressedTarGz:
+    """CDN-decompressed .tar.gz files (raw tar) are accepted and extracted."""
+
+    def test_raw_tar_with_tar_gz_name_passes_validation(self, tmp_path):
+        """A raw tar served for a .tar.gz URL passes validation."""
+        from vtsearch.datasets import downloader as dl_module
+
+        # Create an uncompressed tar but name it .tar.gz (mimics CDN behaviour).
+        tar_path = _make_tar(tmp_path, arcname="data_dir")
+        misnamed = tmp_path / "test.tar.gz"
+        tar_path.rename(misnamed)
+
+        # Should not raise — the file is a valid tar even without gzip.
+        dl_module._validate_archive(misnamed, "test.tar.gz", "Test")
+
+    def test_raw_tar_with_tar_gz_name_extracts(self, tmp_path):
+        """A raw tar named .tar.gz extracts correctly via _download_and_extract."""
+        from vtsearch.datasets import downloader as dl_module
+
+        tar_path = _make_tar(tmp_path, arcname="data_dir")
+        misnamed = tmp_path / "staging" / "test.tar.gz"
+        misnamed.parent.mkdir(parents=True, exist_ok=True)
+        tar_path.rename(misnamed)
+
+        extract_to = tmp_path / "extracted"
+        check_path = extract_to / "data_dir"
+        data_dir = tmp_path / "data"
+
+        with (
+            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: misnamed.rename(dest),
+            ),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.tar.gz",
+                archive_name="test.tar.gz",
+                extract_to=extract_to,
+                check_path=check_path,
+                download_size_mb=1,
+                dataset_name="Test",
+                on_progress=lambda *a: None,
+            )
+
+        assert check_path.exists()
+        assert (check_path / "file.txt").read_text() == "hello"
 
 
 class TestCaltech101ExtractionProgress:
