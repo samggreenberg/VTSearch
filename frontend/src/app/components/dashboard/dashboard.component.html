@@ -80,7 +80,7 @@
               <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
               <th (click)="sortModels('media_type')" class="sortable text-center" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
               <th (click)="sortModels('num_training')" class="sortable text-center" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
-              <th class="text-center" title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
+              <th class="text-center" title="Is this Model one we can load into Train Mode and improve?">Trainable</th>
               <th (click)="sortModels('autodetect')" class="sortable text-center" title="Include this model in CLI autorun (click to sort)">Autorun<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span></th>
               <th (click)="sortModels('last_trained_at')" class="sortable text-center" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
               <th (click)="sortModels('created_at')" class="sortable text-center" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
@@ -125,7 +125,7 @@
         [title]="labelHint"
         (click)="onLabel()"
       >
-        Label
+        Train
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
     </div>
