@@ -144,9 +144,9 @@ bash install-gpu.sh cu124    # for CUDA 12.4
 
 The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version.
 
-## Building the frontend (optional)
+## Building the frontend
 
-The Angular frontend is pre-built and committed to `static/`, so you can skip this step if you're only working on the backend. If you need to modify the frontend, you'll need **Node.js 18+** and **npm**.
+The Angular frontend must be built after checking out the code — the compiled files are not committed to Git. You'll need **Node.js 18+** and **npm**.
 
 Check if they're installed:
 
