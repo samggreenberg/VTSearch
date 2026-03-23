@@ -53,7 +53,9 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_votes.py` — Voting and vote retrieval
   - `test_sorting.py` — Text sort, learned sort, example sort, train_and_score
   - `test_labels.py` — Label export/import (via /api/labels/export and /api/labels/import)
-  - `test_label_importers.py` — Label importer base class, registry, server json_file/csv_file importers, API routes
+  - `test_label_importers.py` — Label importer base class, registry, built-in server json_file/csv_file importers, GET /api/label-importers endpoint
+  - `test_label_import_endpoint.py` — Label import POST endpoint, resolve_media_ids, find_missing_entries, next_media_id, missing element handling
+  - `test_label_import_ingestion.py` — Label import ingestion: ingest-missing endpoint, _group_by_origin, _media_type_from_origin, _ingest_via_resolver
   - `test_inclusion.py` — Inclusion GET/POST
   - `test_detectors.py` — Detector export, detector sort, autorun detectors, auto-detect
   - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
