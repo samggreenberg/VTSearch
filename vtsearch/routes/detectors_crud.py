@@ -31,10 +31,20 @@ detectors_crud_bp = Blueprint("detectors_crud", __name__)
 
 
 def get_detectors_dir() -> Path:
-    """Return the configured detectors directory from settings."""
-    from vtsearch.settings import get_detectors_dir as _get
+    """Return the per-user detectors directory.
 
-    return _get()
+    In multi-user mode each user gets their own ``detectors/`` subdirectory
+    inside their data dir, preventing cross-user file access.  In single-user
+    mode the directory from settings is used (defaulting to ``data/detectors/``).
+    """
+    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
+
+    provider = get_login_provider()
+    if isinstance(provider, DefaultLoginProvider):
+        from vtsearch.settings import get_detectors_dir as _get
+
+        return _get()
+    return get_user_data_dir() / "detectors"
 
 
 #: Backward-compat alias — prefer :func:`get_detectors_dir` for live value.

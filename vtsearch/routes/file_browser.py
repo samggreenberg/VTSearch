@@ -114,5 +114,4 @@ def browse():
         "directories": directories,
         "files": files,
         "current_path": current_path,
-        "root": str(root),
     })
