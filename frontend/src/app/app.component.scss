@@ -70,25 +70,31 @@ header {
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 4px 12px var(--shadow-dropdown);
-  min-width: 220px;
+  min-width: 160px;
   z-index: 1000;
   display: none;
-  padding: 8px 0;
+  padding: 4px 0;
 
   &.show {
     display: block;
   }
 }
 
+.menu-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .burger-item {
-  padding: 10px 16px;
+  padding: 8px 12px;
   cursor: pointer;
   font-size: 0.85rem;
   color: var(--text-secondary);
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 
   &:hover {
     background: var(--bg-hover);
