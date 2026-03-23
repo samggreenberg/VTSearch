@@ -57,13 +57,13 @@ export class DatasetsApiService {
     source: string,
     path: string,
   ): Observable<{
-    directories: { name: string; path: string }[];
-    files: { name: string; path: string; size_bytes: number }[];
+    directories: { name: string; path: string; modified_at?: string }[];
+    files: { name: string; path: string; size_bytes: number; modified_at?: string }[];
     root_path: string;
   }> {
     return this.http.get<{
-      directories: { name: string; path: string }[];
-      files: { name: string; path: string; size_bytes: number }[];
+      directories: { name: string; path: string; modified_at?: string }[];
+      files: { name: string; path: string; size_bytes: number; modified_at?: string }[];
       root_path: string;
     }>('/api/browse-media-files', { params: { source, path } });
   }

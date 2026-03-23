@@ -301,6 +301,9 @@
             <button class="sf-dir-item" (click)="sfEnterDirectory(dir)">
               <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
               <span class="sf-dir-name">{{ dir.name }}</span>
+              @if (dir.modified_at) {
+                <span class="sf-dir-date">{{ dir.modified_at }}</span>
+              }
             </button>
           }
         </div>

@@ -148,10 +148,16 @@
               @if (entry.isDir) {
                 <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
                   <span class="entry-icon"><vt-icon type="folder"></vt-icon></span> {{ entry.name }}
+                  @if (entry.modified_at) {
+                    <span class="entry-date">{{ entry.modified_at }}</span>
+                  }
                 </button>
               } @else {
                 <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
                   <span class="entry-icon"><vt-icon type="file-text"></vt-icon></span> {{ entry.name }}
+                  @if (entry.modified_at) {
+                    <span class="entry-date">{{ entry.modified_at }}</span>
+                  }
                   @if (entry.size_bytes != null) {
                     <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
                   }

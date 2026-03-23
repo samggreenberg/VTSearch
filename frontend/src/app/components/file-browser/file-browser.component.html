@@ -49,12 +49,14 @@
             <button class="file-browser-item file-browser-dir" (click)="enterDirectory(dir)">
               <span class="file-browser-icon">&#x1F4C1;</span>
               <span class="file-browser-name">{{ dir.name }}</span>
+              <span class="file-browser-date">{{ dir.modified_at }}</span>
             </button>
           }
           @for (file of files; track file.path) {
             <button class="file-browser-item file-browser-file" (click)="selectFile(file)">
               <span class="file-browser-icon">&#x1F4C4;</span>
               <span class="file-browser-name">{{ file.name }}</span>
+              <span class="file-browser-date">{{ file.modified_at }}</span>
               <span class="file-browser-size">{{ formatSize(file.size_bytes) }}</span>
             </button>
           }
