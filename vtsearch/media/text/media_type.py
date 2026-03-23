@@ -40,7 +40,7 @@ class TextMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "📄"
+        return "file-text"
 
     # ------------------------------------------------------------------
     # File import

@@ -332,7 +332,7 @@ export class NewModelModalComponent implements OnInit {
   getMediaTypeLabel(typeId: string): string {
     const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
     if (mt) {
-      return `${mt.icon || ''} ${mt.tab_title || mt.name}`.trim();
+      return (mt.tab_title || mt.name).trim();
     }
     return typeId;
   }

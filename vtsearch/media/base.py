@@ -461,7 +461,7 @@ class MediaType(ABC):
     @property
     @abstractmethod
     def icon(self) -> str:
-        """Icon for the UI (emoji or icon name), e.g. ``"🔊"``."""
+        """SVG icon type name for the UI, e.g. ``"audio"``."""
 
     # ------------------------------------------------------------------
     # File import

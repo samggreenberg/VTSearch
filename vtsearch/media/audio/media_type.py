@@ -41,7 +41,7 @@ class AudioMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "🔊"
+        return "audio"
 
     # ------------------------------------------------------------------
     # File import
