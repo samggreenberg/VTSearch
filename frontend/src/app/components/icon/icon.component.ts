@@ -123,7 +123,7 @@ function emojiToType(icon: string): string {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
       }
       @case ('brain') {
-        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3.5 3.5 0 0 0-3.4 2.7A3 3 0 0 0 4 7.5a3 3 0 0 0 .7 1.9A3.5 3.5 0 0 0 3 12.5a3.5 3.5 0 0 0 1.7 3A3 3 0 0 0 7 19a3 3 0 0 0 2.5-1.3"/><path d="M14.5 2a3.5 3.5 0 0 1 3.4 2.7A3 3 0 0 1 20 7.5a3 3 0 0 1-.7 1.9 3.5 3.5 0 0 1 1.7 3.1 3.5 3.5 0 0 1-1.7 3A3 3 0 0 1 17 19a3 3 0 0 1-2.5-1.3"/><path d="M12 2v20"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C7 2 3 6 3 10.5c0 2.5 1.2 4.8 3 6.2V20a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1c2.7-1.2 5-4.5 5-8C19 6 16 2 12 2z"/><path d="M8 12c1.5-1 3-3 3-5"/><path d="M7 15c2-1 4-3.5 4.5-6"/><path d="M12 11c1.5 1 3 3.5 3.5 5.5"/></svg>
       }
       @case ('file') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
