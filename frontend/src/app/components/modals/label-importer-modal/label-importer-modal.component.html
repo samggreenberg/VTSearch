@@ -156,4 +156,30 @@
       </div>
     </div>
   }
+  @if (view === 'missing') {
+    <div class="missing-view">
+      @if (successMessage) {
+        <p class="success-text">{{ successMessage }}</p>
+      }
+      <p class="missing-info">
+        {{ missingEntries.length }} labeled element(s) were not found in the current dataset.
+        Would you like to resolve and add them from their original sources?
+      </p>
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+
+      <div class="form-actions" modal-footer>
+        <button class="btn btn--secondary" (click)="skipMissing()" [disabled]="ingesting">Skip</button>
+        <button class="btn btn--primary" (click)="ingestMissing()" [disabled]="ingesting">
+          @if (ingesting) {
+            Ingesting...
+          } @else {
+            Resolve &amp; Add
+          }
+        </button>
+      </div>
+    </div>
+  }
 </vt-modal>

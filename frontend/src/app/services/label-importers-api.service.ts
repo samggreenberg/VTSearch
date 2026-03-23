@@ -25,7 +25,7 @@ export class LabelImportersApiService {
     return this.http.post(`/api/label-importers/import/${importerName}`, params);
   }
 
-  ingestMissing(): Observable<unknown> {
-    return this.http.post('/api/label-importers/ingest-missing', {});
+  ingestMissing(entries: unknown[]): Observable<unknown> {
+    return this.http.post('/api/label-importers/ingest-missing', { entries });
   }
 }

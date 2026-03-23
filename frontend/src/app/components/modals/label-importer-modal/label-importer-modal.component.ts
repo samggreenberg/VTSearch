@@ -19,7 +19,7 @@ interface LabelImporterInfo {
   hidden_from_picker?: boolean;
 }
 
-type ModalView = 'picker' | 'form';
+type ModalView = 'picker' | 'form' | 'missing';
 
 @Component({
   selector: 'vt-label-importer-modal',
@@ -47,6 +47,8 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
+  missingEntries: unknown[] = [];
+  ingesting = false;
 
   constructor(
     private labelImportersApi: LabelImportersApiService,
@@ -55,6 +57,9 @@ export class LabelImporterModalComponent implements OnInit {
   ) {}
 
   get modalTitle(): string {
+    if (this.view === 'missing') {
+      return 'Missing Media';
+    }
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
@@ -121,13 +126,44 @@ export class LabelImporterModalComponent implements OnInit {
         this.submitting = false;
         this.successMessage = res.message || `Applied ${res.applied ?? 0} labels`;
         this.imported.emit();
-        setTimeout(() => this.close(), 1500);
+
+        if (res.missing_count > 0 && res.missing?.length) {
+          this.missingEntries = res.missing;
+          this.view = 'missing';
+        } else {
+          setTimeout(() => this.close(), 1500);
+        }
       },
       error: (err) => {
         this.submitting = false;
         this.error = err.error?.error || 'Import failed';
       },
     });
+  }
+
+  ingestMissing(): void {
+    if (!this.missingEntries.length) return;
+    this.ingesting = true;
+    this.error = '';
+
+    this.labelImportersApi.ingestMissing(this.missingEntries).subscribe({
+      next: (res: any) => {
+        this.ingesting = false;
+        this.successMessage = res.message || `Ingested ${res.ingested ?? 0} media(s), applied ${res.applied ?? 0} label(s).`;
+        this.missingEntries = [];
+        this.imported.emit();
+        setTimeout(() => this.close(), 1500);
+      },
+      error: (err) => {
+        this.ingesting = false;
+        this.error = err.error?.error || 'Failed to ingest missing media';
+      },
+    });
+  }
+
+  skipMissing(): void {
+    this.missingEntries = [];
+    this.close();
   }
 
   triggerAddGood(): void {

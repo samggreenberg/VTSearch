@@ -60,7 +60,7 @@
 </aside>
 
 @if (showLabelImport) {
-  <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="showLabelImport = false" />
+  <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="voteState.loadVotes()" />
 }
 
 @if (showExport) {
