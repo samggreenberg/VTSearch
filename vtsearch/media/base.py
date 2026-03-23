@@ -393,14 +393,16 @@ class DemoDataset:
     Leave empty for sources that don't require an explicit identifier."""
 
     required_folder: Optional[Path] = None
-    """Local directory that must exist for a cached ``.pkl`` to be usable.
+    """Local directory containing the extracted source files for this dataset.
 
-    Audio and video datasets store references to external media files rather
-    than inlining the bytes, so a stale ``.pkl`` left behind after the source
-    directory was removed would incorrectly appear ready.  Set this to the
-    directory that the importer places the source files into (e.g.
-    ``DATA_DIR / "ESC-50-master" / "audio"``).  Leave ``None`` for datasets
-    whose ``.pkl`` is entirely self-contained (images, text)."""
+    Used both as a staleness check (a cached ``.pkl`` is only considered valid
+    when this directory still exists on disk) and as the browsable root for
+    the *Select Media Example* file picker.  Set this to the directory that the
+    downloader extracts source files into (e.g.
+    ``DATA_DIR / "ESC-50-master" / "audio"`` or
+    ``DATA_DIR / "caltech-101" / "101_ObjectCategories"``).
+    Leave ``None`` only for datasets that have no on-disk source directory
+    (e.g. text datasets generated from in-memory data)."""
 
     slice_start: int = 0
     """Per-category start index for element slicing (inclusive).
