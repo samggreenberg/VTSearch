@@ -35,8 +35,8 @@
   }
   {{ capitalizeType(dataset.media_type) }}
 </td>
-<td class="text-right">{{ dataset.num_items ?? '-' }}</td>
-<td class="text-right">{{ dataset.num_dupes ?? 0 }}</td>
+<td>{{ dataset.num_items ?? '-' }}</td>
+<td>{{ dataset.num_dupes ?? 0 }}</td>
 <td>{{ formatDate(dataset.created_at) }}</td>
 <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
 <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
@@ -45,14 +45,14 @@
   <td>{{ dataset.created_by || '-' }}</td>
   <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
 }
-<td class="text-center">
+<td>
   @if (dataset.loaded) {
     <span class="check" aria-label="Loaded">&#10003;</span>
   } @else {
     <span class="dim">-</span>
   }
 </td>
-<td class="actions-cell text-center">
+<td class="actions-cell">
   @if (!isDefaultLogin) {
     <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -45,7 +45,7 @@
                 <th (click)="sortDatasets('readers')" class="sortable" title="Users with access to this dataset (click to sort)" data-col="readers" [style.width.px]="datasetsTableFixed ? datasetColWidths['readers'] : null">Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'readers')" (click)="$event.stopPropagation()"></div></th>
               }
               <th title="Whether this dataset is currently loaded into memory" data-col="loaded" [style.width.px]="datasetsTableFixed ? datasetColWidths['loaded'] : null">Loaded?<div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'loaded')" (click)="$event.stopPropagation()"></div></th>
-              <th class="text-center" title="Available operations for this dataset" data-col="actions" [style.width.px]="datasetsTableFixed ? datasetColWidths['actions'] : null">Actions</th>
+              <th title="Available operations for this dataset" data-col="actions" [style.width.px]="datasetsTableFixed ? datasetColWidths['actions'] : null">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -90,7 +90,7 @@
               <th (click)="sortModels('autodetect')" class="sortable" title="Include this model in CLI autorun (click to sort)" data-col="autodetect" [style.width.px]="modelsTableFixed ? modelColWidths['autodetect'] : null">Autorun?<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'autodetect')" (click)="$event.stopPropagation()"></div></th>
               <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)" data-col="last_trained_at" [style.width.px]="modelsTableFixed ? modelColWidths['last_trained_at'] : null">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'last_trained_at')" (click)="$event.stopPropagation()"></div></th>
               <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)" data-col="created_at" [style.width.px]="modelsTableFixed ? modelColWidths['created_at'] : null">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'created_at')" (click)="$event.stopPropagation()"></div></th>
-              <th class="text-center" title="Available operations for this model" data-col="actions" [style.width.px]="modelsTableFixed ? modelColWidths['actions'] : null">Actions</th>
+              <th title="Available operations for this model" data-col="actions" [style.width.px]="modelsTableFixed ? modelColWidths['actions'] : null">Actions</th>
             </tr>
           </thead>
           <tbody>
