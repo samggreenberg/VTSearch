@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -55,6 +55,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   datasetSortAsc = true;
   modelSortColumn = 'name';
   modelSortAsc = true;
+
+  // Column resize state
+  datasetColWidths: Record<string, number> = {};
+  modelColWidths: Record<string, number> = {};
+  datasetsTableFixed = false;
+  modelsTableFixed = false;
+  datasetsTableWidth = 0;
+  modelsTableWidth = 0;
+  private datasetsResizeInit = false;
+  private modelsResizeInit = false;
+  private resizeState: {
+    startX: number;
+    startWidth: number;
+    table: 'datasets' | 'models';
+    col: string;
+  } | null = null;
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
@@ -127,6 +143,71 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.knownModelIds = currentIds;
       });
     this.refresh();
+  }
+
+  // --- Column resize ---
+
+  startResize(event: MouseEvent, table: 'datasets' | 'models', col: string): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
+    const tableEl = th.closest('table') as HTMLTableElement;
+    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+    const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
+
+    if (!initialized) {
+      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+      let totalWidth = 0;
+      ths.forEach((t) => {
+        const colKey = t.getAttribute('data-col');
+        const w = t.offsetWidth;
+        if (colKey) colWidths[colKey] = w;
+        totalWidth += w;
+      });
+      if (table === 'datasets') {
+        this.datasetsTableWidth = totalWidth;
+        this.datasetsResizeInit = true;
+        this.datasetsTableFixed = true;
+      } else {
+        this.modelsTableWidth = totalWidth;
+        this.modelsResizeInit = true;
+        this.modelsTableFixed = true;
+      }
+    }
+
+    this.resizeState = {
+      startX: event.clientX,
+      startWidth: colWidths[col] ?? 100,
+      table,
+      col,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onColResizeMove(event: MouseEvent): void {
+    if (!this.resizeState) return;
+    const delta = event.clientX - this.resizeState.startX;
+    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+    const newWidth = Math.max(30, this.resizeState.startWidth + delta);
+    const prevWidth = colWidths[this.resizeState.col] ?? this.resizeState.startWidth;
+    colWidths[this.resizeState.col] = newWidth;
+    const widthChange = newWidth - prevWidth;
+    if (this.resizeState.table === 'datasets') {
+      this.datasetsTableWidth = Math.max(100, this.datasetsTableWidth + widthChange);
+    } else {
+      this.modelsTableWidth = Math.max(100, this.modelsTableWidth + widthChange);
+    }
+  }
+
+  @HostListener('document:mouseup')
+  onColResizeEnd(): void {
+    if (!this.resizeState) return;
+    this.resizeState = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   }
 
   ngOnDestroy(): void {
