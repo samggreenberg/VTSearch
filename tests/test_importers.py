@@ -1191,3 +1191,32 @@ class TestSymlinkedImporterDiscovery:
             for key in list(sys.modules):
                 if "symlink_test_pkg" in key:
                     del sys.modules[key]
+
+
+class TestRglobFollowSymlinks:
+    """rglob_follow_symlinks should descend into symlinked directories."""
+
+    def test_finds_files_through_symlinked_directory(self, tmp_path):
+        from vtsearch.utils.paths import rglob_follow_symlinks
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"a")
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "b.wav").write_bytes(b"b")
+
+        (root / "linked").symlink_to(external)
+
+        results = rglob_follow_symlinks(root, "*.wav")
+        names = {p.name for p in results}
+        assert "a.wav" in names
+        assert "b.wav" in names
+
+    def test_no_matches_returns_empty(self, tmp_path):
+        from vtsearch.utils.paths import rglob_follow_symlinks
+
+        root = tmp_path / "empty"
+        root.mkdir()
+        assert rglob_follow_symlinks(root, "*.wav") == []
