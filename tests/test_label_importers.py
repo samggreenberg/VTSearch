@@ -797,7 +797,7 @@ class TestIngestMissingClips:
         from vtsearch.datasets.ingest import _media_type_from_origin
 
         origin = {"importer": "folder", "params": {"path": "/tmp/x", "media_type": "paragraphs"}}
-        assert _media_type_from_origin(origin) == "text"
+        assert _media_type_from_origin(origin) == "paragraph"
 
     def test_media_type_from_origin_demo(self):
         """Demo origins resolve media type from DEMO_DATASETS config."""
@@ -858,13 +858,14 @@ class TestIngestMissingClips:
 
         # Patch resolve_file_from_origin to return our test file,
         # embed_file to return a fake embedding, and _media_type_from_origin
-        # to return "image"
+        # to return "image".  The resolver imports are lazy (inside the
+        # function), so patch at the source module.
         from unittest.mock import patch
 
         with (
             patch("vtsearch.datasets.ingest._media_type_from_origin", return_value="image"),
-            patch("vtsearch.datasets.ingest.resolve_file_from_origin", return_value=img_path),
-            patch("vtsearch.datasets.ingest.embed_file", return_value=fake_embedding),
+            patch("vtsearch.models.resolver.resolve_file_from_origin", return_value=img_path),
+            patch("vtsearch.models.resolver.embed_file", return_value=fake_embedding),
         ):
             result = _ingest_via_resolver(origin, entries, existing, noop_progress)
 
