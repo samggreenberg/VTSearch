@@ -15,21 +15,25 @@ def _origin_key(origin: dict[str, Any], origin_name: str) -> str:
 
 def build_media_lookup(
     media_dict: dict[int, dict[str, Any]],
-) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+) -> tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]]:
     """Build lookup tables for matching label entries to medias.
 
-    Returns ``(origin_lookup, md5_lookup)`` where:
+    Returns ``(origin_lookup, md5_lookup, name_lookup)`` where:
 
     * **origin_lookup** maps ``_origin_key(origin, origin_name)`` to a list of
       media IDs that share that origin+name pair.
     * **md5_lookup** maps an MD5 hex string to a list of media IDs whose
       content hash matches.
+    * **name_lookup** maps an ``origin_name`` string to a list of media IDs
+      that share that name.  Used as a fallback when the full origin dict is
+      not available (e.g. CSV label imports across datasets).
 
-    Both lookups map to *lists* because the same key can match multiple medias
+    All lookups map to *lists* because the same key can match multiple medias
     (e.g. duplicate files with the same MD5).
     """
     origin_lookup: dict[str, list[int]] = {}
     md5_lookup: dict[str, list[int]] = {}
+    name_lookup: dict[str, list[int]] = {}
 
     for media in media_dict.values():
         cid = media["id"]
@@ -40,17 +44,21 @@ def build_media_lookup(
             key = _origin_key(origin, origin_name)
             origin_lookup.setdefault(key, []).append(cid)
 
+        if origin_name:
+            name_lookup.setdefault(origin_name, []).append(cid)
+
         md5 = media.get("md5", "")
         if md5:
             md5_lookup.setdefault(md5, []).append(cid)
 
-    return origin_lookup, md5_lookup
+    return origin_lookup, md5_lookup, name_lookup
 
 
 def resolve_media_ids(
     entry: dict[str, Any],
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
+    name_lookup: dict[str, list[int]] | None = None,
 ) -> list[int]:
     """Resolve a label entry to matching media ID(s).
 
@@ -59,6 +67,11 @@ def resolve_media_ids(
     a label is applied to every element in the dataset that corresponds to
     the entry, regardless of whether it was matched by provenance or by
     content hash.  Duplicate IDs are removed.
+
+    When *name_lookup* is provided and neither origin+name nor MD5 produced a
+    match, ``origin_name`` (or ``filename``) is used as a last-resort
+    fallback.  This enables cross-dataset label transfer from CSV files that
+    lack the full origin dict.
     """
     matched: dict[int, None] = {}
 
@@ -75,6 +88,14 @@ def resolve_media_ids(
         for cid in md5_lookup.get(md5, []):
             matched[cid] = None
 
+    # Fallback: match by origin_name alone (or filename) when the full origin
+    # dict is not available, e.g. CSV label imports across datasets.
+    if not matched and name_lookup is not None:
+        name = origin_name or entry.get("filename", "")
+        if name:
+            for cid in name_lookup.get(name, []):
+                matched[cid] = None
+
     return list(matched)
 
 
@@ -82,6 +103,7 @@ def find_missing_entries(
     label_entries: list[dict[str, Any]],
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
+    name_lookup: dict[str, list[int]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return label entries that do not match any media by origin+name or md5.
 
@@ -94,7 +116,7 @@ def find_missing_entries(
         label = entry.get("label", "")
         if label not in ("good", "bad"):
             continue
-        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         if not cids:
             missing.append(entry)
     return missing

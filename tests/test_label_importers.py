@@ -479,7 +479,7 @@ class TestResolveClipIdsUnion:
 
         # Entry with only md5, no origin — should match by md5
         md5 = app_module.medias[1]["md5"]
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {"md5": md5, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert 1 in cids
@@ -487,7 +487,7 @@ class TestResolveClipIdsUnion:
     def test_origin_match_only(self):
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         media = app_module.medias[1]
         entry = {"origin": media["origin"], "origin_name": media["origin_name"], "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
@@ -501,7 +501,7 @@ class TestResolveClipIdsUnion:
         orig_md5 = app_module.medias[2]["md5"]
         app_module.medias[2]["md5"] = app_module.medias[1]["md5"]
         try:
-            origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+            origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
             clip1 = app_module.medias[1]
             # Entry: origin matches media 1, md5 also matches media 1 AND media 2
             entry = {
@@ -519,7 +519,7 @@ class TestResolveClipIdsUnion:
     def test_no_match_returns_empty(self):
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {
             "md5": "nonexistent",
             "origin": {"importer": "nope", "params": {}},
@@ -528,6 +528,42 @@ class TestResolveClipIdsUnion:
         }
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert cids == []
+
+    def test_name_fallback_matches_by_origin_name(self):
+        """When md5 and origin don't match, name_lookup matches by origin_name alone."""
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
+        origin_name = app_module.medias[1].get("origin_name", "")
+        assert origin_name, "Test media 1 must have origin_name"
+        entry = {"md5": "wrong_md5", "origin_name": origin_name, "label": "good"}
+        # Without name_lookup — no match
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
+        assert cids == []
+        # With name_lookup — matches by origin_name
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+        assert 1 in cids
+
+    def test_name_fallback_uses_filename_when_no_origin_name(self):
+        """name_lookup falls back to 'filename' key when origin_name is absent."""
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
+        origin_name = app_module.medias[1].get("origin_name", "")
+        assert origin_name
+        entry = {"md5": "wrong_md5", "filename": origin_name, "label": "good"}
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+        assert 1 in cids
+
+    def test_name_fallback_skipped_when_md5_matches(self):
+        """Name fallback is NOT used when md5 already matches (avoids false positives)."""
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
+        md5 = app_module.medias[1]["md5"]
+        entry = {"md5": md5, "origin_name": "some_other_name", "label": "good"}
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+        assert 1 in cids
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +575,7 @@ class TestFindMissingEntries:
     def test_all_present_returns_empty(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [{"md5": app_module.medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
         missing = find_missing_entries(entries, origin_lookup, md5_lookup)
         assert missing == []
@@ -547,7 +583,7 @@ class TestFindMissingEntries:
     def test_unknown_entries_returned(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
             {"md5": app_module.medias[1]["md5"], "label": "good"},
             {"md5": "totally_unknown", "label": "bad"},
@@ -559,7 +595,7 @@ class TestFindMissingEntries:
     def test_invalid_labels_excluded(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
             {"md5": "unknown1", "label": "good"},
             {"md5": "unknown2", "label": "meh"},  # invalid label — excluded
@@ -1082,5 +1118,35 @@ class TestServerCsvLabelImporter:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 2
+        assert 1 in app_module.good_votes
+        assert 2 in app_module.bad_votes
+
+    def test_csv_importer_preserves_origin_name(self, tmp_path):
+        """CSV importer reads origin_name/filename/category columns."""
+        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+
+        csv_text = "label,md5,origin_name,filename,category\ngood,abc123,clip.wav,clip.wav,music\n"
+        result = _parse_csv_bytes(csv_text.encode())
+        assert len(result) == 1
+        assert result[0]["origin_name"] == "clip.wav"
+        assert result[0]["filename"] == "clip.wav"
+        assert result[0]["category"] == "music"
+
+    def test_csv_cross_dataset_import_matches_by_origin_name(self, client, tmp_path):
+        """CSV labels with different MD5s match current dataset elements by origin_name."""
+        origin_name_1 = app_module.medias[1].get("origin_name", "")
+        origin_name_2 = app_module.medias[2].get("origin_name", "")
+        assert origin_name_1, "Test media 1 must have an origin_name"
+        csv_text = f"label,md5,origin_name\ngood,wrong_md5_1,{origin_name_1}\nbad,wrong_md5_2,{origin_name_2}\n"
+        p = tmp_path / "cross_dataset.csv"
+        p.write_text(csv_text)
+        res = client.post(
+            "/api/label-importers/import/server_csv_file",
+            json={"filepath": str(p)},
+        )
+        assert res.status_code == 200
+        result = res.get_json()
+        assert result["applied"] == 2
+        assert result["missing_count"] == 0
         assert 1 in app_module.good_votes
         assert 2 in app_module.bad_votes
