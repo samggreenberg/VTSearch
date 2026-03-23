@@ -201,14 +201,12 @@
               <div class="embedder-grid-header">
                 <span>Embedder</span>
                 <span>Media Type</span>
-                <span></span>
               </div>
               @for (embedder of embedders; track embedder.name) {
                 <label class="embedder-row">
                   <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
                   <span class="embedder-name">{{ embedder.name }}</span>
-                  <span class="embedder-media-type">{{ embedder.media_type_id }}</span>
-                  <span class="embedder-icon"><vt-icon [icon]="getMediaTypeIcon(embedder.media_type_id)"></vt-icon></span>
+                  <span class="embedder-media-type"><vt-icon [icon]="getMediaTypeIcon(embedder.media_type_id)" class="embedder-media-type-icon"></vt-icon>{{ embedder.media_type_id }}</span>
                 </label>
               }
             </div>
