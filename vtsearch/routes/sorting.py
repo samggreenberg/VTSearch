@@ -395,7 +395,7 @@ def import_labels():
     if not isinstance(labels, list):
         return jsonify({"error": "labels must be a list"}), 400
 
-    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, _ = build_media_lookup(snapshot_medias())
 
     applied = 0
     skipped = 0

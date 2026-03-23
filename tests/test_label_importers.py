@@ -479,7 +479,7 @@ class TestResolveClipIdsUnion:
 
         # Entry with only md5, no origin — should match by md5
         md5 = app_module.medias[1]["md5"]
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {"md5": md5, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert 1 in cids
@@ -487,7 +487,7 @@ class TestResolveClipIdsUnion:
     def test_origin_match_only(self):
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         media = app_module.medias[1]
         entry = {"origin": media["origin"], "origin_name": media["origin_name"], "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
@@ -501,7 +501,7 @@ class TestResolveClipIdsUnion:
         orig_md5 = app_module.medias[2]["md5"]
         app_module.medias[2]["md5"] = app_module.medias[1]["md5"]
         try:
-            origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+            origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
             clip1 = app_module.medias[1]
             # Entry: origin matches media 1, md5 also matches media 1 AND media 2
             entry = {
@@ -519,7 +519,7 @@ class TestResolveClipIdsUnion:
     def test_no_match_returns_empty(self):
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {
             "md5": "nonexistent",
             "origin": {"importer": "nope", "params": {}},
@@ -539,7 +539,7 @@ class TestFindMissingEntries:
     def test_all_present_returns_empty(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [{"md5": app_module.medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
         missing = find_missing_entries(entries, origin_lookup, md5_lookup)
         assert missing == []
@@ -547,7 +547,7 @@ class TestFindMissingEntries:
     def test_unknown_entries_returned(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
             {"md5": app_module.medias[1]["md5"], "label": "good"},
             {"md5": "totally_unknown", "label": "bad"},
@@ -559,7 +559,7 @@ class TestFindMissingEntries:
     def test_invalid_labels_excluded(self):
         from vtsearch.utils import build_media_lookup, find_missing_entries
 
-        origin_lookup, md5_lookup = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
             {"md5": "unknown1", "label": "good"},
             {"md5": "unknown2", "label": "meh"},  # invalid label — excluded

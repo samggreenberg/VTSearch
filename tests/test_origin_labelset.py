@@ -445,7 +445,7 @@ class TestBuildClipLookup:
             1: {"id": 1, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"},
             2: {"id": 2, "md5": "h2", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "b.wav"},
         }
-        origin_lookup, md5_lookup = build_media_lookup(medias)
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
         assert len(origin_lookup) == 2
         assert len(md5_lookup) == 2
 
@@ -455,14 +455,14 @@ class TestBuildClipLookup:
             1: {"id": 1, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "a.wav"},
             2: {"id": 2, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "b.wav"},
         }
-        _, md5_lookup = build_media_lookup(medias)
+        _, md5_lookup, _ = build_media_lookup(medias)
         assert sorted(md5_lookup["same_hash"]) == [1, 2]
 
     def test_clips_without_origin_only_in_md5_lookup(self):
         medias = {
             1: {"id": 1, "md5": "h1"},
         }
-        origin_lookup, md5_lookup = build_media_lookup(medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
         assert len(origin_lookup) == 0
         assert md5_lookup["h1"] == [1]
 
@@ -477,33 +477,33 @@ class TestResolveClipIds:
         return build_media_lookup(medias)
 
     def test_match_by_origin(self):
-        origin_lookup, md5_lookup = self._make_lookups()
+        origin_lookup, md5_lookup, _ = self._make_lookups()
         entry = {"md5": "wrong", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [1]
 
     def test_fallback_to_md5(self):
-        origin_lookup, md5_lookup = self._make_lookups()
+        origin_lookup, md5_lookup, _ = self._make_lookups()
         entry = {"md5": "h2"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [2]
 
     def test_md5_fallback_returns_all_duplicates(self):
         """When falling back to MD5, all medias with that hash are returned."""
-        origin_lookup, md5_lookup = self._make_lookups()
+        origin_lookup, md5_lookup, _ = self._make_lookups()
         entry = {"md5": "h1"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert sorted(ids) == [1, 3]
 
     def test_no_match_returns_empty(self):
-        origin_lookup, md5_lookup = self._make_lookups()
+        origin_lookup, md5_lookup, _ = self._make_lookups()
         entry = {"md5": "nonexistent"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == []
 
     def test_union_of_origin_and_md5(self):
         """Origin and MD5 matches are unioned: all matching medias are returned."""
-        origin_lookup, md5_lookup = self._make_lookups()
+        origin_lookup, md5_lookup, _ = self._make_lookups()
         # Origin matches media 1, md5 "h1" matches medias 1 and 3 → union is [1, 3]
         entry = {"md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)

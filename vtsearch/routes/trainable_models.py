@@ -153,7 +153,7 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     if not snap:
         return 0
 
-    _, md5_lookup = build_media_lookup(snap)
+    _, md5_lookup, _ = build_media_lookup(snap)
     server_media_dir = DATA_DIR / "example_media"
 
     # Determine the embedder and media type from the loaded dataset so we
@@ -257,7 +257,7 @@ def _restore_labels_from_trainable_model(tm_data: dict) -> int:
     if not snap:
         return 0
 
-    origin_lookup, md5_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, _ = build_media_lookup(snap)
 
     restored = 0
     for elem in labelset.elements:
