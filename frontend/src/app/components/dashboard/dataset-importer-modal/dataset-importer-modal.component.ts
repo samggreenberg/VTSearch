@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -17,6 +17,9 @@ type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
   styleUrl: './dataset-importer-modal.component.scss',
 })
 export class DatasetImporterModalComponent implements OnInit {
+  /** Media type_id guessed from existing datasets/models (e.g. "image"). */
+  @Input() guessedMediaType = '';
+
   @Output() closed = new EventEmitter<void>();
   @Output() importStarted = new EventEmitter<void>();
   @Output() demoSelected = new EventEmitter<DemoDataset>();
@@ -110,8 +113,16 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    // Load clippers and embedders for the default media type
+    // Override media_type default with guessed type when available
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
+    if (mediaTypeField && this.guessedMediaType) {
+      const folderName = this.toFolderName(this.guessedMediaType);
+      if (folderName && mediaTypeField.options?.includes(folderName)) {
+        this.formValues['media_type'] = folderName;
+      }
+    }
+
+    // Load clippers and embedders for the default media type
     if (mediaTypeField) {
       const defaultType = this.formValues['media_type'] || mediaTypeField.default || '';
       this.loadClippers(defaultType);
@@ -218,7 +229,12 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
     if (this.demoTabs.length > 0 && !this.activeTab) {
-      this.activeTab = this.demoTabs[0];
+      // Prefer guessed media type if it has demos
+      if (this.guessedMediaType && this.demoTabs.includes(this.guessedMediaType)) {
+        this.activeTab = this.guessedMediaType;
+      } else {
+        this.activeTab = this.demoTabs[0];
+      }
       this.loadDemoEmbedders(this.activeTab);
     }
   }
@@ -353,6 +369,13 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.demoSortAsc ? ' \u25B2' : ' \u25BC';
   }
 
+  /** Convert a type_id (e.g. "image") to the corresponding folder_import_name (e.g. "images"). */
+  private toFolderName(typeId: string): string {
+    if (!typeId) return '';
+    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
+    return mt?.folder_import_name || typeId;
+  }
+
   getMediaTypeOptionLabel(opt: string): string {
     const mt = this.mediaTypes.find((m) => m.folder_import_name === opt);
     if (mt) {
@@ -432,7 +455,14 @@ export class DatasetImporterModalComponent implements OnInit {
     const folderImporter = this.importers.find((imp) => imp.name === 'folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
     this.sfMediaTypeOptions = mtField?.options || [];
-    this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'sounds';
+
+    // Prefer guessed media type when available
+    const guessedFolder = this.toFolderName(this.guessedMediaType);
+    if (guessedFolder && this.sfMediaTypeOptions.includes(guessedFolder)) {
+      this.sfMediaType = guessedFolder;
+    } else {
+      this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'sounds';
+    }
 
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);

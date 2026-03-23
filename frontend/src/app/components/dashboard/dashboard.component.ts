@@ -277,6 +277,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Importer modal ---
 
+  /** Guess the media type the user likely wants based on existing datasets/models. */
+  get guessedMediaType(): string {
+    const types = new Set<string>();
+    for (const d of this.datasets) {
+      if (d.media_type) types.add(d.media_type);
+    }
+    for (const m of this.models) {
+      if (m.media_type) types.add(m.media_type);
+    }
+    return types.size === 1 ? [...types][0] : '';
+  }
+
   openImporterModal(): void {
     this.importerModalOpen = true;
   }
