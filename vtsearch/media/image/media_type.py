@@ -13,7 +13,6 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
-    intercept_tqdm_progress,
 )
 
 
@@ -305,8 +304,12 @@ class ImageMediaType(MediaType):
             """Embed a list of (img_path, category) tuples."""
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                with intercept_tqdm_progress(on_progress):
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
                     embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected)
@@ -463,8 +466,12 @@ class ImageMediaType(MediaType):
 
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                with intercept_tqdm_progress(on_progress):
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
                     embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected_pages)
@@ -520,7 +527,12 @@ class ImageMediaType(MediaType):
 
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                embedder.load_models()
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
+                    embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected_images)

@@ -123,8 +123,6 @@ def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = 
     if total_steps is None:
         total_steps = _TOTAL_LOAD_STEPS
 
-    from vtsearch.media.base import intercept_tqdm_progress, intercept_weight_loading_progress
-
     emb = _get_embedder_for_clips()
     if emb is None:
         update_progress("idle", "Ready", step=None, total_steps=None)
@@ -141,11 +139,12 @@ def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = 
         step=step,
         total_steps=total_steps,
     )
-    with (
-        intercept_tqdm_progress(_model_load_progress),
-        intercept_weight_loading_progress(_model_load_progress, "Loading model weights…"),
-    ):
+    original_cb = emb._on_progress
+    emb._on_progress = _model_load_progress
+    try:
         emb.load_models()
+    finally:
+        emb._on_progress = original_cb
 
     # Warm up the text encoder so the first text sort is instant.
     update_progress(

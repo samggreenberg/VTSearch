@@ -518,11 +518,13 @@ def load_dataset_from_folder(
     # Eagerly load models before starting the embedding timer so that
     # download / weight-loading time does not pollute the progress bar.
     if emb is not None and getattr(emb, "_model", None) is None:
-        from vtsearch.media.base import intercept_tqdm_progress
-
         on_progress("loading", "Loading embedding model…", 0, 0)
-        with intercept_tqdm_progress(on_progress):
+        original_cb = emb._on_progress
+        emb._on_progress = on_progress
+        try:
             emb.load_models()
+        finally:
+            emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
@@ -753,11 +755,13 @@ def load_dataset_from_folder_chunked(
     # Eagerly load models before starting the embedding timer so that
     # download / weight-loading time does not pollute the progress bar.
     if emb is not None and getattr(emb, "_model", None) is None:
-        from vtsearch.media.base import intercept_tqdm_progress
-
         on_progress("loading", "Loading embedding model…", 0, 0)
-        with intercept_tqdm_progress(on_progress):
+        original_cb = emb._on_progress
+        emb._on_progress = on_progress
+        try:
             emb.load_models()
+        finally:
+            emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
