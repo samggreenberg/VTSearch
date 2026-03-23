@@ -14,7 +14,6 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
-    intercept_tqdm_progress,
 )
 
 
@@ -278,8 +277,12 @@ class AudioMediaType(MediaType):
         # Load models
         if getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading audio embedding model…", 0, 0)
-            with intercept_tqdm_progress(on_progress):
+            original_cb = embedder._on_progress
+            embedder._on_progress = on_progress
+            try:
                 embedder.load_models()
+            finally:
+                embedder._on_progress = original_cb
 
         clip_id = 1
         total = len(audio_files)
