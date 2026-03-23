@@ -30,7 +30,6 @@ export class FileBrowserComponent implements OnInit {
   directories: BrowseEntry[] = [];
   files: BrowseEntry[] = [];
   currentPath = '';
-  root = '';
 
   /** The text value in the manual input field. */
   inputValue = '';
@@ -61,7 +60,6 @@ export class FileBrowserComponent implements OnInit {
         this.directories = res.directories;
         this.files = res.files;
         this.currentPath = res.current_path;
-        this.root = res.root;
         this.loading = false;
       },
       error: (err) => {
@@ -84,11 +82,10 @@ export class FileBrowserComponent implements OnInit {
     this.loadDirectory(dir.path);
   }
 
-  /** Select a file and emit the full path. */
+  /** Select a file and emit its relative path. */
   selectFile(file: BrowseEntry): void {
-    const fullPath = this.root + '/' + file.path;
-    this.inputValue = fullPath;
-    this.pathSelected.emit(fullPath);
+    this.inputValue = file.path;
+    this.pathSelected.emit(file.path);
     this.browserOpen = false;
   }
 

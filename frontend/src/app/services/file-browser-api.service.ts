@@ -12,7 +12,6 @@ export interface BrowseResponse {
   directories: BrowseEntry[];
   files: BrowseEntry[];
   current_path: string;
-  root: string;
 }
 
 @Injectable({ providedIn: 'root' })
