@@ -637,6 +637,153 @@ class TestLoadDatasetContentVectors:
 
 
 # ---------------------------------------------------------------------------
+# load_dataset_from_folder – skip_embedding support
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDatasetSkipEmbedding:
+    """Verify that load_dataset_from_folder respects skip_embedding=True."""
+
+    def _write_wav(self, path):
+        """Write a minimal WAV file to *path*."""
+        path.write_bytes(_make_wav_bytes())
+
+    def test_skip_embedding_with_content_vectors(self, tmp_path):
+        """Pre-computed vectors are used; no embedder is resolved."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        wav = tmp_path / "a.wav"
+        self._write_wav(wav)
+
+        pre_vector = np.array([1.0, 2.0, 3.0])
+        medias: dict = {}
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.load_media_data.return_value = {"duration": 1.0}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
+             mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type, \
+             mock.patch("vtsearch.media.get_embedder") as mock_get_emb:
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                content_vectors={"a.wav": pre_vector},
+                on_progress=lambda *a: None,
+                skip_embedding=True,
+            )
+
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
+        # Embedder registry should never be consulted.
+        mock_emb_for_type.assert_not_called()
+        mock_get_emb.assert_not_called()
+
+    def test_skip_embedding_without_vectors_sets_none(self, tmp_path):
+        """Files without pre-computed vectors get embedding=None."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        wav = tmp_path / "a.wav"
+        self._write_wav(wav)
+
+        medias: dict = {}
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.load_media_data.return_value = {"duration": 1.0}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
+             mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type:
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                on_progress=lambda *a: None,
+                skip_embedding=True,
+            )
+
+        assert len(medias) == 1
+        assert medias[1]["embedding"] is None
+        assert medias[1]["embedder"] == ""
+        mock_emb_for_type.assert_not_called()
+
+    def test_skip_embedding_progress_says_loading(self, tmp_path):
+        """Progress messages should say 'Loading' not 'Embedding'."""
+        import unittest.mock as mock
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        wav = tmp_path / "a.wav"
+        self._write_wav(wav)
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.load_media_data.return_value = {"duration": 1.0}
+
+        progress_calls: list = []
+
+        def track_progress(*args):
+            progress_calls.append(args)
+
+        medias: dict = {}
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
+             mock.patch("vtsearch.media.embedders_for_type"):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                on_progress=track_progress,
+                skip_embedding=True,
+            )
+
+        # The per-file progress calls should use "loading" phase, not "embedding".
+        per_file = [c for c in progress_calls if len(c) >= 4 and c[2] > 0]
+        assert len(per_file) >= 1
+        assert per_file[0][0] == "loading"
+        assert "Loading" in per_file[0][1]
+
+    def test_skip_embedding_chunked(self, tmp_path):
+        """skip_embedding works with the chunked variant too."""
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        for name in ("a.wav", "b.wav"):
+            self._write_wav(tmp_path / name)
+
+        vectors = {
+            "a.wav": np.array([1.0, 2.0]),
+            "b.wav": np.array([3.0, 4.0]),
+        }
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.load_media_data.return_value = {"duration": 1.0}
+
+        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
+             mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type:
+            chunks = list(load_dataset_from_folder_chunked(
+                tmp_path, "sounds", chunk_size=10,
+                content_vectors=vectors,
+                on_progress=lambda *a: None,
+                skip_embedding=True,
+            ))
+
+        all_medias = {}
+        for chunk in chunks:
+            all_medias.update(chunk)
+        assert len(all_medias) == 2
+        mock_emb_for_type.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # load_dataset_from_folder – content_md5s support
 # ---------------------------------------------------------------------------
 

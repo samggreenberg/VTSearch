@@ -291,7 +291,7 @@ class AudioMediaType(MediaType):
 
         for i, (audio_path, meta) in enumerate(audio_files):
             rel_name = f"{meta['category']}/{audio_path.name}"
-            on_progress("embedding", f"Embedding {rel_name} ({i + 1}/{total})", i + 1, total)
+            on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
             embedding = embedder.embed_media(audio_path)
             if embedding is None:
                 continue

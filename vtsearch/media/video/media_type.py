@@ -185,7 +185,7 @@ class VideoMediaType(MediaType):
 
         for i, (video_path, meta) in enumerate(video_files):
             rel_name = f"{meta['category']}/{video_path.name}"
-            on_progress("embedding", f"Embedding {rel_name} ({i + 1}/{total})", i + 1, total)
+            on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
             embedding = embedder.embed_media(video_path)
             if embedding is None:
                 continue

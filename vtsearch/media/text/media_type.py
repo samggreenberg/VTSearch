@@ -242,7 +242,7 @@ class TextMediaType(MediaType):
         demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
-            on_progress("embedding", f"Embedding {category}: paragraph {i + 1}/{total}", i + 1, total)
+            on_progress("embedding", f"Embedding {category}", i + 1, total)
             text_content = text_content[:1000].strip()
             if not text_content:
                 continue

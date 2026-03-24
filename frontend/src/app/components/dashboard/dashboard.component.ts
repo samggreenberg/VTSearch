@@ -81,6 +81,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
+  private completedTaskIds = new Set<string>();
 
   currentUser = '';
   isDefaultLogin = true;
@@ -445,6 +446,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   startProgressPolling(onComplete?: () => void): void {
     this.datasetState.setErrorMessage('');
     this.polling$.next(); // cancel previous polling
+    this.completedTaskIds.clear();
 
     timer(0, 1000)
       .pipe(
@@ -466,6 +468,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.loadingTasks = [...active, ...failed];
           this.datasetState.setLoadingTasks(active);
 
+          // Detect tasks that just completed successfully so we can
+          // refresh the registry immediately (not only when ALL finish).
+          const justFinished = tasks.filter(
+            (t) => t.status === 'idle' && !t.error && !this.completedTaskIds.has(t.task_id),
+          );
+          for (const t of justFinished) {
+            this.completedTaskIds.add(t.task_id);
+          }
+          if (justFinished.length > 0) {
+            this.datasetState.refresh();
+          }
+
           // Also set the top-level error banner for failed tasks
           for (const t of failed) {
             this.datasetState.setErrorMessage(t.error!);
@@ -477,7 +491,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (active.length === 0) {
             // No more active tasks — stop polling
             this.polling$.next();
-            this.datasetState.refresh();
+            // Refresh unless we just did (justFinished already triggered it)
+            if (justFinished.length === 0) {
+              this.datasetState.refresh();
+            }
             if (onComplete && failed.length === 0) {
               onComplete();
             }
@@ -767,8 +784,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
           }
           if (progress.current != null && progress.total != null && progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
-            msg += ` (${pct}%)`;
+            const fraction = `(${progress.current}/${progress.total})`;
+            const stepEnd = msg.indexOf('] ');
+            if (stepEnd !== -1) {
+              msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+            } else {
+              msg = fraction + ' ' + msg;
+            }
           }
           this.datasetState.setProgressMessage(msg);
         },
@@ -865,8 +887,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const pct = Math.min(100, Math.round((task.current / task.total) * 100));
-      msg += ` (${pct}%)`;
+      const fraction = `(${task.current}/${task.total})`;
+      const stepEnd = msg.indexOf('] ');
+      if (stepEnd !== -1) {
+        msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+      } else {
+        msg = fraction + ' ' + msg;
+      }
     }
     return msg;
   }

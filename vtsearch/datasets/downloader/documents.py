@@ -98,7 +98,7 @@ def download_ucsf_documents(
             pdf_path = cat_dir / f"{doc_id}.pdf"
             if pdf_path.exists():
                 downloaded += 1
-                on_progress("downloading", f"Cached {doc_id}.pdf ({downloaded}/{total_docs})", downloaded, total_docs)
+                on_progress("downloading", f"Cached {doc_id}.pdf", downloaded, total_docs)
                 continue
 
             url = (
