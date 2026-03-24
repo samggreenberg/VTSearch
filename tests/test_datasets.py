@@ -670,18 +670,23 @@ class TestCaltech101Download:
 
     def test_extracts_nested_tar_gz(self, tmp_path):
         """download_caltech101 should extract the inner tar.gz to produce category dirs."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
-        zip_path = data_dir / "caltech-101.zip"
+        zip_path = tmp_path / "caltech-101.zip"
         self._make_caltech101_zip(zip_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
+            ),
         ):
             result = download_caltech101(on_progress=lambda *a: None)
 
@@ -693,18 +698,23 @@ class TestCaltech101Download:
 
     def test_inner_tar_cleaned_up(self, tmp_path):
         """The inner 101_ObjectCategories.tar.gz should be deleted after extraction."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
-        zip_path = data_dir / "caltech-101.zip"
+        zip_path = tmp_path / "caltech-101.zip"
         self._make_caltech101_zip(zip_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
+            ),
         ):
             download_caltech101(on_progress=lambda *a: None)
 
@@ -712,23 +722,30 @@ class TestCaltech101Download:
         assert not inner_tar.exists(), "Inner tar.gz should be deleted after extraction"
 
     def test_outer_zip_cleaned_up(self, tmp_path):
-        """The outer caltech-101.zip should be deleted after extraction."""
+        """The temp archive should be deleted after extraction."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
-        zip_path = data_dir / "caltech-101.zip"
+        zip_path = tmp_path / "caltech-101.zip"
         self._make_caltech101_zip(zip_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
+            ),
         ):
             download_caltech101(on_progress=lambda *a: None)
 
-        assert not zip_path.exists(), "Outer zip should be deleted after extraction"
+        # No temp download files should remain in data_dir.
+        leftover = [p for p in data_dir.iterdir() if p.name.startswith(".dl_")]
+        assert not leftover, f"Temp archive files should be cleaned up: {leftover}"
 
     def test_skips_if_already_extracted(self, tmp_path):
         """If 101_ObjectCategories already exists, skip download and extraction."""
@@ -778,6 +795,7 @@ class TestUCF101SubsetDownload:
 
     def test_extracts_and_flattens_splits(self, tmp_path):
         """download_ucf101_subset should flatten train/val/test into category dirs."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_ucf101_subset
@@ -785,12 +803,16 @@ class TestUCF101SubsetDownload:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         video_dir = data_dir / "video"
-        tar_path = data_dir / "UCF101_subset.tar.gz"
+        tar_path = tmp_path / "UCF101_subset.tar.gz"
         self._make_ucf101_subset_tar(tar_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
+            ),
         ):
             result = download_ucf101_subset(on_progress=lambda *a: None)
 
@@ -803,7 +825,8 @@ class TestUCF101SubsetDownload:
         assert len(list((result / "BabyCrawling").glob("*.avi"))) == 9
 
     def test_tar_cleaned_up(self, tmp_path):
-        """The UCF101_subset.tar.gz should be deleted after extraction."""
+        """The temp archive should be deleted after extraction."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_ucf101_subset
@@ -811,19 +834,26 @@ class TestUCF101SubsetDownload:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         video_dir = data_dir / "video"
-        tar_path = data_dir / "UCF101_subset.tar.gz"
+        tar_path = tmp_path / "UCF101_subset.tar.gz"
         self._make_ucf101_subset_tar(tar_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
+            ),
         ):
             download_ucf101_subset(on_progress=lambda *a: None)
 
-        assert not tar_path.exists(), "tar.gz should be deleted after extraction"
+        # No temp download files should remain in data_dir.
+        leftover = [p for p in data_dir.iterdir() if p.name.startswith(".dl_")]
+        assert not leftover, f"Temp archive files should be cleaned up: {leftover}"
 
     def test_staging_dir_cleaned_up(self, tmp_path):
         """The UCF101_subset staging directory should be removed after flattening."""
+        import shutil
         from unittest.mock import patch
 
         from vtsearch.datasets.downloader import download_ucf101_subset
@@ -831,12 +861,16 @@ class TestUCF101SubsetDownload:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         video_dir = data_dir / "video"
-        tar_path = data_dir / "UCF101_subset.tar.gz"
+        tar_path = tmp_path / "UCF101_subset.tar.gz"
         self._make_ucf101_subset_tar(tar_path)
 
         with (
             patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
             patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch(
+                "vtsearch.datasets.downloader.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
+            ),
         ):
             download_ucf101_subset(on_progress=lambda *a: None)
 
