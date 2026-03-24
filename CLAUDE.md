@@ -2,6 +2,13 @@
 
 Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, CLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + Angular + PyTorch.
 
+## Branch Policy (CRITICAL)
+
+- **All pull requests MUST target `dev`**, never `main` or `master`.
+- **Claude must NEVER open a PR that merges into `main` or `master`.** The `main`/`master` branch is protected and only updated by human maintainers.
+- When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
+- If your feature branch was forked from `master`/`main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
+
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also checks frontend TypeScript build)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; `core` includes frontend build check)
