@@ -691,8 +691,15 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
-    # Save current model's labels before switching.
-    sync_labels_to_loaded_model()
+    # Save current model's labels before switching — but only if there
+    # are votes in the active context.  When the user has switched to a
+    # different dataset the active context may have no votes at all;
+    # syncing in that situation would overwrite the model's saved
+    # training labels with an empty labelset.
+    from vtsearch.utils import bad_votes, good_votes
+
+    if good_votes or bad_votes:
+        sync_labels_to_loaded_model()
 
     # Clear votes so labels from the previous session don't carry over.
     clear_votes()

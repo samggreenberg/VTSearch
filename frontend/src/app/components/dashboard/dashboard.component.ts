@@ -780,11 +780,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Dataset not loaded — load it first, then navigate
+    // Dataset not loaded — load it first, then activate and navigate.
+    // The background loader only auto-activates when no other dataset is
+    // active, so we must explicitly activate after loading completes.
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
-          navigateToLabel();
+          this.datasetsApi.activateRegistered(dataset.id).subscribe({
+            next: () => {
+              this.datasetState.refresh();
+              navigateToLabel();
+            },
+            error: () => navigateToLabel(),
+          });
         });
       },
     });
@@ -823,11 +831,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Dataset not loaded — load it first, then navigate
+    // Dataset not loaded — load it first, then activate and navigate.
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
-          navigateToFind();
+          this.datasetsApi.activateRegistered(dataset.id).subscribe({
+            next: () => {
+              this.datasetState.refresh();
+              navigateToFind();
+            },
+            error: () => navigateToFind(),
+          });
         });
       },
     });
