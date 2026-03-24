@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { DatasetRegistryEntry, ModelRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../models/api.models';
 import { DatasetsApiService } from './datasets-api.service';
 import { TrainableModelsApiService } from './trainable-models-api.service';
 
@@ -9,6 +9,7 @@ import { TrainableModelsApiService } from './trainable-models-api.service';
 export class DatasetStateService implements OnDestroy {
   private readonly datasetsSubject = new BehaviorSubject<DatasetRegistryEntry[]>([]);
   private readonly modelsSubject = new BehaviorSubject<ModelRegistryEntry[]>([]);
+  private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
   private readonly errorMessageSubject = new BehaviorSubject<string>('');
@@ -16,6 +17,7 @@ export class DatasetStateService implements OnDestroy {
 
   readonly datasets$ = this.datasetsSubject.asObservable();
   readonly models$ = this.modelsSubject.asObservable();
+  readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
   readonly loading$ = this.loadingSubject.asObservable();
   readonly progressMessage$ = this.progressMessageSubject.asObservable();
   readonly errorMessage$ = this.errorMessageSubject.asObservable();
@@ -36,6 +38,14 @@ export class DatasetStateService implements OnDestroy {
 
   get models(): ModelRegistryEntry[] {
     return this.modelsSubject.value;
+  }
+
+  get loadingTasks(): LoadingTask[] {
+    return this.loadingTasksSubject.value;
+  }
+
+  setLoadingTasks(tasks: LoadingTask[]): void {
+    this.loadingTasksSubject.next(tasks);
   }
 
   get loading(): boolean {
@@ -79,6 +89,7 @@ export class DatasetStateService implements OnDestroy {
   clear(): void {
     this.datasetsSubject.next([]);
     this.modelsSubject.next([]);
+    this.loadingTasksSubject.next([]);
     this.loadingSubject.next(false);
     this.progressMessageSubject.next('');
     this.errorMessageSubject.next('');

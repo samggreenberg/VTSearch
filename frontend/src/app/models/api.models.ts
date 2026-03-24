@@ -142,7 +142,31 @@ export interface DatasetStatus {
 }
 
 export interface DatasetProgress {
+  status?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  step?: number;
+  total_steps?: number;
+  error?: string;
   [key: string]: unknown;
+}
+
+export interface LoadingTask {
+  task_id: string;
+  name: string;
+  status: string;
+  message: string;
+  current: number;
+  total: number;
+  step?: number;
+  total_steps?: number;
+  error?: string;
+  created_at: number;
+}
+
+export interface LoadingTasksResponse {
+  tasks: LoadingTask[];
 }
 
 export interface ImporterInfo {

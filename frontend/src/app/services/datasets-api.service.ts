@@ -7,6 +7,8 @@ import {
   DatasetProgress,
   ImportersResponse,
   DemoListResponse,
+  LoadingTask,
+  LoadingTasksResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
   ClipperInfo,
@@ -152,8 +154,18 @@ export class DatasetsApiService {
     return this.http.post('/api/dataset/combine', params);
   }
 
+  getLoadingTasks(): Observable<LoadingTask[]> {
+    return this.http.get<LoadingTasksResponse>('/api/dataset/loading-tasks').pipe(
+      map((res) => res.tasks),
+    );
+  }
+
   cancelIngest(): Observable<OkResponse> {
     return this.http.post<OkResponse>('/api/dataset/cancel', {});
+  }
+
+  cancelTask(taskId: string): Observable<OkResponse> {
+    return this.http.post<OkResponse>(`/api/dataset/cancel/${taskId}`, {});
   }
 
   clearDataset(): Observable<OkResponse> {
