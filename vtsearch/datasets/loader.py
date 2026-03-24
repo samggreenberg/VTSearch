@@ -979,7 +979,7 @@ def load_dataset_from_pickle(
         }
 
     # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
@@ -1000,8 +1000,6 @@ def load_dataset_from_pickle(
     try:
         for media_id, media_info in medias_data.items():
             # Determine media type (normalize legacy IDs like "paragraph" → "text")
-            from vtsearch.media import normalize_type_id
-
             media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
@@ -1192,7 +1190,7 @@ def load_dataset_from_pickle_chunked(
 
     # Build lookup tables dynamically from the media type registry,
     # matching the approach used by load_dataset_from_pickle.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
