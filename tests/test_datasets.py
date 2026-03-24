@@ -1087,10 +1087,14 @@ class TestCancelIngest:
         try:
             started = threading.Event()
 
-            # Simulate a slow importer that checks cancellation via progress
+            # Simulate a slow importer that checks cancellation via progress.
+            # Use ``while True`` so the function can only exit via
+            # CancelledError — a bounded loop (e.g. ``range(100)``) can
+            # finish before the cancel is processed on a loaded machine,
+            # making the test flaky.
             def slow_load():
                 started.set()
-                for i in range(100):
+                while True:
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
 

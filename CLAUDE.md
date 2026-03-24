@@ -236,6 +236,27 @@ thread.start()
 time.sleep(0.2)  # FLAKY — may not be enough on a loaded machine
 ```
 
+### 3. Never use bounded loops to simulate "cancellable" or "interruptible" work
+A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds — but on a loaded machine the code that's supposed to interrupt it (e.g. setting a cancel flag) can take longer than 5 seconds to run. If the loop completes before the interrupt arrives, the test follows the wrong code path and fails.
+
+**Do this:**
+```python
+def slow_load():
+    started.set()
+    while True:                            # exits ONLY via CancelledError
+        dataset_progress.check_cancelled()
+        time.sleep(0.05)
+```
+
+**Not this:**
+```python
+def slow_load():
+    started.set()
+    for i in range(100):                   # FLAKY — can finish before cancel arrives
+        dataset_progress.check_cancelled()
+        time.sleep(0.05)
+```
+
 ## Environment Notes (Claude Code on the web)
 - **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
