@@ -8,4 +8,5 @@ import { Injectable } from '@angular/core';
 export class FindSessionService {
   modelId = '';
   modelName = '';
+  datasetId = '';
 }

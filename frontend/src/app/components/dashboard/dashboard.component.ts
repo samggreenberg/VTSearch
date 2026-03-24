@@ -789,9 +789,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.models.find((m) => this.selectedModelIds.has(m.id));
     if (!model) return;
 
-    // Store model info in the find session service
+    // Store model and dataset info in the find session service
     this.findSession.modelId = model.id;
     this.findSession.modelName = model.name;
+    this.findSession.datasetId = dataset.id;
 
     const navigateToFind = (): void => {
       this.router.navigate(['/find']);
