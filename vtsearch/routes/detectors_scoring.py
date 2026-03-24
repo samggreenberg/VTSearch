@@ -129,9 +129,9 @@ def find_label():
     # correct context instead of whichever dataset happens to be active.
     dataset_id = body.get("dataset_id")
     if dataset_id:
-        from vtsearch.datasets.registry import is_loaded as _ds_is_loaded
+        from vtsearch.utils import get_context
 
-        if _ds_is_loaded(dataset_id):
+        if get_context(dataset_id) is not None:
             set_active_dataset_id(dataset_id)
 
     update_find_progress(

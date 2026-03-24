@@ -431,14 +431,14 @@ class TestFindLabel:
 
         # Create a second dataset with different (fewer) items
         rng = np.random.default_rng(99)
-        ctx_b = DatasetContext()
+        ctx_b = DatasetContext("dataset_b")
         for i in range(1, 4):
             ctx_b.medias[i] = {
                 "id": i,
                 "md5": f"dataset_b_{i}",
                 "embedding": rng.standard_normal(512).astype(np.float32),
             }
-        register_context("dataset_b", ctx_b)
+        register_context(ctx_b)
 
         try:
             # Switch active to dataset_b — simulates user browsing Dataset B
