@@ -785,6 +785,10 @@ def unload_registered_dataset(dataset_id: str):
     The dataset's context is removed, freeing its RAM.  If it was the
     active dataset, the active pointer is cleared.
     """
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can unload it"}), 403
     if not _reg_is_loaded(dataset_id):
         return jsonify({"error": "This dataset is not currently loaded"}), 400
     unregister_context(dataset_id)
@@ -799,6 +803,10 @@ def activate_registered_dataset(dataset_id: str):
     The dataset must already be loaded in memory.  This is an instant
     operation — no data is re-read or re-embedded.
     """
+    from vtsearch.auth import get_current_user
+
+    if not _reg_can_access(dataset_id, get_current_user()):
+        return jsonify({"error": "Access denied"}), 403
     if not _reg_is_loaded(dataset_id):
         return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
     set_active_dataset_id(dataset_id)
