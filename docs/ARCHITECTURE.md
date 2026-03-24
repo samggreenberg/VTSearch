@@ -90,7 +90,14 @@ VTSearch/
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
 │   │   ├── loader.py               load_dataset_from_folder/pickle/demo
-│   │   ├── downloader.py           HTTP download + ESC-50/Caltech-101/etc.
+│   │   ├── downloader/             HTTP download + demo dataset downloaders
+│   │   │   ├── __init__.py         Re-exports all symbols for backward compat
+│   │   │   ├── core.py             URLs, sizes, progress, archive validation/extraction
+│   │   │   ├── audio.py            ESC-50, GTZAN, Speech Commands v2, UrbanSound8K
+│   │   │   ├── images.py           CIFAR-10, Caltech-101/256, Flowers, Food-101, EuroSAT, Dogs
+│   │   │   ├── video.py            UCF-101 subset
+│   │   │   ├── text.py             20 Newsgroups, BBC News, AG News, IMDB
+│   │   │   └── documents.py        UCSF Industry Documents
 │   │   ├── ingest.py               Clip ingestion (file → clip dict)
 │   │   ├── config.py               Demo dataset catalogue
 │   │   ├── split.py                Train/test splitting
@@ -183,7 +190,7 @@ modules on the right.
 │ media/*      │ │ models/    │ │ datasets/          │
 │              │ │            │ │                     │
 │ audio    ─┐ │ │ training   │ │ loader ──► media/*  │
-│ image    ─┤ │ │ progress   │ │ downloader          │
+│ image    ─┤ │ │ progress   │ │ downloader/          │
 │ text     ─┤ │ │ embeddings │ │ importers/*         │
 │ video    ─┤ │ │ loader     │ │                     │
 │ document ─┘ │ │            │ │                     │
@@ -234,7 +241,7 @@ modules on the right.
 | `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
 | `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
 | `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
-| `datasets/downloader.py` | No | No (callback) | **Yes** — requests only |
+| `datasets/downloader/` | No | No (callback) | **Yes** — requests only |
 | `datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
 | `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** — each self-contained |
 | `eval/*` | No | No | **Yes** — needs media + datasets |
