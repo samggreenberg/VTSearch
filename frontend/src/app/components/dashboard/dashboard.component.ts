@@ -81,6 +81,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
+  private completedTaskIds = new Set<string>();
 
   currentUser = '';
   isDefaultLogin = true;
@@ -441,6 +442,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   startProgressPolling(onComplete?: () => void): void {
     this.datasetState.setErrorMessage('');
     this.polling$.next(); // cancel previous polling
+    this.completedTaskIds.clear();
 
     timer(0, 1000)
       .pipe(
@@ -459,6 +461,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.loadingTasks = active;
           this.datasetState.setLoadingTasks(active);
 
+          // Detect tasks that just completed successfully so we can
+          // refresh the registry immediately (not only when ALL finish).
+          const justFinished = tasks.filter(
+            (t) => t.status === 'idle' && !t.error && !this.completedTaskIds.has(t.task_id),
+          );
+          for (const t of justFinished) {
+            this.completedTaskIds.add(t.task_id);
+          }
+          if (justFinished.length > 0) {
+            this.datasetState.refresh();
+          }
+
           // Show errors from just-completed tasks
           for (const t of errored) {
             if (t.error && t.error !== 'Cancelled') {
@@ -472,7 +486,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (active.length === 0) {
             // No more active tasks — stop polling
             this.polling$.next();
-            this.datasetState.refresh();
+            // Refresh unless we just did (justFinished already triggered it)
+            if (justFinished.length === 0) {
+              this.datasetState.refresh();
+            }
             if (onComplete && errored.length === 0) {
               onComplete();
             }
