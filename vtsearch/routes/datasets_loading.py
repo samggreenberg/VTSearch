@@ -428,6 +428,24 @@ def _run_origin_load_in_background(
             unregister_context(task_id)
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except ImportError as e:
+            traceback.print_exc()
+            from vtsearch.utils.state_core import unregister_context
+
+            unregister_context(task_id)
+            gc.collect()
+            tracker.update(
+                "idle",
+                "",
+                0,
+                0,
+                error=(
+                    f"Missing dependency: {e}. "
+                    "Install all required packages with: pip install -e '.[cpu,dev]'"
+                ),
+                step=None,
+                total_steps=None,
+            )
         except MemoryError:
             from vtsearch.utils.state_core import unregister_context
 
@@ -548,6 +566,16 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 100,
                 100,
                 staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
+            )
+        except ImportError as e:
+            traceback.print_exc()
+            gc.collect()
+            update_progress(
+                "idle",
+                "",
+                0,
+                0,
+                f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
             )
         except MemoryError:
             gc.collect()

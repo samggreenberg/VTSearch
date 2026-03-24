@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress, require_import
 
 if TYPE_CHECKING:
     import torch
@@ -70,9 +70,9 @@ class ImageClipEmbedder(MediaEmbedder):
             return
         import gc
 
-        from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
+        CLIPModel, CLIPProcessor = require_import("transformers", "CLIPModel", "CLIPProcessor")
 
-        from vtsearch.models.loader import ensure_torch_configured
+        from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
 
         ensure_torch_configured()
         gc.collect()

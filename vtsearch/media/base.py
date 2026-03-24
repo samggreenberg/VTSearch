@@ -43,6 +43,7 @@ __all__ = [
     "ProgressCallback",
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
+    "require_import",
 ]
 
 
@@ -240,6 +241,37 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
     finally:
         for obj, attr, orig in _patches:
             setattr(obj, attr, orig)
+
+
+def require_import(module: str, *names: str, package: str | None = None):
+    """Import *names* from *module*, raising a clear error on failure.
+
+    Returns a tuple of the imported objects (or a single object when only one
+    name is requested).  If the import fails, the :class:`ImportError` message
+    tells the user which pip package to install.
+    """
+    import importlib  # noqa: PLC0415
+
+    pkg_label = package or module.split(".")[0]
+    try:
+        mod = importlib.import_module(module)
+    except ImportError as exc:
+        raise ImportError(
+            f"Could not import '{module}'. "
+            f"Please install it: pip install {pkg_label}"
+        ) from exc
+
+    results = []
+    for name in names:
+        obj = getattr(mod, name, None)
+        if obj is None:
+            raise ImportError(
+                f"Cannot import '{name}' from '{module}' "
+                f"(installed version may be too old or missing PyTorch). "
+                f"Try: pip install -U {pkg_label} torch"
+            )
+        results.append(obj)
+    return results[0] if len(results) == 1 else tuple(results)
 
 
 class MediaEmbedder(ABC):

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import MODELS_CACHE_DIR, SIGLIP_MODEL_ID
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress, require_import
 
 if TYPE_CHECKING:
     import torch
@@ -68,9 +68,9 @@ class ImageSiglipEmbedder(MediaEmbedder):
             return
         import gc
 
-        from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
+        SiglipModel, SiglipProcessor = require_import("transformers", "SiglipModel", "SiglipProcessor")
 
-        from vtsearch.models.loader import ensure_torch_configured
+        from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
 
         ensure_torch_configured()
         gc.collect()
