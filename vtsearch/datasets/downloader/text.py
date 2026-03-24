@@ -4,19 +4,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets.downloader.core import (
-    AG_NEWS_DOWNLOAD_SIZE_MB,
-    AG_NEWS_URL,
-    BBC_NEWS_DOWNLOAD_SIZE_MB,
-    BBC_NEWS_URL,
-    IMDB_DOWNLOAD_SIZE_MB,
-    IMDB_URL,
-    ProgressCallback,
-    _default_progress,
-    _download_and_extract,
-    download_file_with_progress,
-)
+from vtsearch.datasets.downloader import core as _core
+from vtsearch.datasets.downloader.core import ProgressCallback
 
 
 def download_20newsgroups(
@@ -56,7 +45,7 @@ def download_20newsgroups(
           ordered to correspond with label index values.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
     from sklearn.datasets import fetch_20newsgroups
 
@@ -133,19 +122,19 @@ def download_bbc_news(
         ``{"business": ["Article text...", ...], "sport": [...], ...}``.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    zip_path = DATA_DIR / "bbc-fulltext.zip"
-    extract_dir = DATA_DIR / "bbc-fulltext"
-    DATA_DIR.mkdir(exist_ok=True)
+    zip_path = _core.DATA_DIR / "bbc-fulltext.zip"
+    extract_dir = _core.DATA_DIR / "bbc-fulltext"
+    _core.DATA_DIR.mkdir(exist_ok=True)
 
     if not extract_dir.exists():
         if not zip_path.exists():
             on_progress("downloading", "Starting BBC News download...", 0, 0)
-            download_file_with_progress(
-                BBC_NEWS_URL,
+            _core.download_file_with_progress(
+                _core.BBC_NEWS_URL,
                 zip_path,
-                BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                _core.BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
                 on_progress,
             )
 
@@ -163,10 +152,10 @@ def download_bbc_news(
                         i + 1,
                         total,
                     )
-                zip_ref.extract(member, DATA_DIR / "bbc-fulltext-raw")
+                zip_ref.extract(member, _core.DATA_DIR / "bbc-fulltext-raw")
 
         # Find the directory that contains the category subfolders.
-        raw_root = DATA_DIR / "bbc-fulltext-raw"
+        raw_root = _core.DATA_DIR / "bbc-fulltext-raw"
         _bbc_root = _find_bbc_root(raw_root)
         if _bbc_root is None:
             raise RuntimeError(f"Could not locate BBC News category directories inside {raw_root}")
@@ -220,17 +209,17 @@ def download_ag_news(
     import csv  # noqa: PLC0415
 
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    csv_path = DATA_DIR / "ag_news_train.csv"
-    DATA_DIR.mkdir(exist_ok=True)
+    csv_path = _core.DATA_DIR / "ag_news_train.csv"
+    _core.DATA_DIR.mkdir(exist_ok=True)
 
     if not csv_path.exists():
         on_progress("downloading", "Starting AG News download...", 0, 0)
-        download_file_with_progress(
-            AG_NEWS_URL,
+        _core.download_file_with_progress(
+            _core.AG_NEWS_URL,
             csv_path,
-            AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+            _core.AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
             on_progress,
         )
 
@@ -282,15 +271,15 @@ def download_imdb(
         ``{"pos": ["Great film...", ...], "neg": ["Terrible...", ...]}``.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    extract_dir = DATA_DIR / "aclImdb"
-    _download_and_extract(
-        url=IMDB_URL,
+    extract_dir = _core.DATA_DIR / "aclImdb"
+    _core._download_and_extract(
+        url=_core.IMDB_URL,
         archive_name="aclImdb_v1.tar.gz",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=extract_dir,
-        download_size_mb=IMDB_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.IMDB_DOWNLOAD_SIZE_MB,
         dataset_name="IMDB",
         on_progress=on_progress,
     )

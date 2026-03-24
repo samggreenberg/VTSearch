@@ -5,29 +5,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets.downloader.core import (
-    CALTECH101_DOWNLOAD_SIZE_MB,
-    CALTECH101_URL,
-    CALTECH256_DOWNLOAD_SIZE_MB,
-    CALTECH256_URL,
-    CIFAR10_DOWNLOAD_SIZE_MB,
-    CIFAR10_URL,
-    EUROSAT_DOWNLOAD_SIZE_MB,
-    EUROSAT_URL,
-    FOOD101_DOWNLOAD_SIZE_MB,
-    FOOD101_URL,
-    IMAGE_DIR,
-    OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
-    OXFORD_FLOWERS_LABELS_URL,
-    OXFORD_FLOWERS_URL,
-    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-    STANFORD_DOGS_URL,
-    ProgressCallback,
-    _default_progress,
-    _download_and_extract,
-    download_file_with_progress,
-)
+from vtsearch.datasets.downloader import core as _core
+from vtsearch.datasets.downloader.core import ProgressCallback
 
 
 def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -47,15 +26,15 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
         batch files (e.g. ``data/cifar-10-batches-py``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    extract_dir = DATA_DIR / "cifar-10-batches-py"
-    _download_and_extract(
-        url=CIFAR10_URL,
+    extract_dir = _core.DATA_DIR / "cifar-10-batches-py"
+    _core._download_and_extract(
+        url=_core.CIFAR10_URL,
         archive_name="cifar-10-python.tar.gz",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=extract_dir,
-        download_size_mb=CIFAR10_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.CIFAR10_DOWNLOAD_SIZE_MB,
         dataset_name="CIFAR-10",
         on_progress=on_progress,
     )
@@ -82,19 +61,19 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         ``data/caltech-101/101_ObjectCategories``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    zip_path = DATA_DIR / "caltech-101.zip"
-    extract_dir = DATA_DIR / "caltech-101"
-    DATA_DIR.mkdir(exist_ok=True)
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    zip_path = _core.DATA_DIR / "caltech-101.zip"
+    extract_dir = _core.DATA_DIR / "caltech-101"
+    _core.DATA_DIR.mkdir(exist_ok=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
     categories_dir = extract_dir / "101_ObjectCategories"
     if not categories_dir.exists():
         if not zip_path.exists():
             on_progress("downloading", "Starting Caltech-101 download...", 0, 0)
-            download_file_with_progress(
-                CALTECH101_URL, zip_path, CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            _core.download_file_with_progress(
+                _core.CALTECH101_URL, zip_path, _core.CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
             )
 
         on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
@@ -109,7 +88,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                         i,
                         total,
                     )
-                zip_ref.extract(member, DATA_DIR)
+                zip_ref.extract(member, _core.DATA_DIR)
 
         zip_path.unlink(missing_ok=True)
 
@@ -153,17 +132,17 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
         ``data/caltech-256/256_ObjectCategories``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    categories_dir = DATA_DIR / "caltech-256" / "256_ObjectCategories"
-    _download_and_extract(
-        url=CALTECH256_URL,
+    categories_dir = _core.DATA_DIR / "caltech-256" / "256_ObjectCategories"
+    _core._download_and_extract(
+        url=_core.CALTECH256_URL,
         archive_name="256_ObjectCategories.tar",
-        extract_to=DATA_DIR / "caltech-256",
+        extract_to=_core.DATA_DIR / "caltech-256",
         check_path=categories_dir,
-        download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.CALTECH256_DOWNLOAD_SIZE_MB,
         dataset_name="Caltech-256",
         on_progress=on_progress,
     )
@@ -190,17 +169,17 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
         ``imagelabels.mat`` (e.g. ``data/oxford_flowers``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    extract_dir = DATA_DIR / "oxford_flowers"
-    _download_and_extract(
-        url=OXFORD_FLOWERS_URL,
+    extract_dir = _core.DATA_DIR / "oxford_flowers"
+    _core._download_and_extract(
+        url=_core.OXFORD_FLOWERS_URL,
         archive_name="102flowers.tgz",
         extract_to=extract_dir,
         check_path=extract_dir / "jpg",
-        download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         dataset_name="Oxford Flowers",
         on_progress=on_progress,
     )
@@ -208,9 +187,9 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
     # Download labels file if not present.
     labels_path = extract_dir / "imagelabels.mat"
     if not labels_path.exists():
-        DATA_DIR.mkdir(exist_ok=True)
+        _core.DATA_DIR.mkdir(exist_ok=True)
         on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
-        download_file_with_progress(OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
+        _core.download_file_with_progress(_core.OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
 
     return extract_dir
 
@@ -234,17 +213,17 @@ def download_food101(on_progress: Optional[ProgressCallback] = None) -> Path:
         subdirectories with JPEG images (e.g. ``data/food-101/images``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    images_dir = DATA_DIR / "food-101" / "images"
-    _download_and_extract(
-        url=FOOD101_URL,
+    images_dir = _core.DATA_DIR / "food-101" / "images"
+    _core._download_and_extract(
+        url=_core.FOOD101_URL,
         archive_name="food-101.tar.gz",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=images_dir,
-        download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.FOOD101_DOWNLOAD_SIZE_MB,
         dataset_name="Food-101",
         on_progress=on_progress,
     )
@@ -270,17 +249,17 @@ def download_eurosat(on_progress: Optional[ProgressCallback] = None) -> Path:
         subdirectories with JPEG images (e.g. ``data/EuroSAT_RGB``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    extract_dir = DATA_DIR / "EuroSAT_RGB"
-    _download_and_extract(
-        url=EUROSAT_URL,
+    extract_dir = _core.DATA_DIR / "EuroSAT_RGB"
+    _core._download_and_extract(
+        url=_core.EUROSAT_URL,
         archive_name="EuroSAT_RGB.zip",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=extract_dir,
-        download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.EUROSAT_DOWNLOAD_SIZE_MB,
         dataset_name="EuroSAT",
         on_progress=on_progress,
     )
@@ -308,17 +287,17 @@ def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Pa
         ``data/stanford_dogs/Images``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    images_dir = DATA_DIR / "stanford_dogs" / "Images"
-    _download_and_extract(
-        url=STANFORD_DOGS_URL,
+    images_dir = _core.DATA_DIR / "stanford_dogs" / "Images"
+    _core._download_and_extract(
+        url=_core.STANFORD_DOGS_URL,
         archive_name="stanford_dogs_images.tar",
-        extract_to=DATA_DIR / "stanford_dogs",
+        extract_to=_core.DATA_DIR / "stanford_dogs",
         check_path=images_dir,
-        download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         dataset_name="Stanford Dogs",
         on_progress=on_progress,
     )

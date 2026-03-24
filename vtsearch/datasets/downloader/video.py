@@ -3,15 +3,8 @@
 from pathlib import Path
 from typing import Optional
 
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets.downloader.core import (
-    UCF101_SUBSET_DOWNLOAD_SIZE_MB,
-    UCF101_SUBSET_URL,
-    VIDEO_DIR,
-    ProgressCallback,
-    _default_progress,
-    _download_and_extract,
-)
+from vtsearch.datasets.downloader import core as _core
+from vtsearch.datasets.downloader.core import ProgressCallback
 
 
 def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -37,22 +30,22 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
         ``.avi`` files.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    video_dir = VIDEO_DIR / "ucf101"
-    VIDEO_DIR.mkdir(exist_ok=True, parents=True)
+    video_dir = _core.VIDEO_DIR / "ucf101"
+    _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
 
     # Already downloaded and extracted — nothing to do.
     if video_dir.exists() and any(video_dir.glob("*/*.avi")):
         return video_dir
 
-    extract_dir = DATA_DIR / "UCF101_subset"
-    _download_and_extract(
-        url=UCF101_SUBSET_URL,
+    extract_dir = _core.DATA_DIR / "UCF101_subset"
+    _core._download_and_extract(
+        url=_core.UCF101_SUBSET_URL,
         archive_name="UCF101_subset.tar.gz",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=extract_dir,
-        download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.UCF101_SUBSET_DOWNLOAD_SIZE_MB,
         dataset_name="UCF-101 subset",
         on_progress=on_progress,
     )

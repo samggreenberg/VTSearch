@@ -58,9 +58,9 @@ class TestDownloadAndExtract:
         check_path = extract_to / "data_dir"
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -89,9 +89,9 @@ class TestDownloadAndExtract:
         check_path = extract_to / "data_dir"
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -119,9 +119,9 @@ class TestDownloadAndExtract:
         check_path = extract_to / "data_dir"
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: zip_path.rename(dest),
             ),
@@ -154,8 +154,8 @@ class TestDownloadAndExtract:
             shutil.copy(str(tar_path), str(dest))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             dl_module._download_and_extract(
                 url="http://example.com/test.tgz",
@@ -179,9 +179,9 @@ class TestDownloadAndExtract:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
@@ -207,9 +207,9 @@ class TestDownloadAndExtract:
         dummy.write_bytes(b"fake")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: None,
             ),
@@ -242,9 +242,9 @@ class TestDownloadAndExtract:
         data_dir = tmp_path / "data"
 
         with (
-            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -278,9 +278,9 @@ class TestDownloadAndExtract:
         data_dir = tmp_path / "data"
 
         with (
-            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -317,8 +317,8 @@ class TestCorruptArchiveValidation:
             dest.write_text("<html>404 Not Found</html>")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             with pytest.raises(RuntimeError, match="invalid file"):
                 dl_module._download_and_extract(
@@ -342,8 +342,8 @@ class TestCorruptArchiveValidation:
             dest.write_bytes(b"this is not a zip file")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             with pytest.raises(RuntimeError, match="invalid file"):
                 dl_module._download_and_extract(
@@ -367,9 +367,9 @@ class TestCorruptArchiveValidation:
         check_path = extract_to / "data_dir"
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -395,7 +395,7 @@ class TestCorruptArchiveValidation:
         corrupt_file = tmp_path / "test.tar.gz"
         corrupt_file.write_bytes(b"this is not a valid archive at all")
 
-        with patch.object(dl_module, "DATA_DIR", tmp_path):
+        with patch.object(dl_module.core, "DATA_DIR", tmp_path):
             with pytest.raises(RuntimeError, match="invalid file"):
                 dl_module._download_and_extract(
                     url="http://example.com/test.tar.gz",
@@ -418,8 +418,8 @@ class TestCorruptArchiveValidation:
             dest.write_text("<html>Service Unavailable</html>")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             with pytest.raises(RuntimeError, match="My Dataset") as exc_info:
                 dl_module._download_and_extract(
@@ -465,9 +465,9 @@ class TestCdnDecompressedTarGz:
         data_dir = tmp_path / "data"
 
         with (
-            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: misnamed.rename(dest),
             ),
@@ -516,10 +516,10 @@ class TestCaltech101ExtractionProgress:
         data_dir.mkdir()
 
         with (
-            patch.object(dl_module, "DATA_DIR", data_dir),
-            patch.object(dl_module, "IMAGE_DIR", data_dir / "images"),
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "IMAGE_DIR", data_dir / "images"),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: __import__("shutil").copy(str(outer_zip_path), str(dest)),
             ),
@@ -561,10 +561,10 @@ class TestBbcNewsExtractionProgress:
         data_dir.mkdir()
 
         with (
-            patch.object(dl_module, "DATA_DIR", data_dir),
-            patch.object(dl_module, "IMAGE_DIR", data_dir / "images"),
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "IMAGE_DIR", data_dir / "images"),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: __import__("shutil").copy(str(zip_path), str(dest)),
             ),

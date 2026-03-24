@@ -41,9 +41,9 @@ class TestDownloadGtzan:
         tar_path = _make_gtzan_tar(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -66,9 +66,9 @@ class TestDownloadGtzan:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
@@ -104,9 +104,9 @@ class TestDownloadSpeechCommandsV2:
                     tf.add(f, arcname=f"{keyword}/{f.name}")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -127,9 +127,9 @@ class TestDownloadSpeechCommandsV2:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
@@ -167,9 +167,9 @@ class TestDownloadUrbansound8k:
             tf.add(tree_root, arcname="UrbanSound8K")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: tar_path.rename(dest),
             ),
@@ -192,9 +192,9 @@ class TestDownloadUrbansound8k:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),

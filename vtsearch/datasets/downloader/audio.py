@@ -4,21 +4,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets.downloader.core import (
-    ESC50_DOWNLOAD_SIZE_MB,
-    ESC50_URL,
-    GTZAN_DOWNLOAD_SIZE_MB,
-    GTZAN_URL,
-    SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
-    SPEECH_COMMANDS_V2_URL,
-    URBANSOUND8K_DOWNLOAD_SIZE_MB,
-    URBANSOUND8K_URL,
-    ProgressCallback,
-    _default_progress,
-    _download_and_extract,
-    download_file_with_progress,
-)
+from vtsearch.datasets.downloader import core as _core
+from vtsearch.datasets.downloader.core import ProgressCallback
 
 
 def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -37,16 +24,18 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
         directory (e.g. ``data/ESC-50-master/audio``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    zip_path = DATA_DIR / "esc50.zip"
-    extract_dir = DATA_DIR / "ESC-50-master"
-    DATA_DIR.mkdir(exist_ok=True)
+    zip_path = _core.DATA_DIR / "esc50.zip"
+    extract_dir = _core.DATA_DIR / "ESC-50-master"
+    _core.DATA_DIR.mkdir(exist_ok=True)
 
     if not extract_dir.exists():
         if not zip_path.exists():
             on_progress("downloading", "Starting download...", 0, 0)
-            download_file_with_progress(ESC50_URL, zip_path, ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress)
+            _core.download_file_with_progress(
+                _core.ESC50_URL, zip_path, _core.ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+            )
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             members = zip_ref.namelist()
@@ -58,7 +47,7 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
                     i,
                     total,
                 )
-                zip_ref.extract(member, DATA_DIR)
+                zip_ref.extract(member, _core.DATA_DIR)
 
         zip_path.unlink(missing_ok=True)
 
@@ -84,15 +73,15 @@ def download_gtzan(on_progress: Optional[ProgressCallback] = None) -> Path:
         with ``.wav`` files (e.g. ``data/gtzan/genres``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    genres_dir = DATA_DIR / "gtzan" / "genres"
-    _download_and_extract(
-        url=GTZAN_URL,
+    genres_dir = _core.DATA_DIR / "gtzan" / "genres"
+    _core._download_and_extract(
+        url=_core.GTZAN_URL,
         archive_name="genres.tar.gz",
-        extract_to=DATA_DIR / "gtzan",
+        extract_to=_core.DATA_DIR / "gtzan",
         check_path=genres_dir,
-        download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.GTZAN_DOWNLOAD_SIZE_MB,
         dataset_name="GTZAN",
         on_progress=on_progress,
     )
@@ -119,15 +108,15 @@ def download_speech_commands_v2(on_progress: Optional[ProgressCallback] = None) 
         ``data/speech_commands_v2``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    extract_dir = DATA_DIR / "speech_commands_v2"
-    _download_and_extract(
-        url=SPEECH_COMMANDS_V2_URL,
+    extract_dir = _core.DATA_DIR / "speech_commands_v2"
+    _core._download_and_extract(
+        url=_core.SPEECH_COMMANDS_V2_URL,
         archive_name="speech_commands_v0.02.tar.gz",
         extract_to=extract_dir,
         check_path=extract_dir,
-        download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
         dataset_name="Speech Commands v2",
         on_progress=on_progress,
     )
@@ -153,15 +142,15 @@ def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Pat
         ``metadata/`` subdirectories (e.g. ``data/UrbanSound8K``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    extract_dir = DATA_DIR / "UrbanSound8K"
-    _download_and_extract(
-        url=URBANSOUND8K_URL,
+    extract_dir = _core.DATA_DIR / "UrbanSound8K"
+    _core._download_and_extract(
+        url=_core.URBANSOUND8K_URL,
         archive_name="UrbanSound8K.tar.gz",
-        extract_to=DATA_DIR,
+        extract_to=_core.DATA_DIR,
         check_path=extract_dir,
-        download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+        download_size_mb=_core.URBANSOUND8K_DOWNLOAD_SIZE_MB,
         dataset_name="UrbanSound8K",
         on_progress=on_progress,
     )

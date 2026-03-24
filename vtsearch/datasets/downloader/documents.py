@@ -5,14 +5,8 @@ from typing import Optional
 
 import requests
 
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets.downloader.core import (
-    UCSF_IDL_API_URL,
-    UCSF_IDL_DOWNLOAD_URL,
-    ProgressCallback,
-    _default_progress,
-    download_file_with_progress,
-)
+from vtsearch.datasets.downloader import core as _core
+from vtsearch.datasets.downloader.core import ProgressCallback
 
 
 def download_ucsf_documents(
@@ -43,10 +37,10 @@ def download_ucsf_documents(
         subdirectories with ``.pdf`` files (e.g. ``data/ucsf_documents``).
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = _core._default_progress()
 
-    extract_dir = DATA_DIR / "ucsf_documents"
-    DATA_DIR.mkdir(exist_ok=True)
+    extract_dir = _core.DATA_DIR / "ucsf_documents"
+    _core.DATA_DIR.mkdir(exist_ok=True)
 
     # Fast-path: if every category already has PDFs, skip the download.
     all_present = True
@@ -88,7 +82,7 @@ def download_ucsf_documents(
         }
 
         try:
-            resp = requests.get(UCSF_IDL_API_URL, params=params, timeout=30)
+            resp = requests.get(_core.UCSF_IDL_API_URL, params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             docs = data.get("response", {}).get("docs", [])
@@ -107,10 +101,13 @@ def download_ucsf_documents(
                 on_progress("downloading", f"Cached {doc_id}.pdf ({downloaded}/{total_docs})", downloaded, total_docs)
                 continue
 
-            url = f"{UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}/{doc_id}/{doc_id}.pdf"
+            url = (
+                f"{_core.UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}"
+                f"/{doc_id}/{doc_id}.pdf"
+            )
 
             try:
-                download_file_with_progress(url, pdf_path, 0, on_progress)
+                _core.download_file_with_progress(url, pdf_path, 0, on_progress)
                 downloaded += 1
                 on_progress(
                     "downloading", f"Downloaded {doc_id}.pdf ({downloaded}/{total_docs})", downloaded, total_docs
