@@ -8,7 +8,18 @@
 
   &.disabled {
     pointer-events: none;
-    opacity: 0.45;
+
+    // Dim individual sections but keep the progress bar bright & visible
+    .left-tabs,
+    .images-header,
+    .media-list-container,
+    vt-sort-bar,
+    vt-select-mode,
+    vt-inclusion-slider,
+    .label-divider,
+    vt-autopilot-panel {
+      opacity: 0.45;
+    }
   }
 }
 
