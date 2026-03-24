@@ -325,7 +325,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
                 embedding = embedder.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -487,7 +487,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
 
             for i, (page_name, pil_image, category) in enumerate(selected_pages):
-                on_progress("embedding", f"Embedding {page_name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {page_name}", i + 1, total)
                 embedding = embedder.embed_pil_image(pil_image)
                 if embedding is None:
                     continue
@@ -548,7 +548,7 @@ class ImageMediaType(MediaType):
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
-                on_progress("embedding", f"Embedding {category}: image {i + 1}/{total}", i + 1, total)
+                on_progress("embedding", f"Embedding {category}", i + 1, total)
                 img = Image.fromarray(image_array.astype("uint8"), "RGB")
                 img_buffer = _io.BytesIO()
                 img.save(img_buffer, format="PNG")

@@ -150,7 +150,7 @@ def _ingest_via_source(
 
             on_progress(
                 "ingesting",
-                f"Fetched {origin_name or filename} ({ingested}/{len(entries)})...",
+                f"Fetched {origin_name or filename}",
                 ingested,
                 len(entries),
             )
@@ -217,7 +217,7 @@ def _ingest_via_resolver(
 
         on_progress(
             "ingesting",
-            f"Resolved {origin_name or filename} ({ingested}/{len(entries)})...",
+            f"Resolved {origin_name or filename}",
             ingested,
             len(entries),
         )
