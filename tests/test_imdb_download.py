@@ -47,8 +47,8 @@ class TestDownloadImdb:
             progress_calls.append((status, msg))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", lambda url, dest, size, cb: tar_path.rename(dest)),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: tar_path.rename(dest)),
         ):
             result = dl_module.download_imdb(on_progress=fake_progress)
 
@@ -71,9 +71,9 @@ class TestDownloadImdb:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),

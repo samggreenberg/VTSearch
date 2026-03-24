@@ -42,9 +42,9 @@ class TestDownloadAgNews:
             progress_calls.append((status, msg))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda url, dest, size, cb: csv_path.rename(dest) if dest != csv_path else None,
             ),
@@ -65,7 +65,7 @@ class TestDownloadAgNews:
 
         _make_ag_news_csv(tmp_path)
 
-        with patch.object(dl_module, "DATA_DIR", tmp_path):
+        with patch.object(dl_module.core, "DATA_DIR", tmp_path):
             result = dl_module.download_ag_news(on_progress=lambda *a: None)
 
         # Check that the first World article has both title and description.
@@ -81,9 +81,9 @@ class TestDownloadAgNews:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
@@ -102,7 +102,7 @@ class TestDownloadAgNews:
             '"1","Good title","Good description"\n"bad row"\n"2","Another","Article"\n', encoding="utf-8"
         )
 
-        with patch.object(dl_module, "DATA_DIR", tmp_path):
+        with patch.object(dl_module.core, "DATA_DIR", tmp_path):
             result = dl_module.download_ag_news(on_progress=lambda *a: None)
 
         total = sum(len(v) for v in result.values())
