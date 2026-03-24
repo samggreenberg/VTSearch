@@ -150,6 +150,28 @@ class TestInterceptTqdmProgress:
         # But the callback should still have received the progress
         assert len(calls) >= 3
 
+    def test_suppresses_console_output_with_explicit_stderr(self, capsys):
+        """Bars created with file=sys.stderr (like huggingface_hub) should still be suppressed."""
+        import sys
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((status, message, current, total))
+
+        with intercept_tqdm_progress(cb):
+            # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly
+            bar = tqdm.auto.tqdm(total=100, desc="model.safetensors", file=sys.stderr)
+            bar.update(50)
+            bar.update(50)
+            bar.close()
+
+        captured = capsys.readouterr()
+        assert "model.safetensors" not in captured.out
+        assert "model.safetensors" not in captured.err
+        # Callback should still receive progress
+        assert len(calls) >= 3
+
     def test_callback_receives_status_loading(self):
         """All forwarded calls should use status='loading'."""
         calls = []

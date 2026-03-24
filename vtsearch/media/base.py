@@ -95,10 +95,10 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
     _devnull = open(os.devnull, "w")  # noqa: SIM115
 
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        # Inject file=devnull so tqdm wraps it in its DisableOnWriteError
-        # wrapper during init — suppresses all console output from the bar.
-        if "file" not in kwargs:
-            kwargs["file"] = _devnull
+        # Force file=devnull so tqdm never writes to the console.
+        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
+        # so we must override unconditionally (not just when absent).
+        kwargs["file"] = _devnull
         _orig_init(self, *args, **kwargs)
         total = getattr(self, "total", None)
         if total and total > 0 and not getattr(self, "disable", False):
