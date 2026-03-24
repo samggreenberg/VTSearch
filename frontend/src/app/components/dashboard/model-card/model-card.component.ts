@@ -21,6 +21,7 @@ export class ModelCardComponent {
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
   @Output() export = new EventEmitter<void>();
+  @Output() load = new EventEmitter<void>();
   @Output() autorunToggle = new EventEmitter<boolean>();
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
@@ -53,6 +54,11 @@ export class ModelCardComponent {
     } else if (event.key === 'Escape') {
       this.cancelRename();
     }
+  }
+
+  onLoad(event: MouseEvent): void {
+    event.stopPropagation();
+    this.load.emit();
   }
 
   onDelete(event: MouseEvent): void {

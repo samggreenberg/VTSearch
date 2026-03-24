@@ -22,6 +22,7 @@ export class DatasetCardComponent {
   }
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
+  @Output() load = new EventEmitter<void>();
   @Output() security = new EventEmitter<void>();
 
   get isOwner(): boolean {
@@ -63,6 +64,11 @@ export class DatasetCardComponent {
   onSecurity(event: MouseEvent): void {
     event.stopPropagation();
     this.security.emit();
+  }
+
+  onLoad(event: MouseEvent): void {
+    event.stopPropagation();
+    this.load.emit();
   }
 
   onDelete(event: MouseEvent): void {

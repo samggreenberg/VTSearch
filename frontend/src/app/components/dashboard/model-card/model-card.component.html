@@ -60,7 +60,7 @@
   @if (model.detector_loaded) {
     <span class="status-loaded" aria-label="Loaded">&#10003;</span>
   } @else {
-    <span class="dim">-</span>
+    <span class="load-action" (click)="onLoad($event)" title="Click to load this model" aria-label="Load model">-</span>
   }
 </td>
 <td class="actions-cell">

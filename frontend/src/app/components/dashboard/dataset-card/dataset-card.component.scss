@@ -76,6 +76,19 @@ td {
   color: var(--color-good);
 }
 
+.load-action {
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+}
+
 .btn--xs {
   padding: 1px 6px;
   font-size: 0.75rem;

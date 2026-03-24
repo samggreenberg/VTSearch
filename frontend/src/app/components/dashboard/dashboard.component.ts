@@ -441,6 +441,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadDataset(dataset: DatasetRegistryEntry): void {
+    this.datasetsApi.loadRegistered(dataset.id).subscribe({
+      next: () => this.startProgressPolling(),
+    });
+  }
+
+  loadModel(model: ModelRegistryEntry): void {
+    this.modelsApi.loadModel(model.id).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
   toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
     const detectorName = model.detector_name || model.name;
     this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
