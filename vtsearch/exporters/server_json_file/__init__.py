@@ -39,8 +39,8 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
                 "results file will be written.  Parent directories are "
                 "created automatically."
             ),
-            placeholder="/home/user/autodetect_results.json",
-            default="autodetect_results.json",
+            placeholder="data/autodetect_results.json",
+            default="data/autodetect_results.json",
         ),
     ]
 

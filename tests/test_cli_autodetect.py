@@ -854,7 +854,7 @@ class TestExporterCLIArguments:
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args([])
-        assert args.filepath == "autodetect_results.json"
+        assert args.filepath == "data/autodetect_results.json"
 
     def test_email_smtp_exporter_adds_expected_args(self):
         from vtsearch.exporters.email_smtp import EmailLabelsetExporter

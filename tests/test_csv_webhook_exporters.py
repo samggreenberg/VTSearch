@@ -152,7 +152,7 @@ class TestCsvExporterCLI:
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args([])
-        assert args.filepath == "autodetect_results.csv"
+        assert args.filepath == "data/autodetect_results.csv"
 
     def test_validate_passes(self):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
