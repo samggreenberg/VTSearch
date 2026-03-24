@@ -762,8 +762,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
           }
           if (progress.current != null && progress.total != null && progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
-            msg += ` (${pct}%)`;
+            const fraction = `(${progress.current}/${progress.total})`;
+            const stepEnd = msg.indexOf('] ');
+            if (stepEnd !== -1) {
+              msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+            } else {
+              msg = fraction + ' ' + msg;
+            }
           }
           this.datasetState.setProgressMessage(msg);
         },
@@ -860,8 +865,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const pct = Math.min(100, Math.round((task.current / task.total) * 100));
-      msg += ` (${pct}%)`;
+      const fraction = `(${task.current}/${task.total})`;
+      const stepEnd = msg.indexOf('] ');
+      if (stepEnd !== -1) {
+        msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+      } else {
+        msg = fraction + ' ' + msg;
+      }
     }
     return msg;
   }
