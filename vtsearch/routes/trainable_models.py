@@ -81,10 +81,6 @@ def sync_labels_to_loaded_model() -> None:
     Skipped when the model is in "find mode" (after ``/api/find-label``),
     because the global votes reflect scoring results on a different dataset,
     not the model's original training labels.
-
-    Also skipped when the active dataset context has no votes, which avoids
-    overwriting existing training labels with an empty labelset after the
-    user switches to a different dataset.
     """
     from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
 
@@ -99,14 +95,6 @@ def sync_labels_to_loaded_model() -> None:
     if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
         return
 
-    from vtsearch.utils import bad_votes, good_votes
-
-    # Skip sync when there are no votes in the active dataset context.
-    # This prevents overwriting existing training labels with an empty
-    # labelset after the user switches to a different dataset.
-    if not good_votes and not bad_votes:
-        return
-
     tm_name = entry["trainable_model_name"]
     path = _model_path(tm_name)
     data = _read_model(path)
@@ -114,7 +102,7 @@ def sync_labels_to_loaded_model() -> None:
         return
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import snapshot_medias
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
     labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
     data["labelset"] = labelset.to_dict()
@@ -703,8 +691,15 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
-    # Save current model's labels before switching.
-    sync_labels_to_loaded_model()
+    # Save current model's labels before switching — but only if there
+    # are votes in the active context.  When the user has switched to a
+    # different dataset the active context may have no votes at all;
+    # syncing in that situation would overwrite the model's saved
+    # training labels with an empty labelset.
+    from vtsearch.utils import bad_votes, good_votes
+
+    if good_votes or bad_votes:
+        sync_labels_to_loaded_model()
 
     # Clear votes so labels from the previous session don't carry over.
     clear_votes()

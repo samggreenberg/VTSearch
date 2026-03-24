@@ -594,12 +594,13 @@ class TestSyncLabelsAcrossDatasets:
     """sync_labels_to_loaded_model must not destroy training data when the
     active dataset has been switched (no votes in the new context)."""
 
-    def test_sync_skips_when_votes_empty_after_dataset_switch(self, client, tmp_path):
-        """Train on Dataset A, switch to Dataset B (empty votes),
-        call sync → model's labelset must still have A's labels."""
+    def test_load_model_route_skips_sync_when_no_votes(self, client, tmp_path):
+        """load_model_route must skip sync when the active context has no
+        votes, preventing destruction of the model's saved labelset from a
+        prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
         from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
-        from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
+        from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
@@ -624,6 +625,7 @@ class TestSyncLabelsAcrossDatasets:
                 {
                     "name": tm_name,
                     "text_query": "",
+                    "media_type": "audio",
                     "examples": [],
                     "labelset": labelset.to_dict(),
                 },
@@ -642,14 +644,15 @@ class TestSyncLabelsAcrossDatasets:
             good_votes.clear()
             bad_votes.clear()
 
-            # Phase 3: trigger sync — must NOT overwrite training labels
-            sync_labels_to_loaded_model()
+            # Phase 3: re-load the same model via the API endpoint
+            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            assert resp.status_code == 200
 
             saved = _read_model(tm_path)
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
-                f"Expected {original_label_count} training labels but sync "
-                f"overwrote them with {len(saved_labels)} (empty votes)"
+                f"Expected {original_label_count} training labels but load_model "
+                f"overwrote them with {len(saved_labels)} (empty votes context)"
             )
         finally:
             set_trainable_models_dir(original_dir)
