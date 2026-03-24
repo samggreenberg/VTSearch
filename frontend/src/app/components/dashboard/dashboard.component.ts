@@ -246,12 +246,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const prevColWidth = ths[colIndex].style.width;
 
     tableEl.classList.remove('table-fixed');
-    tableEl.style.width = '';
+    // Force width:auto so the table shrinks to content instead of stretching
+    // to 100% (the CSS class default).  Without this, the browser distributes
+    // extra container space across columns, inflating every measurement.
+    tableEl.style.width = 'auto';
     ths[colIndex].style.width = '';
 
-    // Measure the natural width of body cells (not the header, whose uppercase
-    // text, letter-spacing, and sort-indicator inflate the width beyond what
-    // the data needs).
+    // Measure the natural width of the column from body cells.
     let maxWidth = 0;
     const rows = tableEl.querySelectorAll('tbody tr');
     rows.forEach((row) => {
@@ -305,10 +306,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.modelsTableWidth = total;
     }
 
-    // Restore fixed layout (Angular binding will apply on next change detection)
+    // Restore layout (Angular binding will apply on next change detection).
+    // Clear the temporary 'auto' override so Angular bindings take over.
+    tableEl.style.width = prevTableWidth;
     if (wasFixed) {
       tableEl.classList.add('table-fixed');
-      tableEl.style.width = prevTableWidth;
     }
   }
 
