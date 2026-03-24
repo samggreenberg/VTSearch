@@ -57,6 +57,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() panelMode: 'label' | 'find' = 'label';
   /** Disable all interaction (used during Find scoring). */
   @Input() disabled = false;
+  /** Display name of the current dataset. */
+  @Input() datasetName = '';
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() selectModeChange = new EventEmitter<SelectMode>();

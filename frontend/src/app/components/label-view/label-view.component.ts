@@ -8,6 +8,7 @@ import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
+import { DatasetsApiService } from '../../services/datasets-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -30,6 +31,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
+  datasetName = '';
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
   gridGoalWidthLeft: number = 80;
@@ -83,6 +85,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private sortingApi: SortingApiService,
     private detectorsApi: DetectorsApiService,
     private mediasApi: MediasApiService,
+    private datasetsApi: DatasetsApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
     public mediaState: MediaStateService,
@@ -101,6 +104,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
 
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))

@@ -1,4 +1,7 @@
 <div class="left-panel" [class.collapsed-autopilot]="panelMode === 'label' && activeTab === 'autopilot' && autopilotCollapsed" [class.disabled]="disabled">
+  @if (datasetName && !(panelMode === 'label' && activeTab === 'autopilot' && autopilotCollapsed)) {
+    <div class="dataset-name" [title]="datasetName">{{ datasetName }}</div>
+  }
   @if (panelMode === 'find') {
     <!-- Find mode: simplified view — just the media list header + media + stripe -->
     <div class="tab-panel-manual" role="region" aria-label="Find results">
