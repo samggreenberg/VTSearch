@@ -10,6 +10,10 @@
   &.selected {
     background: var(--accent-highlight-bg);
   }
+
+  &.loading-error {
+    background: var(--error-bg, rgba(220, 38, 38, 0.06));
+  }
 }
 
 td {
@@ -132,5 +136,61 @@ td {
   &:hover {
     color: var(--color-bad);
     background: var(--bad-bg);
+  }
+}
+
+// Inline loading progress (replaces data columns while loading)
+.inline-loading-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .progress-msg {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  vt-progress-bar {
+    flex: 1;
+  }
+
+  .btn--cancel {
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
+
+  &.inline-loading-failed {
+    .error-msg {
+      flex: 1;
+      font-size: 0.8rem;
+      color: var(--error-text, #991b1b);
+    }
+
+    .btn--cancel {
+      background: transparent;
+      color: var(--error-text, #991b1b);
+      border: 1px solid var(--error-border, #fca5a5);
+
+      &:hover {
+        background: var(--error-border, #fca5a5);
+        color: #fff;
+      }
+    }
   }
 }

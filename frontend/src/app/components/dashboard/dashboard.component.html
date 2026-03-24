@@ -14,7 +14,7 @@
       </div>
     </div>
 
-    @if (datasets.length === 0 && loadingTasks.length === 0 && !loading) {
+    @if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
@@ -38,7 +38,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (task of loadingTasks; track task.task_id) {
+            @for (task of orphanLoadingTasks; track task.task_id) {
               <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
@@ -69,11 +69,14 @@
                 [currentUser]="currentUser"
                 [isDefaultLogin]="isDefaultLogin"
                 [selected]="isDatasetSelected(dataset.id)"
+                [loadingTask]="getInlineTask(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
+                (cancelTask)="cancelLoadingTask($event)"
+                (dismissTask)="dismissLoadingTask($event)"
               />
             }
           </tbody>

@@ -692,7 +692,7 @@ def load_registered_dataset(dataset_id: str):
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
-    tracker = _loading_tasks.create_task(task_id, entry.get("name", dataset_id))
+    tracker = _loading_tasks.create_task(task_id, entry.get("name", dataset_id), dataset_id=dataset_id)
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):

@@ -153,7 +153,7 @@ class LoadingTasksTracker:
         self._lock = threading.Lock()
         self._tasks: dict[str, dict[str, Any]] = {}
 
-    def create_task(self, task_id: str, name: str = "") -> ProgressTracker:
+    def create_task(self, task_id: str, name: str = "", dataset_id: str = "") -> ProgressTracker:
         """Create and register a new loading task.
 
         Returns the per-task :class:`ProgressTracker` instance.
@@ -167,6 +167,7 @@ class LoadingTasksTracker:
                 "name": name,
                 "created_at": time.time(),
                 "finished_at": None,
+                "dataset_id": dataset_id,
             }
         return tracker
 
@@ -230,12 +231,16 @@ class LoadingTasksTracker:
                 snapshot["task_id"] = task_id
                 snapshot["name"] = entry["name"]
                 snapshot["created_at"] = entry["created_at"]
+                if entry.get("dataset_id"):
+                    snapshot["dataset_id"] = entry["dataset_id"]
                 result.append(snapshot)
             else:
                 snapshot = entry["tracker"].get()
                 snapshot["task_id"] = task_id
                 snapshot["name"] = entry["name"]
                 snapshot["created_at"] = entry["created_at"]
+                if entry.get("dataset_id"):
+                    snapshot["dataset_id"] = entry["dataset_id"]
                 result.append(snapshot)
         if stale:
             with self._lock:

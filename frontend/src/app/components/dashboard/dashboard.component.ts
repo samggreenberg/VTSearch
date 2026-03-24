@@ -341,6 +341,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.errorMessage;
   }
 
+  /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
+  get inlineTaskMap(): Map<string, LoadingTask> {
+    const map = new Map<string, LoadingTask>();
+    const datasetIds = new Set(this.datasets.map((d) => d.id));
+    for (const task of this.loadingTasks) {
+      if (task.dataset_id && datasetIds.has(task.dataset_id)) {
+        map.set(task.dataset_id, task);
+      }
+    }
+    return map;
+  }
+
+  /** Loading tasks that have no matching dataset row (new imports, etc.). */
+  get orphanLoadingTasks(): LoadingTask[] {
+    const datasetIds = new Set(this.datasets.map((d) => d.id));
+    return this.loadingTasks.filter((t) => !t.dataset_id || !datasetIds.has(t.dataset_id));
+  }
+
+  getInlineTask(datasetId: string): LoadingTask | undefined {
+    return this.inlineTaskMap.get(datasetId);
+  }
+
   dismissError(): void {
     this.datasetState.setErrorMessage('');
   }
