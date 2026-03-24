@@ -198,10 +198,10 @@ class TestGuessMediaType:
         data = resp.get_json()
         assert len(data["datasets"]) == 0
         # Set a single autoload type
-        client.put("/api/settings", json={"autoload_media_types": ["paragraph"]})
+        client.put("/api/settings", json={"autoload_media_types": ["text"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert data["autoload_media_types"] == ["paragraph"]
+        assert data["autoload_media_types"] == ["text"]
 
 
 class TestDashboardDatasetRegistryColumns:

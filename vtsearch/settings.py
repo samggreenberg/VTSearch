@@ -574,11 +574,13 @@ def get_autoload_media_types() -> list[str]:
 
     .. deprecated:: Use :func:`get_autoload_media_embedders` instead.
     """
+    from vtsearch.media import normalize_type_id
+
     valid = _valid_media_types()
     with _settings_lock:
         raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
         if isinstance(raw, list):
-            return [v for v in raw if v in valid]
+            return [normalize_type_id(v) for v in raw if normalize_type_id(v) in valid]
         return []
 
 

@@ -36,7 +36,7 @@ export class MediaItemComponent {
     if (!this.isGrid) return null;
     if (this.thumbnailUrl) return null;
     if (this.media.type === 'audio') return '\u266B';
-    if (this.media.type === 'paragraph') return '\u00B6';
+    if (this.media.type === 'text') return '\u00B6';
     return '\u25A1';
   }
 

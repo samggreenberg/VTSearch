@@ -277,7 +277,7 @@ class TestPickleChunked:
         """Text-specific fields (word_count, character_count) are preserved via the registry."""
         medias_data = {
             1: {
-                "type": "paragraph",
+                "type": "text",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Hello world",
                 "media_bytes": b"Hello world",
@@ -294,7 +294,7 @@ class TestPickleChunked:
         # Full mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         media = chunks[0][1]
-        assert media["type"] == "paragraph"
+        assert media["type"] == "text"
         assert media["word_count"] == 2
         assert media["character_count"] == 11
 
@@ -392,10 +392,10 @@ class TestPickleChunked:
         assert "report.pdf" in media["media_path"]
 
     def test_text_legacy_key_via_registry(self, tmp_path):
-        """Legacy text_content key is resolved via the registry for paragraph type."""
+        """Legacy text_content key is resolved via the registry for text type."""
         medias_data = {
             1: {
-                "type": "paragraph",
+                "type": "text",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "text_content": "Some text paragraph",
                 "filename": "para.txt",
@@ -409,7 +409,7 @@ class TestPickleChunked:
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
-        assert media["type"] == "paragraph"
+        assert media["type"] == "text"
         assert media["media_string"] == "Some text paragraph"
         assert media["media_bytes"] == b"Some text paragraph"
 

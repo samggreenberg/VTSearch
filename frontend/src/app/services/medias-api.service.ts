@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   MediaItem,
-  ParagraphResponse,
+  TextResponse,
   VoteResponse,
 } from '../models/api.models';
 
@@ -27,8 +27,8 @@ export class MediasApiService {
     return this.http.get(`/api/medias/${id}/image`, { responseType: 'blob' });
   }
 
-  getParagraph(id: number): Observable<ParagraphResponse> {
-    return this.http.get<ParagraphResponse>(`/api/medias/${id}/paragraph`);
+  getText(id: number): Observable<TextResponse> {
+    return this.http.get<TextResponse>(`/api/medias/${id}/text`);
   }
 
   getMedia(id: number): Observable<Blob> {

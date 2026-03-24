@@ -12,7 +12,7 @@ export interface MediaItem {
   description?: string;
 }
 
-export interface ParagraphResponse {
+export interface TextResponse {
   content: string;
   word_count?: number;
   character_count?: number;

@@ -36,7 +36,7 @@ class TextBGEEmbedder(MediaEmbedder):
 
     @property
     def media_type_id(self) -> str:
-        return "paragraph"
+        return "text"
 
     # ------------------------------------------------------------------
     # Model lifecycle

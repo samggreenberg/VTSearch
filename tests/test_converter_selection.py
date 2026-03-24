@@ -63,7 +63,7 @@ class TestConverterRegistry:
         assert len(converters) >= 4
         names = [c.name for c in converters]
         assert "document2image" in names
-        assert "document2paragraph" in names
+        assert "document2text" in names
         assert "video2audio" in names
         assert "video2image" in names
 
@@ -98,12 +98,12 @@ class TestConverterRegistry:
         assert "video2audio" in names
         assert "video2image" not in names
 
-    def test_list_converters_for_target_paragraph(self):
+    def test_list_converters_for_target_text(self):
         from vtsearch.converters import list_converters_for_target
 
-        converters = list_converters_for_target("paragraph")
+        converters = list_converters_for_target("text")
         names = [c.name for c in converters]
-        assert "document2paragraph" in names
+        assert "document2text" in names
 
     def test_list_converters_for_target_none(self):
         from vtsearch.converters import list_converters_for_target
@@ -184,7 +184,7 @@ class TestConvertersAPI:
         assert "video2image" in names
         assert "video2audio" in names
         assert "document2image" in names
-        assert "document2paragraph" in names
+        assert "document2text" in names
 
     def test_filter_by_target_type_id(self, client):
         resp = client.get("/api/converters?target=image")

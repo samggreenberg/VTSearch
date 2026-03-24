@@ -94,7 +94,7 @@ class TestIngestMissingClips:
         from vtsearch.datasets.ingest import _media_type_from_origin
 
         origin = {"importer": "folder", "params": {"path": "/tmp/x", "media_type": "paragraphs"}}
-        assert _media_type_from_origin(origin) == "paragraph"
+        assert _media_type_from_origin(origin) == "text"
 
     def test_media_type_from_origin_demo(self):
         """Demo origins resolve media type from DEMO_DATASETS config."""
@@ -205,7 +205,7 @@ class TestIngestMissingClips:
         existing_clips: dict = {
             1: {
                 "id": 1,
-                "type": "paragraph",
+                "type": "text",
                 "duration": 0,
                 "file_size": 10,
                 "md5": "existing_md5",

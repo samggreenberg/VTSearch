@@ -999,8 +999,10 @@ def load_dataset_from_pickle(
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
-            # Determine media type
-            media_type = media_info.get("type", "audio")
+            # Determine media type (normalize legacy IDs like "paragraph" → "text")
+            from vtsearch.media import normalize_type_id
+
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
@@ -1209,7 +1211,7 @@ def load_dataset_from_pickle_chunked(
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = media_info.get("type", "audio")
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 media_path: str | None = media_info.get("media_path")

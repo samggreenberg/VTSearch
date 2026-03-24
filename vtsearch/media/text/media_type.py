@@ -31,7 +31,7 @@ class TextMediaType(MediaType):
 
     @property
     def type_id(self) -> str:
-        return "paragraph"
+        return "text"
 
     @property
     def name(self) -> str:

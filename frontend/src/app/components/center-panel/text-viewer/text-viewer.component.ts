@@ -30,7 +30,7 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
   private loadText(): void {
     this.sub?.unsubscribe();
     this.text = 'Loading...';
-    this.sub = this.mediasApi.getParagraph(this.media.id).subscribe({
+    this.sub = this.mediasApi.getText(this.media.id).subscribe({
       next: (data) => {
         this.text = data.content || '';
       },

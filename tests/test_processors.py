@@ -132,10 +132,10 @@ class TestDetectorABC:
         assert det.media_type == "audio"
 
     def test_to_dict(self):
-        det = StubDetector(name="test-det", media_type="paragraph")
+        det = StubDetector(name="test-det", media_type="text")
         d = det.to_dict()
         assert d["name"] == "test-det"
-        assert d["media_type"] == "paragraph"
+        assert d["media_type"] == "text"
 
 
 # ---------------------------------------------------------------------------

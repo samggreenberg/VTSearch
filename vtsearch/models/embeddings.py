@@ -41,7 +41,7 @@ def embed_image_file(image_path: Path) -> Optional[np.ndarray]:
 
 def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
     """Generate an E5-base-v2 embedding for *text_path*."""
-    emb = _get_embedder_for_media_type("paragraph")
+    emb = _get_embedder_for_media_type("text")
     return emb.embed_media(text_path) if emb else None
 
 

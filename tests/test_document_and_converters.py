@@ -310,7 +310,7 @@ class TestDocument2TextMediaConverter:
 
         c = Document2TextMediaConverter()
         assert c.source_type == "document"
-        assert c.target_type == "paragraph"
+        assert c.target_type == "text"
 
     def test_extract_text_from_pdf(self):
         from vtsearch.converters.document2text import Document2TextMediaConverter
@@ -539,7 +539,7 @@ class TestConverterRegistrySourceFilter:
         results = list_converters_for_source("document")
         names = [c.name for c in results]
         assert "document2image" in names
-        assert "document2paragraph" in names
+        assert "document2text" in names
         assert "video2image" not in names
 
     def test_list_converters_for_source_nonexistent(self):
@@ -585,7 +585,7 @@ class TestConvertersAPISourceFilter:
         assert "video2image" in names
 
     def test_converters_filter_by_source_no_results(self, client):
-        resp = client.get("/api/converters?source=paragraph")
+        resp = client.get("/api/converters?source=text")
         data = resp.get_json()
         assert data["converters"] == []
 

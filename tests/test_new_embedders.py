@@ -189,7 +189,7 @@ class TestTextBGEEmbedderProperties:
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
-        assert emb.media_type_id == "paragraph"
+        assert emb.media_type_id == "text"
 
     def test_description_wrappers_non_empty(self):
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
@@ -204,12 +204,12 @@ class TestTextBGEEmbedderProperties:
 
         emb = get_embedder("bge")
         assert emb.name == "bge"
-        assert emb.media_type_id == "paragraph"
+        assert emb.media_type_id == "text"
 
     def test_listed_in_embedders_for_type(self):
         from vtsearch.media import embedders_for_type
 
-        embedders = embedders_for_type("paragraph")
+        embedders = embedders_for_type("text")
         names = [e.name for e in embedders]
         assert "bge" in names
 
@@ -218,7 +218,7 @@ class TestTextBGEEmbedderProperties:
 
         emb = TextBGEEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "bge", "media_type_id": "paragraph"}
+        assert d == {"name": "bge", "media_type_id": "text"}
 
     def test_load_models_idempotent(self):
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
@@ -328,10 +328,10 @@ class TestAllEmbeddersRegistration:
         names = {e.name for e in embedders_for_type("image")}
         assert names == {"clip", "siglip"}
 
-    def test_embedders_for_paragraph(self):
+    def test_embedders_for_text(self):
         from vtsearch.media import embedders_for_type
 
-        names = {e.name for e in embedders_for_type("paragraph")}
+        names = {e.name for e in embedders_for_type("text")}
         assert names == {"e5", "bge"}
 
     def test_embedders_for_video(self):

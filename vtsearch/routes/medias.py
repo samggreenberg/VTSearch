@@ -350,8 +350,9 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
+@medias_bp.route("/api/medias/<int:media_id>/text")
 def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
-    """Return the text content and statistics for a single paragraph media item.
+    """Return the text content and statistics for a single text media item.
 
     Args:
         media_id: Integer media ID from the URL path.
@@ -360,13 +361,13 @@ def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
         A JSON object with keys ``"content"`` (str), ``"word_count"`` (int),
         and ``"character_count"`` (int) on success (HTTP 200), a JSON 404
         error if the media does not exist, or a JSON 400 error if the media
-        exists but is not of type ``"paragraph"``.
+        exists but is not of type ``"text"``.
     """
     c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
-    if c.get("type") != "paragraph":
-        return jsonify({"error": "not a paragraph"}), 400
+    if c.get("type") not in ("text", "paragraph"):
+        return jsonify({"error": "not a text media"}), 400
 
     content = _resolve_string(c)
     if content is None:
