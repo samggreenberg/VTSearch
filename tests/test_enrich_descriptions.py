@@ -93,7 +93,7 @@ class TestEmbedTextEnriched:
             def media_type_id(self):
                 return "mock"
 
-            def load_models(self):
+            def _load_models_impl(self):
                 pass
 
             def embed_media(self, file_path):

@@ -281,12 +281,29 @@ class MediaEmbedder(ABC):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def load_models(self) -> None:
         """Load (and cache) the embedding model.
 
         Called lazily the first time this embedder needs to produce a vector.
         Implementations must be idempotent — a second call should be a no-op.
+
+        Subclasses should override :meth:`_load_models_impl` (not this method).
+        This wrapper catches :class:`ImportError` and re-raises with an
+        actionable message so that missing dependencies surface clearly.
+        """
+        try:
+            self._load_models_impl()
+        except ImportError as exc:
+            raise ImportError(
+                f"{exc} — required by the '{self.name}' embedder. "
+                f"Install dependencies with: pip install -e '.[cpu,dev]'"
+            ) from exc
+
+    @abstractmethod
+    def _load_models_impl(self) -> None:
+        """Subclass hook: load the embedding model.
+
+        Override this instead of :meth:`load_models`.
         """
 
     # ------------------------------------------------------------------
