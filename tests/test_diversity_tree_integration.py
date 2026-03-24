@@ -435,6 +435,43 @@ class TestDiversityLevelOverTime:
         for i in range(1, len(levels)):
             assert levels[i] >= levels[i - 1], f"Diversity level decreased at step {i}: {levels[i - 1]} -> {levels[i]}"
 
+    def test_diversity_level_no_drop_after_vote_polarity_switch(self, client):
+        """Switching a vote from bad→good must not cause a diversity dip in the progress cache."""
+        tree = _build_tree()
+
+        # Label several medias to build up diversity — need both good and bad
+        cids = sorted(tree.vector_to_leaf.keys())[:6]
+        for i, cid in enumerate(cids):
+            if i % 2 == 0:
+                client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+            else:
+                client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
+
+        # Record the diversity level before the switch
+        resp = client.post("/api/labeling-progress")
+        data = resp.get_json()
+        levels_before = [e["diversity_level"] for e in data["diversity_level_over_time"]]
+        assert len(levels_before) > 0, "Expected diversity history entries"
+        peak_before = max(levels_before)
+
+        # Switch the last bad vote to good (polarity switch triggers cache invalidation)
+        switch_cid = cids[1]  # was voted bad
+        client.post(f"/api/medias/{switch_cid}/vote", json={"vote": "good"})
+
+        # Fetch diversity history again — no entry should be below the pre-switch peak
+        resp = client.post("/api/labeling-progress")
+        data = resp.get_json()
+        levels_after = [e["diversity_level"] for e in data["diversity_level_over_time"]]
+        for i, level in enumerate(levels_after):
+            if i < len(levels_before):
+                # Kept entries should be unchanged
+                continue
+            # New entries should not dip below the peak
+            assert level >= peak_before, (
+                f"Diversity level dropped to {level} at step {i} after vote polarity switch "
+                f"(peak before switch was {peak_before}). Full history: {levels_after}"
+            )
+
     def test_labeling_status_includes_diversity_level(self, client):
         """The /api/labeling-status span info should include diversity_level."""
         _build_tree()
