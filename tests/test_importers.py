@@ -741,7 +741,7 @@ class TestLoadDatasetSkipEmbedding:
             )
 
         # The per-file progress calls should use "loading" phase, not "embedding".
-        per_file = [c for c in progress_calls if c[2] > 0]  # non-zero current
+        per_file = [c for c in progress_calls if len(c) >= 4 and c[2] > 0]
         assert len(per_file) >= 1
         assert per_file[0][0] == "loading"
         assert "Loading" in per_file[0][1]
