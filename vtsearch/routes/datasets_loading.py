@@ -336,6 +336,11 @@ def _run_origin_load_in_background(
     Returns the task_id that can be used to poll progress or cancel.
     """
 
+    # Reset the legacy cancellation flag so a previous cancel does not
+    # immediately abort this new operation (backward compat for tests that
+    # check dataset_progress.is_cancelled).
+    dataset_progress.reset_cancel()
+
     task_id = f"_loading_{uuid4().hex[:8]}"
     tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin))
 
@@ -354,7 +359,13 @@ def _run_origin_load_in_background(
             # route to this task's tracker instead of the global singleton.
             set_thread_progress(stepped)
             try:
-                load_fn(ctx.medias)
+                import inspect
+
+                sig = inspect.signature(load_fn)
+                if sig.parameters:
+                    load_fn(ctx.medias)
+                else:
+                    load_fn()
             finally:
                 clear_thread_progress()
 
@@ -439,16 +450,7 @@ def _run_origin_load_in_background(
             tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
         finally:
             clear_thread_progress()
-            # Remove the task from the loading tasks tracker after a brief
-            # delay to let the frontend poll the final state.  The actual
-            # cleanup happens asynchronously.
-            def _deferred_cleanup():
-                import time
-
-                time.sleep(3)
-                loading_tasks.remove_task(task_id)
-
-            threading.Thread(target=_deferred_cleanup, daemon=True).start()
+            loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
     return task_id

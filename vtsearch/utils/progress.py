@@ -166,8 +166,16 @@ class LoadingTasksTracker:
                 "tracker": tracker,
                 "name": name,
                 "created_at": time.time(),
+                "finished_at": None,
             }
         return tracker
+
+    def mark_finished(self, task_id: str) -> None:
+        """Record the time a task finished (for deferred cleanup)."""
+        with self._lock:
+            entry = self._tasks.get(task_id)
+            if entry:
+                entry["finished_at"] = time.time()
 
     def get_tracker(self, task_id: str) -> ProgressTracker | None:
         """Return the ProgressTracker for *task_id*, or ``None``."""
@@ -200,16 +208,28 @@ class LoadingTasksTracker:
 
         Each entry includes: ``task_id``, ``name``, ``created_at``, and
         all fields from the task's :class:`ProgressTracker`.
+
+        Finished tasks older than 5 seconds are automatically removed.
         """
+        now = time.time()
+        stale: list[str] = []
         with self._lock:
             entries = list(self._tasks.items())
         result = []
         for task_id, entry in entries:
+            finished = entry.get("finished_at")
+            if finished is not None and (now - finished) > 5:
+                stale.append(task_id)
+                continue
             snapshot = entry["tracker"].get()
             snapshot["task_id"] = task_id
             snapshot["name"] = entry["name"]
             snapshot["created_at"] = entry["created_at"]
             result.append(snapshot)
+        if stale:
+            with self._lock:
+                for tid in stale:
+                    self._tasks.pop(tid, None)
         return result
 
     def has_active_tasks(self) -> bool:
@@ -286,12 +306,29 @@ def update_progress(
 
 
 def get_progress() -> dict[str, Any]:
-    """Return a snapshot of the current dataset progress data."""
+    """Return a snapshot of the current dataset progress data.
+
+    Checks per-task loading trackers first (used by parallel dataset
+    loading) and falls back to the legacy global singleton.
+    """
+    tasks = loading_tasks.list_tasks()
+    active = [t for t in tasks if t.get("status") != "idle"]
+    if active:
+        return active[0]
+    # Check if any just-finished task has an error to report
+    errored = [t for t in tasks if t.get("error")]
+    if errored:
+        return errored[0]
     return dataset_progress.get()
 
 
 def cancel_dataset_progress() -> None:
-    """Signal the current dataset operation to cancel."""
+    """Signal the current dataset operation(s) to cancel.
+
+    Cancels all active per-task loading trackers as well as the legacy
+    global singleton (used by staging operations).
+    """
+    loading_tasks.cancel_all()
     dataset_progress.cancel()
 
 

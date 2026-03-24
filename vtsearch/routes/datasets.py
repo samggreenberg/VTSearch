@@ -320,7 +320,7 @@ def combine_datasets_route():
         return jsonify({"error": "combine_datasets importer not available"}), 500
 
     task_id = _run_importer_in_background(importer, {"datasets": dataset_paths})
-    return jsonify({"ok": True, "message": "Combining datasets...", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +480,7 @@ def import_dataset(importer_name: str):
             field_values[key] = val
 
     task_id = _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +522,7 @@ def load_demo_dataset_route():
         field_values["embedder"] = embedder_name
 
     task_id = _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ def load_dataset_file():
     file_bytes = io.BytesIO(file.read())
     file_bytes.name = file.filename
     task_id = _run_importer_in_background(importer, {"file": file_bytes})
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_bp.route("/api/dataset/load-folder", methods=["POST"])
@@ -574,7 +574,7 @@ def load_dataset_folder():
 
     importer = get_importer("folder")
     task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -767,18 +767,11 @@ def load_registered_dataset(dataset_id: str):
             tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
         finally:
             clear_thread_progress()
-
-            def _deferred_cleanup():
-                import time
-
-                time.sleep(3)
-                _loading_tasks.remove_task(task_id)
-
-            threading.Thread(target=_deferred_cleanup, daemon=True).start()
+            _loading_tasks.mark_finished(task_id)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
@@ -924,4 +917,4 @@ def _load_from_origin(source: dict):
                 return jsonify({"error": str(exc)}), 400
 
     task_id = _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started", "task_id": task_id})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
