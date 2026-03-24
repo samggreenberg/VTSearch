@@ -48,12 +48,10 @@
   <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
 }
 <td>
-  @if (dataset.active) {
-    <span class="check active-check" aria-label="Active" title="Active (in use)">&#10003;</span>
-  } @else if (dataset.loaded) {
-    <span class="check loaded-check" aria-label="Loaded" title="Loaded in memory (click to activate)">&#9679;</span>
+  @if (dataset.loaded) {
+    <span class="status-loaded" aria-label="Loaded">Loaded</span>
   } @else {
-    <span class="dim">-</span>
+    <span class="status-not-loaded" aria-label="Not loaded">Not loaded</span>
   }
 </td>
 <td class="actions-cell">
