@@ -762,9 +762,13 @@ def load_registered_dataset(dataset_id: str):
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Out of memory — dataset too large.", step=None, total_steps=None)
         except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
             unregister_context(dataset_id)
             _reg_remove_loaded(dataset_id)
-            tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
+            error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
             clear_thread_progress()
             _loading_tasks.mark_finished(task_id)

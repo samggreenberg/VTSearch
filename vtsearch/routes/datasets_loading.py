@@ -277,6 +277,7 @@ def _auto_register_dataset(
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
+        traceback.print_exc()
         return None
 
     entry = _reg_register(
@@ -337,9 +338,11 @@ def _run_origin_load_in_background(
     """
 
     # Reset the legacy cancellation flag so a previous cancel does not
-    # immediately abort this new operation (backward compat for tests that
-    # check dataset_progress.is_cancelled).
-    dataset_progress.reset_cancel()
+    # immediately abort this new operation — but only when no other
+    # parallel loads are running (otherwise we would clear cancellation
+    # that might still be intended for those in-flight tasks).
+    if not loading_tasks.has_active_tasks():
+        dataset_progress.reset_cancel()
 
     task_id = f"_loading_{uuid4().hex[:8]}"
     tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin))
@@ -465,7 +468,8 @@ def _run_origin_load_in_background(
             from vtsearch.utils.state_core import unregister_context
 
             unregister_context(task_id)
-            tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
+            error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
@@ -588,7 +592,8 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             )
         except Exception as e:
             traceback.print_exc()
-            update_progress("idle", "", 0, 0, str(e))
+            error_msg = str(e) or repr(e) or "Unknown error during staging"
+            update_progress("idle", "", 0, 0, error_msg)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()
