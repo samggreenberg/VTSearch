@@ -163,6 +163,7 @@ export interface LoadingTask {
   total_steps?: number;
   error?: string;
   created_at: number;
+  dataset_id?: string;
 }
 
 export interface LoadingTasksResponse {
