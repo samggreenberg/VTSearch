@@ -62,7 +62,7 @@ class VideoXClipEmbedder(MediaEmbedder):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    def load_models(self) -> None:
+    def _load_models_impl(self) -> None:
         if self._model is not None:
             return
         import gc

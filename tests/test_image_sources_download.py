@@ -111,9 +111,9 @@ class TestDownloadOxfordFlowers:
                 shutil.copy(str(tgz_path), str(dest))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             result = dl_module.download_oxford_flowers(on_progress=lambda *a: None)
 
@@ -134,8 +134,8 @@ class TestDownloadOxfordFlowers:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -161,8 +161,8 @@ class TestDownloadFood101:
         tar_path = _make_food101_tar(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -187,8 +187,8 @@ class TestDownloadFood101:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -214,8 +214,8 @@ class TestDownloadEurosat:
         zip_path = _make_eurosat_zip(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -238,8 +238,8 @@ class TestDownloadEurosat:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -265,8 +265,8 @@ class TestDownloadStanfordDogs:
         tar_path = _make_stanford_dogs_tar(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -290,8 +290,8 @@ class TestDownloadStanfordDogs:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",

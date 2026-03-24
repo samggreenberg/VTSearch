@@ -59,8 +59,8 @@ class TestDownloadUcsfDocuments:
             downloads.append(dest.name)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
             patch("requests.get", return_value=mock_response),
         ):
             result = dl_module.download_ucsf_documents(
@@ -90,8 +90,8 @@ class TestDownloadUcsfDocuments:
             dest.write_bytes(b"%PDF-1.0 stub")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
             patch("requests.get", return_value=mock_response),
         ):
             dl_module.download_ucsf_documents(
@@ -112,9 +112,9 @@ class TestDownloadUcsfDocuments:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
@@ -146,8 +146,8 @@ class TestDownloadUcsfDocuments:
             dest.write_bytes(b"%PDF-1.0 stub")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
             patch("requests.get", fake_get),
         ):
             dl_module.download_ucsf_documents(
@@ -176,8 +176,8 @@ class TestDownloadUcsfDocuments:
             downloads.append(dest.name)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
             patch("requests.get", return_value=mock_response),
         ):
             dl_module.download_ucsf_documents(
@@ -198,7 +198,7 @@ class TestDownloadUcsfDocuments:
             raise ConnectionError("network down")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch("requests.get", fail_get),
         ):
             result = dl_module.download_ucsf_documents(

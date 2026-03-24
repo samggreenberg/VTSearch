@@ -681,10 +681,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -709,10 +709,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -734,10 +734,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -759,8 +759,8 @@ class TestCaltech101Download:
         (categories_dir / "image_0001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.IMAGE_DIR", data_dir / "images"),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
         ):
             result = download_caltech101(on_progress=lambda *a: None)
 
@@ -807,10 +807,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -838,10 +838,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -865,10 +865,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.download_file_with_progress",
+                "vtsearch.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -890,8 +890,8 @@ class TestUCF101SubsetDownload:
         (ucf_dir / "v_Archery_g01_c01.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
 
         with (
-            patch("vtsearch.datasets.downloader.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.VIDEO_DIR", video_dir),
+            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
         ):
             result = download_ucf101_subset(on_progress=lambda *a: None)
 
