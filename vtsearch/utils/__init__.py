@@ -34,6 +34,7 @@ from vtsearch.utils.state import (
     bad_votes,
     build_media_lookup,
     build_diversity_tree,
+    build_diversity_tree_for_context,
     clear_all,
     clear_medias,
     clear_votes,
@@ -173,6 +174,7 @@ __all__ = [
     "apply_labels_bulk_with_click_time",
     # Diversity tree
     "build_diversity_tree",
+    "build_diversity_tree_for_context",
     "get_diversity_tree",
     "diversity_tree_next_sample",
     "diversity_tree_label",

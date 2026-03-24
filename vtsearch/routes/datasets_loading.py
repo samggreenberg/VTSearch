@@ -20,8 +20,10 @@ from vtsearch.datasets.registry import (
 from vtsearch.utils import (
     DatasetContext,
     build_diversity_tree,
+    build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
+    get_active_dataset_id,
     get_dataset_display_name,
     get_dupe_count,
     medias,
@@ -30,7 +32,14 @@ from vtsearch.utils import (
     snapshot_medias,
     update_progress,
 )
-from vtsearch.utils.progress import CancelledError, dataset_progress
+from vtsearch.utils.progress import (
+    CancelledError,
+    ProgressTracker,
+    clear_thread_progress,
+    dataset_progress,
+    loading_tasks,
+    set_thread_progress,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -49,24 +58,31 @@ _STATUS_TO_STEP = {
 _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 
 
-def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Thin wrapper around :func:`update_progress` that injects step info.
+def _make_stepped_progress(tracker: ProgressTracker):
+    """Return a stepped-progress callback bound to *tracker*.
 
-    Translates the ``status`` value emitted by inner functions (downloader,
-    media-type ``load_demo_source``, etc.) into a step number so the
-    frontend can display "Step 1/4", "Step 2/4", etc.
+    The returned callable maps status strings emitted by inner functions
+    (downloader, media-type ``load_demo_source``, etc.) into step numbers
+    and updates the per-task *tracker* rather than the global singleton.
 
-    ``"idle"`` signals are silently dropped because the outer
-    :func:`_run_origin_load_in_background` wrapper is responsible for
-    emitting the final ``"idle"`` after registration and embedder warm-up
-    are complete.  Without this filter a cached-pickle load can briefly set
-    ``"idle"`` before the wrapper overrides it, and a frontend poll during
-    that window would stop polling prematurely — leaving the UI stuck on
-    the progress overlay.
-
-    Also checks the cancellation flag on each callback so that long-running
-    loops (embedding, downloading) abort promptly when the user cancels.
+    ``"idle"`` signals are silently dropped because the outer loading
+    wrapper is responsible for emitting the final ``"idle"`` after
+    registration and embedder warm-up are complete.
     """
+
+    def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+        tracker.check_cancelled()
+        if status == "idle":
+            return
+        step = _STATUS_TO_STEP.get(status)
+        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+
+    return _stepped_progress
+
+
+# Keep the old module-level _stepped_progress for backward compat (staging uses it)
+def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+    """Legacy stepped progress that updates the global dataset_progress."""
     dataset_progress.check_cancelled()
     if status == "idle":
         return
@@ -79,12 +95,11 @@ def clear_dataset():
     clear_all()
 
 
-def _get_embedder_for_clips():
-    """Return the embedder for the current dataset, or None."""
-    snap = snapshot_medias()
-    if not snap:
+def _get_embedder_for_medias(media_dict: dict):
+    """Return the embedder for the given medias dict, or None."""
+    if not media_dict:
         return None
-    first = next(iter(snap.values()))
+    first = next(iter(media_dict.values()))
     embedder_name = first.get("embedder", "")
     media_type = first.get("type", "audio")
 
@@ -100,48 +115,38 @@ def _get_embedder_for_clips():
     return avail[0] if avail else None
 
 
-def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
-    """Eagerly load the embedder for the current dataset's media type.
+def _get_embedder_for_clips():
+    """Return the embedder for the current dataset, or None."""
+    snap = snapshot_medias()
+    return _get_embedder_for_medias(snap)
 
-    Called right after a dataset finishes loading so the first text sort
-    doesn't have to wait for the model download.  ``load_models()`` is
-    idempotent, so this is a no-op when the model is already warm (e.g.
-    after a folder import that already called ``embed_media()``).
 
-    After loading the model, a dummy text embedding is run to warm up the
-    text encoder branch.  Models like CLAP, CLIP, and X-CLIP have separate
-    media and text encoder sub-networks; data ingest only exercises the
-    media branch, leaving the text branch cold.  Without this warmup the
-    first user-initiated text sort would stall on PyTorch's lazy
-    initialisation for that branch.
+def _load_embedder_with_progress(
+    media_dict: dict,
+    progress_fn,
+    step: int | None = None,
+    total_steps: int | None = None,
+) -> None:
+    """Eagerly load the embedder and warm up its text encoder.
 
-    Args:
-        step: The step number to report for this phase.  Defaults to
-            ``_TOTAL_LOAD_STEPS`` (the last step of the demo/importer flow).
-        total_steps: The total number of steps to report.  Defaults to
-            ``_TOTAL_LOAD_STEPS``.
+    *progress_fn* is called as ``progress_fn(status, message, current, total, **kw)``
+    to report progress.  When *media_dict* is passed it is used to determine
+    the embedder; otherwise falls back to the active dataset.
     """
     if step is None:
         step = _TOTAL_LOAD_STEPS
     if total_steps is None:
         total_steps = _TOTAL_LOAD_STEPS
 
-    emb = _get_embedder_for_clips()
+    emb = _get_embedder_for_medias(media_dict) if media_dict else _get_embedder_for_clips()
     if emb is None:
-        update_progress("idle", "Ready", step=None, total_steps=None)
+        progress_fn("idle", "Ready", step=None, total_steps=None)
         return
 
     def _model_load_progress(status, message, current, total):
-        update_progress(status, message, current, total, step=step, total_steps=total_steps)
+        progress_fn(status, message, current, total, step=step, total_steps=total_steps)
 
-    update_progress(
-        "loading",
-        "Loading embedding model…",
-        0,
-        0,
-        step=step,
-        total_steps=total_steps,
-    )
+    progress_fn("loading", "Loading embedding model…", 0, 0, step=step, total_steps=total_steps)
     original_cb = emb._on_progress
     emb._on_progress = _model_load_progress
     try:
@@ -150,28 +155,21 @@ def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = 
         emb._on_progress = original_cb
 
     # Warm up the text encoder so the first text sort is instant.
-    update_progress(
-        "loading",
-        "Warming up text encoder…",
-        0,
-        0,
-        step=step,
-        total_steps=total_steps,
-    )
+    progress_fn("loading", "Warming up text encoder…", 0, 0, step=step, total_steps=total_steps)
     try:
         emb.embed_text("warmup")
     except Exception:
         pass
-    update_progress("idle", "Ready", step=None, total_steps=None)
+    progress_fn("idle", "Ready", step=None, total_steps=None)
+
+
+def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
+    """Legacy wrapper: load embedder using the global progress tracker."""
+    _load_embedder_with_progress(None, update_progress, step=step, total_steps=total_steps)
 
 
 def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
-    """Set origin and origin_name on medias that don't already have them.
-
-    Called after an importer finishes populating the medias dict.  Clips
-    that already carry their own origin (e.g. loaded from a pickle that
-    recorded per-element provenance) are left untouched.
-    """
+    """Set origin and origin_name on medias that don't already have them."""
     for media in clips_dict.values():
         if media.get("origin") is None:
             media["origin"] = origin
@@ -180,11 +178,7 @@ def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
 
 
 def _origin_to_str(origin: dict | None) -> str:
-    """Convert an origin dict to a human-readable string.
-
-    Delegates to the importer's :meth:`origin_display` when available,
-    falling back to a generic ``"<importer_name>:<first_param>"`` format.
-    """
+    """Convert an origin dict to a human-readable string."""
     if not origin:
         return "unknown"
     importer_name = origin.get("importer", "")
@@ -197,7 +191,6 @@ def _origin_to_str(origin: dict | None) -> str:
     if importer is not None:
         return importer.origin_display(origin)
 
-    # Unknown importer — generic fallback
     params = origin.get("params", {})
     if params:
         first_val = next(iter(params.values()))
@@ -206,15 +199,7 @@ def _origin_to_str(origin: dict | None) -> str:
 
 
 def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
-    """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
-
-    Each media is run through the clipper's ``clip()`` method.  The resulting
-    clips are assigned fresh sequential IDs and their origins are annotated
-    with the clipper name and clip index.
-
-    If *clipper_params* is provided, the registered clipper is customised via
-    its :meth:`~MediaClipper.with_params` method before clipping.
-    """
+    """Apply a clipper to all medias in *clips_dict*, replacing them in-place."""
     if not clipper_name:
         return
     from vtsearch.media import get_clipper
@@ -231,7 +216,6 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
     for media in list(clips_dict.values()):
         clipped = clipper.clip(media)
         for idx, clip in enumerate(clipped):
-            # Annotate origin with clipper info
             orig = clip.get("origin")
             if isinstance(orig, dict):
                 clip["origin"] = dict(orig)
@@ -248,45 +232,48 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
 
 
 def _auto_register_dataset(
+    media_dict: dict,
     name: str = "",
     origin_str: str = "unknown",
     source: dict | None = None,
     clipper: str = "",
     embedder: str = "",
     created_by: str = "",
+    display_name: str | None = None,
 ) -> dict | None:
-    """Save the current medias as a pkl and register in the dataset registry.
+    """Save *media_dict* as a pkl and register in the dataset registry.
 
-    Called at the end of every successful dataset load.  Skips if medias is
-    empty or if a registry entry with the same pkl path already exists (to
-    avoid duplicating on reload).
+    Unlike the old version, this accepts an explicit *media_dict* instead
+    of reading from the global ``medias`` proxy, enabling parallel loads.
 
     Returns the registry entry dict on success, or ``None`` on failure/skip.
     """
-    snap = snapshot_medias()
-    if not snap:
+    if not media_dict:
         return None
 
-    first = next(iter(snap.values()))
+    first = next(iter(media_dict.values()))
     media_type = first.get("type", "audio")
-    num_items = len(snap)
+    num_items = len(media_dict)
 
-    # Derive embedder from medias if not explicitly provided
     if not embedder:
         embedder = first.get("embedder", "")
 
-    # Derive name from display-name override, origin, or fallback
     if not name:
-        name = get_dataset_display_name() or origin_str or "Untitled"
+        name = display_name or origin_str or "Untitled"
         if ":" in name:
             name = name.split(":", 1)[1] or name
 
-    # Save to a pkl file in saved_datasets/
+    # Count dupes
+    num_dupes = sum(
+        1 for m in media_dict.values()
+        if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
+    )
+
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     try:
-        data_bytes = export_dataset_to_file(snap)
+        data_bytes = export_dataset_to_file(media_dict)
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
@@ -296,7 +283,7 @@ def _auto_register_dataset(
         name=name,
         media_type=media_type,
         num_items=num_items,
-        num_dupes=get_dupe_count(),
+        num_dupes=num_dupes,
         pkl_path=pkl_path,
         origin=origin_str,
         source=source,
@@ -320,6 +307,11 @@ def _activate_new_context(dataset_id: str) -> DatasetContext:
     return ctx
 
 
+# ---------------------------------------------------------------------------
+# Parallel-safe background loading
+# ---------------------------------------------------------------------------
+
+
 def _run_origin_load_in_background(
     load_fn,
     origin: dict,
@@ -329,82 +321,56 @@ def _run_origin_load_in_background(
     clipper_params: dict | None = None,
     embedder: str = "",
     created_by: str = "",
-) -> None:
+) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
-    *load_fn* is called after a fresh DatasetContext is activated and should
-    populate ``medias`` (which now proxies to the new context).  Everything
-    after (origin tagging, clipping, dedup, diversity tree, registry,
-    embedder warm-up) is handled automatically.
+    *load_fn* is called with a single argument — the target medias dict —
+    and should populate it in-place.  Everything after (origin tagging,
+    clipping, dedup, diversity tree, registry, embedder warm-up) is handled
+    automatically.
 
-    Parameters
-    ----------
-    load_fn:
-        Callable that loads data into *medias*.
-    origin:
-        Origin dict (``{"importer": ..., "params": ...}``).
-    name:
-        Display name for the dataset registry.  Falls back to
-        ``_origin_to_str(origin)`` when empty.
-    clipper:
-        Name of the clipper to apply after loading.  Empty string means
-        no clipping.
-    clipper_params:
-        Optional dict of parameter overrides for the clipper (e.g.
-        ``{"duration": 5.0}``).
-    embedder:
-        Name of the embedder used.  When empty, derived from the medias
-        at registration time.
-    created_by:
-        Username of the user who initiated the load.  Captured before
-        the background thread starts (no Flask request context in thread).
+    The dataset context is NOT activated during loading.  It is activated
+    only upon successful completion, and only if no other dataset is
+    currently active.
+
+    Returns the task_id that can be used to poll progress or cancel.
     """
 
-    # Reset the cancellation flag so a previous cancel does not immediately
-    # abort this new operation.
-    dataset_progress.reset_cancel()
+    task_id = f"_loading_{uuid4().hex[:8]}"
+    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin))
 
-    # Set progress to "loading" synchronously so the frontend never sees a
-    # stale "idle" status from a previous operation before the thread starts.
-    # Clear the error field so stale errors from previous loads don't persist.
-    update_progress("loading", "Preparing dataset...", error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
-
-    # Generate a temporary context ID.  It will be replaced by the real
-    # registry ID once _auto_register_dataset succeeds.
-    temp_ctx_id = f"_loading_{uuid4().hex[:8]}"
+    # Set initial progress synchronously so the first poll sees it.
+    tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     def task():
+        ctx = DatasetContext(task_id)
+        stepped = _make_stepped_progress(tracker)
         try:
-            update_progress(
-                "loading",
-                "Preparing new dataset…",
-                0,
-                0,
-                step=1,
-                total_steps=_TOTAL_LOAD_STEPS,
-            )
-            # Create a fresh context and activate it (preserving other contexts).
-            _activate_new_context(temp_ctx_id)
+            tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+            register_context(ctx)
             gc.collect()
-            load_fn()
-            dataset_progress.check_cancelled()
-            # Use MD5 hashes from custom_metadata when the importer
-            # provides them, before duplicate collapsing relies on them.
-            apply_custom_metadata_md5(medias)
-            update_progress(
-                "loading",
-                "Removing duplicates…",
-                step=_TOTAL_LOAD_STEPS,
-                total_steps=_TOTAL_LOAD_STEPS,
+
+            # Set thread-local progress so that loader/downloader callbacks
+            # route to this task's tracker instead of the global singleton.
+            set_thread_progress(stepped)
+            try:
+                load_fn(ctx.medias)
+            finally:
+                clear_thread_progress()
+
+            tracker.check_cancelled()
+            apply_custom_metadata_md5(ctx.medias)
+            tracker.update(
+                "loading", "Removing duplicates…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
             )
-            _set_clip_origins(medias, origin)
+            _set_clip_origins(ctx.medias, origin)
             if clipper:
-                _apply_clipper(medias, clipper, clipper_params)
-            collapse_duplicates(medias)
+                _apply_clipper(ctx.medias, clipper, clipper_params)
+            collapse_duplicates(ctx.medias)
 
             def _diversity_progress(current: int, total: int) -> None:
-                dataset_progress.check_cancelled()
-                update_progress(
+                tracker.check_cancelled()
+                tracker.update(
                     "loading",
                     "Building diversity index…",
                     current=current,
@@ -414,52 +380,54 @@ def _run_origin_load_in_background(
                 )
 
             _diversity_progress(0, 0)
-            build_diversity_tree(on_progress=_diversity_progress)
-            dataset_progress.check_cancelled()
-            update_progress(
-                "loading",
-                "Saving to registry…",
-                step=_TOTAL_LOAD_STEPS,
-                total_steps=_TOTAL_LOAD_STEPS,
+            build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+            tracker.check_cancelled()
+            tracker.update(
+                "loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
             )
             origin_str = _origin_to_str(origin)
             entry = _auto_register_dataset(
+                ctx.medias,
                 name=name,
                 origin_str=origin_str,
                 source=origin,
                 clipper=clipper,
                 embedder=embedder,
                 created_by=created_by,
+                display_name=name,
             )
-            # Migrate the context from the temp ID to the real registry ID.
+
+            # Migrate the context from the temp task_id to the real registry ID.
             if entry is not None:
-                _migrate_context_id(temp_ctx_id, entry["id"])
-            _load_embedder_for_clips()
+                _migrate_context_id(task_id, entry["id"])
+                ctx.dataset_display_name = entry.get("name", name)
+                # Activate this dataset if nothing else is currently active.
+                if get_active_dataset_id() is None:
+                    set_active_dataset_id(entry["id"])
+
+            # Warm up the embedder.  Use a progress wrapper that updates the
+            # task tracker, not the global singleton.
+            def _task_progress(status, message="", current=0, total=0, **kw):
+                tracker.update(status, message, current, total, **kw)
+
+            _load_embedder_with_progress(ctx.medias, _task_progress)
         except CancelledError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(temp_ctx_id)
+            unregister_context(task_id)
             gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                error="Cancelled",
-                step=None,
-                total_steps=None,
-            )
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except MemoryError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(temp_ctx_id)
+            unregister_context(task_id)
             gc.collect()
-            update_progress(
+            tracker.update(
                 "idle",
                 "",
                 0,
                 0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                error="Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
                 step=None,
                 total_steps=None,
             )
@@ -467,14 +435,23 @@ def _run_origin_load_in_background(
             traceback.print_exc()
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(temp_ctx_id)
-            update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
+            unregister_context(task_id)
+            tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
+        finally:
+            clear_thread_progress()
+            # Remove the task from the loading tasks tracker after a brief
+            # delay to let the frontend poll the final state.  The actual
+            # cleanup happens asynchronously.
+            def _deferred_cleanup():
+                import time
 
-    # Signal "loading" before the thread starts so frontend polling never
-    # sees a stale "idle" from a previous load and prematurely stops.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
+                time.sleep(3)
+                loading_tasks.remove_task(task_id)
+
+            threading.Thread(target=_deferred_cleanup, daemon=True).start()
 
     threading.Thread(target=task, daemon=True).start()
+    return task_id
 
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
@@ -494,8 +471,11 @@ def _migrate_context_id(old_id: str, new_id: str) -> None:
         set_active_dataset_id(new_id)
 
 
-def _run_importer_in_background(importer, field_values: dict) -> None:
-    """Start *importer*.run() in a daemon thread after clearing the dataset."""
+def _run_importer_in_background(importer, field_values: dict) -> str:
+    """Start *importer*.run() in a daemon thread.
+
+    Returns the task_id for progress tracking.
+    """
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "") or ""
@@ -505,25 +485,10 @@ def _run_importer_in_background(importer, field_values: dict) -> None:
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
-    def _load():
-        # Inject step-aware progress into the importer's on_progress default
-        # by temporarily patching the module-level _default_progress resolver
-        # used by loader.py and downloader.py.
-        import vtsearch.datasets.loader as _loader_mod
-        import vtsearch.datasets.downloader as _dl_mod
+    def _load(target_medias):
+        importer.run(field_values, target_medias)
 
-        orig_loader_dp = _loader_mod._default_progress
-        orig_dl_dp = _dl_mod._default_progress
-
-        _loader_mod._default_progress = lambda: _stepped_progress
-        _dl_mod._default_progress = lambda: _stepped_progress
-        try:
-            importer.run(field_values, medias)
-        finally:
-            _loader_mod._default_progress = orig_loader_dp
-            _dl_mod._default_progress = orig_dl_dp
-
-    _run_origin_load_in_background(
+    return _run_origin_load_in_background(
         _load,
         origin,
         name=importer.resolve_display_name(field_values),

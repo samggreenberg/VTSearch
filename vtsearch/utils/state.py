@@ -92,6 +92,7 @@ from vtsearch.utils.state_processors import (  # noqa: F401
 # Re-export diversity tree --------------------------------------------------
 from vtsearch.utils.state_diversity import (  # noqa: F401
     build_diversity_tree,
+    build_diversity_tree_for_context,
     diversity_tree_label,
     diversity_tree_next_sample,
     diversity_tree_unlabel,

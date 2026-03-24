@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from vtsearch.utils.state_core import (
+    DatasetContext,
     _get_diversity_tree,
     _set_diversity_tree,
     _state_lock,
@@ -54,6 +55,35 @@ def build_diversity_tree(
         for cid in bad_votes:
             if cid in tree.vector_to_leaf:
                 tree.label(cid)
+
+
+def build_diversity_tree_for_context(
+    ctx: DatasetContext,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> None:
+    """Build a diversity tree and store it on a specific context.
+
+    Unlike :func:`build_diversity_tree` this does not touch the active
+    context — it operates entirely on *ctx*.  Used by parallel dataset
+    loading where the new dataset is not yet active.
+    """
+    import numpy as np
+
+    from vtsearch.models.diversity_tree import DiversityTree
+
+    vectors: dict[int, np.ndarray] = {}
+    for cid, media in ctx.medias.items():
+        emb = media.get("embedding")
+        if emb is not None:
+            vectors[cid] = np.asarray(emb, dtype=np.float32)
+
+    if not vectors:
+        ctx.diversity_tree = None
+        return
+
+    tree = DiversityTree(vectors, k=3, on_progress=on_progress)
+    ctx.diversity_tree = tree
+    # Fresh context has no votes — nothing to replay.
 
 
 def get_diversity_tree():
