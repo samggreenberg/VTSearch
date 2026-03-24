@@ -42,7 +42,7 @@
 <td>{{ formatDate(dataset.created_at) }}</td>
 <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
 <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
-<td class="embedder-cell">{{ dataset.embedder || '-' }}</td>
+<td class="embedder-cell">{{ (dataset.embedder | titlecase) || '-' }}</td>
 @if (!isDefaultLogin) {
   <td>{{ dataset.created_by || '-' }}</td>
   <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
