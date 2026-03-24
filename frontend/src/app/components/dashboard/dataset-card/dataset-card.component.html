@@ -51,7 +51,7 @@
   @if (dataset.loaded) {
     <span class="status-loaded" aria-label="Loaded">&#10003;</span>
   } @else {
-    <span class="dim">-</span>
+    <span class="load-action" (click)="onLoad($event)" title="Click to load this dataset" aria-label="Load dataset">-</span>
   }
 </td>
 <td class="actions-cell">
