@@ -18,12 +18,15 @@ from vtsearch.datasets.registry import (
     set_loaded_id as _reg_set_loaded,
 )
 from vtsearch.utils import (
+    DatasetContext,
     build_diversity_tree,
     clear_all,
     collapse_duplicates,
     get_dataset_display_name,
     get_dupe_count,
     medias,
+    register_context,
+    set_active_dataset_id,
     snapshot_medias,
     update_progress,
 )
@@ -251,16 +254,18 @@ def _auto_register_dataset(
     clipper: str = "",
     embedder: str = "",
     created_by: str = "",
-) -> None:
+) -> dict | None:
     """Save the current medias as a pkl and register in the dataset registry.
 
     Called at the end of every successful dataset load.  Skips if medias is
     empty or if a registry entry with the same pkl path already exists (to
     avoid duplicating on reload).
+
+    Returns the registry entry dict on success, or ``None`` on failure/skip.
     """
     snap = snapshot_medias()
     if not snap:
-        return
+        return None
 
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
@@ -285,7 +290,7 @@ def _auto_register_dataset(
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
-        return
+        return None
 
     entry = _reg_register(
         name=name,
@@ -300,6 +305,19 @@ def _auto_register_dataset(
         created_by=created_by,
     )
     _reg_set_loaded(entry["id"])
+    return entry
+
+
+def _activate_new_context(dataset_id: str) -> DatasetContext:
+    """Create a fresh DatasetContext, register it, and make it active.
+
+    The previous active context (if any) is *preserved* in the context
+    store — it is not cleared.  This enables the multi-dataset model.
+    """
+    ctx = DatasetContext(dataset_id)
+    register_context(ctx)
+    set_active_dataset_id(dataset_id)
+    return ctx
 
 
 def _run_origin_load_in_background(
@@ -314,9 +332,10 @@ def _run_origin_load_in_background(
 ) -> None:
     """Run a dataset load in a background thread with standard error handling.
 
-    *load_fn* is called after ``clear_dataset()`` / ``gc.collect()`` and should
-    populate ``medias``.  Everything after (origin tagging, clipping, dedup,
-    diversity tree, registry, embedder warm-up) is handled automatically.
+    *load_fn* is called after a fresh DatasetContext is activated and should
+    populate ``medias`` (which now proxies to the new context).  Everything
+    after (origin tagging, clipping, dedup, diversity tree, registry,
+    embedder warm-up) is handled automatically.
 
     Parameters
     ----------
@@ -350,27 +369,28 @@ def _run_origin_load_in_background(
     # Clear the error field so stale errors from previous loads don't persist.
     update_progress("loading", "Preparing dataset...", error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
+    # Generate a temporary context ID.  It will be replaced by the real
+    # registry ID once _auto_register_dataset succeeds.
+    temp_ctx_id = f"_loading_{uuid4().hex[:8]}"
+
     def task():
         try:
             update_progress(
                 "loading",
-                "Clearing previous dataset…",
+                "Preparing new dataset…",
                 0,
                 0,
                 step=1,
                 total_steps=_TOTAL_LOAD_STEPS,
             )
-            clear_dataset()
+            # Create a fresh context and activate it (preserving other contexts).
+            _activate_new_context(temp_ctx_id)
             gc.collect()
             load_fn()
             dataset_progress.check_cancelled()
             # Use MD5 hashes from custom_metadata when the importer
             # provides them, before duplicate collapsing relies on them.
             apply_custom_metadata_md5(medias)
-            # _stepped_progress (the progress callback injected by
-            # _run_importer_in_background) filters out "idle" so that
-            # inner functions like load_demo_dataset cannot prematurely
-            # signal completion to the frontend.
             update_progress(
                 "loading",
                 "Removing duplicates…",
@@ -403,7 +423,7 @@ def _run_origin_load_in_background(
                 total_steps=_TOTAL_LOAD_STEPS,
             )
             origin_str = _origin_to_str(origin)
-            _auto_register_dataset(
+            entry = _auto_register_dataset(
                 name=name,
                 origin_str=origin_str,
                 source=origin,
@@ -411,9 +431,14 @@ def _run_origin_load_in_background(
                 embedder=embedder,
                 created_by=created_by,
             )
+            # Migrate the context from the temp ID to the real registry ID.
+            if entry is not None:
+                _migrate_context_id(temp_ctx_id, entry["id"])
             _load_embedder_for_clips()
         except CancelledError:
-            medias.clear()
+            from vtsearch.utils.state_core import unregister_context
+
+            unregister_context(temp_ctx_id)
             gc.collect()
             update_progress(
                 "idle",
@@ -425,7 +450,9 @@ def _run_origin_load_in_background(
                 total_steps=None,
             )
         except MemoryError:
-            medias.clear()
+            from vtsearch.utils.state_core import unregister_context
+
+            unregister_context(temp_ctx_id)
             gc.collect()
             update_progress(
                 "idle",
@@ -438,6 +465,9 @@ def _run_origin_load_in_background(
             )
         except Exception as e:
             traceback.print_exc()
+            from vtsearch.utils.state_core import unregister_context
+
+            unregister_context(temp_ctx_id)
             update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
 
     # Signal "loading" before the thread starts so frontend polling never
@@ -445,6 +475,23 @@ def _run_origin_load_in_background(
     update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     threading.Thread(target=task, daemon=True).start()
+
+
+def _migrate_context_id(old_id: str, new_id: str) -> None:
+    """Re-key a context from *old_id* to *new_id* in the store."""
+    from vtsearch.utils.state_core import (
+        _contexts,
+        _active_dataset_id,
+        set_active_dataset_id,
+    )
+
+    ctx = _contexts.pop(old_id, None)
+    if ctx is None:
+        return
+    ctx.dataset_id = new_id
+    _contexts[new_id] = ctx
+    if _active_dataset_id == old_id:
+        set_active_dataset_id(new_id)
 
 
 def _run_importer_in_background(importer, field_values: dict) -> None:

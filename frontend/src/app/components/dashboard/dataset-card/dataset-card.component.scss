@@ -74,6 +74,11 @@ td {
 
 .check {
   color: var(--color-good);
+
+  &.loaded-check {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+  }
 }
 
 .btn--xs {

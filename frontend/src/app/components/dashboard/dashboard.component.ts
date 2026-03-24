@@ -639,8 +639,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
     };
 
-    if (dataset.loaded) {
+    if (dataset.active) {
       navigateToLabel();
+      return;
+    }
+
+    if (dataset.loaded) {
+      // Already in memory — activate instantly (no progress needed).
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => {
+          this.datasetState.refresh();
+          navigateToLabel();
+        },
+        error: () => navigateToLabel(),
+      });
       return;
     }
 
@@ -676,8 +688,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.router.navigate(['/find']);
     };
 
-    if (dataset.loaded) {
+    if (dataset.active) {
       navigateToFind();
+      return;
+    }
+
+    if (dataset.loaded) {
+      // Already in memory — activate instantly (no progress needed).
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => {
+          this.datasetState.refresh();
+          navigateToFind();
+        },
+        error: () => navigateToFind(),
+      });
       return;
     }
 

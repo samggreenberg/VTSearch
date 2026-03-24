@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from vtsearch.utils.state_core import _state_lock, vote_click_times
 
-# Import _click_counter via the module so we can mutate the global.
-import vtsearch.utils.state_core as _core
+# Import context-aware accessors for scalar state.
+from vtsearch.utils.state_core import _get_click_counter, _set_click_counter
 
 
 def assign_click_time(media_id: int) -> int:
@@ -15,9 +15,10 @@ def assign_click_time(media_id: int) -> int:
     monotonically increasing.
     """
     with _state_lock:
-        _core._click_counter += 1
-        vote_click_times[media_id] = _core._click_counter
-        return _core._click_counter
+        new_val = _get_click_counter() + 1
+        _set_click_counter(new_val)
+        vote_click_times[media_id] = new_val
+        return new_val
 
 
 def remove_click_time(media_id: int) -> None:
