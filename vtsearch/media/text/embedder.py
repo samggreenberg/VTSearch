@@ -48,6 +48,7 @@ class TextE5Embedder(MediaEmbedder):
         import gc
 
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        from transformers import BertModel  # noqa: PLC0415
 
         from vtsearch.models.loader import ensure_torch_configured
 
@@ -55,6 +56,7 @@ class TextE5Embedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading E5 model…", 0, 0)
+        BertModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
             self._on_progress, "Loading E5 model…"
         ):
