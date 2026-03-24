@@ -39,20 +39,27 @@
           </thead>
           <tbody>
             @for (task of loadingTasks; track task.task_id) {
-              <tr class="loading-task-row">
+              <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
                 </td>
                 <td [attr.colspan]="isDefaultLogin ? 9 : 11">
-                  <div class="loading-task-progress">
-                    <span class="progress-msg">{{ taskProgressMessage(task) }}</span>
-                    <vt-progress-bar
-                      [value]="task.current"
-                      [max]="task.total"
-                      [indeterminate]="taskIsIndeterminate(task)"
-                    />
-                    <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
-                  </div>
+                  @if (task.error) {
+                    <div class="loading-task-progress loading-task-failed">
+                      <span class="error-msg">Failed: {{ task.error }}</span>
+                      <button class="btn btn--cancel btn--sm" (click)="dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
+                    </div>
+                  } @else {
+                    <div class="loading-task-progress">
+                      <span class="progress-msg">{{ taskProgressMessage(task) }}</span>
+                      <vt-progress-bar
+                        [value]="task.current"
+                        [max]="task.total"
+                        [indeterminate]="taskIsIndeterminate(task)"
+                      />
+                      <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
+                    </div>
+                  }
                 </td>
               </tr>
             }

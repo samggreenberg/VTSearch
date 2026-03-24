@@ -232,6 +232,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  &.loading-task-error {
+    background: var(--error-bg, rgba(220, 38, 38, 0.06));
+  }
+
+  .loading-task-failed {
+    .error-msg {
+      flex: 1;
+      font-size: 0.8rem;
+      color: var(--error-text, #991b1b);
+    }
+  }
 }
 
 .empty-state {

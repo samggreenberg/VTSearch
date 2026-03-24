@@ -436,6 +436,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.cancelTask(taskId).subscribe();
   }
 
+  dismissLoadingTask(taskId: string): void {
+    this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
+  }
+
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
@@ -454,16 +458,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
         next: (tasks: LoadingTask[]) => {
           // Separate active from finished
           const active = tasks.filter((t) => t.status !== 'idle');
-          const errored = tasks.filter((t) => t.status === 'idle' && t.error);
+          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
+          const cancelled = errored.filter((t) => t.error === 'Cancelled');
+          const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this.loadingTasks = active;
+          // Show both active tasks and failed tasks (so users see the error)
+          this.loadingTasks = [...active, ...failed];
           this.datasetState.setLoadingTasks(active);
 
-          // Show errors from just-completed tasks
-          for (const t of errored) {
-            if (t.error && t.error !== 'Cancelled') {
-              this.datasetState.setErrorMessage(t.error);
-            }
+          // Also set the top-level error banner for failed tasks
+          for (const t of failed) {
+            this.datasetState.setErrorMessage(t.error!);
           }
 
           // Keep legacy loading flag for backward compat
@@ -473,7 +478,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             // No more active tasks — stop polling
             this.polling$.next();
             this.datasetState.refresh();
-            if (onComplete && errored.length === 0) {
+            if (onComplete && failed.length === 0) {
               onComplete();
             }
           }

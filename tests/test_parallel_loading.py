@@ -324,6 +324,143 @@ class TestParallelLoadConcurrency:
             loading_tasks.remove_task("cancel_b")
 
 
+class TestErrorVisibility:
+    """Verify that loading errors are visible to the polling frontend."""
+
+    def test_error_message_always_non_empty(self):
+        """Exception handlers must produce non-empty error strings."""
+        pt = loading_tasks.create_task("err_test", "Fail")
+        # Simulate the backend error handler with an exception that has
+        # an empty str() representation:
+        e = Exception()
+        error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
+        pt.update("idle", "", 0, 0, error=error_msg)
+        try:
+            tasks = loading_tasks.list_tasks()
+            assert len(tasks) == 1
+            assert tasks[0]["error"]  # must be truthy
+            assert tasks[0]["error"] != ""
+        finally:
+            loading_tasks.remove_task("err_test")
+
+    def test_errored_task_visible_after_finish(self):
+        """Errored tasks stay visible in list_tasks longer than success tasks."""
+        pt = loading_tasks.create_task("err_vis", "ErrorDS")
+        pt.update("idle", "", 0, 0, error="Something broke")
+        # Mark finished 10 seconds ago — non-error tasks would be cleaned up
+        with loading_tasks._lock:
+            loading_tasks._tasks["err_vis"]["finished_at"] = time.time() - 10
+        try:
+            tasks = loading_tasks.list_tasks()
+            assert len(tasks) == 1
+            assert tasks[0]["error"] == "Something broke"
+        finally:
+            loading_tasks.remove_task("err_vis")
+
+    def test_errored_task_cleaned_after_30s(self):
+        """Errored tasks are eventually cleaned up after 30 seconds."""
+        pt = loading_tasks.create_task("err_old", "OldError")
+        pt.update("idle", "", 0, 0, error="Old error")
+        with loading_tasks._lock:
+            loading_tasks._tasks["err_old"]["finished_at"] = time.time() - 35
+        tasks = loading_tasks.list_tasks()
+        assert len(tasks) == 0
+
+    def test_errored_task_in_api_response(self, client):
+        """GET /api/dataset/loading-tasks returns errored tasks."""
+        pt = loading_tasks.create_task("api_err", "API Err DS")
+        pt.update("idle", "", 0, 0, error="Load failed")
+        loading_tasks.mark_finished("api_err")
+        try:
+            resp = client.get("/api/dataset/loading-tasks")
+            data = resp.get_json()
+            errored = [t for t in data["tasks"] if t.get("error")]
+            assert len(errored) == 1
+            assert errored[0]["error"] == "Load failed"
+        finally:
+            loading_tasks.remove_task("api_err")
+
+    def test_concurrent_load_one_fails_other_succeeds(self):
+        """When two tasks run and one errors, the error is visible while the other continues."""
+        pt_ok = loading_tasks.create_task("ok_task", "Good DS")
+        pt_fail = loading_tasks.create_task("fail_task", "Bad DS")
+
+        pt_ok.update("loading", "Still working", 50, 100)
+        pt_fail.update("idle", "", 0, 0, error="Download failed")
+        loading_tasks.mark_finished("fail_task")
+
+        try:
+            tasks = loading_tasks.list_tasks()
+            by_id = {t["task_id"]: t for t in tasks}
+
+            assert "ok_task" in by_id
+            assert by_id["ok_task"]["status"] == "loading"
+
+            assert "fail_task" in by_id
+            assert by_id["fail_task"]["error"] == "Download failed"
+        finally:
+            loading_tasks.remove_task("ok_task")
+            loading_tasks.remove_task("fail_task")
+
+
+class TestResetCancelSafety:
+    """Verify that starting a new load does not interfere with running loads."""
+
+    def test_reset_cancel_skipped_when_tasks_active(self):
+        """dataset_progress.reset_cancel() must not fire when loads are in progress."""
+        from vtsearch.utils.progress import dataset_progress
+
+        # Create an active task
+        pt = loading_tasks.create_task("active_task", "Running")
+        pt.update("loading", "Downloading", 10, 100)
+
+        # Cancel the global tracker (simulating user cancel of a previous load)
+        dataset_progress.cancel()
+        assert dataset_progress.is_cancelled
+
+        try:
+            # Start a new load — should NOT reset global cancel since a task is active
+            from unittest.mock import patch
+
+            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+            with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+                _run_origin_load_in_background(
+                    lambda: None,
+                    {"importer": "test", "params": {}},
+                )
+
+            # The global cancel should still be set (not reset)
+            assert dataset_progress.is_cancelled
+        finally:
+            loading_tasks.remove_task("active_task")
+            dataset_progress.reset_cancel()
+
+    def test_reset_cancel_allowed_when_no_tasks_active(self):
+        """dataset_progress.reset_cancel() fires when no loads are in progress."""
+        from vtsearch.utils.progress import dataset_progress
+
+        dataset_progress.cancel()
+        assert dataset_progress.is_cancelled
+
+        from unittest.mock import patch
+
+        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+
+        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+            task_id = _run_origin_load_in_background(
+                lambda: None,
+                {"importer": "test", "params": {}},
+            )
+
+        try:
+            # The global cancel should have been reset
+            assert not dataset_progress.is_cancelled
+        finally:
+            loading_tasks.remove_task(task_id)
+            dataset_progress.reset_cancel()
+
+
 class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 

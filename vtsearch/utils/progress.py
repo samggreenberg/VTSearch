@@ -209,7 +209,9 @@ class LoadingTasksTracker:
         Each entry includes: ``task_id``, ``name``, ``created_at``, and
         all fields from the task's :class:`ProgressTracker`.
 
-        Finished tasks older than 5 seconds are automatically removed.
+        Finished tasks without errors are removed after 5 seconds.
+        Finished tasks *with* errors are kept for 30 seconds so that
+        the polling frontend has time to display them.
         """
         now = time.time()
         stale: list[str] = []
@@ -218,14 +220,23 @@ class LoadingTasksTracker:
         result = []
         for task_id, entry in entries:
             finished = entry.get("finished_at")
-            if finished is not None and (now - finished) > 5:
-                stale.append(task_id)
-                continue
-            snapshot = entry["tracker"].get()
-            snapshot["task_id"] = task_id
-            snapshot["name"] = entry["name"]
-            snapshot["created_at"] = entry["created_at"]
-            result.append(snapshot)
+            if finished is not None:
+                snapshot = entry["tracker"].get()
+                has_error = bool(snapshot.get("error"))
+                max_age = 30 if has_error else 5
+                if (now - finished) > max_age:
+                    stale.append(task_id)
+                    continue
+                snapshot["task_id"] = task_id
+                snapshot["name"] = entry["name"]
+                snapshot["created_at"] = entry["created_at"]
+                result.append(snapshot)
+            else:
+                snapshot = entry["tracker"].get()
+                snapshot["task_id"] = task_id
+                snapshot["name"] = entry["name"]
+                snapshot["created_at"] = entry["created_at"]
+                result.append(snapshot)
         if stale:
             with self._lock:
                 for tid in stale:
