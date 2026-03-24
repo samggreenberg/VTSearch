@@ -249,8 +249,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     tableEl.style.width = '';
     ths[colIndex].style.width = '';
 
-    // Measure the natural width of the column (header + all body cells)
-    let maxWidth = ths[colIndex].offsetWidth;
+    // Measure the natural width of body cells (not the header, whose uppercase
+    // text, letter-spacing, and sort-indicator inflate the width beyond what
+    // the data needs).
+    let maxWidth = 0;
     const rows = tableEl.querySelectorAll('tbody tr');
     rows.forEach((row) => {
       const cell = row.children[colIndex] as HTMLElement | undefined;
@@ -260,6 +262,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         maxWidth = Math.max(maxWidth, cell.scrollWidth);
       }
     });
+    // Fall back to header width only when the table has no body rows
+    if (maxWidth === 0) {
+      maxWidth = ths[colIndex].offsetWidth;
+    }
 
     // Add a small buffer for padding
     maxWidth = Math.max(30, maxWidth + 2);
