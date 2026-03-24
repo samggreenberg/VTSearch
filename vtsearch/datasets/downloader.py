@@ -7,7 +7,10 @@ When omitted the functions fall back to the application-wide
 to use these functions outside the Flask app (scripts, notebooks, tests).
 """
 
+import os
+import shutil
 import tarfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -155,6 +158,21 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
         )
 
 
+def _move_tree_contents(src: Path, dst: Path) -> None:
+    """Move all children of *src* into *dst*, skipping already-existing targets."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dst / child.name
+        if not target.exists():
+            try:
+                child.rename(target)
+            except OSError:
+                if child.is_dir():
+                    shutil.copytree(child, target)
+                else:
+                    shutil.copy2(child, target)
+
+
 def _download_and_extract(
     *,
     url: str,
@@ -171,6 +189,11 @@ def _download_and_extract(
     and ``.zip`` archives.  The archive file is deleted after successful
     extraction to reclaim disk space.
 
+    Each invocation downloads and extracts into unique temporary paths so that
+    concurrent calls targeting the same archive do not interfere with each
+    other.  After extraction the content is moved to the final location; if
+    another call finished first the duplicate is simply cleaned up.
+
     Args:
         url: Download URL for the archive.
         archive_name: Filename to save the downloaded archive as inside
@@ -185,56 +208,85 @@ def _download_and_extract(
     if check_path.exists():
         return
 
-    archive_path = DATA_DIR / archive_name
+    unique_id = uuid.uuid4().hex[:8]
+    temp_archive = DATA_DIR / f".dl_{unique_id}_{archive_name}"
+    temp_extract = extract_to.parent / f".extract_{unique_id}_{extract_to.name}"
     DATA_DIR.mkdir(exist_ok=True)
 
-    if not archive_path.exists():
+    try:
         on_progress("downloading", f"Starting {dataset_name} download...", 0, 0)
-        download_file_with_progress(url, archive_path, download_size_mb * 1024 * 1024, on_progress)
+        download_file_with_progress(url, temp_archive, download_size_mb * 1024 * 1024, on_progress)
 
-    # Validate the downloaded file looks like a real archive before trying
-    # to extract it.  A common failure mode is the server returning an HTML
-    # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
-    _validate_archive(archive_path, archive_name, dataset_name)
+        # Another download may have finished while we were downloading.
+        if check_path.exists():
+            return
 
-    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
-    extract_to.mkdir(parents=True, exist_ok=True)
+        # Validate the downloaded file looks like a real archive before trying
+        # to extract it.  A common failure mode is the server returning an HTML
+        # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
+        _validate_archive(temp_archive, archive_name, dataset_name)
 
-    suffix = archive_name.lower()
-    if suffix.endswith((".tar.gz", ".tgz")):
-        # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
-        # Xet) transparently decompress .tar.gz files during transfer.
-        with tarfile.open(archive_path, "r:*") as tar_ref:
-            members = tar_ref.getmembers()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                tar_ref.extract(member, extract_to, filter="data")
-    elif suffix.endswith(".tar"):
-        with tarfile.open(archive_path, "r:") as tar_ref:
-            members = tar_ref.getmembers()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                tar_ref.extract(member, extract_to, filter="data")
-    elif suffix.endswith(".zip"):
-        with zipfile.ZipFile(archive_path, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                # Guard against path traversal in zip entries
-                member_path = Path(extract_to) / member
-                if not str(member_path.resolve()).startswith(str(Path(extract_to).resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
-                zip_ref.extract(member, extract_to)
-    else:
-        raise ValueError(f"Unsupported archive format: {archive_name}")
+        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+        temp_extract.mkdir(parents=True, exist_ok=True)
 
-    archive_path.unlink(missing_ok=True)
+        suffix = archive_name.lower()
+        if suffix.endswith((".tar.gz", ".tgz")):
+            # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
+            # Xet) transparently decompress .tar.gz files during transfer.
+            with tarfile.open(temp_archive, "r:*") as tar_ref:
+                members = tar_ref.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    tar_ref.extract(member, temp_extract, filter="data")
+        elif suffix.endswith(".tar"):
+            with tarfile.open(temp_archive, "r:") as tar_ref:
+                members = tar_ref.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    tar_ref.extract(member, temp_extract, filter="data")
+        elif suffix.endswith(".zip"):
+            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
+                members = zip_ref.namelist()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    # Guard against path traversal in zip entries
+                    member_path = Path(temp_extract) / member
+                    if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):
+                        raise ValueError(f"Path traversal detected in archive: {member}")
+                    zip_ref.extract(member, temp_extract)
+        else:
+            raise ValueError(f"Unsupported archive format: {archive_name}")
+
+        # Another download may have finished while we were extracting.
+        if check_path.exists():
+            return
+
+        # Move extracted content to final location.
+        if not extract_to.exists():
+            try:
+                os.rename(temp_extract, extract_to)
+                return
+            except OSError:
+                pass  # extract_to appeared between check and rename (race)
+
+        # extract_to already existed (e.g. it is DATA_DIR) — move children.
+        _move_tree_contents(temp_extract, extract_to)
+    finally:
+        temp_archive.unlink(missing_ok=True)
+        if temp_extract.exists():
+            shutil.rmtree(temp_extract, ignore_errors=True)
 
 
 def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -255,29 +307,16 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    zip_path = DATA_DIR / "esc50.zip"
     extract_dir = DATA_DIR / "ESC-50-master"
-    DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not zip_path.exists():
-            on_progress("downloading", "Starting download...", 0, 0)
-            download_file_with_progress(ESC50_URL, zip_path, ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress)
-
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                on_progress(
-                    "downloading",
-                    f"Extracting {member.split('/')[-1]}...",
-                    i,
-                    total,
-                )
-                zip_ref.extract(member, DATA_DIR)
-
-        zip_path.unlink(missing_ok=True)
-
+    _download_and_extract(
+        url=ESC50_URL,
+        archive_name="esc50.zip",
+        extract_to=DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+        dataset_name="ESC-50",
+        on_progress=on_progress,
+    )
     return extract_dir / "audio"
 
 
@@ -426,6 +465,9 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     directories.  Both archives are deleted after extraction to reclaim
     disk space.
 
+    Each invocation uses unique temporary paths so that concurrent calls
+    do not interfere with each other.
+
     Args:
         on_progress: Optional progress callback. Falls back to the
             application-wide ``update_progress`` when ``None``.
@@ -438,21 +480,30 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _default_progress()
 
-    zip_path = DATA_DIR / "caltech-101.zip"
     extract_dir = DATA_DIR / "caltech-101"
+    categories_dir = extract_dir / "101_ObjectCategories"
+
+    if categories_dir.exists():
+        return categories_dir
+
+    unique_id = uuid.uuid4().hex[:8]
+    temp_archive = DATA_DIR / f".dl_{unique_id}_caltech-101.zip"
+    temp_extract = DATA_DIR / f".extract_{unique_id}_caltech-101"
     DATA_DIR.mkdir(exist_ok=True)
     IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    categories_dir = extract_dir / "101_ObjectCategories"
-    if not categories_dir.exists():
-        if not zip_path.exists():
-            on_progress("downloading", "Starting Caltech-101 download...", 0, 0)
-            download_file_with_progress(
-                CALTECH101_URL, zip_path, CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
+    try:
+        on_progress("downloading", "Starting Caltech-101 download...", 0, 0)
+        download_file_with_progress(
+            CALTECH101_URL, temp_archive, CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+        )
+
+        if categories_dir.exists():
+            return categories_dir
 
         on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        temp_extract.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(temp_archive, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
             for i, member in enumerate(members, 1):
@@ -463,15 +514,14 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                         i,
                         total,
                     )
-                zip_ref.extract(member, DATA_DIR)
-
-        zip_path.unlink(missing_ok=True)
+                zip_ref.extract(member, temp_extract)
 
         # The zip contains 101_ObjectCategories.tar.gz (a nested archive).
         # Extract it to produce the actual category directories.
-        inner_tar = extract_dir / "101_ObjectCategories.tar.gz"
-        if inner_tar.exists() and not categories_dir.exists():
+        inner_tar = temp_extract / "caltech-101" / "101_ObjectCategories.tar.gz"
+        if inner_tar.exists():
             on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
+            inner_dest = temp_extract / "caltech-101"
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
                 members = tar_ref.getmembers()
                 total = len(members)
@@ -483,10 +533,28 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                             i + 1,
                             total,
                         )
-                    tar_ref.extract(member, extract_dir, filter="data")
+                    tar_ref.extract(member, inner_dest, filter="data")
             inner_tar.unlink(missing_ok=True)
 
-    return categories_dir
+        if categories_dir.exists():
+            return categories_dir
+
+        # Move extracted caltech-101 dir to final location.
+        temp_caltech = temp_extract / "caltech-101"
+        if temp_caltech.exists():
+            if not extract_dir.exists():
+                try:
+                    os.rename(temp_caltech, extract_dir)
+                except OSError:
+                    _move_tree_contents(temp_caltech, extract_dir)
+            else:
+                _move_tree_contents(temp_caltech, extract_dir)
+
+        return categories_dir
+    finally:
+        temp_archive.unlink(missing_ok=True)
+        if temp_extract.exists():
+            shutil.rmtree(temp_extract, ignore_errors=True)
 
 
 def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -723,7 +791,6 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
     )
 
     # Flatten the train/val/test splits into VIDEO_DIR/ucf101/<Category>/.
-    import shutil
 
     video_dir.mkdir(parents=True, exist_ok=True)
 
@@ -853,6 +920,9 @@ def download_bbc_news(
     The dataset contains ~2225 articles across five topic categories:
     ``business``, ``entertainment``, ``politics``, ``sport``, and ``tech``.
 
+    Each invocation uses unique temporary paths so that concurrent calls
+    do not interfere with each other.
+
     Args:
         on_progress: Optional progress callback. Falls back to the
             application-wide ``update_progress`` when ``None``.
@@ -864,47 +934,58 @@ def download_bbc_news(
     if on_progress is None:
         on_progress = _default_progress()
 
-    zip_path = DATA_DIR / "bbc-fulltext.zip"
     extract_dir = DATA_DIR / "bbc-fulltext"
     DATA_DIR.mkdir(exist_ok=True)
 
     if not extract_dir.exists():
-        if not zip_path.exists():
+        unique_id = uuid.uuid4().hex[:8]
+        temp_archive = DATA_DIR / f".dl_{unique_id}_bbc-fulltext.zip"
+        temp_extract = DATA_DIR / f".extract_{unique_id}_bbc-fulltext"
+
+        try:
             on_progress("downloading", "Starting BBC News download...", 0, 0)
             download_file_with_progress(
                 BBC_NEWS_URL,
-                zip_path,
+                temp_archive,
                 BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
                 on_progress,
             )
 
-        on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            # The zip may contain a top-level folder (e.g. "bbc/"); extract
-            # all members and then locate category directories below.
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress(
-                        "downloading",
-                        f"Extracting BBC News dataset ({i + 1}/{total})...",
-                        i + 1,
-                        total,
+            if not extract_dir.exists():
+                on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
+                raw_dir = temp_extract / "raw"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(temp_archive, "r") as zip_ref:
+                    # The zip may contain a top-level folder (e.g. "bbc/"); extract
+                    # all members and then locate category directories below.
+                    members = zip_ref.namelist()
+                    total = len(members)
+                    for i, member in enumerate(members):
+                        if i % 100 == 0 or i == total - 1:
+                            on_progress(
+                                "downloading",
+                                f"Extracting BBC News dataset ({i + 1}/{total})...",
+                                i + 1,
+                                total,
+                            )
+                        zip_ref.extract(member, raw_dir)
+
+                # Find the directory that contains the category subfolders.
+                _bbc_root = _find_bbc_root(raw_dir)
+                if _bbc_root is None:
+                    raise RuntimeError(
+                        f"Could not locate BBC News category directories inside {raw_dir}"
                     )
-                zip_ref.extract(member, DATA_DIR / "bbc-fulltext-raw")
 
-        # Find the directory that contains the category subfolders.
-        raw_root = DATA_DIR / "bbc-fulltext-raw"
-        _bbc_root = _find_bbc_root(raw_root)
-        if _bbc_root is None:
-            raise RuntimeError(f"Could not locate BBC News category directories inside {raw_root}")
-
-        import shutil
-
-        shutil.copytree(_bbc_root, extract_dir)
-        shutil.rmtree(raw_root, ignore_errors=True)
-        zip_path.unlink(missing_ok=True)
+                if not extract_dir.exists():
+                    try:
+                        shutil.copytree(_bbc_root, extract_dir)
+                    except FileExistsError:
+                        pass  # Another download finished first
+        finally:
+            temp_archive.unlink(missing_ok=True)
+            if temp_extract.exists():
+                shutil.rmtree(temp_extract, ignore_errors=True)
 
     # Read articles grouped by category directory name.
     categories_articles: dict[str, list[str]] = {}
@@ -955,13 +1036,23 @@ def download_ag_news(
     DATA_DIR.mkdir(exist_ok=True)
 
     if not csv_path.exists():
-        on_progress("downloading", "Starting AG News download...", 0, 0)
-        download_file_with_progress(
-            AG_NEWS_URL,
-            csv_path,
-            AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
-            on_progress,
-        )
+        unique_id = uuid.uuid4().hex[:8]
+        temp_path = DATA_DIR / f".dl_{unique_id}_ag_news_train.csv"
+        try:
+            on_progress("downloading", "Starting AG News download...", 0, 0)
+            download_file_with_progress(
+                AG_NEWS_URL,
+                temp_path,
+                AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+            if not csv_path.exists():
+                try:
+                    os.rename(temp_path, csv_path)
+                except OSError:
+                    pass  # Another download finished first
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     label_to_category = {
         "1": "World",

@@ -1,6 +1,7 @@
 """Tests for the _download_and_extract() generic helper."""
 
 import tarfile
+import threading
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -387,15 +388,17 @@ class TestCorruptArchiveValidation:
         assert check_path.exists()
         assert (check_path / "file.txt").read_text() == "hello"
 
-    def test_corrupt_pre_existing_archive_detected(self, tmp_path):
-        """A corrupt file left from a previous failed download is caught."""
+    def test_corrupt_download_cleaned_up(self, tmp_path):
+        """A corrupt download is detected and its temp file is cleaned up."""
         from vtsearch.datasets import downloader as dl_module
 
-        # Simulate a corrupt file already on disk (download is skipped).
-        corrupt_file = tmp_path / "test.tar.gz"
-        corrupt_file.write_bytes(b"this is not a valid archive at all")
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"this is not a valid archive at all")
 
-        with patch.object(dl_module, "DATA_DIR", tmp_path):
+        with (
+            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module, "download_file_with_progress", fake_download),
+        ):
             with pytest.raises(RuntimeError, match="invalid file"):
                 dl_module._download_and_extract(
                     url="http://example.com/test.tar.gz",
@@ -407,8 +410,9 @@ class TestCorruptArchiveValidation:
                     on_progress=lambda *a: None,
                 )
 
-        # Corrupt file removed so next attempt will re-download.
-        assert not corrupt_file.exists()
+        # No temp files should remain after cleanup.
+        leftover = [p for p in tmp_path.iterdir() if p.name.startswith(".dl_")]
+        assert not leftover, f"Temp archive files should be cleaned up: {leftover}"
 
     def test_error_message_is_user_friendly(self, tmp_path):
         """The error message mentions the dataset name and suggests retrying."""
@@ -584,3 +588,108 @@ class TestBbcNewsExtractionProgress:
         assert len(extract_progress) > 0, "BBC News extraction should report progress with total"
         last_msg, last_cur, last_tot = extract_progress[-1]
         assert last_cur == last_tot
+
+
+class TestConcurrentDownloads:
+    """Concurrent downloads of the same archive do not interfere."""
+
+    def test_two_concurrent_downloads_both_succeed(self, tmp_path):
+        """Two threads downloading the same archive both complete without error."""
+        import shutil
+
+        from vtsearch.datasets import downloader as dl_module
+
+        # Create a valid zip archive to serve as the download source.
+        source_zip = tmp_path / "source.zip"
+        with zipfile.ZipFile(source_zip, "w") as zf:
+            zf.writestr("data_dir/file.txt", "hello")
+
+        barrier = threading.Barrier(2, timeout=10)
+        errors: list[Exception] = []
+
+        def slow_download(url, dest, size, cb):
+            """Simulate a slow download — both threads start before either finishes."""
+            shutil.copy(str(source_zip), str(dest))
+            barrier.wait()  # ensure both threads are mid-download
+
+        data_dir = tmp_path / "data"
+        extract_to = data_dir / "extracted"
+        check_path = extract_to / "data_dir"
+
+        def run():
+            try:
+                with (
+                    patch.object(dl_module, "DATA_DIR", data_dir),
+                    patch.object(dl_module, "download_file_with_progress", slow_download),
+                ):
+                    dl_module._download_and_extract(
+                        url="http://example.com/test.zip",
+                        archive_name="test.zip",
+                        extract_to=extract_to,
+                        check_path=check_path,
+                        download_size_mb=1,
+                        dataset_name="Test",
+                        on_progress=lambda *a: None,
+                    )
+            except Exception as exc:
+                errors.append(exc)
+
+        t1 = threading.Thread(target=run)
+        t2 = threading.Thread(target=run)
+        t1.start()
+        t2.start()
+        t1.join(timeout=30)
+        t2.join(timeout=30)
+
+        assert not errors, f"Concurrent downloads raised errors: {errors}"
+        assert check_path.exists()
+        assert (check_path / "file.txt").read_text() == "hello"
+
+        # No temp files should remain.
+        leftover = [p for p in data_dir.iterdir() if p.name.startswith(".dl_") or p.name.startswith(".extract_")]
+        assert not leftover, f"Temp files should be cleaned up: {leftover}"
+
+    def test_second_download_defers_to_first(self, tmp_path):
+        """If the first download finishes before the second starts extracting,
+        the second cleans up without errors."""
+        import shutil
+
+        from vtsearch.datasets import downloader as dl_module
+
+        source_zip = tmp_path / "source.zip"
+        with zipfile.ZipFile(source_zip, "w") as zf:
+            zf.writestr("data_dir/file.txt", "hello")
+
+        data_dir = tmp_path / "data"
+        extract_to = data_dir / "extracted"
+        check_path = extract_to / "data_dir"
+
+        call_count = 0
+
+        def download_and_create_check_path(url, dest, size, cb):
+            """First call creates the check_path to simulate another thread finishing."""
+            nonlocal call_count
+            shutil.copy(str(source_zip), str(dest))
+            call_count += 1
+            if call_count == 1:
+                # Simulate the first download having already finished extraction.
+                check_path.mkdir(parents=True, exist_ok=True)
+                (check_path / "file.txt").write_text("from first download")
+
+        with (
+            patch.object(dl_module, "DATA_DIR", data_dir),
+            patch.object(dl_module, "download_file_with_progress", download_and_create_check_path),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.zip",
+                archive_name="test.zip",
+                extract_to=extract_to,
+                check_path=check_path,
+                download_size_mb=1,
+                dataset_name="Test",
+                on_progress=lambda *a: None,
+            )
+
+        assert check_path.exists()
+        # Content should be from the "first download" that finished first.
+        assert (check_path / "file.txt").read_text() == "from first download"
