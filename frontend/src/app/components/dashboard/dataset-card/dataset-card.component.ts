@@ -72,7 +72,8 @@ export class DatasetCardComponent {
 
   formatDate(timestamp: number | null): string {
     if (!timestamp) return '-';
-    return new Date(timestamp * 1000).toLocaleDateString();
+    const d = new Date(timestamp * 1000);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   capitalizeType(type: string | undefined): string {
