@@ -12,7 +12,16 @@ from vtsearch.utils.progress import (
     update_sort_progress,
 )
 from vtsearch.utils.state import (
+    DatasetContext,
     _state_lock,
+    clear_all_contexts,
+    get_active_context,
+    get_active_dataset_id,
+    get_context,
+    list_loaded_dataset_ids,
+    register_context,
+    set_active_dataset_id,
+    unregister_context,
     add_autorun_detector,
     add_autorun_extractor,
     add_autorun_localizer,
@@ -172,4 +181,14 @@ __all__ = [
     "diversity_tree_unlabel",
     # Hit building
     "build_media_hit",
+    # Multi-dataset context management
+    "DatasetContext",
+    "get_active_context",
+    "get_active_dataset_id",
+    "set_active_dataset_id",
+    "register_context",
+    "unregister_context",
+    "get_context",
+    "list_loaded_dataset_ids",
+    "clear_all_contexts",
 ]

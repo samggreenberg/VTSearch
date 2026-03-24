@@ -24,8 +24,11 @@ from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     can_user_access as _reg_can_access,
     get_loaded_id as _reg_loaded_id,
+    get_loaded_ids as _reg_loaded_ids,
+    is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
     list_datasets_for_user as _reg_list_for_user,
+    remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
     set_loaded_id as _reg_set_loaded,
     set_readers as _reg_set_readers,
@@ -38,14 +41,21 @@ from vtsearch.utils import (
     build_diversity_tree,
     cancel_dataset_progress,
     collapse_duplicates,
+    get_active_dataset_id,
+    get_context,
+    list_loaded_dataset_ids,
     medias,
     get_dataset_display_name,
     get_dupe_count,
     get_progress,
     good_votes,
+    register_context,
+    set_active_dataset_id,
     set_dataset_display_name,
     snapshot_medias,
+    unregister_context,
     update_progress,
+    DatasetContext,
 )
 from vtsearch.utils.progress import CancelledError
 from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
@@ -567,9 +577,13 @@ def export_dataset():
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
 def clear_dataset_route():
-    """Clear the current dataset."""
-    clear_dataset()
-    _reg_set_loaded(None)
+    """Clear the active dataset from memory."""
+    active_id = get_active_dataset_id()
+    if active_id:
+        unregister_context(active_id)
+        _reg_remove_loaded(active_id)
+    else:
+        clear_dataset()
     return jsonify({"ok": True})
 
 
@@ -580,16 +594,24 @@ def clear_dataset_route():
 
 @datasets_bp.route("/api/datasets/registry")
 def list_registered_datasets():
-    """Return registered datasets visible to the current user."""
+    """Return registered datasets visible to the current user.
+
+    Each entry includes:
+    - ``loaded``: whether the dataset is currently in memory
+    - ``active``: whether it is the currently active (UI-facing) dataset
+    """
     from vtsearch.auth import get_current_user
 
     entries = _reg_list_for_user(get_current_user())
     loaded_id = _reg_loaded_id()
+    loaded_ids = _reg_loaded_ids()
     from vtsearch.media import get_clipper
 
     for entry in entries:
-        entry["loaded"] = entry["id"] == loaded_id
-        if entry["loaded"]:
+        ds_id = entry["id"]
+        entry["loaded"] = ds_id in loaded_ids
+        entry["active"] = ds_id == loaded_id
+        if entry["active"]:
             entry["num_dupes"] = get_dupe_count()
         else:
             entry.setdefault("num_dupes", 0)
@@ -610,7 +632,11 @@ def list_registered_datasets():
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
 def load_registered_dataset(dataset_id: str):
-    """Load a registered dataset from its saved pkl file."""
+    """Load a registered dataset from its saved pkl file.
+
+    If the dataset is already loaded in memory, it is simply activated
+    (made the current UI-facing dataset) without re-reading the pkl.
+    """
     from vtsearch.auth import get_current_user
 
     entry = _reg_get(dataset_id)
@@ -619,6 +645,13 @@ def load_registered_dataset(dataset_id: str):
 
     if not _reg_can_access(dataset_id, get_current_user()):
         return jsonify({"error": "Access denied"}), 403
+
+    # If already loaded in memory, just activate it (instant switch).
+    if _reg_is_loaded(dataset_id):
+        set_active_dataset_id(dataset_id)
+        _reg_set_loaded(dataset_id)
+        set_dataset_display_name(entry.get("name", ""))
+        return jsonify({"ok": True, "message": "Dataset activated (already loaded)"})
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
@@ -648,8 +681,10 @@ def load_registered_dataset(dataset_id: str):
                 step=1,
                 total_steps=_LOAD_STEPS,
             )
-            clear_dataset()
-            _reg_set_loaded(None)
+            # Create a fresh context for this dataset and activate it.
+            ctx = DatasetContext(dataset_id)
+            register_context(ctx)
+            set_active_dataset_id(dataset_id)
             gc.collect()
             load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
             _dataset_progress_tracker.check_cancelled()
@@ -682,14 +717,18 @@ def load_registered_dataset(dataset_id: str):
             set_dataset_display_name(entry.get("name", ""))
             _load_embedder_for_clips(step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
         except CancelledError:
-            medias.clear()
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
             gc.collect()
             update_progress("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except MemoryError:
-            medias.clear()
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
             gc.collect()
             update_progress("idle", "", 0, 0, "Out of memory — dataset too large.", step=None, total_steps=None)
         except Exception as e:
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
             update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
 
     # Signal "loading" before the thread starts so frontend polling never
@@ -704,13 +743,33 @@ def load_registered_dataset(dataset_id: str):
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
 def unload_registered_dataset(dataset_id: str):
-    """Unload the currently loaded dataset (clear from memory)."""
-    loaded = _reg_loaded_id()
-    if loaded != dataset_id:
+    """Unload a specific dataset from memory.
+
+    The dataset's context is removed, freeing its RAM.  If it was the
+    active dataset, the active pointer is cleared.
+    """
+    if not _reg_is_loaded(dataset_id):
         return jsonify({"error": "This dataset is not currently loaded"}), 400
-    clear_dataset()
-    _reg_set_loaded(None)
+    unregister_context(dataset_id)
+    _reg_remove_loaded(dataset_id)
     return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/activate", methods=["POST"])
+def activate_registered_dataset(dataset_id: str):
+    """Make a loaded dataset the active (UI-facing) one.
+
+    The dataset must already be loaded in memory.  This is an instant
+    operation — no data is re-read or re-embedded.
+    """
+    if not _reg_is_loaded(dataset_id):
+        return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
+    set_active_dataset_id(dataset_id)
+    _reg_set_loaded(dataset_id)
+    entry = _reg_get(dataset_id)
+    if entry:
+        set_dataset_display_name(entry.get("name", ""))
+    return jsonify({"ok": True, "message": "Dataset activated"})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
@@ -721,10 +780,10 @@ def delete_registered_dataset(dataset_id: str):
     if not _reg_is_owner(dataset_id, get_current_user()):
         return jsonify({"error": "Only the dataset creator can delete it"}), 403
 
-    loaded = _reg_loaded_id()
-    if loaded == dataset_id:
-        clear_dataset()
-        _reg_set_loaded(None)
+    # If loaded in memory, unload its context.
+    if _reg_is_loaded(dataset_id):
+        unregister_context(dataset_id)
+        _reg_remove_loaded(dataset_id)
     ok = _reg_unregister(dataset_id)
     if not ok:
         return jsonify({"error": "Dataset not found"}), 404
