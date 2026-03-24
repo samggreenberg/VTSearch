@@ -212,6 +212,58 @@
   }
 }
 
+// Loading task rows — per-dataset progress bars inline in the table
+.loading-task-row {
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .loading-task-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .loading-task-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .progress-msg {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    vt-progress-bar {
+      flex: 1;
+    }
+
+    .btn--cancel {
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+
+      &:hover {
+        color: var(--text-primary);
+        border-color: var(--text-secondary);
+      }
+    }
+  }
+}
+
 .empty-state {
   flex: 1 1 0;
   min-height: 0;

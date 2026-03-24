@@ -64,7 +64,12 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _default_progress() -> ProgressCallback:
-    """Lazily resolve the application-wide progress callback."""
+    """Lazily resolve the progress callback for the current thread."""
+    from vtsearch.utils.progress import get_thread_progress
+
+    cb = get_thread_progress()
+    if cb is not None:
+        return cb
     from vtsearch.utils import update_progress
 
     return update_progress

@@ -11,7 +11,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { AuthService } from '../../services/auth.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, ModelRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -45,6 +45,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
+
+  loadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
   newModelModalOpen = false;
@@ -395,9 +397,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
     this.importerModalOpen = false;
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
-    this.progressIndeterminate = true;
     const params: Record<string, string> = {};
     if (demo.embedder) {
       params['embedder'] = demo.embedder;
@@ -408,10 +407,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
         this.startProgressPolling();
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
       },
     });
   }
@@ -437,52 +432,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.cancelIngest().subscribe();
   }
 
+  cancelLoadingTask(taskId: string): void {
+    this.datasetsApi.cancelTask(taskId).subscribe();
+  }
+
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
-    this.datasetState.setLoading(true);
     this.datasetState.setErrorMessage('');
-    this.progressIndeterminate = true;
     this.polling$.next(); // cancel previous polling
 
     timer(0, 1000)
       .pipe(
         takeUntil(this.polling$),
         takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getProgress().pipe(
+        switchMap(() => this.datasetsApi.getLoadingTasks().pipe(
           catchError(() => EMPTY),
         )),
       )
       .subscribe({
-        next: (progress: any) => {
-          if (progress.current != null && progress.total != null && progress.total > 0) {
-            this.progressIndeterminate = false;
-            this.progressValue = progress.current;
-            this.progressTotal = progress.total;
-          } else {
-            this.progressIndeterminate = true;
-          }
+        next: (tasks: LoadingTask[]) => {
+          // Separate active from finished
+          const active = tasks.filter((t) => t.status !== 'idle');
+          const errored = tasks.filter((t) => t.status === 'idle' && t.error);
 
-          // Build message with step info and percentage when available
-          let msg = progress.message || 'Loading...';
-          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
-            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
-          }
-          if (progress.current != null && progress.total != null && progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
-            msg += ` (${pct}%)`;
-          }
-          this.datasetState.setProgressMessage(msg);
+          this.loadingTasks = active;
+          this.datasetState.setLoadingTasks(active);
 
-          if (progress.status === 'idle' || progress.status === 'error') {
-            this.datasetState.setLoading(false);
-            this.progressIndeterminate = false;
-            this.polling$.next();
-            if (progress.error) {
-              this.datasetState.setErrorMessage(progress.error);
+          // Show errors from just-completed tasks
+          for (const t of errored) {
+            if (t.error && t.error !== 'Cancelled') {
+              this.datasetState.setErrorMessage(t.error);
             }
+          }
+
+          // Keep legacy loading flag for backward compat
+          this.datasetState.setLoading(active.length > 0);
+
+          if (active.length === 0) {
+            // No more active tasks — stop polling
+            this.polling$.next();
             this.datasetState.refresh();
-            if (progress.status === 'idle' && !progress.error && onComplete) {
+            if (onComplete && errored.length === 0) {
               onComplete();
             }
           }
@@ -657,18 +648,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     // Dataset not loaded — load it first, then navigate
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
-    this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
           navigateToLabel();
         });
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
       },
     });
   }
@@ -706,18 +690,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     // Dataset not loaded — load it first, then navigate
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
-    this.progressIndeterminate = true;
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
           navigateToFind();
         });
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
       },
     });
   }
@@ -873,5 +850,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   closeFindResults(): void {
     this.findResultsOpen = false;
+  }
+
+  // --- Loading task helpers ---
+
+  taskProgressMessage(task: LoadingTask): string {
+    let msg = task.message || 'Loading...';
+    if (task.step != null && task.total_steps != null && task.total_steps > 1) {
+      msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
+    }
+    if (task.current != null && task.total != null && task.total > 0) {
+      const pct = Math.min(100, Math.round((task.current / task.total) * 100));
+      msg += ` (${pct}%)`;
+    }
+    return msg;
+  }
+
+  taskIsIndeterminate(task: LoadingTask): boolean {
+    return !(task.current != null && task.total != null && task.total > 0);
   }
 }
