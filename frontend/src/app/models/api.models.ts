@@ -347,6 +347,7 @@ export interface ModelRegistryEntry {
   text_query?: string;
   media_example?: string;
   detector_name?: string;
+  detector_loaded?: boolean;
   [key: string]: unknown;
 }
 

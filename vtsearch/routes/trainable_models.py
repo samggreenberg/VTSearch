@@ -590,6 +590,13 @@ def list_registered_models():
             # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
+        # detector_loaded: True when the model's inference data is cached in RAM.
+        # For detector-backed models: weights are present in autorun_detectors.
+        # For trainable models: the model is currently loaded (labels in votes).
+        if det_name and det:
+            entry["detector_loaded"] = det.get("weights") is not None
+        else:
+            entry["detector_loaded"] = entry["loaded"]
     return jsonify({"models": entries})
 
 
