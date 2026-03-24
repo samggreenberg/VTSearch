@@ -407,6 +407,59 @@ class TestFindLabel:
         total = data["good_count"] + data["bad_count"]
         assert total == app_module.NUM_MEDIAS
 
+    def test_find_label_activates_selected_dataset(self, client):
+        """find-label with dataset_id should score against that dataset, not the active one.
+
+        Reproduces the bug: user selects Dataset A + Detector 1 on the dashboard
+        and clicks Find, but scoring runs against Dataset B because it was the
+        most recently loaded into the labeling interface.
+        """
+        from vtsearch.utils import (
+            DatasetContext,
+            get_active_dataset_id,
+            register_context,
+            set_active_dataset_id,
+            snapshot_medias,
+            unregister_context,
+        )
+
+        model_id = self._create_model_with_detector(client)
+
+        # Remember the default dataset (has test medias)
+        original_id = get_active_dataset_id()
+        original_count = len(snapshot_medias())
+
+        # Create a second dataset with different (fewer) items
+        rng = np.random.default_rng(99)
+        ctx_b = DatasetContext()
+        for i in range(1, 4):
+            ctx_b.medias[i] = {
+                "id": i,
+                "md5": f"dataset_b_{i}",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+            }
+        register_context("dataset_b", ctx_b)
+
+        try:
+            # Switch active to dataset_b — simulates user browsing Dataset B
+            set_active_dataset_id("dataset_b")
+            assert get_active_dataset_id() == "dataset_b"
+
+            # Call find-label with dataset_id pointing to the ORIGINAL dataset
+            resp = client.post(
+                "/api/find-label",
+                json={"model_id": model_id, "dataset_id": original_id},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True
+            # Should have scored the original dataset's items, not dataset_b's 3 items
+            total = data["good_count"] + data["bad_count"]
+            assert total == original_count
+        finally:
+            set_active_dataset_id(original_id)
+            unregister_context("dataset_b")
+
     def test_find_label_overwrites_existing_votes(self, client):
         """find-label must mark ALL items even when votes already exist.
 
