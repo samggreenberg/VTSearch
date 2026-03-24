@@ -191,6 +191,7 @@
         width: 2px;
         background: var(--accent, #5b8fff);
         opacity: 0.35;
+        transition: opacity 0.15s;
       }
 
       &:hover::after {
