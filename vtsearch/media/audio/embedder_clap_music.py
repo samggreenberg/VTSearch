@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLAP_MUSIC_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, require_import
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -46,14 +46,14 @@ class AudioClapMusicEmbedder(MediaEmbedder):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    def load_models(self) -> None:
+    def _load_models_impl(self) -> None:
         if self._model is not None:
             return
         import gc
 
-        ClapModel, ClapProcessor = require_import("transformers", "ClapModel", "ClapProcessor")
+        from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
-        from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
+        from vtsearch.models.loader import ensure_torch_configured
 
         ensure_torch_configured()
         gc.collect()

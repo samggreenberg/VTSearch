@@ -43,7 +43,6 @@ __all__ = [
     "ProgressCallback",
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
-    "require_import",
 ]
 
 
@@ -243,37 +242,6 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
             setattr(obj, attr, orig)
 
 
-def require_import(module: str, *names: str, package: str | None = None):
-    """Import *names* from *module*, raising a clear error on failure.
-
-    Returns a tuple of the imported objects (or a single object when only one
-    name is requested).  If the import fails, the :class:`ImportError` message
-    tells the user which pip package to install.
-    """
-    import importlib  # noqa: PLC0415
-
-    pkg_label = package or module.split(".")[0]
-    try:
-        mod = importlib.import_module(module)
-    except ImportError as exc:
-        raise ImportError(
-            f"Could not import '{module}'. "
-            f"Please install it: pip install {pkg_label}"
-        ) from exc
-
-    results = []
-    for name in names:
-        obj = getattr(mod, name, None)
-        if obj is None:
-            raise ImportError(
-                f"Cannot import '{name}' from '{module}' "
-                f"(installed version may be too old or missing PyTorch). "
-                f"Try: pip install -U {pkg_label} torch"
-            )
-        results.append(obj)
-    return results[0] if len(results) == 1 else tuple(results)
-
-
 class MediaEmbedder(ABC):
     """Abstract base class for media embedders.
 
@@ -313,12 +281,29 @@ class MediaEmbedder(ABC):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def load_models(self) -> None:
         """Load (and cache) the embedding model.
 
         Called lazily the first time this embedder needs to produce a vector.
         Implementations must be idempotent — a second call should be a no-op.
+
+        Subclasses should override :meth:`_load_models_impl` (not this method).
+        This wrapper catches :class:`ImportError` and re-raises with an
+        actionable message so that missing dependencies surface clearly.
+        """
+        try:
+            self._load_models_impl()
+        except ImportError as exc:
+            raise ImportError(
+                f"{exc} — required by the '{self.name}' embedder. "
+                f"Install dependencies with: pip install -e '.[cpu,dev]'"
+            ) from exc
+
+    @abstractmethod
+    def _load_models_impl(self) -> None:
+        """Subclass hook: load the embedding model.
+
+        Override this instead of :meth:`load_models`.
         """
 
     # ------------------------------------------------------------------

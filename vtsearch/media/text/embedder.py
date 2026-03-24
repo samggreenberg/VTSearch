@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import E5_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress, require_import
+from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -42,16 +42,14 @@ class TextE5Embedder(MediaEmbedder):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    def load_models(self) -> None:
+    def _load_models_impl(self) -> None:
         if self._model is not None:
             return
         import gc
 
-        SentenceTransformer = require_import(  # noqa: N806
-            "sentence_transformers", "SentenceTransformer", package="sentence-transformers"
-        )
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
-        from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
+        from vtsearch.models.loader import ensure_torch_configured
 
         ensure_torch_configured()
         gc.collect()
