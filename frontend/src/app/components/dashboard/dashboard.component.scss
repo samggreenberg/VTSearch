@@ -36,8 +36,17 @@
   color: var(--text-primary);
 }
 
-.dashboard-progress {
-  flex: 1;
+// Shared .btn--cancel base (used in progress, error, and loading-task rows)
+.btn--cancel {
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dashboard-progress,
+.loading-task-progress {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -53,20 +62,19 @@
   }
 
   .btn--cancel {
-    flex-shrink: 0;
     background: var(--bg-surface);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    cursor: pointer;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
 
     &:hover {
       color: var(--text-primary);
       border-color: var(--text-secondary);
     }
   }
+}
+
+.dashboard-progress {
+  flex: 1;
 }
 
 .dashboard-error {
@@ -86,14 +94,9 @@
   }
 
   .btn--cancel {
-    flex-shrink: 0;
     background: transparent;
     color: var(--error-text, #991b1b);
     border: 1px solid var(--error-border, #fca5a5);
-    cursor: pointer;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
 
     &:hover {
       background: var(--error-border, #fca5a5);
@@ -214,11 +217,6 @@
 
 // Loading task rows — per-dataset progress bars inline in the table
 .loading-task-row {
-  td {
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
   .loading-task-name {
     font-weight: 500;
     color: var(--text-primary);
@@ -227,40 +225,12 @@
     text-overflow: ellipsis;
   }
 
-  .loading-task-progress {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .progress-msg {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      white-space: nowrap;
-      flex-shrink: 0;
-      max-width: 300px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    vt-progress-bar {
-      flex: 1;
-    }
-
-    .btn--cancel {
-      flex-shrink: 0;
-      background: var(--bg-surface);
-      color: var(--text-secondary);
-      border: 1px solid var(--border);
-      cursor: pointer;
-      font-size: 0.75rem;
-      padding: 2px 8px;
-      border-radius: 4px;
-
-      &:hover {
-        color: var(--text-primary);
-        border-color: var(--text-secondary);
-      }
-    }
+  .loading-task-progress .progress-msg {
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -287,20 +257,8 @@
 }
 
 // DESIGN CONSTRAINT — STABLE BUTTON POSITIONING
-// The Label/Find buttons must NOT move when their hint text appears, disappears,
-// or changes length. Three things work together to achieve this:
-//
-// 1. Each .action-btn-group has a fixed width so horizontal position never shifts
-//    when hint text changes length (the parent uses justify-content: center).
-// 2. The .btn-disabled-reason span uses visibility (NOT display/ngIf) toggling in
-//    the template, so hidden hints still reserve vertical space.
-// 3. The span has a fixed single-line height, white-space: nowrap, and overflow:
-//    hidden to prevent multi-line reflow.
-//
-// Do NOT:
-//  - Remove the fixed width on .action-btn-group (causes horizontal shifting)
-//  - Switch to display:none or *ngIf for hints (causes vertical jumping)
-//  - Remove height/white-space/overflow on .btn-disabled-reason (causes reflow)
+// .action-btn-group has fixed width, hints use visibility toggling (not display),
+// and .btn-disabled-reason has fixed height to prevent reflow.
 .action-btn-group {
   display: flex;
   flex-direction: column;
