@@ -15,12 +15,10 @@
         <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Bad
       </label>
-      @if (hasCorrections) {
-        <label class="delimiter-option">
-          <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
-          Corrections
-        </label>
-      }
+      <label class="delimiter-option" [class.disabled]="!hasCorrections" [title]="hasCorrections ? '' : 'No corrections to export.'">
+        <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" [disabled]="!hasCorrections" />
+        Corrections
+      </label>
     </div>
   </div>
 
