@@ -7,7 +7,10 @@ When omitted the functions fall back to the application-wide
 to use these functions outside the Flask app (scripts, notebooks, tests).
 """
 
+import os
+import shutil
 import tarfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -155,6 +158,21 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
         )
 
 
+def _move_tree_contents(src: Path, dst: Path) -> None:
+    """Move all children of *src* into *dst*, skipping already-existing targets."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dst / child.name
+        if not target.exists():
+            try:
+                child.rename(target)
+            except OSError:
+                if child.is_dir():
+                    shutil.copytree(child, target)
+                else:
+                    shutil.copy2(child, target)
+
+
 def _download_and_extract(
     *,
     url: str,
@@ -171,6 +189,11 @@ def _download_and_extract(
     and ``.zip`` archives.  The archive file is deleted after successful
     extraction to reclaim disk space.
 
+    Each invocation downloads and extracts into unique temporary paths so that
+    concurrent calls targeting the same archive do not interfere with each
+    other.  After extraction the content is moved to the final location; if
+    another call finished first the duplicate is simply cleaned up.
+
     Args:
         url: Download URL for the archive.
         archive_name: Filename to save the downloaded archive as inside
@@ -185,53 +208,82 @@ def _download_and_extract(
     if check_path.exists():
         return
 
-    archive_path = DATA_DIR / archive_name
+    unique_id = uuid.uuid4().hex[:8]
+    temp_archive = DATA_DIR / f".dl_{unique_id}_{archive_name}"
+    temp_extract = extract_to.parent / f".extract_{unique_id}_{extract_to.name}"
     DATA_DIR.mkdir(exist_ok=True)
 
-    if not archive_path.exists():
+    try:
         on_progress("downloading", f"Starting {dataset_name} download...", 0, 0)
-        download_file_with_progress(url, archive_path, download_size_mb * 1024 * 1024, on_progress)
+        download_file_with_progress(url, temp_archive, download_size_mb * 1024 * 1024, on_progress)
 
-    # Validate the downloaded file looks like a real archive before trying
-    # to extract it.  A common failure mode is the server returning an HTML
-    # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
-    _validate_archive(archive_path, archive_name, dataset_name)
+        # Another download may have finished while we were downloading.
+        if check_path.exists():
+            return
 
-    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
-    extract_to.mkdir(parents=True, exist_ok=True)
+        # Validate the downloaded file looks like a real archive before trying
+        # to extract it.  A common failure mode is the server returning an HTML
+        # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
+        _validate_archive(temp_archive, archive_name, dataset_name)
 
-    suffix = archive_name.lower()
-    if suffix.endswith((".tar.gz", ".tgz")):
-        # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
-        # Xet) transparently decompress .tar.gz files during transfer.
-        with tarfile.open(archive_path, "r:*") as tar_ref:
-            members = tar_ref.getmembers()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                tar_ref.extract(member, extract_to, filter="data")
-    elif suffix.endswith(".tar"):
-        with tarfile.open(archive_path, "r:") as tar_ref:
-            members = tar_ref.getmembers()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                tar_ref.extract(member, extract_to, filter="data")
-    elif suffix.endswith(".zip"):
-        with zipfile.ZipFile(archive_path, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
-                # Guard against path traversal in zip entries
-                member_path = Path(extract_to) / member
-                if not str(member_path.resolve()).startswith(str(Path(extract_to).resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
-                zip_ref.extract(member, extract_to)
-    else:
-        raise ValueError(f"Unsupported archive format: {archive_name}")
+        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+        temp_extract.mkdir(parents=True, exist_ok=True)
 
-    archive_path.unlink(missing_ok=True)
+        suffix = archive_name.lower()
+        if suffix.endswith((".tar.gz", ".tgz")):
+            # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
+            # Xet) transparently decompress .tar.gz files during transfer.
+            with tarfile.open(temp_archive, "r:*") as tar_ref:
+                members = tar_ref.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    tar_ref.extract(member, temp_extract, filter="data")
+        elif suffix.endswith(".tar"):
+            with tarfile.open(temp_archive, "r:") as tar_ref:
+                members = tar_ref.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    tar_ref.extract(member, temp_extract, filter="data")
+        elif suffix.endswith(".zip"):
+            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
+                members = zip_ref.namelist()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
+                        )
+                    # Guard against path traversal in zip entries
+                    member_path = Path(temp_extract) / member
+                    if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):
+                        raise ValueError(f"Path traversal detected in archive: {member}")
+                    zip_ref.extract(member, temp_extract)
+        else:
+            raise ValueError(f"Unsupported archive format: {archive_name}")
+
+        # Another download may have finished while we were extracting.
+        if check_path.exists():
+            return
+
+        # Move extracted content to final location.
+        if not extract_to.exists():
+            try:
+                os.rename(temp_extract, extract_to)
+                return
+            except OSError:
+                pass  # extract_to appeared between check and rename (race)
+
+        # extract_to already existed (e.g. it is DATA_DIR) — move children.
+        _move_tree_contents(temp_extract, extract_to)
+    finally:
+        temp_archive.unlink(missing_ok=True)
+        if temp_extract.exists():
+            shutil.rmtree(temp_extract, ignore_errors=True)

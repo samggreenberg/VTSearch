@@ -1,5 +1,8 @@
 """Text dataset downloaders: 20 Newsgroups, BBC News, AG News, IMDB."""
 
+import os
+import shutil
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -124,47 +127,58 @@ def download_bbc_news(
     if on_progress is None:
         on_progress = _core._default_progress()
 
-    zip_path = _core.DATA_DIR / "bbc-fulltext.zip"
     extract_dir = _core.DATA_DIR / "bbc-fulltext"
     _core.DATA_DIR.mkdir(exist_ok=True)
 
     if not extract_dir.exists():
-        if not zip_path.exists():
+        unique_id = uuid.uuid4().hex[:8]
+        temp_archive = _core.DATA_DIR / f".dl_{unique_id}_bbc-fulltext.zip"
+        temp_extract = _core.DATA_DIR / f".extract_{unique_id}_bbc-fulltext"
+
+        try:
             on_progress("downloading", "Starting BBC News download...", 0, 0)
             _core.download_file_with_progress(
                 _core.BBC_NEWS_URL,
-                zip_path,
+                temp_archive,
                 _core.BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
                 on_progress,
             )
 
-        on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            # The zip may contain a top-level folder (e.g. "bbc/"); extract
-            # all members and then locate category directories below.
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress(
-                        "downloading",
-                        f"Extracting BBC News dataset ({i + 1}/{total})...",
-                        i + 1,
-                        total,
+            if not extract_dir.exists():
+                on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
+                raw_dir = temp_extract / "raw"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(temp_archive, "r") as zip_ref:
+                    # The zip may contain a top-level folder (e.g. "bbc/"); extract
+                    # all members and then locate category directories below.
+                    members = zip_ref.namelist()
+                    total = len(members)
+                    for i, member in enumerate(members):
+                        if i % 100 == 0 or i == total - 1:
+                            on_progress(
+                                "downloading",
+                                f"Extracting BBC News dataset ({i + 1}/{total})...",
+                                i + 1,
+                                total,
+                            )
+                        zip_ref.extract(member, raw_dir)
+
+                # Find the directory that contains the category subfolders.
+                _bbc_root = _find_bbc_root(raw_dir)
+                if _bbc_root is None:
+                    raise RuntimeError(
+                        f"Could not locate BBC News category directories inside {raw_dir}"
                     )
-                zip_ref.extract(member, _core.DATA_DIR / "bbc-fulltext-raw")
 
-        # Find the directory that contains the category subfolders.
-        raw_root = _core.DATA_DIR / "bbc-fulltext-raw"
-        _bbc_root = _find_bbc_root(raw_root)
-        if _bbc_root is None:
-            raise RuntimeError(f"Could not locate BBC News category directories inside {raw_root}")
-
-        import shutil
-
-        shutil.copytree(_bbc_root, extract_dir)
-        shutil.rmtree(raw_root, ignore_errors=True)
-        zip_path.unlink(missing_ok=True)
+                if not extract_dir.exists():
+                    try:
+                        shutil.copytree(_bbc_root, extract_dir)
+                    except FileExistsError:
+                        pass  # Another download finished first
+        finally:
+            temp_archive.unlink(missing_ok=True)
+            if temp_extract.exists():
+                shutil.rmtree(temp_extract, ignore_errors=True)
 
     # Read articles grouped by category directory name.
     categories_articles: dict[str, list[str]] = {}
@@ -215,13 +229,23 @@ def download_ag_news(
     _core.DATA_DIR.mkdir(exist_ok=True)
 
     if not csv_path.exists():
-        on_progress("downloading", "Starting AG News download...", 0, 0)
-        _core.download_file_with_progress(
-            _core.AG_NEWS_URL,
-            csv_path,
-            _core.AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
-            on_progress,
-        )
+        unique_id = uuid.uuid4().hex[:8]
+        temp_path = _core.DATA_DIR / f".dl_{unique_id}_ag_news_train.csv"
+        try:
+            on_progress("downloading", "Starting AG News download...", 0, 0)
+            _core.download_file_with_progress(
+                _core.AG_NEWS_URL,
+                temp_path,
+                _core.AG_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+            if not csv_path.exists():
+                try:
+                    os.rename(temp_path, csv_path)
+                except OSError:
+                    pass  # Another download finished first
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     label_to_category = {
         "1": "World",

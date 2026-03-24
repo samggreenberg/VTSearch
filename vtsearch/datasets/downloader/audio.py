@@ -1,6 +1,5 @@
 """Audio dataset downloaders: ESC-50, GTZAN, Speech Commands v2, UrbanSound8K."""
 
-import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -26,31 +25,16 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _core._default_progress()
 
-    zip_path = _core.DATA_DIR / "esc50.zip"
     extract_dir = _core.DATA_DIR / "ESC-50-master"
-    _core.DATA_DIR.mkdir(exist_ok=True)
-
-    if not extract_dir.exists():
-        if not zip_path.exists():
-            on_progress("downloading", "Starting download...", 0, 0)
-            _core.download_file_with_progress(
-                _core.ESC50_URL, zip_path, _core.ESC50_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
-
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                on_progress(
-                    "downloading",
-                    f"Extracting {member.split('/')[-1]}...",
-                    i,
-                    total,
-                )
-                zip_ref.extract(member, _core.DATA_DIR)
-
-        zip_path.unlink(missing_ok=True)
-
+    _core._download_and_extract(
+        url=_core.ESC50_URL,
+        archive_name="esc50.zip",
+        extract_to=_core.DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=_core.ESC50_DOWNLOAD_SIZE_MB,
+        dataset_name="ESC-50",
+        on_progress=on_progress,
+    )
     return extract_dir / "audio"
 
 

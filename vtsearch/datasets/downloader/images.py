@@ -1,6 +1,9 @@
 """Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Stanford Dogs."""
 
+import os
+import shutil
 import tarfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -51,6 +54,9 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     directories.  Both archives are deleted after extraction to reclaim
     disk space.
 
+    Each invocation uses unique temporary paths so that concurrent calls
+    do not interfere with each other.
+
     Args:
         on_progress: Optional progress callback. Falls back to the
             application-wide ``update_progress`` when ``None``.
@@ -63,21 +69,30 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     if on_progress is None:
         on_progress = _core._default_progress()
 
-    zip_path = _core.DATA_DIR / "caltech-101.zip"
     extract_dir = _core.DATA_DIR / "caltech-101"
+    categories_dir = extract_dir / "101_ObjectCategories"
+
+    if categories_dir.exists():
+        return categories_dir
+
+    unique_id = uuid.uuid4().hex[:8]
+    temp_archive = _core.DATA_DIR / f".dl_{unique_id}_caltech-101.zip"
+    temp_extract = _core.DATA_DIR / f".extract_{unique_id}_caltech-101"
     _core.DATA_DIR.mkdir(exist_ok=True)
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
-    categories_dir = extract_dir / "101_ObjectCategories"
-    if not categories_dir.exists():
-        if not zip_path.exists():
-            on_progress("downloading", "Starting Caltech-101 download...", 0, 0)
-            _core.download_file_with_progress(
-                _core.CALTECH101_URL, zip_path, _core.CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
-            )
+    try:
+        on_progress("downloading", "Starting Caltech-101 download...", 0, 0)
+        _core.download_file_with_progress(
+            _core.CALTECH101_URL, temp_archive, _core.CALTECH101_DOWNLOAD_SIZE_MB * 1024 * 1024, on_progress
+        )
+
+        if categories_dir.exists():
+            return categories_dir
 
         on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        temp_extract.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(temp_archive, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
             for i, member in enumerate(members, 1):
@@ -88,15 +103,14 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                         i,
                         total,
                     )
-                zip_ref.extract(member, _core.DATA_DIR)
-
-        zip_path.unlink(missing_ok=True)
+                zip_ref.extract(member, temp_extract)
 
         # The zip contains 101_ObjectCategories.tar.gz (a nested archive).
         # Extract it to produce the actual category directories.
-        inner_tar = extract_dir / "101_ObjectCategories.tar.gz"
-        if inner_tar.exists() and not categories_dir.exists():
+        inner_tar = temp_extract / "caltech-101" / "101_ObjectCategories.tar.gz"
+        if inner_tar.exists():
             on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
+            inner_dest = temp_extract / "caltech-101"
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
                 members = tar_ref.getmembers()
                 total = len(members)
@@ -108,10 +122,28 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                             i + 1,
                             total,
                         )
-                    tar_ref.extract(member, extract_dir, filter="data")
+                    tar_ref.extract(member, inner_dest, filter="data")
             inner_tar.unlink(missing_ok=True)
 
-    return categories_dir
+        if categories_dir.exists():
+            return categories_dir
+
+        # Move extracted caltech-101 dir to final location.
+        temp_caltech = temp_extract / "caltech-101"
+        if temp_caltech.exists():
+            if not extract_dir.exists():
+                try:
+                    os.rename(temp_caltech, extract_dir)
+                except OSError:
+                    _core._move_tree_contents(temp_caltech, extract_dir)
+            else:
+                _core._move_tree_contents(temp_caltech, extract_dir)
+
+        return categories_dir
+    finally:
+        temp_archive.unlink(missing_ok=True)
+        if temp_extract.exists():
+            shutil.rmtree(temp_extract, ignore_errors=True)
 
 
 def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:

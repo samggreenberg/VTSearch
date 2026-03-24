@@ -58,6 +58,7 @@ from vtsearch.datasets.downloader.core import (
     ProgressCallback,
     _default_progress,
     _download_and_extract,
+    _move_tree_contents,
     _validate_archive,
     download_file_with_progress,
 )
@@ -100,6 +101,7 @@ __all__ = [
     # Core (private helpers re-exported for tests)
     "_default_progress",
     "_download_and_extract",
+    "_move_tree_contents",
     "_validate_archive",
     # Core
     "AG_NEWS_DOWNLOAD_SIZE_MB",
