@@ -272,7 +272,20 @@ Install dev dependencies (includes pytest):
 pip install -e ".[dev]"
 ```
 
-Then run:
+The recommended way to run tests uses the helper script, which installs
+dependencies automatically and supports grouped test subsets:
+
+```bash
+./run-tests.sh              # full fast CPU suite
+./run-tests.sh core         # basic app functionality only
+./run-tests.sh sorting api  # multiple groups
+```
+
+Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `models`,
+`downloads`, `integration`, `cli`, `converters`. See `CLAUDE.md` for the
+full group-to-file mapping.
+
+You can also run pytest directly:
 
 ```bash
 python -m pytest tests/ -v

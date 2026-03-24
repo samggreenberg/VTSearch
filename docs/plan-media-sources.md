@@ -1,5 +1,11 @@
 # MediaSource Abstraction — Implementation Plan
 
+> **Status: Proposal — not yet implemented.** This document describes a
+> planned design that has not been built. The current codebase uses
+> `resolve_file_from_origin()` in `vtsearch/models/resolver.py` for
+> individual file resolution. See [ARCHITECTURE.md](ARCHITECTURE.md) for
+> the current architecture.
+
 ## Problem
 
 Users want to supply **individual media examples** for sorting during labeling (not just text descriptions). Today, the only way to get media into VTSearch is through dataset importers, which are designed for bulk ingestion — there's no standard way to say "give me just `audio123.wav` from that folder" or "fetch this one file from that S3 bucket."

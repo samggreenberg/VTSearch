@@ -4,6 +4,10 @@ These importers and exporters were removed from the UI but are preserved here
 as reference implementations for developers building new IO plugins.  They are
 **not loaded, tested, or supported** — treat them as code samples.
 
+> **Warning:** These code samples may be outdated. In particular, the current
+> codebase uses the media type ID `"text"` (not `"paragraph"`). Review and
+> test thoroughly before reusing any of this code.
+
 See [EXTENDING.md](EXTENDING.md) for the current plugin interfaces and the
 S3 importer skeleton.
 
