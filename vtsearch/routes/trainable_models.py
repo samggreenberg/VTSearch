@@ -81,6 +81,10 @@ def sync_labels_to_loaded_model() -> None:
     Skipped when the model is in "find mode" (after ``/api/find-label``),
     because the global votes reflect scoring results on a different dataset,
     not the model's original training labels.
+
+    Also skipped when the active dataset context has no votes, which avoids
+    overwriting existing training labels with an empty labelset after the
+    user switches to a different dataset.
     """
     from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
 
@@ -95,6 +99,14 @@ def sync_labels_to_loaded_model() -> None:
     if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
         return
 
+    from vtsearch.utils import bad_votes, good_votes
+
+    # Skip sync when there are no votes in the active dataset context.
+    # This prevents overwriting existing training labels with an empty
+    # labelset after the user switches to a different dataset.
+    if not good_votes and not bad_votes:
+        return
+
     tm_name = entry["trainable_model_name"]
     path = _model_path(tm_name)
     data = _read_model(path)
@@ -102,7 +114,7 @@ def sync_labels_to_loaded_model() -> None:
         return
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+    from vtsearch.utils import snapshot_medias
 
     labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
     data["labelset"] = labelset.to_dict()

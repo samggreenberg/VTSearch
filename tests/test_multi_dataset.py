@@ -583,3 +583,138 @@ class TestEmptyContextFallback:
         set_active_dataset_id(None)
         assert len(good_votes) == 0
         assert len(bad_votes) == 0
+
+
+# ---------------------------------------------------------------------------
+# Multi-dataset training: sync_labels protection
+# ---------------------------------------------------------------------------
+
+
+class TestSyncLabelsAcrossDatasets:
+    """sync_labels_to_loaded_model must not destroy training data when the
+    active dataset has been switched (no votes in the new context)."""
+
+    def test_sync_skips_when_votes_empty_after_dataset_switch(self, client, tmp_path):
+        """Train on Dataset A, switch to Dataset B (empty votes),
+        call sync → model's labelset must still have A's labels."""
+        from vtsearch.datasets.labelset import LabelSet
+        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+        reset_for_tests()
+
+        # Phase 1: simulate training on "Dataset A" (6 labels)
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+
+        snap = snapshot_medias()
+        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
+        original_label_count = len(labelset)
+        assert original_label_count == 6
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "sync-protect-test"
+            tm_path = tmp_path / f"{tm_name}.json"
+            _write_model(
+                tm_path,
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "examples": [],
+                    "labelset": labelset.to_dict(),
+                },
+            )
+
+            entry = register_model(
+                name="Sync Protect Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+            set_loaded_id(model_id)
+
+            # Phase 2: simulate switching to Dataset B (clear votes)
+            good_votes.clear()
+            bad_votes.clear()
+
+            # Phase 3: trigger sync — must NOT overwrite training labels
+            sync_labels_to_loaded_model()
+
+            saved = _read_model(tm_path)
+            saved_labels = saved["labelset"]["labels"]
+            assert len(saved_labels) == original_label_count, (
+                f"Expected {original_label_count} training labels but sync "
+                f"overwrote them with {len(saved_labels)} (empty votes)"
+            )
+        finally:
+            set_trainable_models_dir(original_dir)
+
+    def test_load_model_on_new_dataset_preserves_labels(self, client, tmp_path):
+        """Load a trained model on Dataset B via /api/models/registry/load.
+
+        The model's saved labelset from Dataset A must survive the load
+        even though Dataset B has no votes."""
+        from vtsearch.datasets.labelset import LabelSet
+        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.routes.trainable_models import _read_model, _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+
+        reset_for_tests()
+
+        # Phase 1: simulate training on "Dataset A" (4 labels)
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [19, 20]})
+
+        snap = snapshot_medias()
+        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
+        original_label_count = len(labelset)
+        assert original_label_count == 4
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "load-protect-test"
+            tm_path = tmp_path / f"{tm_name}.json"
+            _write_model(
+                tm_path,
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": labelset.to_dict(),
+                },
+            )
+
+            entry = register_model(
+                name="Load Protect Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+            set_loaded_id(model_id)
+
+            # Phase 2: simulate switching to Dataset B (clear votes)
+            good_votes.clear()
+            bad_votes.clear()
+
+            # Phase 3: re-load the same model (as the dashboard would)
+            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            assert resp.status_code == 200
+
+            # The model file must still have the original labels
+            saved = _read_model(tm_path)
+            saved_labels = saved["labelset"]["labels"]
+            assert len(saved_labels) == original_label_count, (
+                f"Expected {original_label_count} training labels but load_model "
+                f"overwrote them — got {len(saved_labels)}"
+            )
+        finally:
+            set_trainable_models_dir(original_dir)
