@@ -253,7 +253,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       // Derive extension from the static default (e.g. ".json", ".csv") or fall back
       const extMatch = staticDefault.match(/\.(\w+)$/);
       const ext = extMatch ? extMatch[1] : 'json';
-      this.formValues['filepath'] = this.buildDefaultFilename(ext);
+      this.formValues['filepath'] = `data/${this.buildDefaultFilename(ext)}`;
     }
   }
 

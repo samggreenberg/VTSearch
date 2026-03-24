@@ -40,8 +40,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 "results file will be written.  Parent directories are "
                 "created automatically."
             ),
-            placeholder="/home/user/autodetect_results.csv",
-            default="autodetect_results.csv",
+            placeholder="data/autodetect_results.csv",
+            default="data/autodetect_results.csv",
         ),
     ]
 
