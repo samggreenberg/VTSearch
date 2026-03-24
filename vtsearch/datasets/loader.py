@@ -444,6 +444,7 @@ def load_dataset_from_folder(
     thin: bool = False,
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    skip_embedding: bool = False,
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -496,6 +497,11 @@ def load_dataset_from_folder(
             non-empty ``"md5"`` key, that value is used as the media's MD5
             instead of computing it from the file contents.  The metadata dict
             is also attached to the media as ``custom_metadata``.
+        skip_embedding: When ``True``, skip embedder resolution and model
+            loading entirely.  Files with pre-computed vectors in
+            ``content_vectors`` use those; files without are included with
+            ``embedding=None``.  Useful when vectors have already been
+            downloaded or computed externally.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
@@ -513,28 +519,29 @@ def load_dataset_from_folder(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
-    # Resolve the embedder
+    # Resolve the embedder (skipped entirely when skip_embedding=True).
     emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    else:
-        avail = embedders_for_type(mt.type_id)
-        if avail:
-            emb = avail[0]
+    if not skip_embedding:
+        if embedder_name:
+            try:
+                emb = get_embedder(embedder_name)
+            except KeyError:
+                raise ValueError(f"Unknown embedder: {embedder_name}")
+        else:
+            avail = embedders_for_type(mt.type_id)
+            if avail:
+                emb = avail[0]
 
-    # Eagerly load models before starting the embedding timer so that
-    # download / weight-loading time does not pollute the progress bar.
-    if emb is not None and getattr(emb, "_model", None) is None:
-        on_progress("loading", "Loading embedding model…", 0, 0)
-        original_cb = emb._on_progress
-        emb._on_progress = on_progress
-        try:
-            emb.load_models()
-        finally:
-            emb._on_progress = original_cb
+        # Eagerly load models before starting the embedding timer so that
+        # download / weight-loading time does not pollute the progress bar.
+        if emb is not None and getattr(emb, "_model", None) is None:
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
@@ -555,9 +562,10 @@ def load_dataset_from_folder(
             # different subdirectories with the same basename stay distinct.
             rel_path = file_path.relative_to(folder_path).as_posix()
 
+            phase = "loading" if skip_embedding else "embedding"
             on_progress(
-                "embedding",
-                f"Embedding {media_type} {rel_path}...",
+                phase,
+                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path}...",
                 i + 1,
                 total_files,
             )
@@ -568,6 +576,8 @@ def load_dataset_from_folder(
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+            elif skip_embedding:
+                embedding = None
             else:
                 if emb is None:
                     continue
@@ -706,6 +716,7 @@ def load_dataset_from_folder_chunked(
     thin: bool = False,
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    skip_embedding: bool = False,
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -730,6 +741,7 @@ def load_dataset_from_folder_chunked(
             is used.
         custom_metadata_map: Optional mapping of filename to a metadata dict.
             Same semantics as in :func:`load_dataset_from_folder`.
+        skip_embedding: Same semantics as in :func:`load_dataset_from_folder`.
 
     Yields:
         A dict mapping int media IDs (starting at 1) to media data dicts.
@@ -751,28 +763,29 @@ def load_dataset_from_folder_chunked(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
-    # Resolve the embedder
+    # Resolve the embedder (skipped entirely when skip_embedding=True).
     emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    else:
-        avail = embedders_for_type(mt.type_id)
-        if avail:
-            emb = avail[0]
+    if not skip_embedding:
+        if embedder_name:
+            try:
+                emb = get_embedder(embedder_name)
+            except KeyError:
+                raise ValueError(f"Unknown embedder: {embedder_name}")
+        else:
+            avail = embedders_for_type(mt.type_id)
+            if avail:
+                emb = avail[0]
 
-    # Eagerly load models before starting the embedding timer so that
-    # download / weight-loading time does not pollute the progress bar.
-    if emb is not None and getattr(emb, "_model", None) is None:
-        on_progress("loading", "Loading embedding model…", 0, 0)
-        original_cb = emb._on_progress
-        emb._on_progress = on_progress
-        try:
-            emb.load_models()
-        finally:
-            emb._on_progress = original_cb
+        # Eagerly load models before starting the embedding timer so that
+        # download / weight-loading time does not pollute the progress bar.
+        if emb is not None and getattr(emb, "_model", None) is None:
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
@@ -796,9 +809,10 @@ def load_dataset_from_folder_chunked(
             global_idx = start + i
             rel_path = file_path.relative_to(folder_path).as_posix()
 
+            phase = "loading" if skip_embedding else "embedding"
             on_progress(
-                "embedding",
-                f"Embedding {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
+                phase,
+                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
                 global_idx + 1,
                 total_files,
             )
@@ -807,6 +821,8 @@ def load_dataset_from_folder_chunked(
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+            elif skip_embedding:
+                embedding = None
             else:
                 if emb is None:
                     continue
