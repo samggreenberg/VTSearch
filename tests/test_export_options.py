@@ -442,9 +442,10 @@ class TestExportWithSelectedColumns:
 
             with open(fpath, newline="", encoding="utf-8") as f:
                 rows = list(csv.reader(f))
-            assert rows[0] == ["label", "filename"]
-            assert rows[1] == ["good", "a.wav"]
-            assert rows[2] == ["bad", "b.wav"]
+            # origin is always appended as last column for re-import
+            assert rows[0] == ["label", "filename", "origin"]
+            assert rows[1] == ["good", "a.wav", ""]
+            assert rows[2] == ["bad", "b.wav", ""]
 
     def test_json_export_with_selected_columns(self, client):
         """POST /api/exporters/export with labels + selected_columns filters JSON."""
@@ -499,8 +500,9 @@ class TestExportWithSelectedColumns:
             with open(fpath2, newline="", encoding="utf-8") as f:
                 header2 = next(csv.reader(f))
 
-            assert header1 == ["label", "md5", "filename"]
-            assert header2 == ["category"]
+            # origin is always appended as last column
+            assert header1 == ["label", "md5", "filename", "origin"]
+            assert header2 == ["category", "origin"]
 
 
 class TestAvailableColumnsNoDuplicates:
