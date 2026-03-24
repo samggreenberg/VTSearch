@@ -316,6 +316,14 @@ def _ensure_cache(
 
     if _cache_diversity_tree is None:
         _cache_diversity_tree = _build_diversity_tree(clips_dict)
+        # After a partial invalidation (_cache_diversity_tree was set to None
+        # but _cache_good_ids/_cache_bad_ids still contain IDs from kept
+        # steps), seed the fresh tree with those pre-existing labels so that
+        # diversity_level() is correct for subsequently replayed events.
+        if _cache_diversity_tree is not None:
+            for mid in _cache_good_ids | _cache_bad_ids:
+                if mid in _cache_diversity_tree.vector_to_leaf:
+                    _cache_diversity_tree.label(mid)
 
     for t in range(start, len(label_history)):
         media_id, label, _ = label_history[t]
