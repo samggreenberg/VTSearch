@@ -1,30 +1,4 @@
 <vt-modal title="Export" [open]="true" (closed)="close()">
-  <!-- Column Selection -->
-  <div class="export-section">
-    <h3>Columns</h3>
-    <div class="column-checkboxes">
-      @for (col of columns; track col.key) {
-        <label class="column-toggle">
-          <input type="checkbox" [(ngModel)]="col.enabled" />
-          {{ col.label }}
-        </label>
-      }
-    </div>
-  </div>
-
-  <!-- Delimiter -->
-  <div class="export-section">
-    <h3>Delimiter</h3>
-    <div class="delimiter-row">
-      @for (opt of delimiterOptions; track opt.value) {
-        <label class="delimiter-option">
-          <input type="radio" name="delimiter" [value]="opt.value" [(ngModel)]="delimiter" />
-          {{ opt.label }}
-        </label>
-      }
-    </div>
-  </div>
-
   <!-- Category Filter -->
   <div class="export-section">
     <h3>Categories</h3>
@@ -45,6 +19,19 @@
         <label class="delimiter-option">
           <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
           Corrections
+        </label>
+      }
+    </div>
+  </div>
+
+  <!-- Column Selection -->
+  <div class="export-section">
+    <h3>Columns</h3>
+    <div class="column-checkboxes">
+      @for (col of columns; track col.key) {
+        <label class="column-toggle">
+          <input type="checkbox" [(ngModel)]="col.enabled" />
+          {{ col.label }}
         </label>
       }
     </div>
@@ -94,6 +81,19 @@
         </table>
       </div>
     }
+  </div>
+
+  <!-- Delimiter -->
+  <div class="export-section">
+    <h3>Delimiter</h3>
+    <div class="delimiter-row">
+      @for (opt of delimiterOptions; track opt.value) {
+        <label class="delimiter-option">
+          <input type="radio" name="delimiter" [value]="opt.value" [(ngModel)]="delimiter" />
+          {{ opt.label }}
+        </label>
+      }
+    </div>
   </div>
 
   <!-- Export Tabs -->
