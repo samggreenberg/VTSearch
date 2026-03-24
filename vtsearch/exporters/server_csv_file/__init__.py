@@ -46,7 +46,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
     ]
 
     #: Base columns for label exports (used when no selected_columns provided).
-    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category", "origin"]
+    #: ``origin`` is always appended as the last column (not listed here).
+    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         filepath_str = field_values.get("filepath", "").strip()
@@ -64,9 +65,18 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         return self._export_autodetect(results, filepath)
 
     def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
-        """Export labels with user-selected columns."""
+        """Export labels with user-selected columns.
+
+        The ``origin`` column is always written as the last column so
+        that the CSV can be re-imported without data loss.
+        """
         labels = results.get("labels", [])
-        columns: list[str] = results.get("selected_columns") or self._LABEL_BASE_COLUMNS
+        columns: list[str] = list(results.get("selected_columns") or self._LABEL_BASE_COLUMNS)
+
+        # Ensure origin is always the last column (required for re-import).
+        if "origin" in columns:
+            columns.remove("origin")
+        columns.append("origin")
 
         total_rows = 0
         with open(filepath, "w", newline="", encoding="utf-8") as f:
