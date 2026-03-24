@@ -74,6 +74,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     startWidth: number;
     table: 'datasets' | 'models';
     col: string;
+    dragged: boolean;
+    tableEl: HTMLTableElement;
   } | null = null;
 
   private destroy$ = new Subject<void>();
@@ -186,6 +188,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       startWidth: colWidths[col] ?? 100,
       table,
       col,
+      dragged: false,
+      tableEl,
     };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
@@ -195,6 +199,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onColResizeMove(event: MouseEvent): void {
     if (!this.resizeState) return;
     const delta = event.clientX - this.resizeState.startX;
+    if (Math.abs(delta) > 3) this.resizeState.dragged = true;
+    if (!this.resizeState.dragged) return;
     const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
     const newWidth = Math.max(30, this.resizeState.startWidth + delta);
     const prevWidth = colWidths[this.resizeState.col] ?? this.resizeState.startWidth;
@@ -210,9 +216,94 @@ export class DashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:mouseup')
   onColResizeEnd(): void {
     if (!this.resizeState) return;
+    const state = this.resizeState;
     this.resizeState = null;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
+
+    if (!state.dragged) {
+      this.autoSizeColumn(state.tableEl, state.table, state.col);
+    }
+  }
+
+  private autoSizeColumn(tableEl: HTMLTableElement, table: 'datasets' | 'models', col: string): void {
+    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+
+    // Find the column index from the header
+    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+    let colIndex = -1;
+    for (let i = 0; i < ths.length; i++) {
+      if (ths[i].getAttribute('data-col') === col) {
+        colIndex = i;
+        break;
+      }
+    }
+    if (colIndex < 0) return;
+
+    // Temporarily switch to auto layout so content determines width
+    const wasFixed = tableEl.classList.contains('table-fixed');
+    const prevTableWidth = tableEl.style.width;
+    const prevColWidth = ths[colIndex].style.width;
+
+    tableEl.classList.remove('table-fixed');
+    tableEl.style.width = '';
+    ths[colIndex].style.width = '';
+
+    // Measure the natural width of the column (header + all body cells)
+    let maxWidth = ths[colIndex].offsetWidth;
+    const rows = tableEl.querySelectorAll('tbody tr');
+    rows.forEach((row) => {
+      const cell = row.children[colIndex] as HTMLElement | undefined;
+      if (cell) {
+        // For cells with colspan, skip (loading task rows)
+        if (cell.hasAttribute('colspan')) return;
+        maxWidth = Math.max(maxWidth, cell.scrollWidth);
+      }
+    });
+
+    // Add a small buffer for padding
+    maxWidth = Math.max(30, maxWidth + 2);
+
+    // Apply the measured width and restore fixed layout
+    const prevWidth = colWidths[col] ?? 0;
+    colWidths[col] = maxWidth;
+
+    if (table === 'datasets') {
+      this.datasetsTableFixed = true;
+      this.datasetsResizeInit = true;
+      // Recalculate total table width
+      let total = 0;
+      ths.forEach((t) => {
+        const key = t.getAttribute('data-col');
+        if (key && key !== col) {
+          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
+          total += colWidths[key];
+        } else if (key === col) {
+          total += maxWidth;
+        }
+      });
+      this.datasetsTableWidth = total;
+    } else {
+      this.modelsTableFixed = true;
+      this.modelsResizeInit = true;
+      let total = 0;
+      ths.forEach((t) => {
+        const key = t.getAttribute('data-col');
+        if (key && key !== col) {
+          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
+          total += colWidths[key];
+        } else if (key === col) {
+          total += maxWidth;
+        }
+      });
+      this.modelsTableWidth = total;
+    }
+
+    // Restore fixed layout (Angular binding will apply on next change detection)
+    if (wasFixed) {
+      tableEl.classList.add('table-fixed');
+      tableEl.style.width = prevTableWidth;
+    }
   }
 
   ngOnDestroy(): void {
