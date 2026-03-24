@@ -176,6 +176,10 @@ export class DatasetsApiService {
     return this.http.post(`/api/datasets/registry/${datasetId}/unload`, {});
   }
 
+  activateRegistered(datasetId: string): Observable<unknown> {
+    return this.http.post(`/api/datasets/registry/${datasetId}/activate`, {});
+  }
+
   deleteRegistered(datasetId: string): Observable<unknown> {
     return this.http.delete(`/api/datasets/registry/${datasetId}`);
   }

@@ -51,6 +51,7 @@ _TEST_GROUPS = {
         "test_memory_errors",
         "test_pickle_safety",
         "test_media_sources",
+        "test_multi_dataset",
     ],
     "io": [
         "test_exporters",

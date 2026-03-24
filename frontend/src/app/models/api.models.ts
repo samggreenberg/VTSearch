@@ -206,6 +206,7 @@ export interface DatasetRegistryEntry {
   name: string;
   media_type: string;
   loaded?: boolean;
+  active?: boolean;
   readers?: string[];
   [key: string]: unknown;
 }
