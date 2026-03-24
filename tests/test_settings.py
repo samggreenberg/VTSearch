@@ -601,8 +601,8 @@ class TestSettingsModule:
         assert settings_mod.get_autoload_media_types() == ["image", "audio"]
 
     def test_autoload_media_types_all_valid_types(self):
-        settings_mod.set_autoload_media_types(["audio", "image", "paragraph", "video"])
-        assert settings_mod.get_autoload_media_types() == ["audio", "image", "paragraph", "video"]
+        settings_mod.set_autoload_media_types(["audio", "image", "text", "video"])
+        assert settings_mod.get_autoload_media_types() == ["audio", "image", "text", "video"]
 
     def test_toggle_autoload_media_type(self):
         result = settings_mod.toggle_autoload_media_type("audio")
@@ -1199,9 +1199,9 @@ class TestSettingsAPI:
         assert res2.get_json()["autoload_media_types"] == ["audio", "video"]
 
     def test_update_autoload_media_types_all_types(self, client):
-        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "image", "paragraph", "video"]})
+        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "image", "text", "video"]})
         assert res.status_code == 200
-        assert res.get_json()["autoload_media_types"] == ["audio", "image", "paragraph", "video"]
+        assert res.get_json()["autoload_media_types"] == ["audio", "image", "text", "video"]
 
     def test_update_autoload_media_types_clear(self, client):
         client.put("/api/settings", json={"autoload_media_types": ["video"]})

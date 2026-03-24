@@ -446,7 +446,7 @@ class TestTextDefaultClipper:
     def test_returns_media_unchanged(self):
         from vtsearch.media.text.clipper import TextDefaultClipper
 
-        media = {"id": 1, "type": "paragraph", "media_string": "Hello world."}
+        media = {"id": 1, "type": "text", "media_string": "Hello world."}
         result = TextDefaultClipper().clip(media)
         assert result == [media]
 
@@ -455,7 +455,7 @@ class TestTextDefaultClipper:
 
         c = TextDefaultClipper()
         assert c.name == "text_default"
-        assert c.media_type == "paragraph"
+        assert c.media_type == "text"
         assert isinstance(c, MediaClipper)
 
 
@@ -470,13 +470,13 @@ class TestTextSentenceClipper:
 
         c = TextSentenceClipper()
         assert c.name == "text_sentence"
-        assert c.media_type == "paragraph"
+        assert c.media_type == "text"
         assert isinstance(c, MediaClipper)
 
     def test_single_sentence_unchanged(self):
         from vtsearch.media.text.clipper import TextSentenceClipper
 
-        media = {"id": 1, "type": "paragraph", "media_string": "Hello world."}
+        media = {"id": 1, "type": "text", "media_string": "Hello world."}
         result = TextSentenceClipper().clip(media)
         assert len(result) == 1
         assert result[0] is media
@@ -485,7 +485,7 @@ class TestTextSentenceClipper:
         from vtsearch.media.text.clipper import TextSentenceClipper
 
         text = "First sentence. Second sentence. Third one!"
-        media = {"id": 1, "type": "paragraph", "media_string": text, "word_count": 7, "character_count": len(text)}
+        media = {"id": 1, "type": "text", "media_string": text, "word_count": 7, "character_count": len(text)}
         result = TextSentenceClipper().clip(media)
         assert len(result) == 3
         assert result[0]["media_string"] == "First sentence."
@@ -500,7 +500,7 @@ class TestTextSentenceClipper:
         from vtsearch.media.text.clipper import TextSentenceClipper
 
         text = "Is this a test? Yes it is! Great."
-        media = {"id": 1, "type": "paragraph", "media_string": text}
+        media = {"id": 1, "type": "text", "media_string": text}
         result = TextSentenceClipper().clip(media)
         assert len(result) == 3
         assert result[0]["media_string"] == "Is this a test?"
@@ -510,14 +510,14 @@ class TestTextSentenceClipper:
     def test_empty_string_returns_unchanged(self):
         from vtsearch.media.text.clipper import TextSentenceClipper
 
-        media = {"id": 1, "type": "paragraph", "media_string": ""}
+        media = {"id": 1, "type": "text", "media_string": ""}
         result = TextSentenceClipper().clip(media)
         assert result == [media]
 
     def test_no_media_string_returns_unchanged(self):
         from vtsearch.media.text.clipper import TextSentenceClipper
 
-        media = {"id": 1, "type": "paragraph"}
+        media = {"id": 1, "type": "text"}
         result = TextSentenceClipper().clip(media)
         assert result == [media]
 
@@ -764,7 +764,7 @@ class TestClipperRegistry:
     def test_clippers_for_type_paragraph(self):
         from vtsearch.media import clippers_for_type
 
-        text_clippers = clippers_for_type("paragraph")
+        text_clippers = clippers_for_type("text")
         names = [c.name for c in text_clippers]
         assert "text_default" in names
         assert "text_sentence" in names
@@ -877,7 +877,7 @@ class TestApplyClipper:
 
         media = {
             "id": 1,
-            "type": "paragraph",
+            "type": "text",
             "media_string": "First sentence. Second sentence.",
             "word_count": 4,
             "character_count": 32,

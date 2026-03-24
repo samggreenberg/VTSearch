@@ -17,7 +17,7 @@ class TextDefaultClipper(MediaClipper):
 
     @property
     def media_type(self) -> str:
-        return "paragraph"
+        return "text"
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]
@@ -41,7 +41,7 @@ class TextSentenceClipper(MediaClipper):
 
     @property
     def media_type(self) -> str:
-        return "paragraph"
+        return "text"
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         text = media.get("media_string") or ""

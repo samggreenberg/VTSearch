@@ -489,7 +489,7 @@ class TestMediaTypeMismatch:
     def test_paragraph_endpoint_on_audio_media(self):
         resp = self.client.get("/api/medias/1/paragraph")
         assert resp.status_code == 400
-        assert "not a paragraph" in resp.get_json()["error"]
+        assert "not a text media" in resp.get_json()["error"]
 
 
 class TestBoundaryValues:

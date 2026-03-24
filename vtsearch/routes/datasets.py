@@ -86,12 +86,12 @@ def _normalize_media_type_param(value: str) -> str:
     value = value.strip()
     if not value:
         return ""
-    from vtsearch.media import get_by_folder_name
+    from vtsearch.media import get_by_folder_name, normalize_type_id
 
     try:
         return get_by_folder_name(value).type_id
     except KeyError:
-        return value  # assume it is already a type_id
+        return normalize_type_id(value)  # normalize legacy IDs like "paragraph" → "text"
 
 
 # Register the UI sub-blueprint.

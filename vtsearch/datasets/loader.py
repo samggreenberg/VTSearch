@@ -979,7 +979,7 @@ def load_dataset_from_pickle(
         }
 
     # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
@@ -999,8 +999,8 @@ def load_dataset_from_pickle(
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
-            # Determine media type
-            media_type = media_info.get("type", "audio")
+            # Determine media type (normalize legacy IDs like "paragraph" → "text")
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
@@ -1190,7 +1190,7 @@ def load_dataset_from_pickle_chunked(
 
     # Build lookup tables dynamically from the media type registry,
     # matching the approach used by load_dataset_from_pickle.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
@@ -1209,7 +1209,7 @@ def load_dataset_from_pickle_chunked(
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = media_info.get("type", "audio")
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 media_path: str | None = media_info.get("media_path")
