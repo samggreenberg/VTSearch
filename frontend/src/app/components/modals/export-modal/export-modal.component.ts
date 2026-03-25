@@ -79,10 +79,12 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   private static readonly BASE_COLUMNS: { key: string; label: string }[] = [
     { key: 'label', label: 'Label' },
     { key: 'md5', label: 'MD5' },
-    { key: 'origin_name', label: 'Origin Name' },
     { key: 'filename', label: 'Filename' },
     { key: 'category', label: 'Category' },
   ];
+
+  /** Columns excluded from checkboxes/preview but always appended to exports. */
+  private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -133,16 +135,17 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Build column definitions from available_columns or fall back to defaults. */
   private buildColumns(availableColumns?: string[]): void {
     const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
+    const alwaysKeys = new Set(ExportModalComponent.ALWAYS_EXPORT_KEYS);
     // Start with base columns
     this.columns = ExportModalComponent.BASE_COLUMNS.map((c) => ({
       key: c.key,
       label: c.label,
       enabled: true,
     }));
-    // Add metadata columns discovered from the data
+    // Add metadata columns discovered from the data (skip always-export columns)
     if (availableColumns) {
       for (const key of availableColumns) {
-        if (!baseKeys.has(key)) {
+        if (!baseKeys.has(key) && !alwaysKeys.has(key)) {
           this.columns.push({
             key,
             label: key,
@@ -203,9 +206,18 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return String((entry as unknown as Record<string, unknown>)[col.key] ?? '');
   }
 
+  /** Columns to export: user-selected columns plus always-export columns appended at the end. */
+  private get exportColumns(): ColumnDef[] {
+    const cols = [...this.enabledColumns];
+    for (const key of ExportModalComponent.ALWAYS_EXPORT_KEYS) {
+      cols.push({ key, label: key, enabled: true });
+    }
+    return cols;
+  }
+
   /** Build delimited text from labels using selected columns. */
   buildExportText(): string {
-    const cols = this.enabledColumns;
+    const cols = this.exportColumns;
     if (cols.length === 0) return '';
     const header = cols.map((c) => c.label).join(this.delimiter);
     const rows = this.filteredLabels.map((entry) =>
@@ -337,7 +349,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
     const labelsData = {
       labels: this.filteredLabels,
-      selected_columns: this.enabledColumns.map((c) => c.key),
+      selected_columns: this.exportColumns.map((c) => c.key),
     };
     this.exportersApi
       .runExport({
