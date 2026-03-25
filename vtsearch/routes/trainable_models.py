@@ -572,16 +572,19 @@ def save_trainable_model_labels(name: str):
 @trainable_models_bp.route("/api/models/registry")
 def list_registered_models():
     """Return all registered models with their loaded state and autodetect flag."""
-    from vtsearch.models.registry import get_loaded_id, list_models
+    from vtsearch.models.registry import get_active_model_id, get_loaded_model_ids, list_models
     from vtsearch.settings import get_autorun_detector_names
     from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
-    loaded_id = get_loaded_id()
+    loaded_ids = get_loaded_model_ids()
+    active_id = get_active_model_id()
     detectors = get_autorun_detectors()
     autorun_names = set(get_autorun_detector_names())
     for entry in entries:
-        entry["loaded"] = entry["id"] == loaded_id
+        mid = entry["id"]
+        entry["loaded"] = mid in loaded_ids
+        entry["active"] = mid == active_id
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
@@ -590,13 +593,8 @@ def list_registered_models():
             # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
-        # detector_loaded: True when the model's inference data is cached in RAM.
-        # For detector-backed models: weights are present in autorun_detectors.
-        # For trainable models: the model is currently loaded (labels in votes).
-        if det_name and det:
-            entry["detector_loaded"] = det.get("weights") is not None
-        else:
-            entry["detector_loaded"] = entry["loaded"]
+        # detector_loaded: True when the model has a DetectorContext in memory.
+        entry["detector_loaded"] = mid in loaded_ids
     return jsonify({"models": entries})
 
 
@@ -665,23 +663,38 @@ def register_model_route():
 
 @trainable_models_bp.route("/api/models/registry/load", methods=["POST"])
 def load_model_route():
-    """Set the currently loaded model by ID.
+    """Load a model into memory and make it active.
 
     Expects JSON::
 
         {"model_id": "abc123"}
 
-    Pass ``model_id: null`` to unload.
+    Pass ``model_id: null`` to deactivate (no model active).
 
     When loading a trainable model:
 
     1. The current model's labels are saved (auto-sync).
-    2. All votes are cleared so labels from the previous session don't leak.
-    3. The new model's saved labelset is restored into votes.
+    2. A new DetectorContext is created for the model (or an existing one
+       is reused if already loaded).
+    3. The model's saved labelset is restored into the DetectorContext.
     4. Media examples are seeded as good votes.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, set_loaded_id
-    from vtsearch.utils import clear_votes
+    from vtsearch.models.registry import (
+        get_model,
+        is_model_loaded,
+        set_active_model_id,
+        set_loaded_id,
+    )
+    from vtsearch.utils import (
+        DetectorContext,
+        bad_votes,
+        clear_votes,
+        get_active_detector_id,
+        get_detector_context,
+        good_votes,
+        register_detector_context,
+        set_active_detector_id,
+    )
 
     data = request.get_json(force=True, silent=True) or {}
     model_id = data.get("model_id")
@@ -692,24 +705,35 @@ def load_model_route():
             return jsonify({"error": "Model not found"}), 404
 
     # Save current model's labels before switching — but only if there
-    # are votes in the active context.  When the user has switched to a
-    # different dataset the active context may have no votes at all;
-    # syncing in that situation would overwrite the model's saved
-    # training labels with an empty labelset.
-    from vtsearch.utils import bad_votes, good_votes
-
+    # are votes in the active detector context.
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
-    # Clear votes so labels from the previous session don't carry over.
-    clear_votes()
-
-    set_loaded_id(model_id)
-
-    # Restore saved labels and seed examples from the newly loaded model.
     labels_restored = 0
     examples_seeded = 0
-    if model_id is not None and entry is not None:
+
+    if model_id is None:
+        # Deactivate: no model active
+        set_active_model_id(None)
+        set_active_detector_id(None)
+    elif is_model_loaded(model_id):
+        # Already loaded — just activate it (instant switch)
+        set_active_model_id(model_id)
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None:
+            set_active_detector_id(model_id)
+    else:
+        # New load: create a DetectorContext, populate it, register it
+        det_ctx = DetectorContext(
+            model_id,
+            name=entry.get("name", ""),
+            media_type=entry.get("media_type", ""),
+        )
+        register_detector_context(det_ctx)
+        set_active_detector_id(model_id)
+        set_loaded_id(model_id)
+
+        # Restore saved labels and seed examples
         tm_name = entry.get("trainable_model_name", "")
         if tm_name:
             tm_data = _read_model(_model_path(tm_name))
@@ -724,6 +748,70 @@ def load_model_route():
         "labels_restored": labels_restored,
         "examples_seeded": examples_seeded,
     })
+
+
+@trainable_models_bp.route("/api/models/registry/<model_id>/activate", methods=["POST"])
+def activate_model_route(model_id: str):
+    """Switch the active model (must already be loaded).
+
+    Saves the current model's labels before switching.
+    """
+    from vtsearch.models.registry import get_model, is_model_loaded, set_active_model_id
+    from vtsearch.utils import (
+        bad_votes,
+        get_detector_context,
+        good_votes,
+        set_active_detector_id,
+    )
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+    if not is_model_loaded(model_id):
+        return jsonify({"error": "Model is not loaded — load it first"}), 400
+
+    # Save current model's labels before switching
+    if good_votes or bad_votes:
+        sync_labels_to_loaded_model()
+
+    set_active_model_id(model_id)
+    det_ctx = get_detector_context(model_id)
+    if det_ctx is not None:
+        set_active_detector_id(model_id)
+
+    return jsonify({"ok": True, "message": "Model activated"})
+
+
+@trainable_models_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])
+def unload_model_route(model_id: str):
+    """Unload a model from memory (frees its DetectorContext).
+
+    Saves labels before unloading if the model is active.
+    """
+    from vtsearch.models.registry import get_model, is_model_loaded, remove_loaded_model_id
+    from vtsearch.utils import (
+        bad_votes,
+        get_active_detector_id,
+        good_votes,
+        set_active_detector_id,
+        unregister_detector_context,
+    )
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+    if not is_model_loaded(model_id):
+        return jsonify({"error": "Model is not loaded"}), 400
+
+    # Save labels if this is the active model
+    if get_active_detector_id() == model_id and (good_votes or bad_votes):
+        sync_labels_to_loaded_model()
+
+    # Remove from memory
+    unregister_detector_context(model_id)
+    remove_loaded_model_id(model_id)
+
+    return jsonify({"ok": True, "message": "Model unloaded"})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])
@@ -749,7 +837,34 @@ def delete_registered_model(model_id: str):
 
         remove_autorun_detector(det_name)
 
+    # Clean up the DetectorContext if loaded
+    from vtsearch.models.registry import is_model_loaded, remove_loaded_model_id
+    from vtsearch.utils import unregister_detector_context
+
+    if is_model_loaded(model_id):
+        unregister_detector_context(model_id)
+        remove_loaded_model_id(model_id)
+
     unregister_model(model_id)
+    return jsonify({"ok": True})
+
+
+@trainable_models_bp.route("/api/models/loading-tasks")
+def model_loading_tasks_endpoint():
+    """Return all active model loading tasks with their progress."""
+    from vtsearch.utils.progress import model_loading_tasks
+
+    return jsonify({"tasks": model_loading_tasks.list_tasks()})
+
+
+@trainable_models_bp.route("/api/models/cancel/<task_id>", methods=["POST"])
+def cancel_model_loading_task(task_id: str):
+    """Cancel a specific model loading task."""
+    from vtsearch.utils.progress import model_loading_tasks
+
+    ok = model_loading_tasks.cancel_task(task_id)
+    if not ok:
+        return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True})
 
 

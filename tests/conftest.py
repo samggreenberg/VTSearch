@@ -314,11 +314,12 @@ def reset_state():
     clear_progress_cache()
 
     # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks
+    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks, model_loading_tasks
 
     dataset_progress.reset_cancel()
     find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     loading_tasks.reset_for_tests()
+    model_loading_tasks.reset_for_tests()
 
     # Reset the login provider to DefaultLoginProvider
     from vtsearch.auth import DefaultLoginProvider, set_login_provider
