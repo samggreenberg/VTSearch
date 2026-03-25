@@ -47,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressIndeterminate = false;
 
   loadingTasks: LoadingTask[] = [];
+  modelLoadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
   newModelModalOpen = false;
@@ -483,6 +484,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  unloadModel(model: ModelRegistryEntry): void {
+    this.modelsApi.unloadModel(model.id).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
+  getInlineModelTask(modelId: string): LoadingTask | undefined {
+    return this.modelLoadingTasks.find((t) => t.model_id === modelId);
+  }
+
   toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
     const detectorName = model.detector_name || model.name;
     this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
@@ -583,6 +594,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   dismissLoadingTask(taskId: string): void {
     this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
+  }
+
+  cancelModelLoadingTask(taskId: string): void {
+    this.modelsApi.cancelModelLoadingTask(taskId).subscribe();
+  }
+
+  dismissModelLoadingTask(taskId: string): void {
+    this.modelLoadingTasks = this.modelLoadingTasks.filter((t) => t.task_id !== taskId);
   }
 
   // --- Progress polling ---

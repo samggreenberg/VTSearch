@@ -117,12 +117,16 @@
               <vt-model-card
                 [model]="model"
                 [selected]="isModelSelected(model.id)"
+                [loadingTask]="getInlineModelTask(model.id)"
                 (rowClick)="toggleModelSelection(model.id, $event)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
                 (load)="loadModel(model)"
+                (unload)="unloadModel(model)"
                 (export)="openExportModal(model)"
                 (autorunToggle)="toggleAutorun(model, $event)"
+                (cancelTask)="cancelModelLoadingTask($event)"
+                (dismissTask)="dismissModelLoadingTask($event)"
               />
             }
           </tbody>
