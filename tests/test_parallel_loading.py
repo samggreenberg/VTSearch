@@ -461,6 +461,62 @@ class TestResetCancelSafety:
             dataset_progress.reset_cancel()
 
 
+class TestConcurrentModelLoading:
+    """Verify that concurrent load_models() calls are serialised."""
+
+    def test_concurrent_load_models_only_loads_once(self):
+        """Two threads calling load_models() on the same embedder must not
+        both execute _load_models_impl() concurrently — the lock should
+        serialise them so the second caller sees the model already loaded."""
+        from vtsearch.media.base import MediaEmbedder
+
+        call_count = 0
+        started = threading.Event()
+        proceed = threading.Event()
+
+        class FakeEmbedder(MediaEmbedder):
+            name = "fake"
+            media_type_id = "test"
+
+            def __init__(self):
+                super().__init__()
+                self._model = None
+
+            def _load_models_impl(self):
+                nonlocal call_count
+                if self._model is not None:
+                    return
+                started.set()
+                proceed.wait(timeout=5)
+                call_count += 1
+                self._model = "loaded"
+
+            def embed_media(self, file_path):
+                return None
+
+            def embed_text(self, text):
+                return None
+
+        emb = FakeEmbedder()
+
+        t1 = threading.Thread(target=emb.load_models)
+        t2 = threading.Thread(target=emb.load_models)
+
+        t1.start()
+        started.wait(timeout=5)
+        # t1 is inside _load_models_impl holding the lock.
+        # Start t2 — it must block on the lock.
+        t2.start()
+        # Let t1 finish.
+        proceed.set()
+
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert call_count == 1, f"_load_models_impl ran {call_count} times, expected 1"
+        assert emb._model == "loaded"
+
+
 class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 
