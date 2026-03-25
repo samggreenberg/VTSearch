@@ -23,7 +23,7 @@ from vtsearch.utils.state_core import (
 from vtsearch.utils.state_clicks import assign_click_time, remove_click_time
 from vtsearch.utils.state_diversity import diversity_tree_label, diversity_tree_unlabel
 
-from vtsearch.utils.state_core import get_active_context
+from vtsearch.utils.state_core import get_active_detector_context
 
 
 def clear_votes() -> None:
@@ -43,7 +43,7 @@ def clear_votes() -> None:
         vote_click_times.clear()
         _set_click_counter(0)
         last_learned_scores.clear()
-        ctx = get_active_context()
+        ctx = get_active_detector_context()
         ctx.find_initial_labels.clear()
         clear_progress_cache()
 
@@ -104,7 +104,7 @@ def set_find_initial_labels(labels: dict[int, str]) -> None:
     user subsequently changed the label from what the detector assigned.
     """
     with _state_lock:
-        ctx = get_active_context()
+        ctx = get_active_detector_context()
         ctx.find_initial_labels.clear()
         ctx.find_initial_labels.update(labels)
 
@@ -112,7 +112,7 @@ def set_find_initial_labels(labels: dict[int, str]) -> None:
 def get_find_initial_labels() -> dict[int, str]:
     """Return a copy of the find-label initial labels."""
     with _state_lock:
-        return get_active_context().find_initial_labels.copy()
+        return get_active_detector_context().find_initial_labels.copy()
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,18 @@ from vtsearch.utils.state_core import (  # noqa: F401
     set_active_dataset_id,
     unregister_context,
 )
+# Detector context management -----------------------------------------------
+from vtsearch.utils.state_core import (  # noqa: F401
+    DetectorContext,
+    clear_all_detector_contexts,
+    get_active_detector_context,
+    get_active_detector_id,
+    get_detector_context,
+    list_loaded_detector_ids,
+    register_detector_context,
+    set_active_detector_id,
+    unregister_detector_context,
+)
 import vtsearch.utils.state_core as _core  # noqa: F401 — for conftest direct access
 
 # Re-export click tracking ------------------------------------------------
