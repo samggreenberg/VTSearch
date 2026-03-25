@@ -393,10 +393,12 @@ def _set_inclusion(value: int | None) -> None:
 
 # NOTE: These module-level variables are DEAD CODE.  All production code
 # uses the getter/setter helpers above (which delegate to the active
-# DatasetContext).  The conftest reset_state fixture resets per-dataset
-# scalars by creating a fresh context via clear_all_contexts().
-# These names are kept only to avoid import errors if any external code
-# references them; they are never read or written by VTSearch itself.
+# DatasetContext).  The conftest reset_state fixture does NOT reset these
+# module-level variables — nor does it need to, since they are never read
+# or written.  Conftest resets the *DatasetContext* fields (e.g.
+# DatasetContext.click_counter) by creating a fresh context via
+# clear_all_contexts().  These names are kept only to avoid import errors
+# if any external code references them.
 _click_counter: int = 0
 _dataset_display_name: str | None = None
 _diversity_tree: Any = None
