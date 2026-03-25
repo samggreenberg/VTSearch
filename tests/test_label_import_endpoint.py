@@ -179,6 +179,53 @@ class TestLabelImportEndpoint:
         assert set(app_module.good_votes) == {1, 2, 3}
         assert set(app_module.bad_votes) == {4, 5}
 
+    def test_import_syncs_model_registry_num_training(self, client, tmp_path):
+        """Importing labels should update the loaded model's num_training in the registry."""
+        from vtsearch.models.registry import get_model, register_model, reset_for_tests, set_loaded_id
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.routes.trainable_models import _write_model
+
+        reset_for_tests()
+        set_trainable_models_dir(str(tmp_path / "models"))
+
+        # Create a trainable model file on disk
+        tm_name = "test_import_sync"
+        from pathlib import Path
+
+        model_dir = Path(get_trainable_models_dir())
+        model_dir.mkdir(parents=True, exist_ok=True)
+        _write_model(model_dir / f"{tm_name}.json", {
+            "name": tm_name,
+            "media_type": "audio",
+            "examples": [],
+            "labelset": {"labels": []},
+        })
+
+        entry = register_model(
+            name="Import Sync Test",
+            media_type="audio",
+            trainable=True,
+            trainable_model_name=tm_name,
+            num_training=0,
+        )
+        set_loaded_id(entry["id"])
+
+        # Import a label
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
+        res = client.post(
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["applied"] == 1
+
+        # The registry entry should now reflect the updated label count
+        updated = get_model(entry["id"])
+        assert updated["num_training"] == 1
+
     def test_path_traversal_absolute_rejected(self, client):
         """Absolute paths outside the allowed directory must be rejected."""
         res = client.post(
