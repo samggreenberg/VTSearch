@@ -119,7 +119,7 @@ class TestClearVotesResetsState:
         assert len(vote_click_times) == 1
         _state.clear_votes()
         assert len(vote_click_times) == 0
-        assert _core._click_counter == 0
+        assert _core._get_click_counter() == 0
 
     def test_clear_votes_clears_learned_scores(self, client):
         _state.last_learned_scores[1] = 0.9

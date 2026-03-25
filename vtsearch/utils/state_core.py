@@ -348,25 +348,14 @@ _find_initial_labels: dict[int, str] = _ProxyDict("find_initial_labels")  # type
 
 
 # ---------------------------------------------------------------------------
-# Scalar per-dataset state — accessed via properties on the active context.
-# These use module-level *properties* via a descriptor protocol so that
-# ``import state_core; state_core._click_counter`` still works.
-# For simplicity, we keep them as module-level getters/setters and update
-# the active context directly.
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # Scalar per-dataset state accessors
 # ---------------------------------------------------------------------------
 # _click_counter, inclusion, _dataset_display_name, _diversity_tree are
-# scalar fields on DatasetContext.  Code in state submodules accesses them
-# via ``_core._click_counter`` etc.  We keep backward-compatible module-
-# level names that resolve to the active context via property-like access.
-#
-# For *writes*, submodules do ``_core._click_counter += 1``.  Python's
-# module attribute protocol means ``_core._click_counter`` reads the
-# module-level name.  To redirect these to the active context we provide
-# explicit getter/setter helpers and update the call-sites.
+# scalar fields on DatasetContext.  All production code accesses them via
+# the getter/setter helpers below (e.g. _get_click_counter()), which
+# delegate to the active context.  The conftest reset_state fixture resets
+# these by calling clear_all_contexts(), which creates a fresh
+# DatasetContext with all fields at their defaults.
 # ---------------------------------------------------------------------------
 
 
@@ -402,10 +391,12 @@ def _set_inclusion(value: int | None) -> None:
     get_active_context().inclusion = value
 
 
-# Legacy module-level names — these are still used by conftest.py's
-# reset_state fixture which does ``_core._click_counter = 0``.
-# We keep them for backward compat but they are NOT used by the
-# proxy-aware submodules anymore (those call the getters/setters above).
+# NOTE: These module-level variables are DEAD CODE.  All production code
+# uses the getter/setter helpers above (which delegate to the active
+# DatasetContext).  The conftest reset_state fixture resets per-dataset
+# scalars by creating a fresh context via clear_all_contexts().
+# These names are kept only to avoid import errors if any external code
+# references them; they are never read or written by VTSearch itself.
 _click_counter: int = 0
 _dataset_display_name: str | None = None
 _diversity_tree: Any = None
