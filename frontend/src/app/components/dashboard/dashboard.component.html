@@ -180,6 +180,7 @@
 
 @if (newModelModalOpen) {
   <vt-new-model-modal
+    [defaultMediaType]="activeDatasetMediaType"
     (closed)="closeNewModelModal()"
     (created)="onModelCreated()"
   />

@@ -547,6 +547,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- New model modal ---
 
+  /** Media type of the currently active dataset (used as default for new models). */
+  get activeDatasetMediaType(): string {
+    const active = this.datasets.find((d) => d.active);
+    return active?.media_type || '';
+  }
+
   openNewModelModal(): void {
     this.newModelModalOpen = true;
   }
