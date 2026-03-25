@@ -22,10 +22,10 @@ This will:
 Install dependencies (if you haven't already):
 
 ```bash
-pip install -r requirements-cpu.txt   # or requirements-gpu.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
 ```
 
-Matplotlib and pandas are required for plot generation and are included in the requirements file.
+Matplotlib and pandas are required for plot generation and are included in the dev dependencies.
 
 ## CLI reference
 

@@ -30,6 +30,10 @@ ng test --watch=false
 
 Uses [Karma](https://karma-runner.github.io) as the test runner.
 
+> **Note:** Karma requires Chrome or Chromium. In cloud/container
+> environments where a browser is not available, frontend unit tests will
+> fail. The Python backend tests (`./run-tests.sh`) work without a browser.
+
 ## Code scaffolding
 
 ```bash
