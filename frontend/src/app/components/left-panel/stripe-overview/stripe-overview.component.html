@@ -1,7 +1,7 @@
 @if (visible) {
   <div class="stripe-overview" aria-label="Media minimap" (click)="onStripeClick($event)">
     <div class="stripe-container">
-      @for (dot of dots; track $index) {
+      @for (dot of cachedDots; track $index) {
         <div
           class="stripe-dot"
           [class.good]="dot.type === 'good'"
@@ -11,10 +11,10 @@
         ></div>
       }
 
-      @if (thresholdPosition !== null) {
+      @if (cachedThresholdPosition !== null) {
         <div
           class="stripe-threshold"
-          [style.top.%]="thresholdPosition"
+          [style.top.%]="cachedThresholdPosition"
         ></div>
       }
     </div>

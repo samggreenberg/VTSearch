@@ -35,8 +35,11 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
 
   sortedEntries: LabelEntry[] = [];
   private pendingScrollPct: number | null = null;
+  /** Pre-built Map for O(1) media lookups by id (rebuilt when medias input changes). */
+  private mediaMap = new Map<number, MediaItem>();
 
   ngOnInit(): void {
+    this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
     this.sortedEntries = this.buildSortedEntries();
   }
 
@@ -45,6 +48,9 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
       const el = this.voteListContainer.nativeElement;
       const maxScroll = el.scrollHeight - el.clientHeight;
       this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
+    }
+    if (changes['medias']) {
+      this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
     }
     this.sortedEntries = this.buildSortedEntries();
   }
@@ -65,7 +71,7 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   }
 
   private buildEntry(id: number): LabelEntry {
-    const media = this.medias.find(m => m.id === id);
+    const media = this.mediaMap.get(id);
     const name = media ? (media.filename || `Clip #${id}`) : `Clip #${id}`;
     const time = this.clickTimes[String(id)] ?? -1;
     const score = this.learnedScores[String(id)] ?? -1;
@@ -110,17 +116,17 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   }
 
   hasThumbnailUrl(id: number): boolean {
-    const media = this.medias.find(m => m.id === id);
+    const media = this.mediaMap.get(id);
     return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document');
   }
 
   isVideo(id: number): boolean {
-    const media = this.medias.find(m => m.id === id);
+    const media = this.mediaMap.get(id);
     return !!media && media.type === 'video';
   }
 
   thumbnailUrl(id: number): string {
-    const media = this.medias.find(m => m.id === id);
+    const media = this.mediaMap.get(id);
     if (!media) return '';
     if (media.type === 'video') return `/api/medias/${id}/video`;
     return `/api/medias/${id}/image`;
@@ -128,7 +134,7 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
 
   placeholderIcon(id: number): string | null {
     if (!this.isGrid) return null;
-    const media = this.medias.find(m => m.id === id);
+    const media = this.mediaMap.get(id);
     if (!media) return null;
     if (media.type === 'image' || media.type === 'video' || media.type === 'document') return null;
     if (media.type === 'audio') return '\u266B';

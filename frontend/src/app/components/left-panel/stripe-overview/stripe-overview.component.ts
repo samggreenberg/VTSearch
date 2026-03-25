@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SortedItem } from '../left-panel.component';
 
@@ -9,7 +9,7 @@ import { SortedItem } from '../left-panel.component';
   templateUrl: './stripe-overview.component.html',
   styleUrl: './stripe-overview.component.scss',
 })
-export class StripeOverviewComponent {
+export class StripeOverviewComponent implements OnChanges {
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;
@@ -17,6 +17,11 @@ export class StripeOverviewComponent {
   @Input() badVotes: Set<number> = new Set();
   @Input() totalCount = 0;
   @Output() stripeClick = new EventEmitter<number>();
+
+  /** Cached dots — rebuilt only when inputs change. */
+  cachedDots: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];
+  /** Cached threshold position — rebuilt only when inputs change. */
+  cachedThresholdPosition: number | null = null;
 
   onStripeClick(event: MouseEvent): void {
     if (!this.sortOrder || this.sortOrder.length === 0) return;
@@ -32,7 +37,12 @@ export class StripeOverviewComponent {
     return this.sortOrder !== null && this.sortOrder.length > 0;
   }
 
-  get dots(): { top: number; type: 'good' | 'bad' | 'selected' }[] {
+  ngOnChanges(): void {
+    this.cachedDots = this.buildDots();
+    this.cachedThresholdPosition = this.buildThresholdPosition();
+  }
+
+  private buildDots(): { top: number; type: 'good' | 'bad' | 'selected' }[] {
     if (!this.sortOrder || this.sortOrder.length === 0) return [];
 
     const result: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];
@@ -56,7 +66,7 @@ export class StripeOverviewComponent {
     return result;
   }
 
-  get thresholdPosition(): number | null {
+  private buildThresholdPosition(): number | null {
     if (!this.sortOrder || this.threshold === null) return null;
     const total = this.sortOrder.length;
     for (let i = 0; i < total; i++) {

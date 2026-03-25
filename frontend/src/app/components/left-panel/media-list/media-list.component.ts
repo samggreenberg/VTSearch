@@ -10,14 +10,20 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { MediaItem } from '../../../models/api.models';
 import { SortedItem } from '../left-panel.component';
 
+/** Threshold above which we switch from plain DOM to CDK virtual scrolling (list mode only). */
+const VIRTUAL_SCROLL_THRESHOLD = 500;
+/** Approximate height of a single media-item row in list mode (px). */
+const LIST_ITEM_HEIGHT = 28;
+
 @Component({
   selector: 'vt-media-list',
   standalone: true,
-  imports: [CommonModule, MediaItemComponent],
+  imports: [CommonModule, ScrollingModule, MediaItemComponent],
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
@@ -36,22 +42,46 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
+
+  /** Cached ordered items — rebuilt only when inputs change, not on every CD cycle. */
+  cachedOrderedItems: { media: MediaItem; score: number | null; showThreshold: boolean }[] = [];
+
+  readonly listItemHeight = LIST_ITEM_HEIGHT;
 
   private pendingScrollToSelected = false;
   private pendingScrollPct: number | null = null;
+
+  /** Whether to use CDK virtual scrolling (list mode with many items). */
+  get useVirtualScroll(): boolean {
+    return this.viewMode === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selectedId'] && !changes['selectedId'].firstChange) {
       this.pendingScrollToSelected = true;
     }
-    if (changes['viewMode'] && !changes['viewMode'].firstChange && this.listContainer) {
-      const el = this.listContainer.nativeElement;
+
+    const scrollContainer = this.listContainer?.nativeElement ?? this.virtualViewport?.elementRef.nativeElement;
+    if (changes['viewMode'] && !changes['viewMode'].firstChange && scrollContainer) {
+      const el = scrollContainer;
       const maxScroll = el.scrollHeight - el.clientHeight;
       this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
     }
+
+    // Rebuild cache only when relevant inputs change.
+    if (
+      changes['medias'] ||
+      changes['sortOrder'] ||
+      changes['threshold'] ||
+      changes['showScores'] ||
+      changes['viewMode']
+    ) {
+      this.rebuildOrderedItems();
+    }
   }
 
-  get orderedItems(): { media: MediaItem; score: number | null; showThreshold: boolean }[] {
+  private rebuildOrderedItems(): void {
     const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
     const items: { media: MediaItem; score: number | null; showThreshold: boolean }[] = [];
 
@@ -75,7 +105,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
       }
     }
 
-    return items;
+    this.cachedOrderedItems = items;
   }
 
   getVoteLabel(id: number): 'good' | 'bad' | null {
@@ -93,23 +123,42 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
   }
 
   ngAfterViewChecked(): void {
-    if (this.pendingScrollPct !== null && this.listContainer) {
+    const scrollEl =
+      this.virtualViewport?.elementRef.nativeElement ?? this.listContainer?.nativeElement;
+
+    if (this.pendingScrollPct !== null && scrollEl) {
       const pct = this.pendingScrollPct;
       this.pendingScrollPct = null;
       this.pendingScrollToSelected = false;
-      const el = this.listContainer.nativeElement;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      el.scrollTop = pct * maxScroll;
-    } else if (this.pendingScrollToSelected && this.listContainer) {
+      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+      scrollEl.scrollTop = pct * maxScroll;
+    } else if (this.pendingScrollToSelected) {
       this.pendingScrollToSelected = false;
-      const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
-      if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (this.useVirtualScroll && this.virtualViewport) {
+        // In virtual-scroll mode, find the index and scroll to it.
+        const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId);
+        if (idx >= 0) {
+          this.virtualViewport.scrollToIndex(idx, 'smooth');
+        }
+      } else if (this.listContainer) {
+        const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
+        if (activeEl) {
+          activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
       }
     }
   }
 
   scrollToIndex(index: number): void {
+    if (this.useVirtualScroll && this.virtualViewport) {
+      this.virtualViewport.scrollToIndex(index, 'smooth');
+      // After scrolling, select the item at this index.
+      const item = this.cachedOrderedItems[index];
+      if (item) {
+        this.mediaSelect.emit(item.media.id);
+      }
+      return;
+    }
     if (!this.listContainer) return;
     const container = this.listContainer.nativeElement;
     const items = container.querySelectorAll('vt-media-item');
