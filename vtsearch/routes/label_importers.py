@@ -163,6 +163,13 @@ def run_label_import(importer_name: str):
             origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
             unresolved = find_missing_entries(missing, origin_lookup, md5_lookup, name_lookup)
 
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count (num_training) immediately.
+    if applied > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
+
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingested > 0:
         msg += f" Auto-resolved {ingested} missing element(s) from their sources."
@@ -215,6 +222,13 @@ def ingest_missing():
     # Now apply labels to the newly ingested medias
     origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
     applied, _ = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
+
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count immediately.
+    if applied > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
 
     return jsonify(
         {
