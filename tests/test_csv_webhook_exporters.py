@@ -152,7 +152,7 @@ class TestCsvExporterCLI:
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args([])
-        assert args.filepath == "autodetect_results.csv"
+        assert args.filepath == "data/autodetect_results.csv"
 
     def test_validate_passes(self):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -326,7 +326,8 @@ class TestCsvExporterLabelsFormat:
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
-        assert header == ["label", "filename", "category"]
+        # origin is always appended as last column for re-import
+        assert header == ["label", "filename", "category", "origin"]
 
     def test_labels_format_correct_row_count(self, tmp_path):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -358,7 +359,8 @@ class TestCsvExporterLabelsFormat:
             reader = csv.reader(f)
             next(reader)  # skip header
             first_row = next(reader)
-        assert first_row == ["good", "clip1.wav", "birds"]
+        # origin column is always appended (empty when not present on entry)
+        assert first_row == ["good", "clip1.wav", "birds", ""]
 
     def test_labels_format_includes_metadata_columns(self, tmp_path):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -375,8 +377,8 @@ class TestCsvExporterLabelsFormat:
             reader = csv.reader(f)
             header = next(reader)
             first_row = next(reader)
-        assert header == ["filename", "source", "quality"]
-        assert first_row == ["clip1.wav", "field", "high"]
+        assert header == ["filename", "source", "quality", "origin"]
+        assert first_row == ["clip1.wav", "field", "high", ""]
 
     def test_labels_format_missing_metadata_gives_empty(self, tmp_path):
         """When a metadata column is missing from an entry, output empty string."""
@@ -392,8 +394,8 @@ class TestCsvExporterLabelsFormat:
         exp.export(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
-        # Third entry (clip3.wav) has no "quality" in metadata
-        assert rows[3] == ["clip3.wav", ""]
+        # Third entry (clip3.wav) has no "quality" in metadata; origin also empty
+        assert rows[3] == ["clip3.wav", "", ""]
 
     def test_labels_format_changed_columns_reflected(self, tmp_path):
         """Changing selected_columns between exports produces different output."""
@@ -422,8 +424,9 @@ class TestCsvExporterLabelsFormat:
         with open(filepath2, newline="", encoding="utf-8") as f:
             header2 = next(csv.reader(f))
 
-        assert header1 == ["label", "md5", "origin_name", "filename", "category"]
-        assert header2 == ["source"]
+        # origin is always the last column
+        assert header1 == ["label", "md5", "origin_name", "filename", "category", "origin"]
+        assert header2 == ["source", "origin"]
 
     def test_labels_format_no_selected_columns_uses_defaults(self, tmp_path):
         """When selected_columns is absent, fall back to base columns."""
@@ -436,7 +439,7 @@ class TestCsvExporterLabelsFormat:
         exp.export(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             header = next(csv.reader(f))
-        assert header == ["label", "md5", "origin_name", "filename", "category"]
+        assert header == ["label", "md5", "origin_name", "filename", "category", "origin"]
 
     def test_labels_format_message(self, tmp_path):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -463,6 +466,25 @@ class TestCsvExporterLabelsFormat:
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
         assert len(rows) == 1  # header only
+
+    def test_labels_format_origin_dict_serialised_as_json(self, tmp_path):
+        """Origin dicts are JSON-serialised in CSV so they survive round-trip."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        origin = {"importer": "demo", "params": {"name": "flowers102"}}
+        labels = [{"label": "good", "md5": "abc", "origin_name": "rose.jpg", "filename": "rose.jpg", "category": "", "origin": origin}]
+        results = {"labels": labels}
+        filepath = tmp_path / "with_origin.csv"
+
+        exp.export(results, {"filepath": str(filepath)})
+
+        # Read back and verify origin column is valid JSON
+        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+
+        parsed = _parse_csv_bytes(filepath.read_bytes())
+        assert len(parsed) == 1
+        assert parsed[0]["origin"] == origin
 
 
 # ---------------------------------------------------------------------------

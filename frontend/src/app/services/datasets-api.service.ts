@@ -7,6 +7,8 @@ import {
   DatasetProgress,
   ImportersResponse,
   DemoListResponse,
+  LoadingTask,
+  LoadingTasksResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
   ClipperInfo,
@@ -57,13 +59,13 @@ export class DatasetsApiService {
     source: string,
     path: string,
   ): Observable<{
-    directories: { name: string; path: string }[];
-    files: { name: string; path: string; size_bytes: number }[];
+    directories: { name: string; path: string; modified_at?: string }[];
+    files: { name: string; path: string; size_bytes: number; modified_at?: string }[];
     root_path: string;
   }> {
     return this.http.get<{
-      directories: { name: string; path: string }[];
-      files: { name: string; path: string; size_bytes: number }[];
+      directories: { name: string; path: string; modified_at?: string }[];
+      files: { name: string; path: string; size_bytes: number; modified_at?: string }[];
       root_path: string;
     }>('/api/browse-media-files', { params: { source, path } });
   }
@@ -152,8 +154,18 @@ export class DatasetsApiService {
     return this.http.post('/api/dataset/combine', params);
   }
 
+  getLoadingTasks(): Observable<LoadingTask[]> {
+    return this.http.get<LoadingTasksResponse>('/api/dataset/loading-tasks').pipe(
+      map((res) => res.tasks),
+    );
+  }
+
   cancelIngest(): Observable<OkResponse> {
     return this.http.post<OkResponse>('/api/dataset/cancel', {});
+  }
+
+  cancelTask(taskId: string): Observable<OkResponse> {
+    return this.http.post<OkResponse>(`/api/dataset/cancel/${taskId}`, {});
   }
 
   clearDataset(): Observable<OkResponse> {
@@ -174,6 +186,10 @@ export class DatasetsApiService {
 
   unloadRegistered(datasetId: string): Observable<unknown> {
     return this.http.post(`/api/datasets/registry/${datasetId}/unload`, {});
+  }
+
+  activateRegistered(datasetId: string): Observable<unknown> {
+    return this.http.post(`/api/datasets/registry/${datasetId}/activate`, {});
   }
 
   deleteRegistered(datasetId: string): Observable<unknown> {

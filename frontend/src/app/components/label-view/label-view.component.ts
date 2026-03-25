@@ -8,6 +8,7 @@ import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
+import { DatasetsApiService } from '../../services/datasets-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -30,6 +31,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
+  datasetName = '';
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
   gridGoalWidthLeft: number = 80;
@@ -83,6 +85,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private sortingApi: SortingApiService,
     private detectorsApi: DetectorsApiService,
     private mediasApi: MediasApiService,
+    private datasetsApi: DatasetsApiService,
     private ngZone: NgZone,
     private labelSession: LabelSessionService,
     public mediaState: MediaStateService,
@@ -101,6 +104,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
 
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
@@ -648,6 +654,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.onResortKeep();
   }
 
+  onAutopilotRefocus(): void {
+    this.autoSelectNext();
+  }
+
   onAutopilotToggleCollapse(): void {
     const newVal = !this.autopilotCollapsed;
     this.setAutopilotCollapsed(newVal);
@@ -744,14 +754,26 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
     } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
+      const threshold = this.sortState.threshold!;
+      // Find the index where the threshold falls in the sorted (descending) list.
+      // This is the first position whose score is at or below the threshold.
+      let thresholdIndex = sortOrder.length;
+      for (let i = 0; i < sortOrder.length; i++) {
+        if (sortOrder[i].score <= threshold) {
+          thresholdIndex = i;
+          break;
+        }
+      }
+      // Pick the unlabeled item whose index is closest to the threshold index.
+      // This avoids biasing toward one side when scores cluster unevenly.
       let best: SortedItem | null = null;
       let bestDist = Infinity;
-      for (const s of sortOrder) {
-        if (isVoted(s.id)) continue;
-        const dist = Math.abs(s.score - this.sortState.threshold!);
+      for (let i = 0; i < sortOrder.length; i++) {
+        if (isVoted(sortOrder[i].id)) continue;
+        const dist = Math.abs(i - thresholdIndex);
         if (dist < bestDist) {
           bestDist = dist;
-          best = s;
+          best = sortOrder[i];
         }
       }
       if (best) this.mediaState.selectMedia(best.id);

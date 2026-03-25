@@ -132,7 +132,7 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     if (!media) return null;
     if (media.type === 'image' || media.type === 'video' || media.type === 'document') return null;
     if (media.type === 'audio') return '\u266B';
-    if (media.type === 'paragraph') return '\u00B6';
+    if (media.type === 'text') return '\u00B6';
     return '\u25A1';
   }
 

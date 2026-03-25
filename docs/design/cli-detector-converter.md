@@ -1,5 +1,10 @@
 # Design: CLI Autodetect with Converters and Clippers
 
+> **Status: Design proposal.** This document outlines a planned approach for
+> handling converters and clippers in the CLI autodetect pipeline. The
+> converter registry exists in `vtsearch/converters/`, but the `input_spec`
+> field in detector JSON described here is not yet implemented.
+
 ## Problem
 
 The CLI autodetect pipeline currently works like this:

@@ -126,7 +126,9 @@
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  white-space: normal;
+  word-break: break-word;
 
   &:hover {
     background: var(--bg-hover);
@@ -143,10 +145,18 @@
   margin-right: 0.35rem;
 }
 
-.entry-size {
+.entry-date {
   font-size: 0.7rem;
   color: var(--text-secondary);
   margin-left: auto;
+  padding-left: 0.5rem;
+  white-space: nowrap;
+}
+
+.entry-size {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-left: 0;
   padding-left: 0.5rem;
 }
 

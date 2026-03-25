@@ -435,6 +435,76 @@ class TestLoadModelEndpoint:
         res = client.post("/api/models/registry/load", json={"model_id": "nope"})
         assert res.status_code == 404
 
+    def test_load_clears_previous_labels(self, client):
+        """Loading model B must not carry over labels from model A."""
+        from vtsearch.utils import bad_votes, good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create two trainable models + registry entries.
+        for name in ("ModelA", "ModelB"):
+            client.post(
+                "/api/trainable-models",
+                json={"name": name, "media_type": "audio", "text_query": "test"},
+            )
+        res_a = client.post(
+            "/api/models/registry",
+            json={"name": "ModelA", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid_a = res_a.get_json()["model"]["id"]
+        res_b = client.post(
+            "/api/models/registry",
+            json={"name": "ModelB", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid_b = res_b.get_json()["model"]["id"]
+
+        # Load model A and cast some votes.
+        client.post("/api/models/registry/load", json={"model_id": mid_a})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        assert ids[0] in good_votes
+        assert ids[1] in bad_votes
+
+        # Now load model B — votes from A must be gone.
+        client.post("/api/models/registry/load", json={"model_id": mid_b})
+        assert ids[0] not in good_votes, "good vote from model A leaked into model B"
+        assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
+
+    def test_load_restores_saved_labels(self, client):
+        """Loading a model that has a saved labelset should restore its labels."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create model, load it, vote, then save labels.
+        client.post(
+            "/api/trainable-models",
+            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "Persist", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        mid = res.get_json()["model"]["id"]
+        client.post("/api/models/registry/load", json={"model_id": mid})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        # Labels auto-sync on vote, so the trainable model file now has 1 label.
+
+        # Unload to clear votes, then reload — label should be restored.
+        client.post("/api/models/registry/load", json={"model_id": None})
+        assert ids[0] not in good_votes
+
+        res = client.post("/api/models/registry/load", json={"model_id": mid})
+        assert res.status_code == 200
+        assert res.get_json().get("labels_restored", 0) >= 1
+        assert ids[0] in good_votes, "saved label was not restored on model load"
+
 
 class TestVoteSyncsToLoadedModel:
     """Voting while a trainable model is loaded should auto-update the model's labelset."""
@@ -913,4 +983,191 @@ class TestSeedVotesFromExamples:
         data = res.get_json()
         assert data["seeded"] == 0
         assert data["skipped"] == 1
+
+
+class TestLoadModelCrossDatasetResolution:
+    """Loading a model trained on Dataset A while Dataset B is loaded should
+    still resolve labels when the underlying files are the same."""
+
+    def test_load_model_resolves_labels_via_origin(self, client, tmp_path):
+        """Labels from Dataset A should resolve by origin→MD5 on Dataset B.
+
+        Simulates: train detector on Dataset A (labels with folder origins),
+        switch to Dataset B (same files, different origin keys), open Train
+        mode.  The label restore should follow origin trails, compute MD5s,
+        and match against loaded medias.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        reset_for_tests()
+
+        # --- Build files on disk (shared content between both datasets) ---
+        label_folder = tmp_path / "dataset_a"
+        label_folder.mkdir()
+        good_file = label_folder / "good_0.wav"
+        bad_file = label_folder / "bad_0.wav"
+        good_file.write_bytes(b"shared_good_content")
+        bad_file.write_bytes(b"shared_bad_content")
+
+        good_md5 = hashlib.md5(b"shared_good_content").hexdigest()
+        bad_md5 = hashlib.md5(b"shared_bad_content").hexdigest()
+
+        label_origin = {
+            "importer": "folder",
+            "params": {"path": str(label_folder), "media_type": "sounds"},
+        }
+
+        # Labelset entries with Dataset A origin info and DIFFERENT MD5s
+        # (simulating that the labelset was saved with old/different hashes)
+        label_entries = [
+            {
+                "md5": "dataset_a_good_old_hash",
+                "label": "good",
+                "origin": label_origin,
+                "origin_name": "good_0.wav",
+                "filename": "good_0.wav",
+            },
+            {
+                "md5": "dataset_a_bad_old_hash",
+                "label": "bad",
+                "origin": label_origin,
+                "origin_name": "bad_0.wav",
+                "filename": "bad_0.wav",
+            },
+        ]
+
+        # --- Write trainable model ---
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "cross-dataset-load"
+            _write_model(tmp_path / f"{tm_name}.json", {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Cross Load Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+
+            # --- Replace medias with Dataset B (same file content, different origins) ---
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(99)
+            medias[1] = {
+                "id": 1,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": good_md5,  # same content as good_0.wav
+                "filename": "completely_different_name.wav",
+                "origin": {"importer": "folder", "params": {"path": "/other/place"}},
+                "origin_name": "completely_different_name.wav",
+            }
+            medias[2] = {
+                "id": 2,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": bad_md5,  # same content as bad_0.wav
+                "filename": "another_file.wav",
+                "origin": {"importer": "folder", "params": {"path": "/other/place"}},
+                "origin_name": "another_file.wav",
+            }
+
+            try:
+                res = client.post("/api/models/registry/load", json={"model_id": model_id})
+                assert res.status_code == 200
+                data = res.get_json()
+                assert data["ok"] is True
+                assert data["labels_restored"] == 2, (
+                    f"Expected 2 labels restored via origin resolution, got {data['labels_restored']}"
+                )
+                assert 1 in good_votes, "good label should be applied to media 1"
+                assert 2 in bad_votes, "bad label should be applied to media 2"
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            set_trainable_models_dir(original_dir)
+
+    def test_load_model_name_fallback(self, client, tmp_path):
+        """Labels with matching origin_name should resolve even without origin/MD5 match."""
+        import numpy as np
+
+        from vtsearch.models.registry import register_model, reset_for_tests
+        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.utils import good_votes, medias
+
+        reset_for_tests()
+
+        label_entries = [
+            {
+                "md5": "nonexistent_hash",
+                "label": "good",
+                "origin": {"importer": "folder", "params": {"path": "/gone"}},
+                "origin_name": "shared_name.wav",
+                "filename": "shared_name.wav",
+            },
+        ]
+
+        original_dir = get_trainable_models_dir()
+        set_trainable_models_dir(tmp_path)
+        try:
+            tm_name = "name-fallback"
+            _write_model(tmp_path / f"{tm_name}.json", {
+                "name": tm_name,
+                "text_query": "",
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": label_entries},
+            })
+
+            entry = register_model(
+                name="Name Fallback Test",
+                media_type="audio",
+                trainable=True,
+                trainable_model_name=tm_name,
+            )
+            model_id = entry["id"]
+
+            saved = dict(medias)
+            medias.clear()
+            rng = np.random.default_rng(42)
+            medias[1] = {
+                "id": 1,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": "totally_different_md5",
+                "filename": "shared_name.wav",
+                "origin": {"importer": "folder", "params": {"path": "/different"}},
+                "origin_name": "shared_name.wav",
+            }
+
+            try:
+                res = client.post("/api/models/registry/load", json={"model_id": model_id})
+                assert res.status_code == 200
+                data = res.get_json()
+                assert data["labels_restored"] == 1, (
+                    "origin_name fallback should have matched the label"
+                )
+                assert 1 in good_votes
+            finally:
+                medias.clear()
+                medias.update(saved)
+        finally:
+            set_trainable_models_dir(original_dir)
 

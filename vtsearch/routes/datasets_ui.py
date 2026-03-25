@@ -8,7 +8,7 @@ from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtsearch.routes.datasets_loading import _origin_to_str
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import format_mtime, get_json_or_400
 from vtsearch.utils import (
     get_dataset_display_name,
     get_dupe_count,
@@ -258,13 +258,14 @@ def browse_media_files():
             continue
         rel = str(entry.relative_to(root))
         if entry.is_dir():
-            directories.append({"name": entry.name, "path": rel})
+            directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})
         elif entry.is_file() and entry.suffix.lower() in known_exts:
             files.append(
                 {
                     "name": entry.name,
                     "path": rel,
                     "size_bytes": entry.stat().st_size,
+                    "modified_at": format_mtime(entry),
                 }
             )
 

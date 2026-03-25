@@ -74,6 +74,7 @@ VTSearch/
 │   │
 │   ├── converters/                 Media type converters
 │   │   ├── base.py                 MediaConverter ABC
+│   │   ├── runner.py               Converter orchestration (run_converters_on_folder)
 │   │   ├── document2image.py       Render document pages as images
 │   │   ├── document2text.py        Extract text from documents
 │   │   ├── video2audio.py          Extract audio track from video
@@ -84,13 +85,22 @@ VTSearch/
 │   │   ├── progress.py             Labelling-progress cache & analysis
 │   │   ├── embeddings.py           Thin wrappers around media-type embed()
 │   │   ├── loader.py               Model initialisation (delegates to media)
-│   │   └── diversity_tree.py       Hierarchical k-means tree for diverse sampling
+│   │   ├── diversity_tree.py       Hierarchical k-means tree for diverse sampling
+│   │   ├── registry.py             Persistent model registry/manifest management
+│   │   └── resolver.py             Label resolution by following origin trails
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
 │   │   ├── loader.py               load_dataset_from_folder/pickle/demo
-│   │   ├── downloader.py           HTTP download + ESC-50/Caltech-101/etc.
+│   │   ├── downloader/             HTTP download + demo dataset downloaders
+│   │   │   ├── __init__.py         Re-exports all symbols for backward compat
+│   │   │   ├── core.py             URLs, sizes, progress, archive validation/extraction
+│   │   │   ├── audio.py            ESC-50, GTZAN, Speech Commands v2, UrbanSound8K
+│   │   │   ├── images.py           CIFAR-10, Caltech-101/256, Flowers, Food-101, EuroSAT, Dogs
+│   │   │   ├── video.py            UCF-101 subset
+│   │   │   ├── text.py             20 Newsgroups, BBC News, AG News, IMDB
+│   │   │   └── documents.py        UCSF Industry Documents
 │   │   ├── ingest.py               Clip ingestion (file → clip dict)
 │   │   ├── config.py               Demo dataset catalogue
 │   │   ├── split.py                Train/test splitting
@@ -144,12 +154,22 @@ VTSearch/
 │   │   ├── label_importers.py      Label importer registry & execution
 │   │   ├── processor_importers.py  Processor importer registry & execution
 │   │   ├── settings.py             Settings persistence (volume, theme, etc.)
+│   │   ├── file_browser.py         File browser API for directory navigation
 │   │   └── trainable_models.py     Persistent trainable model definitions (CRUD)
 │   │
 │   ├── utils/
-│   │   ├── state.py                Global state (medias, votes, autorun config, history)
+│   │   ├── state.py                Re-export facade over state_*.py submodules
+│   │   ├── state_core.py           Core variables (medias, votes, inclusion) and _state_lock
+│   │   ├── state_votes.py          Vote operations, label history, learned scores
+│   │   ├── state_clicks.py         Click-time tracking for vote sequence analysis
+│   │   ├── state_processors.py     Autorun detector/extractor/localizer CRUD
+│   │   ├── state_diversity.py      Diversity tree construction and sampling
+│   │   ├── state_media_lookup.py   Media ID resolution, duplicate collapsing, origins
 │   │   ├── progress.py             Thread-safe progress tracking
-│   │   └── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
+│   │   ├── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
+│   │   ├── hits.py                 Helpers for building media hit dicts
+│   │   ├── paths.py                Path utilities
+│   │   └── url_validation.py       SSRF URL validation
 │   │
 │   └── audio/                      WAV/tone generation utilities
 │
@@ -183,7 +203,7 @@ modules on the right.
 │ media/*      │ │ models/    │ │ datasets/          │
 │              │ │            │ │                     │
 │ audio    ─┐ │ │ training   │ │ loader ──► media/*  │
-│ image    ─┤ │ │ progress   │ │ downloader          │
+│ image    ─┤ │ │ progress   │ │ downloader/          │
 │ text     ─┤ │ │ embeddings │ │ importers/*         │
 │ video    ─┤ │ │ loader     │ │                     │
 │ document ─┘ │ │            │ │                     │
@@ -234,7 +254,7 @@ modules on the right.
 | `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
 | `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
 | `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
-| `datasets/downloader.py` | No | No (callback) | **Yes** — requests only |
+| `datasets/downloader/` | No | No (callback) | **Yes** — requests only |
 | `datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
 | `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** — each self-contained |
 | `eval/*` | No | No | **Yes** — needs media + datasets |
@@ -410,7 +430,7 @@ Persistent settings live separately in `vtsearch/settings.py` and are
 auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
-`show_metadata`, `view_mode_*`, `grid_columns_*`, `focus_mode_*`,
+`show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*` (per-media-type layout), `autoload_media_types`,
 `autoload_media_embedders`, `autopilot_enabled`, `hide_autopilot`,
 `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_goal_diversity`,

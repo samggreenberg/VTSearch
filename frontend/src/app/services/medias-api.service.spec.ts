@@ -51,9 +51,9 @@ describe('MediasApiService', () => {
     req.flush(new Blob());
   });
 
-  it('getParagraph should GET json', () => {
-    service.getParagraph(4).subscribe(data => expect(data.content).toBe('hello'));
-    const req = httpMock.expectOne('/api/medias/4/paragraph');
+  it('getText should GET json', () => {
+    service.getText(4).subscribe(data => expect(data.content).toBe('hello'));
+    const req = httpMock.expectOne('/api/medias/4/text');
     expect(req.request.method).toBe('GET');
     req.flush({ content: 'hello', word_count: 1, character_count: 5 });
   });

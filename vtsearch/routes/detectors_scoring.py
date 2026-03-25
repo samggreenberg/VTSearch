@@ -13,6 +13,7 @@ from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
+    set_active_dataset_id,
     snapshot_medias,
 )
 from vtsearch.utils.progress import update_find_progress
@@ -123,6 +124,15 @@ def find_label():
     if not model_id:
         update_find_progress("idle", "")
         return jsonify({"error": "model_id is required"}), 400
+
+    # Activate the explicitly selected dataset so scoring runs against the
+    # correct context instead of whichever dataset happens to be active.
+    dataset_id = body.get("dataset_id")
+    if dataset_id:
+        from vtsearch.utils import get_context
+
+        if get_context(dataset_id) is not None:
+            set_active_dataset_id(dataset_id)
 
     update_find_progress(
         "running", "Resolving model…",
@@ -305,9 +315,16 @@ def find_label():
                 )
             if diag.get("hint"):
                 error_msg += f" Hint: {diag['hint']}"
-        resp = {"error": error_msg}
+        resp: dict = {"error": error_msg}
         if _resolution_diagnostic is not None:
             resp["resolution_diagnostic"] = _resolution_diagnostic
+            # Concise user-facing warning for the frontend status bar
+            failed = _resolution_diagnostic["failed_resolution"]
+            total = _resolution_diagnostic["total_labels"]
+            mt = _resolution_diagnostic.get("media_type", "items")
+            # Pluralise: "images", "sounds", etc. — fall back to media_type + "s"
+            mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
+            resp["warning"] = f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
         return jsonify(resp), 400
 
     snap = snapshot_medias()

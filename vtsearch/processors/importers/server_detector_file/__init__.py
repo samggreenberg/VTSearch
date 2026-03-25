@@ -54,7 +54,7 @@ class ServerFileProcessorImporter(ProcessorImporter):
         ProcessorImporterField(
             key="filepath",
             label="Server File Path",
-            field_type="text",
+            field_type="server_path",
             description=("Absolute or relative path to a VTSearch detector JSON file on the server filesystem."),
             placeholder="data/detectors/my_detector.json",
         ),

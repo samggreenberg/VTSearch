@@ -31,15 +31,15 @@ export class VtDialogService {
   dialogInputValue = '';
   dialogButtons: DialogButton[] = [];
 
-  private static readonly ICONS: Record<DialogType, string> = {
-    warning: '\u26A0\uFE0F',
-    error: '\u274C',
-    success: '\u2705',
-    info: '\u2139\uFE0F',
+  private static readonly ICON_TYPES: Record<DialogType, string> = {
+    warning: 'warning',
+    error: 'x-circle',
+    success: 'check',
+    info: 'info',
   };
 
-  getIcon(): string {
-    return VtDialogService.ICONS[this.dialogType] || VtDialogService.ICONS.info;
+  getIconType(): string {
+    return VtDialogService.ICON_TYPES[this.dialogType] || VtDialogService.ICON_TYPES.info;
   }
 
   alert(message: string, type: DialogType = 'info'): Promise<boolean> {

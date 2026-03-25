@@ -32,10 +32,15 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu \
   -e ".[cpu,dev]" \
   -q
 
-# Install frontend (Angular) dependencies if not already present
-if [ -f "frontend/package.json" ] && [ ! -d "frontend/node_modules" ]; then
-  echo "Installing frontend dependencies..."
-  (cd frontend && npm install --no-audit --no-fund -q)
+# Install frontend (Angular) dependencies.
+# Re-run npm install whenever package-lock.json is newer than node_modules,
+# so added/removed packages are always in sync.
+if [ -f "frontend/package.json" ]; then
+  if [ ! -d "frontend/node_modules" ] || \
+     [ "frontend/package-lock.json" -nt "frontend/node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    (cd frontend && npm install --no-audit --no-fund -q)
+  fi
 fi
 
 touch "$MARKER"

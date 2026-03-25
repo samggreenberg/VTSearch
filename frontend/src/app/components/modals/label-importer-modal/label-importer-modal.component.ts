@@ -2,6 +2,8 @@ import { Component, ElementRef, EventEmitter, OnInit, Output, ViewChild } from '
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import { IconComponent } from '../../icon/icon.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { VoteStateService } from '../../../services/vote-state.service';
@@ -22,7 +24,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
@@ -45,6 +47,10 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
+  /** @deprecated No longer used — auto-resolve happens server-side. */
+  missingEntries: unknown[] = [];
+  /** @deprecated No longer used — auto-resolve happens server-side. */
+  ingesting = false;
 
   constructor(
     private labelImportersApi: LabelImportersApiService,
@@ -119,7 +125,13 @@ export class LabelImporterModalComponent implements OnInit {
         this.submitting = false;
         this.successMessage = res.message || `Applied ${res.applied ?? 0} labels`;
         this.imported.emit();
-        setTimeout(() => this.close(), 1500);
+
+        if (res.missing_count > 0 && res.missing?.length) {
+          // Show unresolved elements as a warning but don't prompt — the
+          // backend already tried to auto-resolve them.
+          this.error = `${res.missing_count} element(s) could not be resolved from their original sources.`;
+        }
+        setTimeout(() => this.close(), res.missing_count > 0 ? 3000 : 1500);
       },
       error: (err) => {
         this.submitting = false;
@@ -127,6 +139,7 @@ export class LabelImporterModalComponent implements OnInit {
       },
     });
   }
+
 
   triggerAddGood(): void {
     this.addGoodInput.nativeElement.click();

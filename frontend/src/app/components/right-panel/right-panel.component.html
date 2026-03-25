@@ -5,9 +5,11 @@
     (renamed)="onDetectorRenamed($event)"
   />
 
-  <div class="import-row">
-    <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()">Import Labels</button>
-  </div>
+  @if (mode !== 'find') {
+    <div class="import-row">
+      <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()">Import Labels</button>
+    </div>
+  }
 
   <div class="sort-row">
     <vt-label-sort
@@ -58,7 +60,7 @@
 </aside>
 
 @if (showLabelImport) {
-  <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="showLabelImport = false" />
+  <vt-label-importer-modal (closed)="showLabelImport = false" (imported)="voteState.loadVotes()" />
 }
 
 @if (showExport) {

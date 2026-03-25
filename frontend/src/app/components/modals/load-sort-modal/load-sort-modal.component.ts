@@ -1,6 +1,7 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -16,6 +17,7 @@ interface BrowseEntry {
   name: string;
   path: string;
   size_bytes?: number;
+  modified_at?: string;
   isDir: boolean;
 }
 
@@ -24,7 +26,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 @Component({
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [CommonModule, ModalComponent, IconComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })
@@ -257,10 +259,10 @@ export class LoadSortModalComponent implements OnInit {
       next: (res) => {
         const entries: BrowseEntry[] = [];
         for (const d of res.directories || []) {
-          entries.push({ name: d.name, path: d.path, isDir: true });
+          entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
         }
         for (const f of res.files || []) {
-          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, isDir: false });
+          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, modified_at: f.modified_at, isDir: false });
         }
         this.browseEntries = entries;
         this.fileLoading = false;

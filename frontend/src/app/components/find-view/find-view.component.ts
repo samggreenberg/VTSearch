@@ -7,6 +7,7 @@ import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
+import { DatasetsApiService } from '../../services/datasets-api.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -25,6 +26,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
+  datasetName = '';
   viewModeLeft: 'grid' | 'list' = 'list';
   gridGoalWidthLeft: number = 80;
   focusModeLeft: 'click' | 'hover' = 'click';
@@ -54,6 +56,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(
     private mediasApi: MediasApiService,
     private detectorsApi: DetectorsApiService,
+    private datasetsApi: DatasetsApiService,
     private ngZone: NgZone,
     private findSession: FindSessionService,
     public mediaState: MediaStateService,
@@ -68,6 +71,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.loadSettings();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
 
     // When medias arrive, run the find-label scoring
     this.mediaState.medias$
@@ -145,7 +151,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Start polling for progress concurrently
     this.startProgressPolling();
 
-    this.detectorsApi.findLabel({ model_id: modelId })
+    const datasetId = this.findSession.datasetId;
+    this.detectorsApi.findLabel({ model_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response: any) => {
@@ -175,10 +182,13 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
-        error: () => {
+        error: (err: any) => {
           this.stopProgressPolling();
           this.sortState.setSortBusy(false);
-          this.sortState.setSortStatus('Scoring failed');
+          // Extract the server error message so the user sees why scoring failed
+          const body = err?.error;
+          const warning = body?.warning || body?.error || 'Scoring failed';
+          this.sortState.setSortStatus(warning);
           this.sortState.setSortProgress(0, 0);
         },
       });

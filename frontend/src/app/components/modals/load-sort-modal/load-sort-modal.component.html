@@ -14,7 +14,7 @@
           <div class="source-list">
             @for (src of mediaSources; track src.name) {
               <button class="importer-card" (click)="selectSource(src)">
-                <span class="importer-name">@if (src.icon) {<span class="importer-icon">{{ src.icon }}</span> }{{ src.display_name || src.name }}</span>
+                <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
                 @if (src.description) {
                   <span class="importer-desc">{{ src.description }}</span>
                 }
@@ -64,11 +64,17 @@
             @for (entry of browseEntries; track entry.path) {
               @if (entry.isDir) {
                 <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
-                  <span class="entry-icon">&#128193;</span> {{ entry.name }}
+                  <span class="entry-icon"><vt-icon type="folder"></vt-icon></span> {{ entry.name }}
+                  @if (entry.modified_at) {
+                    <span class="entry-date">{{ entry.modified_at }}</span>
+                  }
                 </button>
               } @else {
                 <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
-                  <span class="entry-icon">&#128196;</span> {{ entry.name }}
+                  <span class="entry-icon"><vt-icon type="file-text"></vt-icon></span> {{ entry.name }}
+                  @if (entry.modified_at) {
+                    <span class="entry-date">{{ entry.modified_at }}</span>
+                  }
                   @if (entry.size_bytes != null) {
                     <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
                   }

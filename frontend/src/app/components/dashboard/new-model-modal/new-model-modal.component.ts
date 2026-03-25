@@ -1,7 +1,8 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -16,6 +17,7 @@ interface BrowseEntry {
   name: string;
   path: string;
   size_bytes?: number;
+  modified_at?: string;
   isDir: boolean;
 }
 
@@ -24,11 +26,14 @@ type ModalView = 'main' | 'media-picker';
 @Component({
   selector: 'vt-new-model-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './new-model-modal.component.html',
   styleUrl: './new-model-modal.component.scss',
 })
 export class NewModelModalComponent implements OnInit {
+  /** Media type of the currently active dataset, if any. */
+  @Input() defaultMediaType = '';
+
   @Output() closed = new EventEmitter<void>();
   @Output() created = new EventEmitter<void>();
 
@@ -40,6 +45,7 @@ export class NewModelModalComponent implements OnInit {
   mediaTypeInfos: MediaTypeInfo[] = [];
   submitting = false;
   error = '';
+  mediaTypeDropdownOpen = false;
 
   // Single example (text or media, not both)
   exampleType: 'text' | 'media' | null = null;
@@ -65,6 +71,14 @@ export class NewModelModalComponent implements OnInit {
     private sortingApi: SortingApiService,
   ) {}
 
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (this.mediaTypeDropdownOpen && !target.closest('.custom-select')) {
+      this.mediaTypeDropdownOpen = false;
+    }
+  }
+
   ngOnInit(): void {
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -72,16 +86,22 @@ export class NewModelModalComponent implements OnInit {
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
-    this.datasetsApi.getRegistry().subscribe({
-      next: (res) => {
-        const types = new Set(
-          (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
-        );
-        if (types.size === 1) {
-          this.mediaType = [...types][0];
-        }
-      },
-    });
+
+    // Prefer the explicit default (active dataset's type) over the all-datasets guess.
+    if (this.defaultMediaType) {
+      this.mediaType = this.defaultMediaType;
+    } else {
+      this.datasetsApi.getRegistry().subscribe({
+        next: (res) => {
+          const types = new Set(
+            (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
+          );
+          if (types.size === 1) {
+            this.mediaType = [...types][0];
+          }
+        },
+      });
+    }
   }
 
   get hasExample(): boolean {
@@ -191,10 +211,10 @@ export class NewModelModalComponent implements OnInit {
       next: (res) => {
         const entries: BrowseEntry[] = [];
         for (const d of res.directories || []) {
-          entries.push({ name: d.name, path: d.path, isDir: true });
+          entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
         }
         for (const f of res.files || []) {
-          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, isDir: false });
+          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, modified_at: f.modified_at, isDir: false });
         }
         this.browseEntries = entries;
         this.fileLoading = false;
@@ -331,9 +351,14 @@ export class NewModelModalComponent implements OnInit {
   getMediaTypeLabel(typeId: string): string {
     const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
     if (mt) {
-      return `${mt.icon || ''} ${mt.tab_title || mt.name}`.trim();
+      return (mt.tab_title || mt.name).trim();
     }
     return typeId;
+  }
+
+  getMediaTypeIcon(typeId: string): string {
+    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
+    return mt?.icon || '';
   }
 
   close(): void {

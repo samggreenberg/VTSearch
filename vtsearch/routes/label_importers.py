@@ -52,6 +52,7 @@ def _apply_labels(
     label_entries: list[dict],
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
+    name_lookup: dict[str, list[int]] | None = None,
 ) -> tuple[int, int]:
     """Apply label entries to the global vote state.
 
@@ -65,7 +66,7 @@ def _apply_labels(
         if label not in ("good", "bad"):
             skipped += 1
             continue
-        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         if not cids:
             skipped += 1
             continue
@@ -133,25 +134,55 @@ def run_label_import(importer_name: str):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
-    applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup)
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup, name_lookup)
 
     # Detect entries that could not be matched at all
-    missing = find_missing_entries(label_entries, origin_lookup, md5_lookup)
+    missing = find_missing_entries(label_entries, origin_lookup, md5_lookup, name_lookup)
     # Adjust skipped count: missing entries were already counted as skipped
     # by _apply_labels, but we report them separately now.
     skipped -= len(missing)
 
-    msg = f"Applied {applied} label(s), skipped {skipped}."
+    # Auto-resolve: try to ingest missing medias from their origins
+    ingested = 0
+    resolved_applied = 0
+    unresolved: list[dict] = []
     if missing:
-        msg += f" {len(missing)} element(s) not found in dataset."
+        from vtsearch.datasets.ingest import ingest_missing_medias
+
+        ingested = ingest_missing_medias(missing, medias)
+
+        if ingested > 0:
+            # Re-apply labels now that new medias are available
+            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+            resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
+            applied += resolved_applied
+
+        # Check which entries still couldn't be resolved
+        if ingested < len(missing):
+            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+            unresolved = find_missing_entries(missing, origin_lookup, md5_lookup, name_lookup)
+
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count (num_training) immediately.
+    if applied > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
+
+    msg = f"Applied {applied} label(s), skipped {skipped}."
+    if ingested > 0:
+        msg += f" Auto-resolved {ingested} missing element(s) from their sources."
+    if unresolved:
+        msg += f" {len(unresolved)} element(s) could not be resolved."
 
     return jsonify(
         {
             "applied": applied,
             "skipped": skipped,
-            "missing_count": len(missing),
-            "missing": missing,
+            "missing_count": len(unresolved),
+            "missing": unresolved,
+            "ingested": ingested,
             "message": msg,
         }
     )
@@ -189,8 +220,15 @@ def ingest_missing():
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
-    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
-    applied, _ = _apply_labels(entries, origin_lookup, md5_lookup)
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    applied, _ = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
+
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count immediately.
+    if applied > 0:
+        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+
+        sync_labels_to_loaded_model()
 
     return jsonify(
         {

@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ImporterInfo } from '../../../models/api.models';
@@ -15,6 +16,7 @@ interface BrowseEntry {
   name: string;
   path: string;
   size_bytes?: number;
+  modified_at?: string;
   isDir: boolean;
 }
 
@@ -29,7 +31,7 @@ type ModalView = 'prompt' | 'media-picker';
 @Component({
   selector: 'vt-resort-prompt-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './resort-prompt-modal.component.html',
   styleUrl: './resort-prompt-modal.component.scss',
 })
@@ -151,10 +153,10 @@ export class ResortPromptModalComponent {
       next: (res) => {
         const entries: BrowseEntry[] = [];
         for (const d of res.directories || []) {
-          entries.push({ name: d.name, path: d.path, isDir: true });
+          entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
         }
         for (const f of res.files || []) {
-          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, isDir: false });
+          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, modified_at: f.modified_at, isDir: false });
         }
         this.browseEntries = entries;
         this.fileLoading = false;

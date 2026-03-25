@@ -37,7 +37,7 @@ class ServerJsonLabelImporter(LabelImporter):
         LabelImporterField(
             key="filepath",
             label="Server File Path",
-            field_type="text",
+            field_type="server_path",
             description=(
                 "Absolute or relative path to a VTSearch labels JSON file "
                 "on the server filesystem."

@@ -25,8 +25,10 @@ _TEST_GROUPS = {
         "test_api_contracts",
         "test_error_recovery",
         "test_dashboard",
+        "test_file_browser",
         "test_path_validation",
         "test_multi_user_security",
+        "test_multi_user_dataset_access",
         "test_ssrf_validation",
     ],
     "sorting": [
@@ -48,6 +50,9 @@ _TEST_GROUPS = {
         "test_chunked_loading",
         "test_memory_errors",
         "test_pickle_safety",
+        "test_media_sources",
+        "test_multi_dataset",
+        "test_parallel_loading",
     ],
     "io": [
         "test_exporters",
@@ -55,6 +60,8 @@ _TEST_GROUPS = {
         "test_export_options",
         "test_importers",
         "test_label_importers",
+        "test_label_import_endpoint",
+        "test_label_import_ingestion",
         "test_labels",
         "test_processor_importers",
         "test_pdf_import",
@@ -163,6 +170,12 @@ def _fake_embed_text(text):
 _patch_embed_audio = patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
+# Create a default context so init_medias() has somewhere to write.
+import vtsearch.utils.state_core as _state_core
+_startup_ctx = _state_core.DatasetContext("_startup")
+_state_core.register_context(_startup_ctx)
+_state_core.set_active_dataset_id("_startup")
+
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
@@ -193,6 +206,9 @@ app_module.bad_votes = bad_votes
 # Initialize models and medias
 initialize_models()
 app_module.init_medias()
+
+# Save the test medias so we can replay them into each test's fresh context.
+_test_medias_snapshot = dict(medias)
 
 # Stop the module-level patch (init_medias is done); the per-test autouse
 # fixture below re-applies the patches for every test so that /api/sort and
@@ -269,27 +285,29 @@ def reset_state():
     """
     import vtsearch.utils.state_core as _core
 
-    good_votes.clear()
-    bad_votes.clear()
-    label_history.clear()
-    textsort_suggestions.clear()
-    vote_click_times.clear()
-    last_learned_scores.clear()
-    _core._click_counter = 0
-    _core.inclusion = None  # reset to "not loaded" so it re-reads from settings
-    _core._dataset_display_name = None
-    _core._diversity_tree = None
+    # Clear all dataset contexts and create a fresh default context so that
+    # tests that just write to ``medias`` / ``good_votes`` etc. still work.
+    _core.clear_all_contexts()
+    default_ctx = _core.DatasetContext("_test_default")
+    _core.register_context(default_ctx)
+    _core.set_active_dataset_id("_test_default")
+
+    # Replay the test medias into the fresh context (medias is intentionally
+    # NOT reset between tests to avoid expensive re-generation).
+    medias.update(_test_medias_snapshot)
+
+    # Clear global (non-per-dataset) state.
     _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
-    _core._find_initial_labels.clear()
     clear_progress_cache()
 
     # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, find_progress
+    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks
 
     dataset_progress.reset_cancel()
     find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+    loading_tasks.reset_for_tests()
 
     # Reset the login provider to DefaultLoginProvider
     from vtsearch.auth import DefaultLoginProvider, set_login_provider

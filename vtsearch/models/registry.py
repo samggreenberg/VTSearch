@@ -111,7 +111,7 @@ def register_model(
 
     Args:
         name: Display name for the dashboard.
-        media_type: ``"audio"``, ``"image"``, ``"video"``, ``"paragraph"``, etc.
+        media_type: ``"audio"``, ``"image"``, ``"video"``, ``"text"``, etc.
         trainable: Whether the model has a labelset that can be extended.
         num_training: Number of training examples (label count or "-" marker).
         detector_name: The key used in ``autorun_detectors`` (for non-trainable).

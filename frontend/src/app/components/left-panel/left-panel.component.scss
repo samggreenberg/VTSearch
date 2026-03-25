@@ -5,6 +5,35 @@
   overflow: hidden;
   container-type: inline-size;
   container-name: left-panel;
+
+  &.disabled {
+    pointer-events: none;
+
+    // Dim individual sections but keep the progress bar bright & visible
+    .dataset-name,
+    .left-tabs,
+    .images-header,
+    .media-list-container,
+    vt-sort-bar,
+    vt-select-mode,
+    vt-inclusion-slider,
+    .label-divider,
+    vt-autopilot-panel {
+      opacity: 0.45;
+    }
+  }
+}
+
+.dataset-name {
+  padding: 6px 8px 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .left-tabs {

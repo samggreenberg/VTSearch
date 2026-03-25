@@ -18,6 +18,8 @@ the registry.
 from __future__ import annotations
 
 import contextlib
+import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,7 +91,15 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
         callback("loading", desc, current, int(total))
 
+    # Redirect intercepted bars' output to devnull so they don't print
+    # to the console.  The callback receives all progress updates instead.
+    _devnull = open(os.devnull, "w")  # noqa: SIM115
+
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Force file=devnull so tqdm never writes to the console.
+        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
+        # so we must override unconditionally (not just when absent).
+        kwargs["file"] = _devnull
         _orig_init(self, *args, **kwargs)
         total = getattr(self, "total", None)
         if total and total > 0 and not getattr(self, "disable", False):
@@ -116,6 +126,7 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
         tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
         tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
+        _devnull.close()
 
 
 @contextlib.contextmanager
@@ -250,6 +261,14 @@ class MediaEmbedder(ABC):
     * :meth:`embed_text` — embed a text query in the same vector space.
     """
 
+    _model_load_lock: threading.Lock
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Each concrete embedder class gets its own lock so that concurrent
+        # callers serialise model loading per embedder type.
+        cls._model_load_lock = threading.Lock()
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 
@@ -271,12 +290,35 @@ class MediaEmbedder(ABC):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def load_models(self) -> None:
         """Load (and cache) the embedding model.
 
         Called lazily the first time this embedder needs to produce a vector.
         Implementations must be idempotent — a second call should be a no-op.
+
+        Subclasses should override :meth:`_load_models_impl` (not this method).
+        This wrapper catches :class:`ImportError` and re-raises with an
+        actionable message so that missing dependencies surface clearly.
+
+        A per-class lock serialises concurrent callers so that only one
+        thread performs the actual load; others wait and then return
+        immediately (the subclass ``_load_models_impl`` checks
+        ``self._model is not None``).
+        """
+        with self._model_load_lock:
+            try:
+                self._load_models_impl()
+            except ImportError as exc:
+                raise ImportError(
+                    f"{exc} — required by the '{self.name}' embedder. "
+                    f"Install dependencies with: pip install -e '.[cpu,dev]'"
+                ) from exc
+
+    @abstractmethod
+    def _load_models_impl(self) -> None:
+        """Subclass hook: load the embedding model.
+
+        Override this instead of :meth:`load_models`.
         """
 
     # ------------------------------------------------------------------
@@ -383,14 +425,16 @@ class DemoDataset:
     Leave empty for sources that don't require an explicit identifier."""
 
     required_folder: Optional[Path] = None
-    """Local directory that must exist for a cached ``.pkl`` to be usable.
+    """Local directory containing the extracted source files for this dataset.
 
-    Audio and video datasets store references to external media files rather
-    than inlining the bytes, so a stale ``.pkl`` left behind after the source
-    directory was removed would incorrectly appear ready.  Set this to the
-    directory that the importer places the source files into (e.g.
-    ``DATA_DIR / "ESC-50-master" / "audio"``).  Leave ``None`` for datasets
-    whose ``.pkl`` is entirely self-contained (images, text)."""
+    Used both as a staleness check (a cached ``.pkl`` is only considered valid
+    when this directory still exists on disk) and as the browsable root for
+    the *Select Media Example* file picker.  Set this to the directory that the
+    downloader extracts source files into (e.g.
+    ``DATA_DIR / "ESC-50-master" / "audio"`` or
+    ``DATA_DIR / "caltech-101" / "101_ObjectCategories"``).
+    Leave ``None`` only for datasets that have no on-disk source directory
+    (e.g. text datasets generated from in-memory data)."""
 
     slice_start: int = 0
     """Per-category start index for element slicing (inclusive).
@@ -451,7 +495,7 @@ class MediaType(ABC):
     @property
     @abstractmethod
     def icon(self) -> str:
-        """Icon for the UI (emoji or icon name), e.g. ``"🔊"``."""
+        """SVG icon type name for the UI, e.g. ``"audio"``."""
 
     # ------------------------------------------------------------------
     # File import

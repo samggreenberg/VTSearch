@@ -36,8 +36,17 @@
   color: var(--text-primary);
 }
 
-.dashboard-progress {
-  flex: 1;
+// Shared .btn--cancel base (used in progress, error, and loading-task rows)
+.btn--cancel {
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dashboard-progress,
+.loading-task-progress {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -53,18 +62,45 @@
   }
 
   .btn--cancel {
-    flex-shrink: 0;
     background: var(--bg-surface);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    cursor: pointer;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
 
     &:hover {
       color: var(--text-primary);
       border-color: var(--text-secondary);
+    }
+  }
+}
+
+.dashboard-progress {
+  flex: 1;
+}
+
+.dashboard-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--error-bg, #fef2f2);
+  border: 1px solid var(--error-border, #fca5a5);
+  border-radius: 6px;
+  padding: 6px 12px;
+
+  .error-msg {
+    flex: 1;
+    font-size: 0.8rem;
+    color: var(--error-text, #991b1b);
+  }
+
+  .btn--cancel {
+    background: transparent;
+    color: var(--error-text, #991b1b);
+    border: 1px solid var(--error-border, #fca5a5);
+
+    &:hover {
+      background: var(--error-border, #fca5a5);
+      color: #fff;
     }
   }
 }
@@ -85,6 +121,10 @@
   overflow: auto;
 }
 
+.table-fixed {
+  table-layout: fixed;
+}
+
 .dash-table {
   width: 100%;
   border-collapse: collapse;
@@ -95,10 +135,10 @@
     text-align: left;
     border-bottom: 1px solid var(--border-subtle);
     white-space: nowrap;
+  }
 
-    &.text-center {
-      text-align: center;
-    }
+  td {
+    padding: 6px 12px;
   }
 
   th {
@@ -112,6 +152,7 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     user-select: none;
+    overflow: hidden;
 
     &.sortable {
       cursor: pointer;
@@ -131,6 +172,32 @@
         visibility: visible;
       }
     }
+
+    .col-resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 5px;
+      cursor: col-resize;
+      z-index: 2;
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 20%;
+        bottom: 20%;
+        right: 0;
+        width: 2px;
+        background: var(--accent, #5b8fff);
+        opacity: 0.35;
+        transition: opacity 0.15s;
+      }
+
+      &:hover::after {
+        opacity: 0.7;
+      }
+    }
   }
 
   tbody tr {
@@ -144,6 +211,37 @@
     &.selected {
       background: var(--accent-highlight-bg);
       border-color: var(--accent-highlight-border);
+    }
+  }
+}
+
+// Loading task rows — per-dataset progress bars inline in the table
+.loading-task-row {
+  .loading-task-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .loading-task-progress .progress-msg {
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &.loading-task-error {
+    background: var(--error-bg, rgba(220, 38, 38, 0.06));
+  }
+
+  .loading-task-failed {
+    .error-msg {
+      flex: 1;
+      font-size: 0.8rem;
+      color: var(--error-text, #991b1b);
     }
   }
 }
@@ -171,20 +269,8 @@
 }
 
 // DESIGN CONSTRAINT — STABLE BUTTON POSITIONING
-// The Label/Find buttons must NOT move when their hint text appears, disappears,
-// or changes length. Three things work together to achieve this:
-//
-// 1. Each .action-btn-group has a fixed width so horizontal position never shifts
-//    when hint text changes length (the parent uses justify-content: center).
-// 2. The .btn-disabled-reason span uses visibility (NOT display/ngIf) toggling in
-//    the template, so hidden hints still reserve vertical space.
-// 3. The span has a fixed single-line height, white-space: nowrap, and overflow:
-//    hidden to prevent multi-line reflow.
-//
-// Do NOT:
-//  - Remove the fixed width on .action-btn-group (causes horizontal shifting)
-//  - Switch to display:none or *ngIf for hints (causes vertical jumping)
-//  - Remove height/white-space/overflow on .btn-disabled-reason (causes reflow)
+// .action-btn-group has fixed width, hints use visibility toggling (not display),
+// and .btn-disabled-reason has fixed height to prevent reflow.
 .action-btn-group {
   display: flex;
   flex-direction: column;

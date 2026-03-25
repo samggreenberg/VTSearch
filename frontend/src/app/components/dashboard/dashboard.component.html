@@ -2,16 +2,11 @@
   <!-- Dataset Section -->
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching">Datasets</span>
-      @if (loading) {
-        <div class="dashboard-progress">
-          <span class="progress-msg">{{ progressMessage }}</span>
-          <vt-progress-bar
-            [value]="progressValue"
-            [max]="progressTotal"
-            [indeterminate]="progressIndeterminate"
-          />
-          <button class="btn btn--cancel btn--sm" (click)="onCancelIngest()" title="Cancel dataset loading">Cancel</button>
+      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching"><vt-icon type="database" [size]="18"></vt-icon> Datasets</span>
+      @if (errorMessage) {
+        <div class="dashboard-error">
+          <span class="error-msg">{{ errorMessage }}</span>
+          <button class="btn btn--cancel btn--sm" (click)="dismissError()" title="Dismiss error">Dismiss</button>
         </div>
       }
       <div class="dashboard-section-actions">
@@ -19,40 +14,69 @@
       </div>
     </div>
 
-    @if (datasets.length === 0 && !loading) {
+    @if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table">
+        <table class="dash-table" [class.table-fixed]="datasetsTableFixed" [style.width]="datasetsTableFixed ? (datasetsTableWidth + 'px') : '100%'">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
-              <th (click)="sortDatasets('media_type')" class="sortable text-center" title="Media type: audio, image, text, video, or document (click to sort)">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
-              <th (click)="sortDatasets('num_items')" class="sortable text-center" title="Number of media items in the dataset (click to sort)">Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
-              <th (click)="sortDatasets('num_dupes')" class="sortable text-center" title="Number of duplicate items collapsed (click to sort)">Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span></th>
-              <th (click)="sortDatasets('created_at')" class="sortable text-center" title="When the dataset was first imported (click to sort)">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
-              <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span></th>
-              <th (click)="sortDatasets('clipper')" class="sortable text-center" title="MediaClipper used at creation (click to sort)">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span></th>
-              <th (click)="sortDatasets('embedder')" class="sortable text-center" title="MediaEmbedder used for embedding (click to sort)">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span></th>
+              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)" data-col="name" [style.width.px]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'name')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)" data-col="media_type" [style.width.px]="datasetsTableFixed ? datasetColWidths['media_type'] : null">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'media_type')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)" data-col="num_items" [style.width.px]="datasetsTableFixed ? datasetColWidths['num_items'] : null"># Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'num_items')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)" data-col="num_dupes" [style.width.px]="datasetsTableFixed ? datasetColWidths['num_dupes'] : null"># Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'num_dupes')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)" data-col="created_at" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_at'] : null">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'created_at')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)" data-col="origin" [style.width.px]="datasetsTableFixed ? datasetColWidths['origin'] : null">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'origin')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('clipper')" class="sortable" title="MediaClipper used at creation (click to sort)" data-col="clipper" [style.width.px]="datasetsTableFixed ? datasetColWidths['clipper'] : null">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'clipper')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortDatasets('embedder')" class="sortable" title="MediaEmbedder used for embedding (click to sort)" data-col="embedder" [style.width.px]="datasetsTableFixed ? datasetColWidths['embedder'] : null">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'embedder')" (click)="$event.stopPropagation()"></div></th>
               @if (!isDefaultLogin) {
-                <th (click)="sortDatasets('created_by')" class="sortable text-center" title="User who created this dataset (click to sort)">Creator<span class="sort-indicator" [class.active]="isDatasetSortActive('created_by')">{{ datasetSortIndicator('created_by') }}</span></th>
-                <th (click)="sortDatasets('readers')" class="sortable text-center" title="Users with access to this dataset (click to sort)">Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span></th>
+                <th (click)="sortDatasets('created_by')" class="sortable" title="User who created this dataset (click to sort)" data-col="created_by" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_by'] : null">Creator<span class="sort-indicator" [class.active]="isDatasetSortActive('created_by')">{{ datasetSortIndicator('created_by') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'created_by')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDatasets('readers')" class="sortable" title="Users with access to this dataset (click to sort)" data-col="readers" [style.width.px]="datasetsTableFixed ? datasetColWidths['readers'] : null">Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'readers')" (click)="$event.stopPropagation()"></div></th>
               }
-              <th class="text-center" title="Whether this dataset is currently loaded into memory">Loaded</th>
-              <th class="text-center" title="Available operations for this dataset">Actions</th>
+              <th title="Whether the dataset is currently loaded in memory" data-col="loaded" [style.width.px]="datasetsTableFixed ? datasetColWidths['loaded'] : null">Loaded?<div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'loaded')" (click)="$event.stopPropagation()"></div></th>
+              <th title="Available operations for this dataset" data-col="actions" [style.width.px]="datasetsTableFixed ? datasetColWidths['actions'] : null">Actions</th>
             </tr>
           </thead>
           <tbody>
+            @for (task of orphanLoadingTasks; track task.task_id) {
+              <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
+                <td>
+                  <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
+                </td>
+                <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+                  @if (task.error) {
+                    <div class="loading-task-progress loading-task-failed">
+                      <span class="error-msg">Failed: {{ task.error }}</span>
+                      <button class="btn btn--cancel btn--sm" (click)="dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
+                    </div>
+                  } @else {
+                    <div class="loading-task-progress">
+                      <span class="progress-msg">{{ taskProgressMessage(task) }}</span>
+                      <vt-progress-bar
+                        [value]="task.current"
+                        [max]="task.total"
+                        [indeterminate]="taskIsIndeterminate(task)"
+                      />
+                      <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
             @for (dataset of sortedDatasets; track dataset.id) {
               <vt-dataset-card
                 [dataset]="dataset"
                 [currentUser]="currentUser"
                 [isDefaultLogin]="isDefaultLogin"
                 [selected]="isDatasetSelected(dataset.id)"
+                [loadingTask]="getInlineTask(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
                 (delete)="deleteDataset(dataset)"
+                (load)="loadDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
+                (cancelTask)="cancelLoadingTask($event)"
+                (dismissTask)="dismissLoadingTask($event)"
               />
             }
           </tbody>
@@ -64,7 +88,7 @@
   <!-- Model Section -->
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title" title="Trained models for scoring and finding media">Models</span>
+      <span class="dashboard-section-title" title="Trained models for scoring and finding media"><vt-icon type="lightbulb" [size]="18"></vt-icon> Models</span>
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm" (click)="openNewModelModal()" title="Create a new model">+</button>
       </div>
@@ -74,17 +98,18 @@
       <p class="empty-state">No models yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table">
+        <table class="dash-table" [class.table-fixed]="modelsTableFixed" [style.width]="modelsTableFixed ? (modelsTableWidth + 'px') : '100%'">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
-              <th (click)="sortModels('media_type')" class="sortable text-center" title="Media type this model operates on (click to sort)">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
-              <th (click)="sortModels('num_training')" class="sortable text-center" title="Number of labeled training examples (click to sort)"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
-              <th class="text-center" title="Is this Model one we can load into the Labeling interface and improve?">Trainable</th>
-              <th (click)="sortModels('autodetect')" class="sortable text-center" title="Include this model in CLI autorun (click to sort)">Autorun<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span></th>
-              <th (click)="sortModels('last_trained_at')" class="sortable text-center" title="When the model was last trained (click to sort)">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
-              <th (click)="sortModels('created_at')" class="sortable text-center" title="When the model was created (click to sort)">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
-              <th class="text-center" title="Available operations for this model">Actions</th>
+              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)" data-col="name" [style.width.px]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'name')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)" data-col="media_type" [style.width.px]="modelsTableFixed ? modelColWidths['media_type'] : null">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'media_type')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)" data-col="num_training" [style.width.px]="modelsTableFixed ? modelColWidths['num_training'] : null"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'num_training')" (click)="$event.stopPropagation()"></div></th>
+              <th title="Is this Model one we can load into Train Mode and improve?" data-col="trainable" [style.width.px]="modelsTableFixed ? modelColWidths['trainable'] : null">Trainable?<div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'trainable')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortModels('autodetect')" class="sortable" title="Include this model in CLI autorun (click to sort)" data-col="autodetect" [style.width.px]="modelsTableFixed ? modelColWidths['autodetect'] : null">Autorun?<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'autodetect')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)" data-col="last_trained_at" [style.width.px]="modelsTableFixed ? modelColWidths['last_trained_at'] : null">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'last_trained_at')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)" data-col="created_at" [style.width.px]="modelsTableFixed ? modelColWidths['created_at'] : null">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'created_at')" (click)="$event.stopPropagation()"></div></th>
+              <th title="Whether the model's inference data is cached in memory" data-col="detector_loaded" [style.width.px]="modelsTableFixed ? modelColWidths['detector_loaded'] : null">Loaded?<div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'detector_loaded')" (click)="$event.stopPropagation()"></div></th>
+              <th title="Available operations for this model" data-col="actions" [style.width.px]="modelsTableFixed ? modelColWidths['actions'] : null">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -95,6 +120,7 @@
                 (rowClick)="toggleModelSelection(model.id, $event)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
+                (load)="loadModel(model)"
                 (export)="openExportModal(model)"
                 (autorunToggle)="toggleAutorun(model, $event)"
               />
@@ -125,7 +151,7 @@
         [title]="labelHint"
         (click)="onLabel()"
       >
-        Label
+        Train
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
     </div>
@@ -145,6 +171,7 @@
 
 @if (importerModalOpen) {
   <vt-dataset-importer-modal
+    [guessedMediaType]="guessedMediaType"
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
     (demoSelected)="onDemoSelected($event)"
@@ -153,6 +180,7 @@
 
 @if (newModelModalOpen) {
   <vt-new-model-modal
+    [defaultMediaType]="activeDatasetMediaType"
     (closed)="closeNewModelModal()"
     (created)="onModelCreated()"
   />

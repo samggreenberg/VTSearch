@@ -92,3 +92,11 @@ python app.py --local
 
 Production mode binds to `127.0.0.1:5000` (localhost only).  `--local` mode
 binds to `0.0.0.0:5000` (accessible from other devices on the network).
+
+**Authentication mode** (`--login`) — select the login provider:
+
+```bash
+python app.py --login trivial    # multi-user mode with simple username auth
+```
+
+Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).

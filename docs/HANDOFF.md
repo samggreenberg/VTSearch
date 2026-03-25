@@ -50,6 +50,8 @@ deployments. Runs locally or in Docker.
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
+| [plan-media-sources.md](plan-media-sources.md) | Future MediaSource abstraction design proposal |
+| [design/](design/) | Architecture design documents (CLI detector-converter pipeline) |
 
 ---
 

@@ -198,10 +198,10 @@ class TestGuessMediaType:
         data = resp.get_json()
         assert len(data["datasets"]) == 0
         # Set a single autoload type
-        client.put("/api/settings", json={"autoload_media_types": ["paragraph"]})
+        client.put("/api/settings", json={"autoload_media_types": ["text"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert data["autoload_media_types"] == ["paragraph"]
+        assert data["autoload_media_types"] == ["text"]
 
 
 class TestDashboardDatasetRegistryColumns:
@@ -497,6 +497,41 @@ class TestDashboardModelRegistryColumns:
         m = data["models"][0]
         assert "loaded" in m
         assert isinstance(m["loaded"], bool)
+
+    def test_model_registry_detector_loaded_false_without_weights(self, client):
+        """detector_loaded is False when detector has no weights in RAM."""
+        add_autorun_detector("noweights", "audio", None, 0.5)
+        register_model(name="noweights", media_type="audio", trainable=False, detector_name="noweights")
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert "detector_loaded" in m
+        assert m["detector_loaded"] is False
+
+    def test_model_registry_detector_loaded_true_with_weights(self, client):
+        """detector_loaded is True when detector has weights in RAM."""
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        fake_weights = {"0.weight": rng.standard_normal((8, 512)).tolist(), "0.bias": rng.standard_normal(8).tolist()}
+        add_autorun_detector("withweights", "audio", fake_weights, 0.5)
+        register_model(name="withweights", media_type="audio", trainable=False, detector_name="withweights")
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["detector_loaded"] is True
+
+    def test_model_registry_detector_loaded_trainable_follows_loaded(self, client):
+        """For trainable models without a detector, detector_loaded follows loaded."""
+        from vtsearch.models.registry import set_loaded_id
+
+        entry = register_model(name="train-ld", media_type="audio", trainable=True)
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["detector_loaded"] is False
+
+        set_loaded_id(entry["id"])
+        resp = client.get("/api/models/registry")
+        m = resp.get_json()["models"][0]
+        assert m["detector_loaded"] is True
 
     def test_model_registry_includes_trainable_field(self, client):
         """Registered models include the trainable boolean."""

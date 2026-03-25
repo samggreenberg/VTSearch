@@ -56,8 +56,9 @@ export class ViewSettingsModalComponent implements OnInit {
   onViewModeChange(typeId: string, value: string): void {
     const dict = (this.settings.view_mode_right as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['view_mode_right'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['view_mode_right'] = updated;
+    this.saveField({ view_mode_right: updated as Record<string, 'grid' | 'list'> });
   }
 
   getViewMode(typeId: string): string {
@@ -69,8 +70,9 @@ export class ViewSettingsModalComponent implements OnInit {
   onGridIconSizeChange(typeId: string, value: string): void {
     const dict = (this.settings.grid_icon_size_right as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['grid_icon_size_right'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['grid_icon_size_right'] = updated;
+    this.saveField({ grid_icon_size_right: updated });
   }
 
   getGridIconSize(typeId: string): string {
@@ -82,8 +84,9 @@ export class ViewSettingsModalComponent implements OnInit {
   onFocusModeChange(typeId: string, value: string): void {
     const dict = (this.settings.focus_mode_right as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['focus_mode_right'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['focus_mode_right'] = updated;
+    this.saveField({ focus_mode_right: updated as Record<string, 'click' | 'hover'> });
   }
 
   getFocusMode(typeId: string): string {
@@ -92,8 +95,11 @@ export class ViewSettingsModalComponent implements OnInit {
     return dict[typeId] ?? 'click';
   }
 
-  private save(): void {
-    this.settingsState.update(this.settings).subscribe({
+  private saveField(changes: Partial<AppSettings>): void {
+    this.settingsState.update(changes).subscribe({
+      next: (updated) => {
+        this.settings = updated;
+      },
       error: () => {
         this.error = 'Failed to save settings';
       },

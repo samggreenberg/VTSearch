@@ -153,7 +153,7 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
     if not snap:
         return 0
 
-    _, md5_lookup = build_media_lookup(snap)
+    _, md5_lookup, _ = build_media_lookup(snap)
     server_media_dir = DATA_DIR / "example_media"
 
     # Determine the embedder and media type from the loaded dataset so we
@@ -228,6 +228,98 @@ def _seed_good_votes_from_examples(examples: list[dict]) -> int:
             seeded += 1
 
     return seeded
+
+
+def _restore_labels_from_trainable_model(tm_data: dict) -> int:
+    """Restore saved labels from a trainable model's labelset into votes.
+
+    Matches labelset entries to loaded medias by origin+origin_name, MD5, and
+    origin_name fallback.  For entries that still don't match (cross-dataset
+    scenario), resolves the original file from its origin trail, computes its
+    MD5, and checks for a match in the loaded dataset.
+
+    Returns the number of labels successfully restored.
+    """
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.utils import (
+        apply_label,
+        build_media_lookup,
+        resolve_media_ids,
+        snapshot_medias,
+    )
+
+    labelset_dict = tm_data.get("labelset")
+    if not labelset_dict:
+        return 0
+
+    labelset = LabelSet.from_dict(labelset_dict)
+    if not labelset.elements:
+        return 0
+
+    snap = snapshot_medias()
+    if not snap:
+        return 0
+
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+
+    restored = 0
+    unresolved: list[tuple] = []  # (elem, label) pairs needing origin resolution
+    for elem in labelset.elements:
+        if elem.label not in ("good", "bad"):
+            continue
+        cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
+        if cids:
+            for cid in cids:
+                apply_label(cid, elem.label)
+            restored += 1
+        else:
+            unresolved.append(elem)
+
+    # Second pass: resolve unmatched labels from their origin files.
+    # When a detector was trained on Dataset A and we're now on Dataset B,
+    # the origin+name keys won't match.  But if the same underlying file
+    # exists in both datasets, resolving the origin file and computing its
+    # MD5 lets us match by content hash.
+    if unresolved:
+        import hashlib
+        import logging
+
+        from vtsearch.models.resolver import resolve_file_from_origin
+
+        _log = logging.getLogger(__name__)
+
+        for elem in unresolved:
+            entry = elem.to_dict()
+            origin = entry.get("origin")
+            origin_name = entry.get("origin_name", "")
+            filename = entry.get("filename", "")
+            resolved_path = resolve_file_from_origin(origin, origin_name, filename)
+            if resolved_path is None:
+                continue
+
+            # Compute MD5 of the resolved file and check against loaded medias
+            try:
+                h = hashlib.md5()
+                with open(resolved_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        h.update(chunk)
+                resolved_md5 = h.hexdigest()
+            except OSError:
+                _log.debug("restore-labels: could not read resolved file %s", resolved_path)
+                continue
+
+            cids = md5_lookup.get(resolved_md5, [])
+            if cids:
+                for cid in cids:
+                    apply_label(cid, elem.label)
+                restored += 1
+            else:
+                _log.debug(
+                    "restore-labels: resolved %s but MD5 %s not in loaded dataset",
+                    resolved_path, resolved_md5,
+                )
+
+    return restored
 
 
 def _list_all() -> list[dict]:
@@ -498,6 +590,13 @@ def list_registered_models():
             # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
+        # detector_loaded: True when the model's inference data is cached in RAM.
+        # For detector-backed models: weights are present in autorun_detectors.
+        # For trainable models: the model is currently loaded (labels in votes).
+        if det_name and det:
+            entry["detector_loaded"] = det.get("weights") is not None
+        else:
+            entry["detector_loaded"] = entry["loaded"]
     return jsonify({"models": entries})
 
 
@@ -574,12 +673,15 @@ def load_model_route():
 
     Pass ``model_id: null`` to unload.
 
-    When loading a model that has media examples, any example files whose
-    MD5 matches a loaded media item are automatically added to
-    ``good_votes`` so that the labeling session starts with those examples
-    pre-labeled as Good.
+    When loading a trainable model:
+
+    1. The current model's labels are saved (auto-sync).
+    2. All votes are cleared so labels from the previous session don't leak.
+    3. The new model's saved labelset is restored into votes.
+    4. Media examples are seeded as good votes.
     """
-    from vtsearch.models.registry import get_model, set_loaded_id
+    from vtsearch.models.registry import get_loaded_id, get_model, set_loaded_id
+    from vtsearch.utils import clear_votes
 
     data = request.get_json(force=True, silent=True) or {}
     model_id = data.get("model_id")
@@ -589,20 +691,39 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
+    # Save current model's labels before switching — but only if there
+    # are votes in the active context.  When the user has switched to a
+    # different dataset the active context may have no votes at all;
+    # syncing in that situation would overwrite the model's saved
+    # training labels with an empty labelset.
+    from vtsearch.utils import bad_votes, good_votes
+
+    if good_votes or bad_votes:
+        sync_labels_to_loaded_model()
+
+    # Clear votes so labels from the previous session don't carry over.
+    clear_votes()
+
     set_loaded_id(model_id)
 
-    # Seed good votes from media examples on the loaded model.
+    # Restore saved labels and seed examples from the newly loaded model.
+    labels_restored = 0
     examples_seeded = 0
     if model_id is not None and entry is not None:
         tm_name = entry.get("trainable_model_name", "")
         if tm_name:
             tm_data = _read_model(_model_path(tm_name))
             if tm_data:
+                labels_restored = _restore_labels_from_trainable_model(tm_data)
                 examples_seeded = _seed_good_votes_from_examples(
                     tm_data.get("examples", [])
                 )
 
-    return jsonify({"ok": True, "examples_seeded": examples_seeded})
+    return jsonify({
+        "ok": True,
+        "labels_restored": labels_restored,
+        "examples_seeded": examples_seeded,
+    })
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])

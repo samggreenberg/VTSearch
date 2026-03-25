@@ -351,7 +351,7 @@ def train_from_label_import(importer_name: str):
     # Match md5s to loaded medias and collect embeddings
     from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-    origin_lookup, md5_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, _ = build_media_lookup(snap)
 
     X_list: list = []
     y_list: list = []
@@ -520,7 +520,7 @@ def find_check_labels():
 
             from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-            origin_lookup, md5_lookup = build_media_lookup(temp_medias)
+            origin_lookup, md5_lookup, _ = build_media_lookup(temp_medias)
             matched = 0
             for lbl in labels:
                 if resolve_media_ids(lbl, origin_lookup, md5_lookup):
@@ -785,7 +785,7 @@ def multi_find():
                 try:
                     from vtsearch.utils import build_media_lookup, resolve_media_ids
 
-                    origin_lookup, md5_lookup = build_media_lookup(temp_medias)
+                    origin_lookup, md5_lookup, _ = build_media_lookup(temp_medias)
                     good_ids, bad_ids = [], []
                     for lbl in labels:
                         matched = resolve_media_ids(lbl, origin_lookup, md5_lookup)

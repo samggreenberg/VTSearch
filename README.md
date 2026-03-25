@@ -67,8 +67,10 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
 │   ├── demos.md                    # Demo dataset listing
-│   └── old_io.md                   # Retired IO module reference implementations
-└── requirements*.txt               # Dependency files (cpu, gpu, dev, importers, exporters)
+│   ├── old_io.md                   # Retired IO module reference implementations
+│   ├── plan-media-sources.md       # MediaSource abstraction design proposal
+│   └── design/                     # Architecture design documents
+└── pyproject.toml                  # Project metadata and dependencies
 ```
 
 ## HTTP API

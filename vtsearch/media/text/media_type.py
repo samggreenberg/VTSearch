@@ -13,7 +13,6 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
-    intercept_tqdm_progress,
 )
 
 
@@ -32,7 +31,7 @@ class TextMediaType(MediaType):
 
     @property
     def type_id(self) -> str:
-        return "paragraph"
+        return "text"
 
     @property
     def name(self) -> str:
@@ -40,7 +39,7 @@ class TextMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "📄"
+        return "file-text"
 
     # ------------------------------------------------------------------
     # File import
@@ -230,8 +229,12 @@ class TextMediaType(MediaType):
 
         if getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading text embedding model…", 0, 0)
-            with intercept_tqdm_progress(on_progress):
+            original_cb = embedder._on_progress
+            embedder._on_progress = on_progress
+            try:
                 embedder.load_models()
+            finally:
+                embedder._on_progress = original_cb
 
         clip_id = 1
         total = len(selected_texts)
@@ -239,7 +242,7 @@ class TextMediaType(MediaType):
         demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
-            on_progress("embedding", f"Embedding {category}: paragraph {i + 1}/{total}", i + 1, total)
+            on_progress("embedding", f"Embedding {category}", i + 1, total)
             text_content = text_content[:1000].strip()
             if not text_content:
                 continue

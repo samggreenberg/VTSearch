@@ -15,10 +15,15 @@ from vtsearch.utils.state_core import (
     textsort_suggestions,
     vote_click_times,
 )
+from vtsearch.utils.state_core import (
+    _get_click_counter,
+    _get_diversity_tree,
+    _set_click_counter,
+)
 from vtsearch.utils.state_clicks import assign_click_time, remove_click_time
 from vtsearch.utils.state_diversity import diversity_tree_label, diversity_tree_unlabel
 
-import vtsearch.utils.state_core as _core
+from vtsearch.utils.state_core import get_active_context
 
 
 def clear_votes() -> None:
@@ -36,9 +41,10 @@ def clear_votes() -> None:
         label_history.clear()
         textsort_suggestions.clear()
         vote_click_times.clear()
-        _core._click_counter = 0
+        _set_click_counter(0)
         last_learned_scores.clear()
-        _core._find_initial_labels.clear()
+        ctx = get_active_context()
+        ctx.find_initial_labels.clear()
         clear_progress_cache()
 
 
@@ -94,18 +100,19 @@ def get_learned_scores() -> dict[int, float]:
 def set_find_initial_labels(labels: dict[int, str]) -> None:
     """Store the detector-assigned labels from a find-label run.
 
-    This snapshot is used to identify "corrections" — items where the
+    This snapshot is used to identify "corrections" -- items where the
     user subsequently changed the label from what the detector assigned.
     """
     with _state_lock:
-        _core._find_initial_labels.clear()
-        _core._find_initial_labels.update(labels)
+        ctx = get_active_context()
+        ctx.find_initial_labels.clear()
+        ctx.find_initial_labels.update(labels)
 
 
 def get_find_initial_labels() -> dict[int, str]:
     """Return a copy of the find-label initial labels."""
     with _state_lock:
-        return _core._find_initial_labels.copy()
+        return get_active_context().find_initial_labels.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +128,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
     (unlabelled); otherwise the vote is applied (overriding any existing
     opposite vote).
 
-    When a vote switches polarity (good→bad or bad→good), the progress
+    When a vote switches polarity (good->bad or bad->good), the progress
     cache is partially invalidated: only cached steps from the point where
     the media first appeared in the training data are discarded.  Earlier
     steps (whose models never included this media) are preserved.
@@ -225,7 +232,7 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]]) -> None:
     import time as _time
 
     with _state_lock:
-        tree = _core._diversity_tree
+        tree = _get_diversity_tree()
         for media_id, label in labels:
             if label == "good":
                 bad_votes.pop(media_id, None)
@@ -235,7 +242,8 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]]) -> None:
                 good_votes.pop(media_id, None)
                 bad_votes[media_id] = None
                 label_history.append((media_id, "bad", _time.time()))
-            _core._click_counter += 1
-            vote_click_times[media_id] = _core._click_counter
+            new_val = _get_click_counter() + 1
+            _set_click_counter(new_val)
+            vote_click_times[media_id] = new_val
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)

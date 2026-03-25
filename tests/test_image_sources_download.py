@@ -111,9 +111,9 @@ class TestDownloadOxfordFlowers:
                 shutil.copy(str(tgz_path), str(dest))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
-            patch.object(dl_module, "download_file_with_progress", fake_download),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
         ):
             result = dl_module.download_oxford_flowers(on_progress=lambda *a: None)
 
@@ -134,8 +134,8 @@ class TestDownloadOxfordFlowers:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -156,17 +156,19 @@ class TestDownloadOxfordFlowers:
 class TestDownloadFood101:
     def test_returns_images_directory(self, tmp_path):
         """download_food101 returns the food-101/images/ directory."""
+        import shutil
+
         from vtsearch.datasets import downloader as dl_module
 
         tar_path = _make_food101_tar(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
-                lambda url, dest, size, cb: tar_path.rename(dest),
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
             result = dl_module.download_food101(on_progress=lambda *a: None)
@@ -187,8 +189,8 @@ class TestDownloadFood101:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -209,17 +211,19 @@ class TestDownloadFood101:
 class TestDownloadEurosat:
     def test_returns_extract_directory(self, tmp_path):
         """download_eurosat returns the EuroSAT_RGB/ directory."""
+        import shutil
+
         from vtsearch.datasets import downloader as dl_module
 
         zip_path = _make_eurosat_zip(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
-                lambda url, dest, size, cb: zip_path.rename(dest),
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
             result = dl_module.download_eurosat(on_progress=lambda *a: None)
@@ -238,8 +242,8 @@ class TestDownloadEurosat:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",
@@ -260,17 +264,19 @@ class TestDownloadEurosat:
 class TestDownloadStanfordDogs:
     def test_returns_images_directory(self, tmp_path):
         """download_stanford_dogs returns the stanford_dogs/Images/ directory."""
+        import shutil
+
         from vtsearch.datasets import downloader as dl_module
 
         tar_path = _make_stanford_dogs_tar(tmp_path)
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
-                lambda url, dest, size, cb: tar_path.rename(dest),
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
             result = dl_module.download_stanford_dogs(on_progress=lambda *a: None)
@@ -290,8 +296,8 @@ class TestDownloadStanfordDogs:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
             patch.object(
                 dl_module,
                 "download_file_with_progress",

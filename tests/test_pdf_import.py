@@ -340,3 +340,53 @@ class TestFolderImporterPdf:
         m = list(medias.values())[0]
         assert m["origin_name"] == m["filename"]
         assert m["origin_name"] == "doc.pdf-1"
+
+
+class TestPdfSymlinkDiscovery:
+    """PDF scanning must follow symlinked directories."""
+
+    def _make_fake_image_media_type(self):
+        mt = mock.MagicMock()
+        mt.type_id = "image"
+        mt.folder_import_name = "images"
+        mt.file_extensions = ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"]
+        mt.load_media_data.return_value = {"media_bytes": b"fake", "duration": 0, "width": 100, "height": 100}
+        return mt
+
+    def _make_fake_embedder(self):
+        emb = mock.MagicMock()
+        emb.name = "clip"
+        emb.media_type_id = "image"
+        emb._model = True
+        emb.embed_media.return_value = np.zeros(768)
+        emb.embed_pil_image.return_value = np.zeros(768)
+        return emb
+
+    def test_pdfs_in_symlinked_subdir_are_discovered(self, tmp_path):
+        """PDFs inside a symlinked subdirectory should be found and rendered."""
+        from contextlib import ExitStack
+
+        from vtsearch.datasets.importers.folder import _load_pdf_images
+
+        root = tmp_path / "root"
+        root.mkdir()
+
+        external = tmp_path / "external"
+        external.mkdir()
+        _create_test_pdf(external / "linked_doc.pdf", num_pages=2)
+
+        (root / "linked").symlink_to(external)
+
+        mt = self._make_fake_image_media_type()
+        emb = self._make_fake_embedder()
+        medias: dict = {}
+
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+            stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
+            _load_pdf_images(root, medias, embedder_name="clip")
+
+        assert len(medias) == 2
+        filenames = {m["filename"] for m in medias.values()}
+        assert "linked/linked_doc.pdf-1" in filenames
+        assert "linked/linked_doc.pdf-2" in filenames

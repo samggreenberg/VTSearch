@@ -7,13 +7,13 @@ from typing import Optional
 
 import numpy as np
 
+from vtsearch.config import DATA_DIR
 from vtsearch.media.base import (
     DemoDataset,
     MediaResponse,
     MediaType,
     ProgressCallback,
     _noop_progress,
-    intercept_tqdm_progress,
 )
 
 
@@ -48,7 +48,7 @@ class ImageMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "🖼️"
+        return "image"
 
     # ------------------------------------------------------------------
     # File import
@@ -228,48 +228,56 @@ class ImageMediaType(MediaType):
                 id="caltech101_s", label="Caltech-101 (S)",
                 description="Centered, well-lit object photos — a classic vision benchmark.",
                 categories=cats101, source="caltech101",
+                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
                 slice_start=0, slice_end=20, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech101_m", label="Caltech-101 (M)",
                 description="Centered, well-lit object photos — a classic vision benchmark.",
                 categories=cats101, source="caltech101",
+                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
                 slice_start=20, slice_end=60, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech256_l", label="Caltech-256 (L)",
                 description="Harder object photos with more varied, cluttered backgrounds than Caltech-101.",
                 categories=cats256, source="caltech256",
+                required_folder=DATA_DIR / "caltech-256" / "256_ObjectCategories",
                 slice_start=0, slice_end=80, download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="oxford_flowers_102_a", label="Oxford Flowers 102 (A)",
                 description="Close-up flower photography with fine-grained species variation.",
                 categories=self._OXFORD_FLOWERS_CATEGORIES, source="oxford_flowers_102",
+                required_folder=DATA_DIR / "oxford_flowers",
                 slice_start=0, slice_end=80, download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a", label="Food-101 (A)",
                 description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
                 categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=DATA_DIR / "food-101" / "images",
                 slice_start=0, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a", label="EuroSAT (A)",
                 description="Sentinel-2 satellite imagery classified by land use type.",
                 categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=DATA_DIR / "EuroSAT_RGB",
                 slice_start=0, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a", label="Stanford Dogs (A)",
                 description="Fine-grained dog breed photos — many visually similar breeds.",
                 categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=DATA_DIR / "stanford_dogs" / "Images",
                 slice_start=0, slice_end=171, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucsf_documents_a", label="UCSF Documents (A)",
                 description="Scanned industry document pages from the UCSF Industry Documents Library.",
                 categories=self._UCSF_DOCUMENTS_CATEGORIES, source="ucsf_documents",
+                required_folder=DATA_DIR / "ucsf_documents",
                 slice_start=0, slice_end=25, download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
             ),
         ]
@@ -305,15 +313,19 @@ class ImageMediaType(MediaType):
             """Embed a list of (img_path, category) tuples."""
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                with intercept_tqdm_progress(on_progress):
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
                     embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (img_path, category) in enumerate(selected):
-                on_progress("embedding", f"Embedding {category}/{img_path.name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
                 embedding = embedder.embed_media(img_path)
                 if embedding is None:
                     continue
@@ -463,15 +475,19 @@ class ImageMediaType(MediaType):
 
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                with intercept_tqdm_progress(on_progress):
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
                     embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected_pages)
             on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
 
             for i, (page_name, pil_image, category) in enumerate(selected_pages):
-                on_progress("embedding", f"Embedding {page_name} ({i + 1}/{total})", i + 1, total)
+                on_progress("embedding", f"Embedding {page_name}", i + 1, total)
                 embedding = embedder.embed_pil_image(pil_image)
                 if embedding is None:
                     continue
@@ -520,14 +536,19 @@ class ImageMediaType(MediaType):
 
             if getattr(embedder, "_model", None) is None:
                 on_progress("loading", "Loading image embedding model…", 0, 0)
-                embedder.load_models()
+                original_cb = embedder._on_progress
+                embedder._on_progress = on_progress
+                try:
+                    embedder.load_models()
+                finally:
+                    embedder._on_progress = original_cb
 
             clip_id = 1
             total = len(selected_images)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
             for i, (image_array, category) in enumerate(zip(selected_images, selected_labels)):
-                on_progress("embedding", f"Embedding {category}: image {i + 1}/{total}", i + 1, total)
+                on_progress("embedding", f"Embedding {category}", i + 1, total)
                 img = Image.fromarray(image_array.astype("uint8"), "RGB")
                 img_buffer = _io.BytesIO()
                 img.save(img_buffer, format="PNG")

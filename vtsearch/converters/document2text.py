@@ -33,7 +33,7 @@ class Document2TextMediaConverter(MediaConverter):
 
     @property
     def target_type(self) -> str:
-        return "paragraph"
+        return "text"
 
     def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         media_bytes = media.get("media_bytes")

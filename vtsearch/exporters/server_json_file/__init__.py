@@ -33,14 +33,14 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         ExporterField(
             key="filepath",
             label="Server File Path",
-            field_type="text",
+            field_type="server_path",
             description=(
                 "Absolute or relative path on the server where the JSON "
                 "results file will be written.  Parent directories are "
                 "created automatically."
             ),
-            placeholder="/home/user/autodetect_results.json",
-            default="autodetect_results.json",
+            placeholder="data/autodetect_results.json",
+            default="data/autodetect_results.json",
         ),
     ]
 

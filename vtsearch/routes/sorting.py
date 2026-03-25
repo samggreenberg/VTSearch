@@ -376,7 +376,7 @@ def export_labels():
                 entry["custom_metadata"] = meta
                 all_meta_keys.update(meta.keys())
 
-        base_columns = ["label", "md5", "origin_name", "filename", "category"]
+        base_columns = ["label", "md5", "origin_name", "filename", "category", "origin"]
         base_lower = {c.lower() for c in base_columns}
         extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
         result["available_columns"] = base_columns + extra_keys
@@ -395,7 +395,7 @@ def import_labels():
     if not isinstance(labels, list):
         return jsonify({"error": "labels must be a list"}), 400
 
-    origin_lookup, md5_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, _ = build_media_lookup(snapshot_medias())
 
     applied = 0
     skipped = 0
@@ -643,8 +643,22 @@ def example_sort():
         return jsonify({"error": "Example sort failed"}), 500
 
 
-#: Default directory for server-side example media files.
+#: Default directory for server-side example media files (single-user fallback).
 SERVER_MEDIA_DIR = DATA_DIR / "example_media"
+
+
+def _get_server_media_dir() -> Path:
+    """Return the per-user server media directory.
+
+    In multi-user mode each user gets their own ``example_media/``
+    subdirectory inside their data dir, preventing cross-user file access.
+    """
+    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
+
+    provider = get_login_provider()
+    if isinstance(provider, DefaultLoginProvider):
+        return SERVER_MEDIA_DIR
+    return get_user_data_dir() / "example_media"
 
 
 @sorting_bp.route("/api/server-media-files/upload", methods=["POST"])
@@ -661,8 +675,9 @@ def upload_server_media_file():
 
     suffix = Path(file.filename).suffix or ".bin"
     safe_name = f"{uuid.uuid4().hex}{suffix}"
-    SERVER_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    dest = SERVER_MEDIA_DIR / safe_name
+    media_dir = _get_server_media_dir()
+    media_dir.mkdir(parents=True, exist_ok=True)
+    dest = media_dir / safe_name
     file.save(dest)
 
     return jsonify({"filename": safe_name, "original_name": file.filename}), 201
@@ -670,12 +685,13 @@ def upload_server_media_file():
 
 @sorting_bp.route("/api/server-media-files", methods=["GET"])
 def list_server_media_files():
-    """List media files saved on the server in data/example_media/."""
-    if not SERVER_MEDIA_DIR.is_dir():
+    """List media files saved on the server in the user's example_media/ dir."""
+    media_dir = _get_server_media_dir()
+    if not media_dir.is_dir():
         return jsonify({"files": []})
 
     files = []
-    for p in sorted(SERVER_MEDIA_DIR.iterdir()):
+    for p in sorted(media_dir.iterdir()):
         if p.is_file() and not p.name.startswith("."):
             files.append(
                 {
@@ -698,11 +714,12 @@ def example_sort_server():
     if not filename:
         return jsonify({"error": "filename is required"}), 400
 
-    file_path = SERVER_MEDIA_DIR / filename
+    media_dir = _get_server_media_dir()
+    file_path = media_dir / filename
 
     # Ensure path doesn't escape the server media directory
     try:
-        file_path.resolve().relative_to(SERVER_MEDIA_DIR.resolve())
+        file_path.resolve().relative_to(media_dir.resolve())
     except ValueError:
         return jsonify({"error": "Invalid filename"}), 400
 

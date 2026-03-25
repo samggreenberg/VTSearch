@@ -58,8 +58,8 @@ describe('CenterPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('vt-video-player')).toBeTruthy();
   });
 
-  it('should show text viewer for paragraph media', () => {
-    component.media = { ...mockMedia, type: 'paragraph' };
+  it('should show text viewer for text media', () => {
+    component.media = { ...mockMedia, type: 'text' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-text-viewer')).toBeTruthy();
   });

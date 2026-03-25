@@ -88,7 +88,7 @@ class TestPickleMemoryError:
 
         medias_data = {
             1: {
-                "type": "paragraph",
+                "type": "text",
                 "embedding": [0.0] * 10,
                 "media_string": "hello",
                 "filename": "t.txt",

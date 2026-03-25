@@ -78,8 +78,8 @@ class TestDownloadBbcNews:
             progress_calls.append((status, msg))
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
         ):
             result = dl_module.download_bbc_news(on_progress=fake_progress)
 
@@ -95,8 +95,8 @@ class TestDownloadBbcNews:
         zip_path = _make_bbc_zip(tmp_path, top_folder="bbc")
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
-            patch.object(dl_module, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
         ):
             result = dl_module.download_bbc_news(on_progress=lambda *a: None)
 
@@ -116,9 +116,9 @@ class TestDownloadBbcNews:
         download_called = []
 
         with (
-            patch.object(dl_module, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(
-                dl_module,
+                dl_module.core,
                 "download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),

@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
+import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -22,7 +24,7 @@ export interface ColumnDef {
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -77,10 +79,12 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   private static readonly BASE_COLUMNS: { key: string; label: string }[] = [
     { key: 'label', label: 'Label' },
     { key: 'md5', label: 'MD5' },
-    { key: 'origin_name', label: 'Origin Name' },
     { key: 'filename', label: 'Filename' },
     { key: 'category', label: 'Category' },
   ];
+
+  /** Columns excluded from checkboxes/preview but always appended to exports. */
+  private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -103,7 +107,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.exportersApi.getExporters().subscribe({
+    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
         this.exporters = list.filter((e) => !e.hidden_from_picker);
         this.loading = false;
@@ -114,7 +118,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.sortingApi.exportLabels(false, { enrich: true }).subscribe({
+    this.sortingApi.exportLabels(false, { enrich: true }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (data) => {
         this.labels = data.labels || [];
         this.labelsLoaded = true;
@@ -131,16 +135,17 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Build column definitions from available_columns or fall back to defaults. */
   private buildColumns(availableColumns?: string[]): void {
     const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
+    const alwaysKeys = new Set(ExportModalComponent.ALWAYS_EXPORT_KEYS);
     // Start with base columns
     this.columns = ExportModalComponent.BASE_COLUMNS.map((c) => ({
       key: c.key,
       label: c.label,
       enabled: true,
     }));
-    // Add metadata columns discovered from the data
+    // Add metadata columns discovered from the data (skip always-export columns)
     if (availableColumns) {
       for (const key of availableColumns) {
-        if (!baseKeys.has(key)) {
+        if (!baseKeys.has(key) && !alwaysKeys.has(key)) {
           this.columns.push({
             key,
             label: key,
@@ -201,9 +206,18 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return String((entry as unknown as Record<string, unknown>)[col.key] ?? '');
   }
 
+  /** Columns to export: user-selected columns plus always-export columns appended at the end. */
+  private get exportColumns(): ColumnDef[] {
+    const cols = [...this.enabledColumns];
+    for (const key of ExportModalComponent.ALWAYS_EXPORT_KEYS) {
+      cols.push({ key, label: key, enabled: true });
+    }
+    return cols;
+  }
+
   /** Build delimited text from labels using selected columns. */
   buildExportText(): string {
-    const cols = this.enabledColumns;
+    const cols = this.exportColumns;
     if (cols.length === 0) return '';
     const header = cols.map((c) => c.label).join(this.delimiter);
     const rows = this.filteredLabels.map((entry) =>
@@ -251,7 +265,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       // Derive extension from the static default (e.g. ".json", ".csv") or fall back
       const extMatch = staticDefault.match(/\.(\w+)$/);
       const ext = extMatch ? extMatch[1] : 'json';
-      this.formValues['filepath'] = this.buildDefaultFilename(ext);
+      this.formValues['filepath'] = `data/${this.buildDefaultFilename(ext)}`;
     }
   }
 
@@ -335,7 +349,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
     const labelsData = {
       labels: this.filteredLabels,
-      selected_columns: this.enabledColumns.map((c) => c.key),
+      selected_columns: this.exportColumns.map((c) => c.key),
     };
     this.exportersApi
       .runExport({
@@ -400,6 +414,20 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         this.status = '';
       },
     });
+  }
+
+  /** Map an exporter's emoji icon to an SVG icon type. */
+  getExporterIconType(exp: ExporterInfo): string {
+    const icon = exp.icon || '';
+    if (icon === '📧' || icon.includes('📧')) return 'email';
+    if (icon === '🖥️' || icon === '\uD83D\uDDA5' || icon === '\uD83D\uDDA5\uFE0F') return 'server';
+    if (icon === '🌐' || icon === '\uD83C\uDF10') return 'webhook';
+    // Also match by name as fallback
+    const name = (exp.name || '').toLowerCase();
+    if (name.includes('email') || name.includes('smtp')) return 'email';
+    if (name.includes('webhook')) return 'webhook';
+    if (name.includes('server') || name.includes('file')) return 'server';
+    return 'upload';
   }
 
   close(): void {

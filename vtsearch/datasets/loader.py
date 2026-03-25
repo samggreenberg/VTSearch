@@ -23,6 +23,7 @@ from PIL import Image
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets.config import DEMO_DATASETS
+from vtsearch.utils.paths import rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -83,7 +84,16 @@ def safe_pickle_load(f: io.BufferedIOBase, **kwargs: Any) -> Any:
 
 
 def _default_progress() -> ProgressCallback:
-    """Lazily resolve the application-wide progress callback."""
+    """Lazily resolve the progress callback for the current thread.
+
+    Checks for a per-thread callback first (set during parallel dataset
+    loading) and falls back to the global singleton.
+    """
+    from vtsearch.utils.progress import get_thread_progress
+
+    cb = get_thread_progress()
+    if cb is not None:
+        return cb
     from vtsearch.utils import update_progress
 
     return update_progress
@@ -434,6 +444,7 @@ def load_dataset_from_folder(
     thin: bool = False,
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    skip_embedding: bool = False,
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -486,6 +497,11 @@ def load_dataset_from_folder(
             non-empty ``"md5"`` key, that value is used as the media's MD5
             instead of computing it from the file contents.  The metadata dict
             is also attached to the media as ``custom_metadata``.
+        skip_embedding: When ``True``, skip embedder resolution and model
+            loading entirely.  Files with pre-computed vectors in
+            ``content_vectors`` use those; files without are included with
+            ``embedding=None``.  Useful when vectors have already been
+            downloaded or computed externally.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, or if no matching
@@ -503,32 +519,35 @@ def load_dataset_from_folder(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
-    # Resolve the embedder
+    # Resolve the embedder (skipped entirely when skip_embedding=True).
     emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    else:
-        avail = embedders_for_type(mt.type_id)
-        if avail:
-            emb = avail[0]
+    if not skip_embedding:
+        if embedder_name:
+            try:
+                emb = get_embedder(embedder_name)
+            except KeyError:
+                raise ValueError(f"Unknown embedder: {embedder_name}")
+        else:
+            avail = embedders_for_type(mt.type_id)
+            if avail:
+                emb = avail[0]
 
-    # Eagerly load models before starting the embedding timer so that
-    # download / weight-loading time does not pollute the progress bar.
-    if emb is not None and getattr(emb, "_model", None) is None:
-        from vtsearch.media.base import intercept_tqdm_progress
-
-        on_progress("loading", "Loading embedding model…", 0, 0)
-        with intercept_tqdm_progress(on_progress):
-            emb.load_models()
+        # Eagerly load models before starting the embedding timer so that
+        # download / weight-loading time does not pollute the progress bar.
+        if emb is not None and getattr(emb, "_model", None) is None:
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
     media_files = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.rglob(ext))
+        media_files.extend(rglob_follow_symlinks(folder_path, ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -543,9 +562,10 @@ def load_dataset_from_folder(
             # different subdirectories with the same basename stay distinct.
             rel_path = file_path.relative_to(folder_path).as_posix()
 
+            phase = "loading" if skip_embedding else "embedding"
             on_progress(
-                "embedding",
-                f"Embedding {media_type} {rel_path}...",
+                phase,
+                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path}...",
                 i + 1,
                 total_files,
             )
@@ -556,6 +576,8 @@ def load_dataset_from_folder(
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+            elif skip_embedding:
+                embedding = None
             else:
                 if emb is None:
                     continue
@@ -678,6 +700,7 @@ def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
         cm_md5 = cm.get("md5")
         if cm_md5:
             media["md5"] = cm_md5
+            del cm["md5"]
             count += 1
     return count
 
@@ -693,6 +716,7 @@ def load_dataset_from_folder_chunked(
     thin: bool = False,
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    skip_embedding: bool = False,
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -717,6 +741,7 @@ def load_dataset_from_folder_chunked(
             is used.
         custom_metadata_map: Optional mapping of filename to a metadata dict.
             Same semantics as in :func:`load_dataset_from_folder`.
+        skip_embedding: Same semantics as in :func:`load_dataset_from_folder`.
 
     Yields:
         A dict mapping int media IDs (starting at 1) to media data dicts.
@@ -738,32 +763,35 @@ def load_dataset_from_folder_chunked(
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
 
-    # Resolve the embedder
+    # Resolve the embedder (skipped entirely when skip_embedding=True).
     emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    else:
-        avail = embedders_for_type(mt.type_id)
-        if avail:
-            emb = avail[0]
+    if not skip_embedding:
+        if embedder_name:
+            try:
+                emb = get_embedder(embedder_name)
+            except KeyError:
+                raise ValueError(f"Unknown embedder: {embedder_name}")
+        else:
+            avail = embedders_for_type(mt.type_id)
+            if avail:
+                emb = avail[0]
 
-    # Eagerly load models before starting the embedding timer so that
-    # download / weight-loading time does not pollute the progress bar.
-    if emb is not None and getattr(emb, "_model", None) is None:
-        from vtsearch.media.base import intercept_tqdm_progress
-
-        on_progress("loading", "Loading embedding model…", 0, 0)
-        with intercept_tqdm_progress(on_progress):
-            emb.load_models()
+        # Eagerly load models before starting the embedding timer so that
+        # download / weight-loading time does not pollute the progress bar.
+        if emb is not None and getattr(emb, "_model", None) is None:
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
 
     # Find all files of the specified media type (recursive so that
     # subdirectory structures are preserved).
     media_files: list[Path] = []
     for ext in mt.file_extensions:
-        media_files.extend(folder_path.rglob(ext))
+        media_files.extend(rglob_follow_symlinks(folder_path, ext))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -781,9 +809,10 @@ def load_dataset_from_folder_chunked(
             global_idx = start + i
             rel_path = file_path.relative_to(folder_path).as_posix()
 
+            phase = "loading" if skip_embedding else "embedding"
             on_progress(
-                "embedding",
-                f"Embedding {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
+                phase,
+                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
                 global_idx + 1,
                 total_files,
             )
@@ -792,6 +821,8 @@ def load_dataset_from_folder_chunked(
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+            elif skip_embedding:
+                embedding = None
             else:
                 if emb is None:
                     continue
@@ -948,7 +979,7 @@ def load_dataset_from_pickle(
         }
 
     # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
@@ -968,8 +999,8 @@ def load_dataset_from_pickle(
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
-            # Determine media type
-            media_type = media_info.get("type", "audio")
+            # Determine media type (normalize legacy IDs like "paragraph" → "text")
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
@@ -1159,7 +1190,7 @@ def load_dataset_from_pickle_chunked(
 
     # Build lookup tables dynamically from the media type registry,
     # matching the approach used by load_dataset_from_pickle.
-    from vtsearch.media import all_types
+    from vtsearch.media import all_types, normalize_type_id
 
     _dir_keys: dict[str, str] = {}
     _legacy_bytes: dict[str, list[str]] = {}
@@ -1178,7 +1209,7 @@ def load_dataset_from_pickle_chunked(
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = media_info.get("type", "audio")
+            media_type = normalize_type_id(media_info.get("type", "audio"))
 
             if thin:
                 media_path: str | None = media_info.get("media_path")
@@ -1365,7 +1396,7 @@ def read_pkl_embedder(pkl_path: Path) -> str | None:
         return None
     try:
         with open(pkl_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+            data = safe_pickle_load(f)
         medias_dict = data.get("medias", {}) if isinstance(data, dict) else {}
         for media in medias_dict.values():
             name = media.get("embedder", "")
@@ -1376,6 +1407,24 @@ def read_pkl_embedder(pkl_path: Path) -> str | None:
     except Exception:
         pass
     return None
+
+
+def _stamp_demo_origin(
+    medias: dict[int, dict[str, Any]],
+    dataset_name: str,
+    converter_name: str = "",
+) -> None:
+    """Stamp the demo origin on all medias (fresh dict per media).
+
+    Ensures every media has ``origin = {"importer": "demo", "params": {"name": ...}}``.
+    Called both for freshly-embedded medias and for pickle-cached loads so
+    that old pickles (created before origin stamping was added) get corrected.
+    """
+    demo_origin_params: dict[str, str] = {"name": dataset_name}
+    if converter_name:
+        demo_origin_params["converter"] = converter_name
+    for media in medias.values():
+        media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
 
 
 def load_demo_dataset(
@@ -1452,6 +1501,11 @@ def load_demo_dataset(
             pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
             pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
         else:
+            # Stamp demo origin on cached medias so that cross-dataset
+            # resolution always has the dataset name in the origin params.
+            # Old pickles (created before origin stamping) may have empty
+            # params — this ensures they are corrected on load.
+            _stamp_demo_origin(medias, dataset_name, converter_name)
             on_progress("idle", f"Loaded {dataset_name} dataset")
             return
 
@@ -1487,12 +1541,8 @@ def load_demo_dataset(
         embedder=embedder,
     )
 
-    # Stamp the demo origin on all medias (fresh dict per media to avoid shared-reference mutation bugs)
-    demo_origin_params: dict[str, str] = {"name": dataset_name}
-    if converter_name:
-        demo_origin_params["converter"] = converter_name
-    for media in medias.values():
-        media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
+    # Stamp the demo origin on all medias
+    _stamp_demo_origin(medias, dataset_name, converter_name)
 
     # --- Apply converter if requested ---
     if converter_name:

@@ -26,6 +26,11 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _default_progress() -> ProgressCallback:
+    from vtsearch.utils.progress import get_thread_progress
+
+    cb = get_thread_progress()
+    if cb is not None:
+        return cb
     from vtsearch.utils import update_progress
 
     return update_progress
@@ -52,6 +57,37 @@ def _group_by_origin(
     return groups
 
 
+def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
+    """Determine the media type ID from an origin dict.
+
+    Checks origin params (``media_type`` for folder origins) and falls back
+    to the ``DEMO_DATASETS`` config for demo origins.  Returns an empty
+    string if the media type cannot be determined.
+    """
+    params = origin_dict.get("params", {})
+    importer_name = origin_dict.get("importer", "")
+
+    # Folder origins store the folder-import name (e.g. "sounds" → "audio")
+    folder_import_name = params.get("media_type", "")
+    if folder_import_name:
+        try:
+            from vtsearch.media import get_by_folder_name
+
+            return get_by_folder_name(folder_import_name).type_id
+        except (KeyError, ValueError):
+            pass
+
+    # Demo origins: look up from DEMO_DATASETS config
+    if importer_name == "demo":
+        from vtsearch.datasets.config import DEMO_DATASETS
+
+        demo_name = params.get("name", "")
+        if demo_name in DEMO_DATASETS:
+            return DEMO_DATASETS[demo_name].get("media_type", "")
+
+    return ""
+
+
 def _ingest_via_source(
     origin_dict: dict[str, Any],
     entries: list[dict[str, Any]],
@@ -70,17 +106,7 @@ def _ingest_via_source(
     if source is None:
         return -1
 
-    # Resolve the media type from the folder_import_name (e.g. "sounds" → "audio").
-    folder_import_name = origin_dict.get("params", {}).get("media_type", "")
-    media_type_id = ""
-    if folder_import_name:
-        try:
-            from vtsearch.media import get_by_folder_name
-
-            mt = get_by_folder_name(folder_import_name)
-            media_type_id = mt.type_id
-        except (KeyError, ValueError):
-            pass
+    media_type_id = _media_type_from_origin(origin_dict)
 
     from vtsearch.models.resolver import embed_file
 
@@ -124,12 +150,77 @@ def _ingest_via_source(
 
             on_progress(
                 "ingesting",
-                f"Fetched {origin_name or filename} ({ingested}/{len(entries)})...",
+                f"Fetched {origin_name or filename}",
                 ingested,
                 len(entries),
             )
     finally:
         source.cleanup()
+
+    return ingested
+
+
+def _ingest_via_resolver(
+    origin_dict: dict[str, Any],
+    entries: list[dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
+    on_progress: ProgressCallback,
+) -> int:
+    """Try to ingest missing entries using resolve_file_from_origin (item-by-item).
+
+    Uses the importer-registry-based file resolver, which handles demo,
+    folder, converter, dupe_set, and any other origin type that has a
+    ``resolve_file()`` method on its importer.
+
+    Returns the number of successfully ingested medias, or -1 if the
+    media type cannot be determined (caller should fall back to the
+    full-importer path).
+    """
+    media_type_id = _media_type_from_origin(origin_dict)
+    if not media_type_id:
+        return -1
+
+    from vtsearch.models.resolver import embed_file, resolve_file_from_origin
+
+    ingested = 0
+    cid = next_media_id(medias)
+
+    for entry in entries:
+        origin_name = entry.get("origin_name", "")
+        filename = entry.get("filename", "")
+
+        file_path = resolve_file_from_origin(origin_dict, origin_name, filename)
+        if file_path is None:
+            continue
+
+        embedding = embed_file(file_path, media_type_id)
+        if embedding is None:
+            continue
+
+        file_bytes = file_path.read_bytes()
+        md5 = hashlib.md5(file_bytes).hexdigest()
+
+        media_data: dict[str, Any] = {
+            "id": cid,
+            "filename": origin_name or file_path.name,
+            "origin": origin_dict,
+            "origin_name": origin_name or file_path.name,
+            "md5": md5,
+            "embedding": embedding,
+            "media_bytes": file_bytes,
+            "media_path": str(file_path),
+        }
+
+        medias[cid] = media_data
+        cid += 1
+        ingested += 1
+
+        on_progress(
+            "ingesting",
+            f"Resolved {origin_name or filename}",
+            ingested,
+            len(entries),
+        )
 
     return ingested
 
@@ -145,7 +236,10 @@ def ingest_missing_medias(
 
     1. If a :class:`~vtsearch.datasets.sources.base.MediaSource` is
        available, fetch only the needed files individually (fast path).
-    2. Otherwise, fall back to running the full dataset importer and
+    2. If :func:`~vtsearch.models.resolver.resolve_file_from_origin` can
+       locate individual files (e.g. demo datasets with files on disk),
+       embed and ingest them one-by-one (medium path).
+    3. Otherwise, fall back to running the full dataset importer and
        cherry-picking matching medias (legacy path).
 
     Args:
@@ -183,6 +277,13 @@ def ingest_missing_medias(
         source_result = _ingest_via_source(origin_dict, entries, medias, on_progress)
         if source_result >= 0:
             total_ingested += source_result
+            continue
+
+        # Medium path: use resolve_file_from_origin for item-by-item resolution
+        # (handles demo datasets, importers with resolve_file, etc.)
+        resolver_result = _ingest_via_resolver(origin_dict, entries, medias, on_progress)
+        if resolver_result >= 0:
+            total_ingested += resolver_result
             continue
 
         # Legacy path: run the full importer

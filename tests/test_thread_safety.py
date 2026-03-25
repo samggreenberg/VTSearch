@@ -92,7 +92,7 @@ class TestToggleVote:
     def test_toggle_off_removes_click_time(self):
         good_votes[1] = None
         vote_click_times[1] = 1
-        _core._click_counter = 1
+        _core._set_click_counter(1)
         toggle_vote(1, "good")
         assert 1 not in vote_click_times
 

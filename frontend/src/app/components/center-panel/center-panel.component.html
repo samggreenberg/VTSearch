@@ -13,7 +13,7 @@
         @case ('video') {
           <vt-video-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
         }
-        @case ('paragraph') {
+        @case ('text') {
           <vt-text-viewer [media]="media"></vt-text-viewer>
         }
         @case ('document') {

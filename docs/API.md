@@ -34,10 +34,6 @@ Endpoints for embedders, clippers, and converters are under
 [Datasets](#datasets). Indicator score history and evaluation endpoints
 are under [Labeling Progress](#labeling-progress).
 
-Endpoints for embedders, clippers, and converters are under
-[Datasets](#datasets). Indicator score history and evaluation endpoints
-are under [Labeling Progress](#labeling-progress).
-
 ---
 
 ## Conventions
@@ -82,6 +78,25 @@ GET /api/auth/status
 Returns the active login provider name, current user, whether the request
 is authenticated, and whether the frontend should show a login screen.
 With `DefaultLoginProvider`, every request is authenticated as `"default"`.
+
+### Login
+
+```
+POST /api/auth/login
+```
+
+**Body:** `{"username": "...", "password": "..."}`
+
+→ Provider-specific response. With `DefaultLoginProvider`, returns 404.
+With `TrivialLoginProvider`, authenticates and returns `{"ok": true, "user": "..."}`.
+
+### Logout
+
+```
+POST /api/auth/logout
+```
+
+→ Provider-specific response. With `DefaultLoginProvider`, returns 404.
 
 ---
 
@@ -909,6 +924,36 @@ GET /api/dataset/progress
 {"status": "loading", "message": "Embedding medias…", "cur": 50, "total": 500}
 ```
 
+### Loading tasks
+
+```
+GET /api/dataset/loading-tasks
+```
+
+→ All active dataset loading tasks with their progress:
+
+```json
+{"tasks": [{"id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "cur": 50, "total": 500}]}
+```
+
+### Cancel loading
+
+```
+POST /api/dataset/cancel
+```
+
+Cancels all active loading tasks.
+
+→ `{"ok": true}`
+
+```
+POST /api/dataset/cancel/{task_id}
+```
+
+Cancels a specific loading task.
+
+→ `{"ok": true}` or `{"error": "Task not found"}` (404)
+
 ### List importers
 
 ```
@@ -1108,6 +1153,17 @@ POST /api/datasets/registry/{dataset_id}/load
 
 → `{"ok": true, "message": "Loading started"}`
 
+### Activate registered dataset
+
+```
+POST /api/datasets/registry/{dataset_id}/activate
+```
+
+Switches the active dataset context to the specified dataset (must already
+be loaded). This is an instant operation — no re-embedding.
+
+→ `{"ok": true}`
+
 ### Unload registered dataset
 
 ```
@@ -1133,6 +1189,19 @@ PUT /api/datasets/registry/{dataset_id}/rename
 **Body:** `{"name": "New Name"}`
 
 → `{"ok": true, "name": "New Name"}`
+
+### Set dataset readers
+
+```
+PUT /api/datasets/registry/{dataset_id}/readers
+```
+
+**Body:** `{"readers": ["user1", "user2"]}`
+
+Sets which users can access a dataset (multi-user deployments). Only the
+dataset owner or an admin can modify readers.
+
+→ `{"ok": true, "readers": ["user1", "user2"]}`
 
 ---
 
@@ -1263,8 +1332,8 @@ GET /api/settings
   "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
-  "grid_columns_left": {},
-  "grid_columns_right": {},
+  "grid_icon_size_left": {},
+  "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_types": [],
@@ -1274,14 +1343,16 @@ GET /api/settings
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
+  "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
+  "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
   "trainable_models_dir": "data/trainable_models"
 }
 ```
 
-Per-media-type settings (`view_mode_*`, `focus_mode_*`, `grid_columns_*`,
+Per-media-type settings (`view_mode_*`, `focus_mode_*`, `grid_icon_size_*`,
 `panel_pct_*`) use dicts keyed by media type ID (e.g. `{"audio": "list"}`).
 
 ### Update settings
@@ -1303,12 +1374,13 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
 (number), `audio_playing` (bool), `swipe_animation` (bool),
 `show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
-`focus_mode_left` (dict), `focus_mode_right` (dict), `grid_columns_left`
-(dict), `grid_columns_right` (dict), `panel_pct_left` (dict),
+`focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
+(dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),
 `panel_pct_right` (dict), `autoload_media_types` (list of strings),
 `autoload_media_embedders` (list of strings), `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
-`autopilot_hard_reds` (int), `autopilot_goal_diversity` (int),
+`autopilot_hard_reds` (int), `autopilot_resort_interval` (int),
+`autopilot_goal_diversity` (int), `autorun_detector_names` (list of strings),
 `saved_datasets_dir` (string path), `detectors_dir` (string path),
 `trainable_models_dir` (string path).
 

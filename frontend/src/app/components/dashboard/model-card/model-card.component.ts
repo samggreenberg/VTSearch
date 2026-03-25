@@ -21,6 +21,7 @@ export class ModelCardComponent {
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
   @Output() export = new EventEmitter<void>();
+  @Output() load = new EventEmitter<void>();
   @Output() autorunToggle = new EventEmitter<boolean>();
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
@@ -55,6 +56,11 @@ export class ModelCardComponent {
     }
   }
 
+  onLoad(event: MouseEvent): void {
+    event.stopPropagation();
+    this.load.emit();
+  }
+
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();
@@ -73,7 +79,8 @@ export class ModelCardComponent {
 
   formatDate(timestamp: number | null): string {
     if (!timestamp) return '-';
-    return new Date(timestamp * 1000).toLocaleDateString();
+    const d = new Date(timestamp * 1000);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   capitalizeType(type: string | undefined): string {

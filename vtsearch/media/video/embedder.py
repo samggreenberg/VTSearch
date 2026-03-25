@@ -62,7 +62,7 @@ class VideoXClipEmbedder(MediaEmbedder):
     # Model lifecycle
     # ------------------------------------------------------------------
 
-    def load_models(self) -> None:
+    def _load_models_impl(self) -> None:
         if self._model is not None:
             return
         import gc
@@ -75,6 +75,7 @@ class VideoXClipEmbedder(MediaEmbedder):
         gc.collect()
         cache_dir = str(MODELS_CACHE_DIR)
         self._on_progress("loading", "Loading X-CLIP model weights…", 0, 0)
+        XCLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
             self._on_progress, "Loading X-CLIP model weights…"
         ):
@@ -139,7 +140,7 @@ class VideoXClipEmbedder(MediaEmbedder):
                 print(f"Error: could not extract frames from {file_path}")
                 return None
 
-            inputs = self._processor(videos=list(frames), return_tensors="pt")
+            inputs = self._processor(images=[list(frames)], return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():

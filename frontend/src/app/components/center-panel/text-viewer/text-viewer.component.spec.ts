@@ -11,7 +11,7 @@ describe('TextViewerComponent', () => {
 
   const mockMedia: MediaItem = {
     id: 4,
-    type: 'paragraph',
+    type: 'text',
     filename: 'test.txt',
     md5: 'jkl012',
     custom_metadata: {},
@@ -51,7 +51,7 @@ describe('TextViewerComponent', () => {
     });
     fixture.detectChanges();
 
-    const req = httpMock.expectOne('/api/medias/4/paragraph');
+    const req = httpMock.expectOne('/api/medias/4/text');
     req.flush({ content: 'Hello world', word_count: 2, character_count: 11 });
     fixture.detectChanges();
 
@@ -66,7 +66,7 @@ describe('TextViewerComponent', () => {
     });
     fixture.detectChanges();
 
-    const req = httpMock.expectOne('/api/medias/4/paragraph');
+    const req = httpMock.expectOne('/api/medias/4/text');
     req.error(new ProgressEvent('error'));
     fixture.detectChanges();
 

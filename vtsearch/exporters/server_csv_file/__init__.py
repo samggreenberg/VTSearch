@@ -11,10 +11,21 @@ No additional pip packages are required; uses only Python's ``csv`` and
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from typing import Any
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+# Characters that trigger formula execution in spreadsheet applications.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    """Prefix formula-like cell values with a single quote to prevent injection."""
+    if value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
 
 
 class ServerCsvLabelsetExporter(LabelsetExporter):
@@ -33,18 +44,19 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         ExporterField(
             key="filepath",
             label="Server File Path",
-            field_type="text",
+            field_type="server_path",
             description=(
                 "Absolute or relative path on the server where the CSV "
                 "results file will be written.  Parent directories are "
                 "created automatically."
             ),
-            placeholder="/home/user/autodetect_results.csv",
-            default="autodetect_results.csv",
+            placeholder="data/autodetect_results.csv",
+            default="data/autodetect_results.csv",
         ),
     ]
 
     #: Base columns for label exports (used when no selected_columns provided).
+    #: ``origin`` is always appended as the last column (not listed here).
     _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
@@ -63,9 +75,18 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         return self._export_autodetect(results, filepath)
 
     def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
-        """Export labels with user-selected columns."""
+        """Export labels with user-selected columns.
+
+        The ``origin`` column is always written as the last column so
+        that the CSV can be re-imported without data loss.
+        """
         labels = results.get("labels", [])
-        columns: list[str] = results.get("selected_columns") or self._LABEL_BASE_COLUMNS
+        columns: list[str] = list(results.get("selected_columns") or self._LABEL_BASE_COLUMNS)
+
+        # Ensure origin is always the last column (required for re-import).
+        if "origin" in columns:
+            columns.remove("origin")
+        columns.append("origin")
 
         total_rows = 0
         with open(filepath, "w", newline="", encoding="utf-8") as f:
@@ -77,9 +98,17 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 row = []
                 for col in columns:
                     if col in entry:
-                        row.append(str(entry[col] if entry[col] is not None else ""))
+                        val = entry[col]
+                        # Serialize dicts (e.g. origin) as JSON so they
+                        # survive the CSV round-trip.
+                        if isinstance(val, dict):
+                            row.append(json.dumps(val, sort_keys=True))
+                        else:
+                            cell = str(val if val is not None else "")
+                            row.append(_sanitize_csv_cell(cell))
                     elif col in meta:
-                        row.append(str(meta[col] if meta[col] is not None else ""))
+                        cell = str(meta[col] if meta[col] is not None else "")
+                        row.append(_sanitize_csv_cell(cell))
                     else:
                         row.append("")
                 writer.writerow(row)
@@ -109,13 +138,13 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                         origin_str = Origin.from_dict(origin).display()
                     writer.writerow(
                         [
-                            detector_name,
+                            _sanitize_csv_cell(str(detector_name)),
                             threshold,
-                            hit.get("filename", ""),
-                            hit.get("category", ""),
+                            _sanitize_csv_cell(hit.get("filename", "")),
+                            _sanitize_csv_cell(hit.get("category", "")),
                             hit.get("score", ""),
-                            origin_str,
-                            hit.get("origin_name", ""),
+                            _sanitize_csv_cell(origin_str),
+                            _sanitize_csv_cell(hit.get("origin_name", "")),
                         ]
                     )
                     total_hits += 1

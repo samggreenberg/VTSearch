@@ -27,8 +27,8 @@ describe('SettingsModalComponent', () => {
 
   const mockMediaTypes = {
     media_types: [
-      { type_id: 'audio', name: 'Sound', icon: '\uD83D\uDD0A' },
-      { type_id: 'image', name: 'Image', icon: '\uD83D\uDDBC\uFE0F' },
+      { type_id: 'audio', name: 'Sound', icon: 'audio' },
+      { type_id: 'image', name: 'Image', icon: 'image' },
     ],
   };
 
@@ -182,8 +182,8 @@ describe('SettingsModalComponent', () => {
 
   it('should return media type icon for embedder', () => {
     flushInit();
-    expect(component.getMediaTypeIcon('audio')).toBe('\uD83D\uDD0A');
-    expect(component.getMediaTypeIcon('image')).toBe('\uD83D\uDDBC\uFE0F');
+    expect(component.getMediaTypeIcon('audio')).toBe('audio');
+    expect(component.getMediaTypeIcon('image')).toBe('image');
     expect(component.getMediaTypeIcon('unknown')).toBe('');
   });
 

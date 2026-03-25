@@ -38,7 +38,7 @@ def add_autorun_detector(
     Args:
         name: Unique human-readable name for the detector (e.g. ``"dog barks"``).
         media_type: The media type the detector was trained on (``"audio"``,
-            ``"video"``, ``"image"``, or ``"paragraph"``).
+            ``"video"``, ``"image"``, or ``"text"``).
         weights: Dict mapping layer-parameter names (e.g. ``"0.weight"``) to
             lists of float values, representing the serialised MLP state dict.
             May be ``None`` for an untrained detector stub.

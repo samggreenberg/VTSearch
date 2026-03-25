@@ -10,7 +10,6 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
-    intercept_tqdm_progress,
 )
 
 
@@ -45,7 +44,7 @@ class VideoMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "🎬"
+        return "video"
 
     # ------------------------------------------------------------------
     # File import
@@ -172,8 +171,12 @@ class VideoMediaType(MediaType):
 
         if getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading video embedding model…", 0, 0)
-            with intercept_tqdm_progress(on_progress):
+            original_cb = embedder._on_progress
+            embedder._on_progress = on_progress
+            try:
                 embedder.load_models()
+            finally:
+                embedder._on_progress = original_cb
 
         clip_id = 1
         total = len(video_files)
@@ -182,7 +185,7 @@ class VideoMediaType(MediaType):
 
         for i, (video_path, meta) in enumerate(video_files):
             rel_name = f"{meta['category']}/{video_path.name}"
-            on_progress("embedding", f"Embedding {rel_name} ({i + 1}/{total})", i + 1, total)
+            on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
             embedding = embedder.embed_media(video_path)
             if embedding is None:
                 continue

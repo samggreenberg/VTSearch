@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
 
 @Component({
@@ -7,7 +7,7 @@ import { MediaItem } from '../../../models/api.models';
   templateUrl: './video-player.component.html',
   styleUrl: './video-player.component.scss',
 })
-export class VideoPlayerComponent implements OnChanges {
+export class VideoPlayerComponent implements OnChanges, OnDestroy {
   @Input() media!: MediaItem;
   @Input() volume = 1;
   @Input() audioPlaying = true;
@@ -26,6 +26,15 @@ export class VideoPlayerComponent implements OnChanges {
     }
     if (changes['audioPlaying'] && !changes['media'] && this.videoRef?.nativeElement) {
       this.syncPlaybackState();
+    }
+  }
+
+  ngOnDestroy(): void {
+    const video = this.videoRef?.nativeElement;
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
     }
   }
 

@@ -56,8 +56,9 @@ export class LeftViewSettingsModalComponent implements OnInit {
   onViewModeChange(typeId: string, value: string): void {
     const dict = (this.settings.view_mode_left as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['view_mode_left'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['view_mode_left'] = updated;
+    this.saveField({ view_mode_left: updated as Record<string, 'grid' | 'list'> });
   }
 
   getViewMode(typeId: string): string {
@@ -69,8 +70,9 @@ export class LeftViewSettingsModalComponent implements OnInit {
   onGridIconSizeChange(typeId: string, value: string): void {
     const dict = (this.settings.grid_icon_size_left as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['grid_icon_size_left'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['grid_icon_size_left'] = updated;
+    this.saveField({ grid_icon_size_left: updated });
   }
 
   getGridIconSize(typeId: string): string {
@@ -82,8 +84,9 @@ export class LeftViewSettingsModalComponent implements OnInit {
   onFocusModeChange(typeId: string, value: string): void {
     const dict = (this.settings.focus_mode_left as Record<string, string>) || {};
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['focus_mode_left'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['focus_mode_left'] = updated;
+    this.saveField({ focus_mode_left: updated as Record<string, 'click' | 'hover'> });
   }
 
   getFocusMode(typeId: string): string {
@@ -96,8 +99,9 @@ export class LeftViewSettingsModalComponent implements OnInit {
     const clamped = Math.max(10, Math.min(90, Math.round(value)));
     const dict = (this.settings.panel_pct_left as Record<string, number>) || {};
     dict[typeId] = clamped;
-    (this.settings as Record<string, unknown>)['panel_pct_left'] = { ...dict };
-    this.save();
+    const updated = { ...dict };
+    (this.settings as Record<string, unknown>)['panel_pct_left'] = updated;
+    this.saveField({ panel_pct_left: updated });
   }
 
   getPanelPct(typeId: string): number {
@@ -106,8 +110,11 @@ export class LeftViewSettingsModalComponent implements OnInit {
     return dict[typeId] ?? 50;
   }
 
-  private save(): void {
-    this.settingsState.update(this.settings).subscribe({
+  private saveField(changes: Partial<AppSettings>): void {
+    this.settingsState.update(changes).subscribe({
+      next: (updated) => {
+        this.settings = updated;
+      },
       error: () => {
         this.error = 'Failed to save settings';
       },

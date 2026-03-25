@@ -4,8 +4,10 @@ Maintains a JSON manifest at ``data/dataset_registry.json`` that tracks every
 dataset the user has loaded.  Each entry stores enough metadata to display the
 dataset in the dashboard grid and to re-load it from its saved ``.pkl`` file.
 
-At most one dataset is *loaded* into memory at a time, but the registry
-remembers all datasets across app restarts.
+Multiple datasets may be *loaded* into memory simultaneously (each in its own
+``DatasetContext``), but only one is *active* at a time.  The registry tracks
+which datasets are loaded via ``_loaded_ids``, and which is active via
+``_active_loaded_id``.
 """
 
 from __future__ import annotations
@@ -39,7 +41,11 @@ _lock = threading.RLock()
 # In-memory cache — loaded once from disk, written back on every mutation.
 _entries: list[dict[str, Any]] | None = None
 
-# The ``id`` of the currently loaded dataset entry, or ``None``.
+# The set of dataset IDs that are currently loaded in memory.
+_loaded_ids: set[str] = set()
+
+# The ``id`` of the currently *active* (UI-facing) loaded dataset, or ``None``.
+# This is a subset of ``_loaded_ids`` — the one the user is interacting with.
 _loaded_id: str | None = None
 
 
@@ -161,6 +167,7 @@ def unregister_dataset(dataset_id: str) -> bool:
                 if pkl.is_file():
                     pkl.unlink(missing_ok=True)
                 entries.pop(i)
+                _loaded_ids.discard(dataset_id)
                 if _loaded_id == dataset_id:
                     _loaded_id = None
                 _save(entries)
@@ -193,16 +200,51 @@ def update_dataset(dataset_id: str, **fields: Any) -> bool:
 
 
 def get_loaded_id() -> str | None:
-    """Return the ID of the currently loaded dataset, or ``None``."""
+    """Return the ID of the currently *active* loaded dataset, or ``None``."""
     with _lock:
         return _loaded_id
 
 
 def set_loaded_id(dataset_id: str | None) -> None:
-    """Mark *dataset_id* as the currently loaded dataset (or ``None``)."""
+    """Mark *dataset_id* as the currently active loaded dataset (or ``None``).
+
+    Also adds *dataset_id* to the set of loaded IDs if non-None.
+    """
     global _loaded_id
     with _lock:
         _loaded_id = dataset_id
+        if dataset_id is not None:
+            _loaded_ids.add(dataset_id)
+
+
+def get_loaded_ids() -> set[str]:
+    """Return the set of all currently loaded (in-memory) dataset IDs."""
+    with _lock:
+        return set(_loaded_ids)
+
+
+def add_loaded_id(dataset_id: str) -> None:
+    """Mark *dataset_id* as loaded in memory (without making it active)."""
+    with _lock:
+        _loaded_ids.add(dataset_id)
+
+
+def remove_loaded_id(dataset_id: str) -> None:
+    """Remove *dataset_id* from the set of loaded datasets.
+
+    If it was also the active dataset, clears the active pointer.
+    """
+    global _loaded_id
+    with _lock:
+        _loaded_ids.discard(dataset_id)
+        if _loaded_id == dataset_id:
+            _loaded_id = None
+
+
+def is_loaded(dataset_id: str) -> bool:
+    """Return ``True`` if the dataset is currently loaded in memory."""
+    with _lock:
+        return dataset_id in _loaded_ids
 
 
 def find_by_pkl_path(pkl_path: str) -> dict[str, Any] | None:
@@ -281,3 +323,4 @@ def reset_for_tests() -> None:
     with _lock:
         _entries = None
         _loaded_id = None
+        _loaded_ids.clear()

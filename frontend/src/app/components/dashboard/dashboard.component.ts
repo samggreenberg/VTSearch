@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -11,7 +11,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { AuthService } from '../../services/auth.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, ModelRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -19,6 +19,7 @@ import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { IconComponent } from '../icon/icon.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -32,6 +33,7 @@ import { DetectorExportModalComponent } from '../modals/detector-export-modal/de
     DatasetImporterModalComponent,
     NewModelModalComponent,
     DetectorExportModalComponent,
+    IconComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -43,6 +45,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
+
+  loadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
   newModelModalOpen = false;
@@ -56,11 +60,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
   modelSortColumn = 'name';
   modelSortAsc = true;
 
+  // Column resize state
+  datasetColWidths: Record<string, number> = {};
+  modelColWidths: Record<string, number> = {};
+  datasetsTableFixed = false;
+  modelsTableFixed = false;
+  datasetsTableWidth = 0;
+  modelsTableWidth = 0;
+  private datasetsResizeInit = false;
+  private modelsResizeInit = false;
+  private resizeState: {
+    startX: number;
+    startWidth: number;
+    table: 'datasets' | 'models';
+    col: string;
+    dragged: boolean;
+    tableEl: HTMLTableElement;
+  } | null = null;
+
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
+  private completedTaskIds = new Set<string>();
 
   currentUser = '';
   isDefaultLogin = true;
@@ -129,6 +152,168 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  // --- Column resize ---
+
+  startResize(event: MouseEvent, table: 'datasets' | 'models', col: string): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
+    const tableEl = th.closest('table') as HTMLTableElement;
+    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+    const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
+
+    if (!initialized) {
+      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+      let totalWidth = 0;
+      ths.forEach((t) => {
+        const colKey = t.getAttribute('data-col');
+        const w = t.offsetWidth;
+        if (colKey) colWidths[colKey] = w;
+        totalWidth += w;
+      });
+      if (table === 'datasets') {
+        this.datasetsTableWidth = totalWidth;
+        this.datasetsResizeInit = true;
+        this.datasetsTableFixed = true;
+      } else {
+        this.modelsTableWidth = totalWidth;
+        this.modelsResizeInit = true;
+        this.modelsTableFixed = true;
+      }
+    }
+
+    this.resizeState = {
+      startX: event.clientX,
+      startWidth: colWidths[col] ?? 100,
+      table,
+      col,
+      dragged: false,
+      tableEl,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onColResizeMove(event: MouseEvent): void {
+    if (!this.resizeState) return;
+    const delta = event.clientX - this.resizeState.startX;
+    if (Math.abs(delta) > 3) this.resizeState.dragged = true;
+    if (!this.resizeState.dragged) return;
+    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+    const newWidth = Math.max(30, this.resizeState.startWidth + delta);
+    const prevWidth = colWidths[this.resizeState.col] ?? this.resizeState.startWidth;
+    colWidths[this.resizeState.col] = newWidth;
+    const widthChange = newWidth - prevWidth;
+    if (this.resizeState.table === 'datasets') {
+      this.datasetsTableWidth = Math.max(100, this.datasetsTableWidth + widthChange);
+    } else {
+      this.modelsTableWidth = Math.max(100, this.modelsTableWidth + widthChange);
+    }
+  }
+
+  @HostListener('document:mouseup')
+  onColResizeEnd(): void {
+    if (!this.resizeState) return;
+    const state = this.resizeState;
+    this.resizeState = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    if (!state.dragged) {
+      this.autoSizeColumn(state.tableEl, state.table, state.col);
+    }
+  }
+
+  private autoSizeColumn(tableEl: HTMLTableElement, table: 'datasets' | 'models', col: string): void {
+    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+
+    // Find the column index from the header
+    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+    let colIndex = -1;
+    for (let i = 0; i < ths.length; i++) {
+      if (ths[i].getAttribute('data-col') === col) {
+        colIndex = i;
+        break;
+      }
+    }
+    if (colIndex < 0) return;
+
+    // Temporarily switch to auto layout so content determines width
+    const wasFixed = tableEl.classList.contains('table-fixed');
+    const prevTableWidth = tableEl.style.width;
+    const prevColWidth = ths[colIndex].style.width;
+
+    tableEl.classList.remove('table-fixed');
+    // Force width:auto so the table shrinks to content instead of stretching
+    // to 100% (the CSS class default).  Without this, the browser distributes
+    // extra container space across columns, inflating every measurement.
+    tableEl.style.width = 'auto';
+    ths[colIndex].style.width = '';
+
+    // Measure the natural width of the column from body cells.
+    let maxWidth = 0;
+    const rows = tableEl.querySelectorAll('tbody tr');
+    rows.forEach((row) => {
+      const cell = row.children[colIndex] as HTMLElement | undefined;
+      if (cell) {
+        // For cells with colspan, skip (loading task rows)
+        if (cell.hasAttribute('colspan')) return;
+        maxWidth = Math.max(maxWidth, cell.scrollWidth);
+      }
+    });
+    // Fall back to header width only when the table has no body rows
+    if (maxWidth === 0) {
+      maxWidth = ths[colIndex].offsetWidth;
+    }
+
+    // Add a small buffer for padding
+    maxWidth = Math.max(30, maxWidth + 2);
+
+    // Apply the measured width and restore fixed layout
+    const prevWidth = colWidths[col] ?? 0;
+    colWidths[col] = maxWidth;
+
+    if (table === 'datasets') {
+      this.datasetsTableFixed = true;
+      this.datasetsResizeInit = true;
+      // Recalculate total table width
+      let total = 0;
+      ths.forEach((t) => {
+        const key = t.getAttribute('data-col');
+        if (key && key !== col) {
+          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
+          total += colWidths[key];
+        } else if (key === col) {
+          total += maxWidth;
+        }
+      });
+      this.datasetsTableWidth = total;
+    } else {
+      this.modelsTableFixed = true;
+      this.modelsResizeInit = true;
+      let total = 0;
+      ths.forEach((t) => {
+        const key = t.getAttribute('data-col');
+        if (key && key !== col) {
+          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
+          total += colWidths[key];
+        } else if (key === col) {
+          total += maxWidth;
+        }
+      });
+      this.modelsTableWidth = total;
+    }
+
+    // Restore layout (Angular binding will apply on next change detection).
+    // Clear the temporary 'auto' override so Angular bindings take over.
+    tableEl.style.width = prevTableWidth;
+    if (wasFixed) {
+      tableEl.classList.add('table-fixed');
+    }
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -150,6 +335,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get progressMessage(): string {
     return this.datasetState.progressMessage;
+  }
+
+  get errorMessage(): string {
+    return this.datasetState.errorMessage;
+  }
+
+  /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
+  get inlineTaskMap(): Map<string, LoadingTask> {
+    const map = new Map<string, LoadingTask>();
+    const datasetIds = new Set(this.datasets.map((d) => d.id));
+    for (const task of this.loadingTasks) {
+      if (task.dataset_id && datasetIds.has(task.dataset_id)) {
+        map.set(task.dataset_id, task);
+      }
+    }
+    return map;
+  }
+
+  /** Loading tasks that have no matching dataset row (new imports, etc.). */
+  get orphanLoadingTasks(): LoadingTask[] {
+    const datasetIds = new Set(this.datasets.map((d) => d.id));
+    return this.loadingTasks.filter((t) => !t.dataset_id || !datasetIds.has(t.dataset_id));
+  }
+
+  getInlineTask(datasetId: string): LoadingTask | undefined {
+    return this.inlineTaskMap.get(datasetId);
+  }
+
+  dismissError(): void {
+    this.datasetState.setErrorMessage('');
   }
 
   refresh(): void {
@@ -256,6 +471,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadDataset(dataset: DatasetRegistryEntry): void {
+    this.datasetsApi.loadRegistered(dataset.id).subscribe({
+      next: () => this.startProgressPolling(),
+    });
+  }
+
+  loadModel(model: ModelRegistryEntry): void {
+    this.modelsApi.loadModel(model.id).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
   toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
     const detectorName = model.detector_name || model.name;
     this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
@@ -277,6 +504,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Importer modal ---
 
+  /** Guess the media type the user likely wants based on existing datasets/models. */
+  get guessedMediaType(): string {
+    const types = new Set<string>();
+    for (const d of this.datasets) {
+      if (d.media_type) types.add(d.media_type);
+    }
+    for (const m of this.models) {
+      if (m.media_type) types.add(m.media_type);
+    }
+    return types.size === 1 ? [...types][0] : '';
+  }
+
   openImporterModal(): void {
     this.importerModalOpen = true;
   }
@@ -292,9 +531,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
     this.importerModalOpen = false;
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading demo: ${demo.label}...`);
-    this.progressIndeterminate = true;
     const params: Record<string, string> = {};
     if (demo.embedder) {
       params['embedder'] = demo.embedder;
@@ -306,14 +542,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.startProgressPolling();
       },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
-      },
     });
   }
 
   // --- New model modal ---
+
+  /** Media type used as default for new models: single-selected dataset wins, then active dataset. */
+  get activeDatasetMediaType(): string {
+    if (this.selectedDatasetIds.size === 1) {
+      const selId = [...this.selectedDatasetIds][0];
+      const sel = this.datasets.find((d) => d.id === selId);
+      if (sel?.media_type) return sel.media_type;
+    }
+    const active = this.datasets.find((d) => d.active);
+    return active?.media_type || '';
+  }
 
   openNewModelModal(): void {
     this.newModelModalOpen = true;
@@ -334,48 +577,69 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.cancelIngest().subscribe();
   }
 
+  cancelLoadingTask(taskId: string): void {
+    this.datasetsApi.cancelTask(taskId).subscribe();
+  }
+
+  dismissLoadingTask(taskId: string): void {
+    this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
+  }
+
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
-    this.datasetState.setLoading(true);
-    this.progressIndeterminate = true;
+    this.datasetState.setErrorMessage('');
     this.polling$.next(); // cancel previous polling
+    this.completedTaskIds.clear();
 
     timer(0, 1000)
       .pipe(
         takeUntil(this.polling$),
         takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getProgress().pipe(
+        switchMap(() => this.datasetsApi.getLoadingTasks().pipe(
           catchError(() => EMPTY),
         )),
       )
       .subscribe({
-        next: (progress: any) => {
-          if (progress.current != null && progress.total != null && progress.total > 0) {
-            this.progressIndeterminate = false;
-            this.progressValue = progress.current;
-            this.progressTotal = progress.total;
-          } else {
-            this.progressIndeterminate = true;
-          }
+        next: (tasks: LoadingTask[]) => {
+          // Separate active from finished
+          const active = tasks.filter((t) => t.status !== 'idle');
+          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
+          const cancelled = errored.filter((t) => t.error === 'Cancelled');
+          const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          // Build message with step info and percentage when available
-          let msg = progress.message || 'Loading...';
-          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
-            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
-          }
-          if (progress.current != null && progress.total != null && progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
-            msg += ` (${pct}%)`;
-          }
-          this.datasetState.setProgressMessage(msg);
+          // Show both active tasks and failed tasks (so users see the error)
+          this.loadingTasks = [...active, ...failed];
+          this.datasetState.setLoadingTasks(active);
 
-          if (progress.status === 'idle' || progress.status === 'error') {
-            this.datasetState.setLoading(false);
-            this.progressIndeterminate = false;
-            this.polling$.next();
+          // Detect tasks that just completed successfully so we can
+          // refresh the registry immediately (not only when ALL finish).
+          const justFinished = tasks.filter(
+            (t) => t.status === 'idle' && !t.error && !this.completedTaskIds.has(t.task_id),
+          );
+          for (const t of justFinished) {
+            this.completedTaskIds.add(t.task_id);
+          }
+          if (justFinished.length > 0) {
             this.datasetState.refresh();
-            if (progress.status === 'idle' && onComplete) {
+          }
+
+          // Also set the top-level error banner for failed tasks
+          for (const t of failed) {
+            this.datasetState.setErrorMessage(t.error!);
+          }
+
+          // Keep legacy loading flag for backward compat
+          this.datasetState.setLoading(active.length > 0);
+
+          if (active.length === 0) {
+            // No more active tasks — stop polling
+            this.polling$.next();
+            // Refresh unless we just did (justFinished already triggered it)
+            if (justFinished.length === 0) {
+              this.datasetState.refresh();
+            }
+            if (onComplete && failed.length === 0) {
               onComplete();
             }
           }
@@ -506,7 +770,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
-    return 'Label the selected dataset to train the selected model';
+    return 'Open Train Mode with the selected dataset and model';
   }
 
   private storeSelectedModelTextQuery(): void {
@@ -532,24 +796,37 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
     };
 
-    if (dataset.loaded) {
+    if (dataset.active) {
       navigateToLabel();
       return;
     }
 
-    // Dataset not loaded — load it first, then navigate
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
-    this.progressIndeterminate = true;
+    if (dataset.loaded) {
+      // Already in memory — activate instantly (no progress needed).
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => {
+          this.datasetState.refresh();
+          navigateToLabel();
+        },
+        error: () => navigateToLabel(),
+      });
+      return;
+    }
+
+    // Dataset not loaded — load it first, then activate and navigate.
+    // The background loader only auto-activates when no other dataset is
+    // active, so we must explicitly activate after loading completes.
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
-          navigateToLabel();
+          this.datasetsApi.activateRegistered(dataset.id).subscribe({
+            next: () => {
+              this.datasetState.refresh();
+              navigateToLabel();
+            },
+            error: () => navigateToLabel(),
+          });
         });
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
       },
     });
   }
@@ -561,32 +838,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.models.find((m) => this.selectedModelIds.has(m.id));
     if (!model) return;
 
-    // Store model info in the find session service
+    // Store model and dataset info in the find session service
     this.findSession.modelId = model.id;
     this.findSession.modelName = model.name;
+    this.findSession.datasetId = dataset.id;
 
     const navigateToFind = (): void => {
       this.router.navigate(['/find']);
     };
 
-    if (dataset.loaded) {
+    if (dataset.active) {
       navigateToFind();
       return;
     }
 
-    // Dataset not loaded — load it first, then navigate
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage(`Loading ${dataset.name}...`);
-    this.progressIndeterminate = true;
+    if (dataset.loaded) {
+      // Already in memory — activate instantly (no progress needed).
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => {
+          this.datasetState.refresh();
+          navigateToFind();
+        },
+        error: () => navigateToFind(),
+      });
+      return;
+    }
+
+    // Dataset not loaded — load it first, then activate and navigate.
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
       next: () => {
         this.startProgressPolling(() => {
-          navigateToFind();
+          this.datasetsApi.activateRegistered(dataset.id).subscribe({
+            next: () => {
+              this.datasetState.refresh();
+              navigateToFind();
+            },
+            error: () => navigateToFind(),
+          });
         });
-      },
-      error: () => {
-        this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
       },
     });
   }
@@ -654,8 +943,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
           }
           if (progress.current != null && progress.total != null && progress.total > 0) {
-            const pct = Math.min(100, Math.round((progress.current / progress.total) * 100));
-            msg += ` (${pct}%)`;
+            const fraction = `(${progress.current}/${progress.total})`;
+            const stepEnd = msg.indexOf('] ');
+            if (stepEnd !== -1) {
+              msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+            } else {
+              msg = fraction + ' ' + msg;
+            }
           }
           this.datasetState.setProgressMessage(msg);
         },
@@ -742,5 +1036,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   closeFindResults(): void {
     this.findResultsOpen = false;
+  }
+
+  // --- Loading task helpers ---
+
+  taskProgressMessage(task: LoadingTask): string {
+    let msg = task.message || 'Loading...';
+    if (task.step != null && task.total_steps != null && task.total_steps > 1) {
+      msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
+    }
+    if (task.current != null && task.total != null && task.total > 0) {
+      const fraction = `(${task.current}/${task.total})`;
+      const stepEnd = msg.indexOf('] ');
+      if (stepEnd !== -1) {
+        msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
+      } else {
+        msg = fraction + ' ' + msg;
+      }
+    }
+    return msg;
+  }
+
+  taskIsIndeterminate(task: LoadingTask): boolean {
+    return !(task.current != null && task.total != null && task.total > 0);
   }
 }

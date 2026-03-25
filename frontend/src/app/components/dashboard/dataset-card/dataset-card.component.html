@@ -15,64 +15,89 @@
     </span>
   }
 </td>
-<td class="type-cell text-center">
-  @switch (dataset.media_type) {
-    @case ('audio') {
-      <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-    }
-    @case ('image') {
-      <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-    }
-    @case ('text') {
-      <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-    }
-    @case ('video') {
-      <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-    }
-    @case ('document') {
-      <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-    }
-  }
-  {{ capitalizeType(dataset.media_type) }}
-</td>
-<td class="text-center">{{ dataset.num_items ?? '-' }}</td>
-<td class="text-center">{{ dataset.num_dupes ?? 0 }}</td>
-<td class="text-center">{{ formatDate(dataset.created_at) }}</td>
-<td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
-<td class="clipper-cell text-center">{{ dataset.clipper || '-' }}</td>
-<td class="embedder-cell text-center">{{ dataset.embedder || '-' }}</td>
-@if (!isDefaultLogin) {
-  <td class="text-center">{{ dataset.created_by || '-' }}</td>
-  <td class="text-center" [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
-}
-<td class="text-center">
-  @if (dataset.loaded) {
-    <span class="check" aria-label="Loaded">&#10003;</span>
-  } @else {
-    <span class="dim">-</span>
-  }
-</td>
-<td class="actions-cell text-center">
+@if (loadingTask && !loadingTask.error) {
+  <!-- Inline progress: replace remaining columns with a progress bar -->
+  <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+    <div class="inline-loading-progress">
+      <span class="progress-msg">{{ taskProgressMessage }}</span>
+      <vt-progress-bar
+        [value]="loadingTask.current"
+        [max]="loadingTask.total"
+        [indeterminate]="taskIsIndeterminate"
+      />
+      <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel this dataset load">Cancel</button>
+    </div>
+  </td>
+} @else if (loadingTask && loadingTask.error) {
+  <!-- Inline error: replace remaining columns with error message -->
+  <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+    <div class="inline-loading-progress inline-loading-failed">
+      <span class="error-msg">Failed: {{ loadingTask.error }}</span>
+      <button class="btn btn--cancel btn--sm" (click)="onDismissTask($event)" title="Dismiss this error">Dismiss</button>
+    </div>
+  </td>
+} @else {
+  <td>
+    <span class="type-cell">
+      @switch (dataset.media_type) {
+        @case ('audio') {
+          <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        }
+        @case ('image') {
+          <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        }
+        @case ('text') {
+          <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        }
+        @case ('video') {
+          <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        }
+        @case ('document') {
+          <svg class="type-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+        }
+      }
+      {{ capitalizeType(dataset.media_type) }}
+    </span>
+  </td>
+  <td>{{ dataset.num_items ?? '-' }}</td>
+  <td>{{ dataset.num_dupes ?? 0 }}</td>
+  <td>{{ formatDate(dataset.created_at) }}</td>
+  <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
+  <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
+  <td class="embedder-cell">{{ (dataset.embedder | titlecase) || '-' }}</td>
   @if (!isDefaultLogin) {
-    <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
+    <td>{{ dataset.created_by || '-' }}</td>
+    <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
+  }
+  <td>
+    @if (dataset.loaded) {
+      <span class="status-loaded" aria-label="Loaded">&#10003;</span>
+    } @else {
+      <span class="load-action" (click)="onLoad($event)" title="Click to load this dataset" aria-label="Load dataset">-</span>
+    }
+  </td>
+  <td class="actions-cell">
+    @if (!isDefaultLogin) {
+      <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </button>
+    }
+    <button class="edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
       </svg>
     </button>
-  }
-  <button class="edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-    </svg>
-  </button>
-  <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete dataset" title="Delete">
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="3 6 5 6 21 6"></polyline>
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-      <path d="M10 11v6"></path>
-      <path d="M14 11v6"></path>
-      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-    </svg>
-  </button>
-</td>
+    <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete dataset" title="Delete">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+      </svg>
+    </button>
+  </td>
+}

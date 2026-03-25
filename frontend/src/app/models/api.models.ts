@@ -12,7 +12,7 @@ export interface MediaItem {
   description?: string;
 }
 
-export interface ParagraphResponse {
+export interface TextResponse {
   content: string;
   word_count?: number;
   character_count?: number;
@@ -142,7 +142,32 @@ export interface DatasetStatus {
 }
 
 export interface DatasetProgress {
+  status?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  step?: number;
+  total_steps?: number;
+  error?: string;
   [key: string]: unknown;
+}
+
+export interface LoadingTask {
+  task_id: string;
+  name: string;
+  status: string;
+  message: string;
+  current: number;
+  total: number;
+  step?: number;
+  total_steps?: number;
+  error?: string;
+  created_at: number;
+  dataset_id?: string;
+}
+
+export interface LoadingTasksResponse {
+  tasks: LoadingTask[];
 }
 
 export interface ImporterInfo {
@@ -206,6 +231,7 @@ export interface DatasetRegistryEntry {
   name: string;
   media_type: string;
   loaded?: boolean;
+  active?: boolean;
   readers?: string[];
   [key: string]: unknown;
 }
@@ -322,6 +348,7 @@ export interface ModelRegistryEntry {
   text_query?: string;
   media_example?: string;
   detector_name?: string;
+  detector_loaded?: boolean;
   [key: string]: unknown;
 }
 

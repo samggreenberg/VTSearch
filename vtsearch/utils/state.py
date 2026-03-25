@@ -17,21 +17,29 @@ from typing import Any
 
 # Re-export all state variables from state_core --------------------------
 from vtsearch.utils.state_core import (  # noqa: F401
-    _click_counter,
-    _dataset_display_name,
-    _diversity_tree,
     _state_lock,
     autorun_detectors,
     autorun_extractors,
     autorun_localizers,
     bad_votes,
     good_votes,
-    inclusion,
     label_history,
     last_learned_scores,
     medias,
     textsort_suggestions,
     vote_click_times,
+)
+# Re-export context management functions ---------------------------------
+from vtsearch.utils.state_core import (  # noqa: F401
+    DatasetContext,
+    clear_all_contexts,
+    get_active_context,
+    get_active_dataset_id,
+    get_context,
+    list_loaded_dataset_ids,
+    register_context,
+    set_active_dataset_id,
+    unregister_context,
 )
 import vtsearch.utils.state_core as _core  # noqa: F401 — for conftest direct access
 
@@ -84,6 +92,7 @@ from vtsearch.utils.state_processors import (  # noqa: F401
 # Re-export diversity tree --------------------------------------------------
 from vtsearch.utils.state_diversity import (  # noqa: F401
     build_diversity_tree,
+    build_diversity_tree_for_context,
     diversity_tree_label,
     diversity_tree_next_sample,
     diversity_tree_unlabel,
@@ -141,8 +150,8 @@ def clear_medias() -> None:
 
     with _state_lock:
         medias.clear()
-        _core._diversity_tree = None
-        _core._dataset_display_name = None
+        _core._set_diversity_tree(None)
+        _core._set_dataset_display_name(None)
         clear_progress_cache()
     gc.collect()
 
@@ -165,11 +174,13 @@ def get_inclusion() -> int:
     that it survives app restarts.
     """
     with _state_lock:
-        if _core.inclusion is None:
+        val = _core._get_inclusion()
+        if val is None:
             from vtsearch import settings
 
-            _core.inclusion = settings.get_inclusion()
-        return _core.inclusion
+            val = settings.get_inclusion()
+            _core._set_inclusion(val)
+        return val
 
 
 def set_inclusion(value: int) -> None:
@@ -181,24 +192,24 @@ def set_inclusion(value: int) -> None:
     from vtsearch import settings
 
     with _state_lock:
-        if value != _core.inclusion:
+        if value != _core._get_inclusion():
             from vtsearch.models.progress import clear_progress_cache
 
             clear_progress_cache()
-        _core.inclusion = value
+        _core._set_inclusion(value)
         settings.set_inclusion(value)
 
 
 def get_dataset_display_name() -> str | None:
     """Return the current dataset display name override, or ``None``."""
     with _state_lock:
-        return _core._dataset_display_name
+        return _core._get_dataset_display_name()
 
 
 def set_dataset_display_name(name: str | None) -> None:
     """Set (or clear) the dataset display name override."""
     with _state_lock:
-        _core._dataset_display_name = name
+        _core._set_dataset_display_name(name)
 
 
 def get_calibrate_count() -> int:

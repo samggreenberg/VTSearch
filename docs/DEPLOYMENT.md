@@ -246,7 +246,9 @@ and auto-saved on every change. Schema:
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
+  "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
+  "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
   "trainable_models_dir": "data/trainable_models"

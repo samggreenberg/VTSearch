@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import io
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request, send_file
+from flask import Blueprint, Response, jsonify, make_response, request, send_file
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
@@ -24,6 +26,89 @@ from vtsearch.utils import (
 
 medias_bp = Blueprint("medias", __name__)
 
+# Extensions the browser's <video> element can play natively.
+_BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
+
+
+def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
+    """Transcode video bytes to browser-playable MP4.
+
+    Tries ffmpeg first (preserves audio, H.264 output).  Falls back to OpenCV
+    (video-only, MPEG-4 Part 2) so that videos are at least viewable when
+    ffmpeg is not installed.
+
+    Returns the MP4 bytes on success, or ``None`` if transcoding fails.
+    """
+    ext = Path(filename).suffix or ".avi"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = Path(tmpdir) / f"input{ext}"
+        dst_path = Path(tmpdir) / "output.mp4"
+        src_path.write_bytes(src_bytes)
+
+        # --- Attempt 1: ffmpeg (best quality, preserves audio) -----------
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(src_path),
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "23",
+                    "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    str(dst_path),
+                ],
+                capture_output=True,
+                timeout=120,
+                check=True,
+            )
+        except FileNotFoundError:
+            pass  # ffmpeg not installed — fall through to cv2
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
+        else:
+            if dst_path.exists() and dst_path.stat().st_size > 0:
+                return dst_path.read_bytes()
+
+        # --- Attempt 2: OpenCV (video-only, no audio) --------------------
+        try:
+            import cv2  # noqa: PLC0415
+
+            cap = cv2.VideoCapture(str(src_path))
+            if not cap.isOpened():
+                return None
+            try:
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if fps <= 0:
+                    fps = 25.0
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                if w <= 0 or h <= 0:
+                    return None
+
+                fourcc = cv2.VideoWriter.fourcc(*"mp4v")
+                cv2_dst = Path(tmpdir) / "cv2_output.mp4"
+                writer = cv2.VideoWriter(str(cv2_dst), fourcc, fps, (w, h))
+                if not writer.isOpened():
+                    return None
+                try:
+                    while True:
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        writer.write(frame)
+                finally:
+                    writer.release()
+            finally:
+                cap.release()
+
+            if cv2_dst.exists() and cv2_dst.stat().st_size > 0:
+                return cv2_dst.read_bytes()
+        except Exception:
+            pass
+
+    return None
+
 
 def _resolve_bytes(media: dict) -> bytes | None:
     """Return media bytes, lazy-loading from media_path if needed."""
@@ -37,6 +122,42 @@ def _resolve_bytes(media: dict) -> bytes | None:
             with open(p, "rb") as f:
                 return f.read()
     return None
+
+
+def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Response:
+    """Serve video bytes with HTTP range-request support.
+
+    Browsers require range requests to read video metadata (duration, codecs)
+    and to support seeking.  Without this, ``<video>`` elements show "0:00".
+    """
+    total = len(data)
+    range_header = request.headers.get("Range")
+
+    if range_header:
+        # Parse "bytes=START-END" (END is optional)
+        try:
+            byte_range = range_header.replace("bytes=", "").strip()
+            parts = byte_range.split("-", 1)
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else total - 1
+        except (ValueError, IndexError):
+            start, end = 0, total - 1
+
+        end = min(end, total - 1)
+        length = end - start + 1
+
+        resp = make_response(data[start : end + 1])
+        resp.status_code = 206
+        resp.headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        resp.headers["Content-Length"] = str(length)
+    else:
+        resp = make_response(data)
+        resp.headers["Content-Length"] = str(total)
+
+    resp.headers["Content-Type"] = mimetype
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Disposition"] = f'inline; filename="{download_name}"'
+    return resp
 
 
 def _resolve_string(media: dict) -> str | None:
@@ -148,27 +269,39 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
     if c.get("type") != "video":
         return jsonify({"error": "not a video"}), 400
 
+    filename = c.get("filename", "")
+    ext = Path(filename).suffix.lower() if filename else ".mp4"
+
+    # For browser-incompatible formats (e.g. .avi), transcode to MP4 and
+    # cache the result so subsequent requests are instant.
+    if ext not in _BROWSER_VIDEO_EXTS:
+        cached = c.get("_transcoded_mp4")
+        if cached is not None:
+            return _send_video_bytes(cached, "video/mp4", f"media_{media_id}.mp4")
+
+        media_bytes = _resolve_bytes(c)
+        if media_bytes is None:
+            return jsonify({"error": "media not available"}), 404
+
+        transcoded = _transcode_to_mp4(media_bytes, filename)
+        if transcoded is not None:
+            c["_transcoded_mp4"] = transcoded
+            return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
+        # ffmpeg unavailable — serve raw bytes as best-effort fallback
+        return _send_video_bytes(media_bytes, "video/mp4", f"media_{media_id}{ext}")
+
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
         return jsonify({"error": "media not available"}), 404
 
-    # Determine mimetype based on filename extension
-    filename = c.get("filename", "")
-    if filename.endswith(".webm"):
+    if ext == ".webm":
         mimetype = "video/webm"
-    elif filename.endswith(".mov"):
-        mimetype = "video/quicktime"
-    elif filename.endswith(".avi"):
-        mimetype = "video/x-msvideo"
+    elif ext in (".ogg", ".ogv"):
+        mimetype = "video/ogg"
     else:
         mimetype = "video/mp4"
 
-    ext = Path(filename).suffix if filename else ".mp4"
-    return send_file(
-        io.BytesIO(media_bytes),
-        mimetype=mimetype,
-        download_name=f"media_{media_id}{ext}",
-    )
+    return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
@@ -217,8 +350,9 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
+@medias_bp.route("/api/medias/<int:media_id>/text")
 def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
-    """Return the text content and statistics for a single paragraph media item.
+    """Return the text content and statistics for a single text media item.
 
     Args:
         media_id: Integer media ID from the URL path.
@@ -227,13 +361,13 @@ def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
         A JSON object with keys ``"content"`` (str), ``"word_count"`` (int),
         and ``"character_count"`` (int) on success (HTTP 200), a JSON 404
         error if the media does not exist, or a JSON 400 error if the media
-        exists but is not of type ``"paragraph"``.
+        exists but is not of type ``"text"``.
     """
     c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
-    if c.get("type") != "paragraph":
-        return jsonify({"error": "not a paragraph"}), 400
+    if c.get("type") not in ("text", "paragraph"):
+        return jsonify({"error": "not a text media"}), 400
 
     content = _resolve_string(c)
     if content is None:
@@ -360,7 +494,7 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
 
     # Check if a media with this MD5 already exists
     snap = snapshot_medias()
-    _, md5_lookup = build_media_lookup(snap)
+    _, md5_lookup, _ = build_media_lookup(snap)
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:

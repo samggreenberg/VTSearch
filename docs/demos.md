@@ -41,8 +41,10 @@ When the app is running, click the hamburger menu in the top-left corner to open
 
 | Demo | Description |
 |------|-------------|
-| **ucf101_s** | ~150 clips across 10 UCF-101 action categories — personal activities and sports (manual download) |
-| **ucf101_m** | ~250 clips across 10 UCF-101 action categories (manual download) |
-| **ucf101_l** | ~600 clips across 10 UCF-101 action categories (manual download) |
+| **ucf101_s** | ~150 clips across 10 UCF-101 action categories — personal activities and sports |
+| **ucf101_m** | ~250 clips across 10 UCF-101 action categories |
+| **ucf101_l** | ~600 clips across 10 UCF-101 action categories |
+
+> **Note:** UCF-101 demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup — see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
 
 You can also load your own data from pickle files or folders via the same menu.

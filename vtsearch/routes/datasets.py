@@ -24,8 +24,11 @@ from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     can_user_access as _reg_can_access,
     get_loaded_id as _reg_loaded_id,
+    get_loaded_ids as _reg_loaded_ids,
+    is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
     list_datasets_for_user as _reg_list_for_user,
+    remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
     set_loaded_id as _reg_set_loaded,
     set_readers as _reg_set_readers,
@@ -38,17 +41,25 @@ from vtsearch.utils import (
     build_diversity_tree,
     cancel_dataset_progress,
     collapse_duplicates,
+    get_active_dataset_id,
+    get_context,
+    list_loaded_dataset_ids,
     medias,
     get_dataset_display_name,
     get_dupe_count,
     get_progress,
     good_votes,
+    register_context,
+    set_active_dataset_id,
     set_dataset_display_name,
     snapshot_medias,
+    unregister_context,
     update_progress,
+    DatasetContext,
 )
 from vtsearch.utils.progress import CancelledError
 from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
+from vtsearch.utils.progress import loading_tasks as _loading_tasks
 import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
@@ -57,6 +68,7 @@ from vtsearch.routes.datasets_loading import (  # noqa: F401
     _apply_clipper,
     _auto_register_dataset,
     _load_embedder_for_clips,
+    _load_embedder_with_progress as _load_embedder_for_clips_with_progress,
     _origin_to_str,
     _run_importer_in_background,
     _run_origin_load_in_background,
@@ -74,12 +86,12 @@ def _normalize_media_type_param(value: str) -> str:
     value = value.strip()
     if not value:
         return ""
-    from vtsearch.media import get_by_folder_name
+    from vtsearch.media import get_by_folder_name, normalize_type_id
 
     try:
         return get_by_folder_name(value).type_id
     except KeyError:
-        return value  # assume it is already a type_id
+        return normalize_type_id(value)  # normalize legacy IDs like "paragraph" → "text"
 
 
 # Register the UI sub-blueprint.
@@ -202,19 +214,46 @@ def dataset_status():
 
 @datasets_bp.route("/api/dataset/progress")
 def dataset_progress():
-    """Return the current progress of long-running operations."""
+    """Return the current progress of long-running operations.
+
+    For backward compatibility this returns a single progress dict.
+    Prefers the first active loading task if any, otherwise falls back
+    to the legacy global tracker (used by staging operations).
+    """
+    tasks = _loading_tasks.list_tasks()
+    active = [t for t in tasks if t.get("status") != "idle"]
+    if active:
+        return jsonify(active[0])
+    # Check if any just-finished task has an error to report
+    errored = [t for t in tasks if t.get("error")]
+    if errored:
+        return jsonify(errored[0])
     return jsonify(get_progress())
+
+
+@datasets_bp.route("/api/dataset/loading-tasks")
+def dataset_loading_tasks():
+    """Return all active dataset loading tasks with their progress."""
+    return jsonify({"tasks": _loading_tasks.list_tasks()})
 
 
 @datasets_bp.route("/api/dataset/cancel", methods=["POST"])
 def cancel_dataset_load():
-    """Cancel the currently running dataset load/import operation.
+    """Cancel dataset load/import operations.
 
-    Sets a cancellation flag that is checked cooperatively by background
-    loading threads.  The thread will clean up partial state and set
-    progress to idle.
+    Cancels all active loading tasks and the legacy global tracker.
     """
+    _loading_tasks.cancel_all()
     cancel_dataset_progress()
+    return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/dataset/cancel/<task_id>", methods=["POST"])
+def cancel_dataset_load_task(task_id: str):
+    """Cancel a specific dataset loading task."""
+    ok = _loading_tasks.cancel_task(task_id)
+    if not ok:
+        return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True})
 
 
@@ -280,8 +319,8 @@ def combine_datasets_route():
     if importer is None:
         return jsonify({"error": "combine_datasets importer not available"}), 500
 
-    _run_importer_in_background(importer, {"datasets": dataset_paths})
-    return jsonify({"ok": True, "message": "Combining datasets..."})
+    task_id = _run_importer_in_background(importer, {"datasets": dataset_paths})
+    return jsonify({"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -440,8 +479,8 @@ def import_dataset(importer_name: str):
         if val:
             field_values[key] = val
 
-    _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started"})
+    task_id = _run_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -482,8 +521,8 @@ def load_demo_dataset_route():
     if embedder_name:
         field_values["embedder"] = embedder_name
 
-    _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started"})
+    task_id = _run_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -507,8 +546,8 @@ def load_dataset_file():
     # Flask FileStorage stream is only valid during the request lifecycle.
     file_bytes = io.BytesIO(file.read())
     file_bytes.name = file.filename
-    _run_importer_in_background(importer, {"file": file_bytes})
-    return jsonify({"ok": True, "message": "Loading started"})
+    task_id = _run_importer_in_background(importer, {"file": file_bytes})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_bp.route("/api/dataset/load-folder", methods=["POST"])
@@ -534,8 +573,8 @@ def load_dataset_folder():
         return jsonify({"error": "Invalid folder path"}), 400
 
     importer = get_importer("folder")
-    _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
-    return jsonify({"ok": True, "message": "Loading started"})
+    task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 # ---------------------------------------------------------------------------
@@ -567,9 +606,13 @@ def export_dataset():
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
 def clear_dataset_route():
-    """Clear the current dataset."""
-    clear_dataset()
-    _reg_set_loaded(None)
+    """Clear the active dataset from memory."""
+    active_id = get_active_dataset_id()
+    if active_id:
+        unregister_context(active_id)
+        _reg_remove_loaded(active_id)
+    else:
+        clear_dataset()
     return jsonify({"ok": True})
 
 
@@ -580,16 +623,24 @@ def clear_dataset_route():
 
 @datasets_bp.route("/api/datasets/registry")
 def list_registered_datasets():
-    """Return registered datasets visible to the current user."""
+    """Return registered datasets visible to the current user.
+
+    Each entry includes:
+    - ``loaded``: whether the dataset is currently in memory
+    - ``active``: whether it is the currently active (UI-facing) dataset
+    """
     from vtsearch.auth import get_current_user
 
     entries = _reg_list_for_user(get_current_user())
     loaded_id = _reg_loaded_id()
+    loaded_ids = _reg_loaded_ids()
     from vtsearch.media import get_clipper
 
     for entry in entries:
-        entry["loaded"] = entry["id"] == loaded_id
-        if entry["loaded"]:
+        ds_id = entry["id"]
+        entry["loaded"] = ds_id in loaded_ids
+        entry["active"] = ds_id == loaded_id
+        if entry["active"]:
             entry["num_dupes"] = get_dupe_count()
         else:
             entry.setdefault("num_dupes", 0)
@@ -610,8 +661,14 @@ def list_registered_datasets():
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
 def load_registered_dataset(dataset_id: str):
-    """Load a registered dataset from its saved pkl file."""
+    """Load a registered dataset from its saved pkl file.
+
+    If the dataset is already loaded in memory, it is simply activated
+    (made the current UI-facing dataset) without re-reading the pkl.
+    """
     from vtsearch.auth import get_current_user
+    from vtsearch.utils.progress import clear_thread_progress, set_thread_progress
+    from vtsearch.utils import build_diversity_tree_for_context
 
     entry = _reg_get(dataset_id)
     if entry is None:
@@ -620,52 +677,52 @@ def load_registered_dataset(dataset_id: str):
     if not _reg_can_access(dataset_id, get_current_user()):
         return jsonify({"error": "Access denied"}), 403
 
+    # If already loaded in memory, just activate it (instant switch).
+    if _reg_is_loaded(dataset_id):
+        set_active_dataset_id(dataset_id)
+        _reg_set_loaded(dataset_id)
+        set_dataset_display_name(entry.get("name", ""))
+        return jsonify({"ok": True, "message": "Dataset activated (already loaded)"})
+
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
         return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
 
     _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
 
-    # Reset the cancellation flag so a previous cancel does not immediately
-    # abort this new operation.
-    _dataset_progress_tracker.reset_cancel()
-
-    # Set progress to "loading" synchronously so the frontend never sees a
-    # stale "idle" status from a previous operation before the thread starts.
-    update_progress("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
+    # Create a per-task tracker for this load operation.
+    task_id = f"_regload_{dataset_id[:8]}"
+    tracker = _loading_tasks.create_task(task_id, entry.get("name", dataset_id), dataset_id=dataset_id)
+    tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
-        _dataset_progress_tracker.check_cancelled()
-        update_progress(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
+        tracker.check_cancelled()
+        tracker.update(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
 
     def load_task():
         try:
-            update_progress(
-                "loading",
-                "Preparing…",
-                0,
-                0,
-                step=1,
-                total_steps=_LOAD_STEPS,
-            )
-            clear_dataset()
-            _reg_set_loaded(None)
+            tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+            # Create a fresh context for this dataset (don't activate yet).
+            ctx = DatasetContext(dataset_id)
+            register_context(ctx)
             gc.collect()
-            load_dataset_from_pickle(Path(pkl_path), medias, on_progress=_pickle_progress)
-            _dataset_progress_tracker.check_cancelled()
-            update_progress(
-                "loading",
-                "Removing duplicates…",
-                0,
-                0,
-                step=2,
-                total_steps=_LOAD_STEPS,
+
+            # Set thread-local progress for the pickle loader.
+            set_thread_progress(
+                lambda status, msg="", cur=0, tot=0: tracker.update(status, msg, cur, tot, step=1, total_steps=_LOAD_STEPS)
             )
-            collapse_duplicates(medias)
+            try:
+                load_dataset_from_pickle(Path(pkl_path), ctx.medias, on_progress=_pickle_progress)
+            finally:
+                clear_thread_progress()
+
+            tracker.check_cancelled()
+            tracker.update("loading", "Removing duplicates…", 0, 0, step=2, total_steps=_LOAD_STEPS)
+            collapse_duplicates(ctx.medias)
 
             def _diversity_progress(current: int, total: int) -> None:
-                _dataset_progress_tracker.check_cancelled()
-                update_progress(
+                tracker.check_cancelled()
+                tracker.update(
                     "loading",
                     "Building diversity index…",
                     current=current,
@@ -675,42 +732,89 @@ def load_registered_dataset(dataset_id: str):
                 )
 
             _diversity_progress(0, 0)
-            build_diversity_tree(on_progress=_diversity_progress)
+            build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
             _reg_set_loaded(dataset_id)
             # Update item count and dupe count in case they changed
-            _reg_update(dataset_id, num_items=len(medias), num_dupes=get_dupe_count())
-            set_dataset_display_name(entry.get("name", ""))
-            _load_embedder_for_clips(step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
-        except CancelledError:
-            medias.clear()
-            gc.collect()
-            update_progress("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
-        except MemoryError:
-            medias.clear()
-            gc.collect()
-            update_progress("idle", "", 0, 0, "Out of memory — dataset too large.", step=None, total_steps=None)
-        except Exception as e:
-            update_progress("idle", "", 0, 0, str(e), step=None, total_steps=None)
+            num_dupes = sum(
+                1 for m in ctx.medias.values()
+                if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
+            )
+            _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
+            ctx.dataset_display_name = entry.get("name", "")
 
-    # Signal "loading" before the thread starts so frontend polling never
-    # sees a stale "idle" from a previous load and prematurely stops.
-    # Clear stale error from any previous load.
-    update_progress("loading", "Preparing to load dataset…", 0, 0, error=None, step=1, total_steps=_LOAD_STEPS)
+            # Activate if nothing else is currently active.
+            if get_active_dataset_id() is None:
+                set_active_dataset_id(dataset_id)
+
+            # Warm up the embedder using the task tracker.
+            def _task_progress(status, message="", current=0, total=0, **kw):
+                tracker.update(status, message, current, total, **kw)
+
+            _load_embedder_for_clips_with_progress(ctx.medias, _task_progress, step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
+        except CancelledError:
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
+            gc.collect()
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except MemoryError:
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
+            gc.collect()
+            tracker.update("idle", "", 0, 0, error="Out of memory — dataset too large.", step=None, total_steps=None)
+        except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
+            unregister_context(dataset_id)
+            _reg_remove_loaded(dataset_id)
+            error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        finally:
+            clear_thread_progress()
+            _loading_tasks.mark_finished(task_id)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify({"ok": True, "message": "Loading started"})
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
 def unload_registered_dataset(dataset_id: str):
-    """Unload the currently loaded dataset (clear from memory)."""
-    loaded = _reg_loaded_id()
-    if loaded != dataset_id:
+    """Unload a specific dataset from memory.
+
+    The dataset's context is removed, freeing its RAM.  If it was the
+    active dataset, the active pointer is cleared.
+    """
+    from vtsearch.auth import get_current_user
+
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        return jsonify({"error": "Only the dataset creator can unload it"}), 403
+    if not _reg_is_loaded(dataset_id):
         return jsonify({"error": "This dataset is not currently loaded"}), 400
-    clear_dataset()
-    _reg_set_loaded(None)
+    unregister_context(dataset_id)
+    _reg_remove_loaded(dataset_id)
     return jsonify({"ok": True})
+
+
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/activate", methods=["POST"])
+def activate_registered_dataset(dataset_id: str):
+    """Make a loaded dataset the active (UI-facing) one.
+
+    The dataset must already be loaded in memory.  This is an instant
+    operation — no data is re-read or re-embedded.
+    """
+    from vtsearch.auth import get_current_user
+
+    if not _reg_can_access(dataset_id, get_current_user()):
+        return jsonify({"error": "Access denied"}), 403
+    if not _reg_is_loaded(dataset_id):
+        return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
+    set_active_dataset_id(dataset_id)
+    _reg_set_loaded(dataset_id)
+    entry = _reg_get(dataset_id)
+    if entry:
+        set_dataset_display_name(entry.get("name", ""))
+    return jsonify({"ok": True, "message": "Dataset activated"})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
@@ -721,10 +825,10 @@ def delete_registered_dataset(dataset_id: str):
     if not _reg_is_owner(dataset_id, get_current_user()):
         return jsonify({"error": "Only the dataset creator can delete it"}), 403
 
-    loaded = _reg_loaded_id()
-    if loaded == dataset_id:
-        clear_dataset()
-        _reg_set_loaded(None)
+    # If loaded in memory, unload its context.
+    if _reg_is_loaded(dataset_id):
+        unregister_context(dataset_id)
+        _reg_remove_loaded(dataset_id)
     ok = _reg_unregister(dataset_id)
     if not ok:
         return jsonify({"error": "Dataset not found"}), 404
@@ -824,5 +928,5 @@ def _load_from_origin(source: dict):
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
 
-    _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started"})
+    task_id = _run_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})

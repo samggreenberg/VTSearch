@@ -80,10 +80,23 @@ describe('LeftPanelComponent', () => {
     expect(component.autopilotStop.emit).toHaveBeenCalled();
   });
 
-  it('should not emit when setting the same tab', () => {
+  it('should not emit start when setting the same tab', () => {
     spyOn(component.autopilotStart, 'emit');
     component.setTab('autopilot');
     expect(component.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should emit autopilotRefocus when clicking already-active autopilot tab', () => {
+    spyOn(component.autopilotRefocus, 'emit');
+    component.setTab('autopilot');
+    expect(component.autopilotRefocus.emit).toHaveBeenCalled();
+  });
+
+  it('should not emit autopilotRefocus when clicking already-active manual tab', () => {
+    component.setTab('manual');
+    spyOn(component.autopilotRefocus, 'emit');
+    component.setTab('manual');
+    expect(component.autopilotRefocus.emit).not.toHaveBeenCalled();
   });
 
   it('should emit sortModeChange', () => {

@@ -316,6 +316,14 @@ def _ensure_cache(
 
     if _cache_diversity_tree is None:
         _cache_diversity_tree = _build_diversity_tree(clips_dict)
+        # After a partial invalidation (_cache_diversity_tree was set to None
+        # but _cache_good_ids/_cache_bad_ids still contain IDs from kept
+        # steps), seed the fresh tree with those pre-existing labels so that
+        # diversity_level() is correct for subsequently replayed events.
+        if _cache_diversity_tree is not None:
+            for mid in _cache_good_ids | _cache_bad_ids:
+                if mid in _cache_diversity_tree.vector_to_leaf:
+                    _cache_diversity_tree.label(mid)
 
     for t in range(start, len(label_history)):
         media_id, label, _ = label_history[t]
@@ -656,27 +664,27 @@ def compute_labeling_status(
         }
     else:
         level = span_info["level"]
-        total = span_info["depth"]  # total nodes
-        green_at = min(SPAN_GREEN, total)
+        tree_total = span_info["depth"]  # total nodes
+        green_at = min(SPAN_GREEN, tree_total)
         yellow_at = min(SPAN_YELLOW, green_at)
-        if total <= 0:
+        if tree_total <= 0:
             span = {"status": "green", "reason": "Degenerate tree.", **span_info}
         elif level >= green_at:
             span = {
                 "status": "green",
-                "reason": "All tree nodes covered." if level >= total else f"{level}/{total} nodes covered.",
+                "reason": "All tree nodes covered." if level >= tree_total else f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
         elif level >= yellow_at:
             span = {
                 "status": "yellow",
-                "reason": f"{level}/{total} nodes covered.",
+                "reason": f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
         else:
             span = {
                 "status": "red",
-                "reason": "No tree coverage yet." if level == 0 else f"{level}/{total} nodes covered.",
+                "reason": "No tree coverage yet." if level == 0 else f"{level}/{tree_total} nodes covered.",
                 **span_info,
             }
 
