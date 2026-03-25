@@ -635,7 +635,22 @@ def multi_find():
             step=1, total_steps=_FIND_STEPS,
         )
 
-        # Try autorun detector first (has weights)
+        # Try loaded DetectorContext first (cached MLP — skip resolve + train)
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(m["id"])
+        if det_ctx is not None and det_ctx.model is not None:
+            model_configs.append(
+                {
+                    "name": m["name"],
+                    "model_id": m["id"],
+                    "live_model": det_ctx.model,
+                    "threshold": det_ctx.threshold,
+                }
+            )
+            continue
+
+        # Try autorun detector next (has serialized weights)
         if det_name:
             det = get_autorun_detectors().get(det_name)
             has_weights = det and det.get("weights")
@@ -755,8 +770,29 @@ def multi_find():
                 step=3, total_steps=_FIND_STEPS,
             )
 
-            if "weights" in mc:
-                # Pre-trained detector with weights
+            if "live_model" in mc:
+                # Loaded detector with cached MLP — use directly, no resolve/train
+                try:
+                    model = mc["live_model"]
+                    with torch.no_grad():
+                        raw_logits = model(X_all)
+                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+                    threshold = mc.get("threshold", 0.5)
+
+                    for cid, score in zip(all_ids, scores):
+                        verdict = "Good" if score >= threshold else "Bad"
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": verdict,
+                            "score": round(score, 4),
+                        }
+                except Exception:
+                    for cid in all_ids:
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": "Error",
+                            "score": 0,
+                        }
+            elif "weights" in mc:
+                # Pre-trained detector with serialized weights
                 try:
                     model = build_model_from_weights(mc["weights"])
                     with torch.no_grad():
