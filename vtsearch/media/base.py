@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -260,6 +261,14 @@ class MediaEmbedder(ABC):
     * :meth:`embed_text` — embed a text query in the same vector space.
     """
 
+    _model_load_lock: threading.Lock
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Each concrete embedder class gets its own lock so that concurrent
+        # callers serialise model loading per embedder type.
+        cls._model_load_lock = threading.Lock()
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 
@@ -290,14 +299,20 @@ class MediaEmbedder(ABC):
         Subclasses should override :meth:`_load_models_impl` (not this method).
         This wrapper catches :class:`ImportError` and re-raises with an
         actionable message so that missing dependencies surface clearly.
+
+        A per-class lock serialises concurrent callers so that only one
+        thread performs the actual load; others wait and then return
+        immediately (the subclass ``_load_models_impl`` checks
+        ``self._model is not None``).
         """
-        try:
-            self._load_models_impl()
-        except ImportError as exc:
-            raise ImportError(
-                f"{exc} — required by the '{self.name}' embedder. "
-                f"Install dependencies with: pip install -e '.[cpu,dev]'"
-            ) from exc
+        with self._model_load_lock:
+            try:
+                self._load_models_impl()
+            except ImportError as exc:
+                raise ImportError(
+                    f"{exc} — required by the '{self.name}' embedder. "
+                    f"Install dependencies with: pip install -e '.[cpu,dev]'"
+                ) from exc
 
     @abstractmethod
     def _load_models_impl(self) -> None:
