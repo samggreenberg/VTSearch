@@ -1,4 +1,4 @@
-import { Component, EventEmitter, HostListener, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -31,6 +31,9 @@ type ModalView = 'main' | 'media-picker';
   styleUrl: './new-model-modal.component.scss',
 })
 export class NewModelModalComponent implements OnInit {
+  /** Media type of the currently active dataset, if any. */
+  @Input() defaultMediaType = '';
+
   @Output() closed = new EventEmitter<void>();
   @Output() created = new EventEmitter<void>();
 
@@ -83,16 +86,22 @@ export class NewModelModalComponent implements OnInit {
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
-    this.datasetsApi.getRegistry().subscribe({
-      next: (res) => {
-        const types = new Set(
-          (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
-        );
-        if (types.size === 1) {
-          this.mediaType = [...types][0];
-        }
-      },
-    });
+
+    // Prefer the explicit default (active dataset's type) over the all-datasets guess.
+    if (this.defaultMediaType) {
+      this.mediaType = this.defaultMediaType;
+    } else {
+      this.datasetsApi.getRegistry().subscribe({
+        next: (res) => {
+          const types = new Set(
+            (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
+          );
+          if (types.size === 1) {
+            this.mediaType = [...types][0];
+          }
+        },
+      });
+    }
   }
 
   get hasExample(): boolean {
