@@ -593,8 +593,14 @@ def list_registered_models():
             # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
-        # detector_loaded: True when the model has a DetectorContext in memory.
-        entry["detector_loaded"] = mid in loaded_ids
+        # detector_loaded: True when the model has inference data in RAM.
+        # Either via a DetectorContext (multi-loaded) or via autorun_detectors weights.
+        if mid in loaded_ids:
+            entry["detector_loaded"] = True
+        elif det_name and det:
+            entry["detector_loaded"] = det.get("weights") is not None
+        else:
+            entry["detector_loaded"] = False
     return jsonify({"models": entries})
 
 
@@ -713,7 +719,14 @@ def load_model_route():
     examples_seeded = 0
 
     if model_id is None:
-        # Deactivate: no model active
+        # Deactivate and unload the currently active model.
+        from vtsearch.models.registry import get_active_model_id, remove_loaded_model_id
+        from vtsearch.utils import unregister_detector_context
+
+        prev_id = get_active_model_id()
+        if prev_id is not None:
+            unregister_detector_context(prev_id)
+            remove_loaded_model_id(prev_id)
         set_active_model_id(None)
         set_active_detector_id(None)
     elif is_model_loaded(model_id):
