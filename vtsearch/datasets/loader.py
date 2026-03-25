@@ -1396,7 +1396,7 @@ def read_pkl_embedder(pkl_path: Path) -> str | None:
         return None
     try:
         with open(pkl_path, "rb") as f:
-            data = pickle.load(f)  # noqa: S301
+            data = safe_pickle_load(f)
         medias_dict = data.get("medias", {}) if isinstance(data, dict) else {}
         for media in medias_dict.values():
             name = media.get("embedder", "")

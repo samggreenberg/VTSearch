@@ -17,6 +17,16 @@ from typing import Any
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
+# Characters that trigger formula execution in spreadsheet applications.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    """Prefix formula-like cell values with a single quote to prevent injection."""
+    if value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
 
 class ServerCsvLabelsetExporter(LabelsetExporter):
     """Save auto-detect results as a CSV file on the server filesystem.
@@ -94,9 +104,11 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                         if isinstance(val, dict):
                             row.append(json.dumps(val, sort_keys=True))
                         else:
-                            row.append(str(val if val is not None else ""))
+                            cell = str(val if val is not None else "")
+                            row.append(_sanitize_csv_cell(cell))
                     elif col in meta:
-                        row.append(str(meta[col] if meta[col] is not None else ""))
+                        cell = str(meta[col] if meta[col] is not None else "")
+                        row.append(_sanitize_csv_cell(cell))
                     else:
                         row.append("")
                 writer.writerow(row)
@@ -126,13 +138,13 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                         origin_str = Origin.from_dict(origin).display()
                     writer.writerow(
                         [
-                            detector_name,
+                            _sanitize_csv_cell(str(detector_name)),
                             threshold,
-                            hit.get("filename", ""),
-                            hit.get("category", ""),
+                            _sanitize_csv_cell(hit.get("filename", "")),
+                            _sanitize_csv_cell(hit.get("category", "")),
                             hit.get("score", ""),
-                            origin_str,
-                            hit.get("origin_name", ""),
+                            _sanitize_csv_cell(origin_str),
+                            _sanitize_csv_cell(hit.get("origin_name", "")),
                         ]
                     )
                     total_hits += 1
