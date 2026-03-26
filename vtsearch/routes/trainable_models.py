@@ -581,6 +581,11 @@ def import_labels_into_model(name: str, importer_name: str):
     merged directly into the trainable model's persisted labelset, and the
     model-registry entry is updated so the dashboard reflects the new count.
 
+    When the model's detector context **is** loaded, the new labels are also
+    resolved against the loaded dataset's medias, applied to the detector's
+    votes, and a fresh MLP is trained with a cross-validated threshold — all
+    inside the loaded detector context.
+
     Returns JSON with ``applied``, ``skipped``, ``num_labels``, and
     ``message`` keys.
     """
@@ -614,7 +619,9 @@ def import_labels_into_model(name: str, importer_name: str):
     if not isinstance(label_entries, list):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
-    # Load the model's existing labelset
+    # ------------------------------------------------------------------
+    # 1) Merge into the persisted labelset (always, whether loaded or not)
+    # ------------------------------------------------------------------
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
 
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
@@ -627,6 +634,7 @@ def import_labels_into_model(name: str, importer_name: str):
 
     applied = 0
     skipped = 0
+    new_entries: list[dict] = []
     for entry in label_entries:
         label = entry.get("label", "")
         if label not in ("good", "bad"):
@@ -638,6 +646,7 @@ def import_labels_into_model(name: str, importer_name: str):
             continue
         elem = LabeledElement.from_dict(entry)
         existing_ls.elements.append(elem)
+        new_entries.append(entry)
         if md5:
             existing_keys.add((md5, label))
         applied += 1
@@ -652,13 +661,129 @@ def import_labels_into_model(name: str, importer_name: str):
     if reg_entry:
         update_model(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
 
+    # ------------------------------------------------------------------
+    # 2) If the detector is loaded, resolve + apply + retrain in context
+    # ------------------------------------------------------------------
+    resolved = 0
+    trained = False
+    if applied > 0 and reg_entry:
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(reg_entry["id"])
+        if det_ctx is not None:
+            resolved, trained = _apply_and_retrain(
+                reg_entry["id"], det_ctx, new_entries, name,
+            )
+
     msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
+    if resolved > 0:
+        msg += f" Resolved {resolved} into the loaded detector."
+    if trained:
+        msg += " Retrained MLP."
     return jsonify({
         "applied": applied,
         "skipped": skipped,
+        "resolved": resolved,
+        "trained": trained,
         "num_labels": len(existing_ls),
         "message": msg,
     })
+
+
+def _apply_and_retrain(
+    model_id: str,
+    det_ctx: object,
+    new_entries: list[dict],
+    tm_name: str,
+) -> tuple[int, bool]:
+    """Resolve new label entries into a loaded detector and retrain its MLP.
+
+    Temporarily switches the active detector context to *model_id*, resolves
+    the entries against the loaded dataset's medias, applies matching labels,
+    retrains the MLP with cross-validated threshold, then restores the
+    previously active context.
+
+    Returns ``(resolved_count, trained_bool)``.
+    """
+    from vtsearch.utils import (
+        apply_label,
+        build_media_lookup,
+        resolve_media_ids,
+        snapshot_medias,
+    )
+    from vtsearch.utils.state_core import (
+        get_active_detector_id,
+        set_active_detector_id,
+    )
+
+    # Save the current active context so we can restore it afterwards.
+    prev_active_id = get_active_detector_id()
+
+    try:
+        set_active_detector_id(model_id)
+
+        snap = snapshot_medias()
+        if not snap:
+            return 0, False
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+
+        resolved = 0
+        for entry in new_entries:
+            label = entry.get("label", "")
+            if label not in ("good", "bad"):
+                continue
+            cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+            for cid in cids:
+                apply_label(cid, label)
+            if cids:
+                resolved += 1
+
+        # Persist the updated votes back to the trainable-model file so the
+        # labelset reflects any newly-resolved medias.
+        sync_labels_to_loaded_model()
+
+        # Retrain MLP if we have at least one good and one bad vote.
+        from vtsearch.utils import bad_votes, good_votes
+
+        trained = False
+        if good_votes and bad_votes:
+            from vtsearch.models.training import train_and_score
+            from vtsearch.utils import (
+                get_calibrate_count,
+                get_calibration_fraction,
+                get_inclusion,
+                get_safe_thresholds,
+            )
+
+            _, threshold, model = train_and_score(
+                snap,
+                dict(good_votes),
+                dict(bad_votes),
+                get_inclusion(),
+                safe_thresholds=get_safe_thresholds(),
+                calibrate_count=get_calibrate_count(),
+                calibration_fraction=get_calibration_fraction(),
+            )
+            if model is not None:
+                det_ctx.model = model
+                det_ctx.threshold = threshold
+                # Cache voted media items with embeddings.
+                training = {}
+                for cid in list(good_votes) + list(bad_votes):
+                    if cid in snap:
+                        training[cid] = snap[cid]
+                det_ctx.training_medias = training
+                if snap:
+                    first = next(iter(snap.values()), {})
+                    det_ctx.embedder = first.get("embedder", "")
+                    det_ctx.media_type = first.get("type", "")
+                trained = True
+
+        return resolved, trained
+
+    finally:
+        set_active_detector_id(prev_active_id)
 
 
 # ---------------------------------------------------------------------------
