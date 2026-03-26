@@ -37,7 +37,7 @@
 } @else if (loadingTask?.error) {
   <td colspan="7">
     <div class="loading-task-progress loading-task-failed">
-      <span class="error-msg">Failed: {{ loadingTask.error }}</span>
+      <span class="error-msg">Failed: {{ loadingTask?.error }}</span>
       <button class="btn btn--cancel btn--sm" (click)="onDismissTask($event)" title="Dismiss error">Dismiss</button>
     </div>
   </td>
