@@ -43,7 +43,10 @@ from vtsearch.medias import init_medias  # noqa: E402, F401 — used by tests vi
 from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     auth_bp,
+    eval_bp,
     file_browser_bp,
+    labels_bp,
+    media_server_bp,
     medias_bp,
     datasets_bp,
     detectors_bp,
@@ -89,7 +92,10 @@ def _set_user_context():
 # ---------------------------------------------------------------------------
 
 app.register_blueprint(auth_bp)
+app.register_blueprint(eval_bp)
 app.register_blueprint(file_browser_bp)
+app.register_blueprint(labels_bp)
+app.register_blueprint(media_server_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)

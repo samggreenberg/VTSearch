@@ -13,10 +13,12 @@ from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.labelset import LabelSet, LabeledElement
 from vtsearch.datasets.loader import (
     export_dataset_to_file,
-    load_cifar10_batch,
     load_dataset_from_folder,
     load_dataset_from_pickle,
     load_demo_dataset,
+)
+from vtsearch.datasets.metadata import (
+    load_cifar10_batch,
     load_esc50_metadata,
     load_image_metadata_from_folders,
     load_paragraph_metadata_from_folders,
