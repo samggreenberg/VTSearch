@@ -72,6 +72,7 @@ _TEST_GROUPS = {
         "test_extractors",
         "test_processors",
         "test_trainable_models",
+        "test_multi_detector",
         "test_clippers",
         "test_eval",
         "test_eval_visualize",
