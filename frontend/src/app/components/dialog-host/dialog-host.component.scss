@@ -1,4 +1,10 @@
 // Dialog host uses global modal styles. Component-specific overrides only.
+.dialog-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .form-input {
   width: 100%;
   margin-top: 8px;
