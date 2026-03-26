@@ -698,7 +698,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  startModelProgressPolling(): void {
+  startModelProgressPolling(onComplete?: () => void): void {
     this.modelPolling$.next(); // cancel previous polling
     this.completedModelTaskIds.clear();
 
@@ -738,6 +738,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.modelPolling$.next();
             if (justFinished.length === 0) {
               this.datasetState.refresh();
+            }
+            if (onComplete && failed.length === 0) {
+              onComplete();
             }
           }
         },
@@ -883,49 +886,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!dataset) return;
 
     const modelId = [...this.selectedModelIds][0] || null;
+    const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
-    const navigateToLabel = (): void => {
-      this.storeSelectedModelTextQuery();
-      // Tell the backend which model is loaded so votes auto-sync
-      this.modelsApi.loadModel(modelId).subscribe({
-        next: () => this.router.navigate(['/label']),
-        error: () => this.router.navigate(['/label']),
-      });
+    this.storeSelectedModelTextQuery();
+
+    // Gate: navigate only once both dataset and model are ready.
+    let pending = 2;
+    const gate = (): void => {
+      if (--pending === 0) {
+        this.datasetState.refresh();
+        this.router.navigate(['/label']);
+      }
     };
 
-    if (dataset.active) {
-      navigateToLabel();
-      return;
-    }
-
-    if (dataset.loaded) {
-      // Already in memory — activate instantly (no progress needed).
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => {
-          this.datasetState.refresh();
-          navigateToLabel();
-        },
-        error: () => navigateToLabel(),
+    // --- Model loading (parallel) ---
+    if (model && !model.detector_loaded) {
+      this.modelsApi.loadModel(modelId).subscribe({
+        next: () => this.startModelProgressPolling(() => gate()),
+        error: () => gate(),
       });
-      return;
+    } else {
+      this.modelsApi.loadModel(modelId).subscribe({
+        next: () => gate(),
+        error: () => gate(),
+      });
     }
 
-    // Dataset not loaded — load it first, then activate and navigate.
-    // The background loader only auto-activates when no other dataset is
-    // active, so we must explicitly activate after loading completes.
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => {
-        this.startProgressPolling(() => {
-          this.datasetsApi.activateRegistered(dataset.id).subscribe({
-            next: () => {
-              this.datasetState.refresh();
-              navigateToLabel();
-            },
-            error: () => navigateToLabel(),
+    // --- Dataset loading (parallel) ---
+    if (dataset.active) {
+      gate();
+    } else if (dataset.loaded) {
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => gate(),
+        error: () => gate(),
+      });
+    } else {
+      this.datasetsApi.loadRegistered(dataset.id).subscribe({
+        next: () => {
+          this.startProgressPolling(() => {
+            this.datasetsApi.activateRegistered(dataset.id).subscribe({
+              next: () => gate(),
+              error: () => gate(),
+            });
           });
-        });
-      },
-    });
+        },
+      });
+    }
   }
 
   onFind(): void {
@@ -940,41 +946,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.findSession.modelName = model.name;
     this.findSession.datasetId = dataset.id;
 
-    const navigateToFind = (): void => {
-      this.router.navigate(['/find']);
+    // Gate: navigate only once both dataset and model are ready.
+    let pending = 2;
+    const gate = (): void => {
+      if (--pending === 0) {
+        this.datasetState.refresh();
+        this.router.navigate(['/find']);
+      }
     };
 
-    if (dataset.active) {
-      navigateToFind();
-      return;
-    }
-
-    if (dataset.loaded) {
-      // Already in memory — activate instantly (no progress needed).
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => {
-          this.datasetState.refresh();
-          navigateToFind();
-        },
-        error: () => navigateToFind(),
+    // --- Model loading (parallel) ---
+    if (!model.detector_loaded) {
+      this.modelsApi.loadModel(model.id).subscribe({
+        next: () => this.startModelProgressPolling(() => gate()),
+        error: () => gate(),
       });
-      return;
+    } else {
+      this.modelsApi.loadModel(model.id).subscribe({
+        next: () => gate(),
+        error: () => gate(),
+      });
     }
 
-    // Dataset not loaded — load it first, then activate and navigate.
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => {
-        this.startProgressPolling(() => {
-          this.datasetsApi.activateRegistered(dataset.id).subscribe({
-            next: () => {
-              this.datasetState.refresh();
-              navigateToFind();
-            },
-            error: () => navigateToFind(),
+    // --- Dataset loading (parallel) ---
+    if (dataset.active) {
+      gate();
+    } else if (dataset.loaded) {
+      this.datasetsApi.activateRegistered(dataset.id).subscribe({
+        next: () => gate(),
+        error: () => gate(),
+      });
+    } else {
+      this.datasetsApi.loadRegistered(dataset.id).subscribe({
+        next: () => {
+          this.startProgressPolling(() => {
+            this.datasetsApi.activateRegistered(dataset.id).subscribe({
+              next: () => gate(),
+              error: () => gate(),
+            });
           });
-        });
-      },
-    });
+        },
+      });
+    }
   }
 
   /** Old Find window — runs multi-dataset multi-model find and shows results modal. */
