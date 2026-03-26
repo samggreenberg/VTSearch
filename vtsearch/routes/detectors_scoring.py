@@ -8,7 +8,7 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.models import build_model_from_weights
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe
 from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
@@ -119,7 +119,7 @@ def find_label():
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     model_id = body.get("model_id")
     if not model_id:
         update_find_progress("idle", "")

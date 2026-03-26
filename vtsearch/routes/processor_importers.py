@@ -24,7 +24,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
-from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
+from vtsearch.routes.helpers import extract_plugin_fields, get_json_safe, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
 from vtsearch.utils import add_autorun_detector
 
 processor_importers_bp = Blueprint("processor_importers", __name__)
@@ -60,13 +60,9 @@ def run_processor_import(importer_name: str):
     Returns JSON with ``success``, ``name``, ``media_type``, and any extra
     keys returned by the importer.
     """
-    importer = get_processor_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_processor_importers()]
-        return (
-            jsonify({"error": f"Unknown processor importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_processor_importer, list_processor_importers, importer_name, "processor importer")
+    if err:
+        return err
 
     field_values = extract_plugin_fields(importer)
 
@@ -75,7 +71,7 @@ def run_processor_import(importer_name: str):
     if has_file_fields:
         name = request.form.get("name", "").strip()
     else:
-        name = (request.get_json(force=True, silent=True) or {}).get("name", "").strip()
+        name = get_json_safe().get("name", "").strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400

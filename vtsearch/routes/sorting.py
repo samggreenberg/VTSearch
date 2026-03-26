@@ -7,18 +7,15 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe
 
 from vtsearch.config import DATA_DIR
 import vtsearch.utils.paths as _paths
 from vtsearch.models import (
-    calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
-    calculate_safe_threshold,
     embed_text_query,
     inject_live_model,
     train_and_score,
-    train_model,
 )
 from vtsearch.utils import (
     add_textsort_suggestion,
@@ -477,46 +474,30 @@ def label_file_sort():
             )
 
         # Check if we have both good and bad examples
-        num_good = sum(1 for y in y_list if y == 1.0)
-        num_bad = len(y_list) - num_good
-        if num_good == 0 or num_bad == 0:
+        from vtsearch.routes.detectors_helpers import validate_good_bad_split
+
+        try:
+            validate_good_bad_split(y_list)
+        except ValueError:
             return (
                 jsonify({"error": "Need at least one good and one bad labeled example"}),
                 400,
             )
 
-        # Train MLP using the same approach as learned sort
+        # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
 
-        X = torch.tensor(np.array(X_list), dtype=torch.float32)
-        y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+        from vtsearch.routes.detectors_helpers import train_and_threshold
 
-        input_dim = X.shape[1]
-
-        # Calculate threshold using k-fold calibration
-        threshold = calculate_cross_calibration_threshold(
-            X_list,
-            y_list,
-            input_dim,
-            get_inclusion(),
-            calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
-        )
-
-        # Train final model on all data
-        model = train_model(X, y, input_dim, get_inclusion())
+        snap = snapshot_medias()
+        model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
         # Score every media in the dataset
-        snap = snapshot_medias()
         all_ids = sorted(snap.keys())
         all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-
-        # Apply safe thresholds blending if enabled
-        if get_safe_thresholds():
-            threshold = calculate_safe_threshold(threshold, scores, len(y_list))
 
         # Sort by raw scores (full precision) before rounding for display.
         paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
@@ -559,7 +540,7 @@ def diversity_tree_next():
     scores = None
     threshold = None
     if request.method == "POST":
-        data = request.get_json(force=True, silent=True) or {}
+        data = get_json_safe()
         raw_scores = data.get("scores")
         if isinstance(raw_scores, dict):
             try:

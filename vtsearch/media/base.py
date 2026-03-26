@@ -42,6 +42,8 @@ __all__ = [
     "MediaType",
     "Processor",
     "ProgressCallback",
+    "embedder_load_setup",
+    "extract_tensor",
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
 ]
@@ -49,6 +51,51 @@ __all__ = [
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
+
+
+# ---------------------------------------------------------------------------
+# Shared embedder helpers
+# ---------------------------------------------------------------------------
+
+
+def extract_tensor(output: object):
+    """Extract a plain tensor from a model output.
+
+    Depending on the ``transformers`` version, methods like
+    ``get_image_features()`` / ``get_text_features()`` /
+    ``get_video_features()`` may return either a raw :class:`torch.Tensor`
+    or a ``BaseModelOutputWithPooling`` dataclass.  This helper handles
+    both cases transparently.
+    """
+    import torch  # noqa: PLC0415
+
+    if isinstance(output, torch.Tensor):
+        return output
+    for attr in ("image_embeds", "text_embeds", "video_embeds", "pooler_output"):
+        val = getattr(output, attr, None)
+        if isinstance(val, torch.Tensor):
+            return val
+    # Final fallback: treat as tuple-like and return first element
+    return output[0]  # type: ignore[index]
+
+
+def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
+    """Common setup ceremony shared by all embedder ``_load_models_impl()`` methods.
+
+    1. Calls :func:`ensure_torch_configured`.
+    2. Runs ``gc.collect()`` to free memory before loading a large model.
+    3. Reports initial progress via *on_progress*.
+    4. Returns the model cache directory as a string.
+    """
+    import gc  # noqa: PLC0415
+
+    from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
+    from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
+
+    ensure_torch_configured()
+    gc.collect()
+    on_progress("loading", message, 0, 0)
+    return str(MODELS_CACHE_DIR)
 
 
 @contextlib.contextmanager

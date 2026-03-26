@@ -102,44 +102,20 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     except Exception as exc:
         raise ValueError(f"Invalid JSON: {exc}") from exc
 
+    from vtsearch.models.weights_compat import normalize_detector_weights
+
     media_type = data.get("media_type", "audio")
     suggested_name = data.get("name", "")
 
-    good_origins = data.get("good_origins")
-    bad_origins = data.get("bad_origins")
-    legacy_weights = data.get("weights")
+    nw = normalize_detector_weights(data, media_type=media_type)
 
-    weights = None
-    file_threshold = data.get("threshold", 0.5)
-    threshold = file_threshold
     result: dict[str, Any] = {"media_type": media_type}
-
-    if good_origins and bad_origins:
-        # Origin-based format: re-derive weights from origins
-        from vtsearch.models.training import train_detector_from_origins
-
-        inclusion = data.get("inclusion", 0)
-        weights, threshold = train_detector_from_origins(
-            good_origins,
-            bad_origins,
-            inclusion,
-            media_type,
-        )
-        if weights is not None:
-            result["good_origins"] = good_origins
-            result["bad_origins"] = bad_origins
-            result["inclusion"] = inclusion
-
-    if weights is None and legacy_weights:
-        # Fallback to serialised weights (legacy or unresolvable origins)
-        weights = legacy_weights
-        threshold = file_threshold
-
-    if weights is None:
-        raise ValueError("Detector file missing 'weights' or origin fields.")
-
-    result["weights"] = weights
-    result["threshold"] = threshold
+    if nw.origin_derived:
+        result["good_origins"] = nw.good_origins
+        result["bad_origins"] = nw.bad_origins
+        result["inclusion"] = nw.inclusion
+    result["weights"] = nw.weights
+    result["threshold"] = nw.threshold
 
     if suggested_name:
         result["name"] = suggested_name
