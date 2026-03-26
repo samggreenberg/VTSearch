@@ -10,6 +10,7 @@ import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
@@ -104,6 +105,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private labelSession: LabelSessionService,
     private findSession: FindSessionService,
     public datasetState: DatasetStateService,
+    private activeContext: ActiveContextService,
     private authService: AuthService,
   ) {}
 
@@ -890,6 +892,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.storeSelectedModelTextQuery();
 
+    // Set active context so the HTTP interceptor attaches headers
+    this.activeContext.setDatasetId(dataset.id);
+    this.activeContext.setModelId(modelId || '');
+
     // Gate: navigate only once both dataset and model are ready.
     let pending = 2;
     const gate = (): void => {
@@ -945,6 +951,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.findSession.modelId = model.id;
     this.findSession.modelName = model.name;
     this.findSession.datasetId = dataset.id;
+
+    // Set active context so the HTTP interceptor attaches headers
+    this.activeContext.setDatasetId(dataset.id);
+    this.activeContext.setModelId(model.id);
 
     // Gate: navigate only once both dataset and model are ready.
     let pending = 2;
