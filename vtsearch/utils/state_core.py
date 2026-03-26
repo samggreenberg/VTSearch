@@ -33,6 +33,42 @@ _state_lock = threading.RLock()
 
 
 # ---------------------------------------------------------------------------
+# Request-scoped context helpers
+# ---------------------------------------------------------------------------
+# When running inside a Flask request that carries ``X-Dataset-Id`` or
+# ``X-Model-Id`` headers, the proxy objects should resolve to the context
+# specified by the request rather than the global "active" pointer.  This
+# allows the frontend to declare which dataset/model it is operating on
+# per-request, eliminating the need for a persistent "active" flag.
+#
+# Outside a Flask request (background threads, CLI, tests) the proxies
+# fall back to the global ``_active_dataset_id`` / ``_active_detector_id``
+# as before, so existing code continues to work unchanged.
+# ---------------------------------------------------------------------------
+
+def _request_dataset_context():
+    """Return the DatasetContext stashed on ``g`` by the before_request hook, or None."""
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            return getattr(g, "_dataset_context", None)
+    except ImportError:
+        pass
+    return None
+
+
+def _request_detector_context():
+    """Return the DetectorContext stashed on ``g`` by the before_request hook, or None."""
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            return getattr(g, "_detector_context", None)
+    except ImportError:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
 # DatasetContext — bundles all per-dataset mutable state
 # ---------------------------------------------------------------------------
 
@@ -130,7 +166,18 @@ _empty_dataset_context = DatasetContext("")
 
 
 def get_active_context() -> DatasetContext:
-    """Return the active ``DatasetContext``, or the empty fallback."""
+    """Return the active ``DatasetContext``, or the empty fallback.
+
+    Resolution order:
+    1. Request-scoped context (set by ``before_request`` from ``X-Dataset-Id`` header)
+    2. Global ``_active_dataset_id`` pointer (legacy fallback for threads/CLI)
+    3. Empty fallback context
+    """
+    # 1. Per-request override
+    req_ctx = _request_dataset_context()
+    if req_ctx is not None:
+        return req_ctx
+    # 2. Global active pointer
     if _active_dataset_id is not None:
         ctx = _contexts.get(_active_dataset_id)
         if ctx is not None:
@@ -200,7 +247,18 @@ _empty_detector_context = DetectorContext("")
 
 
 def get_active_detector_context() -> DetectorContext:
-    """Return the active ``DetectorContext``, or the empty fallback."""
+    """Return the active ``DetectorContext``, or the empty fallback.
+
+    Resolution order:
+    1. Request-scoped context (set by ``before_request`` from ``X-Model-Id`` header)
+    2. Global ``_active_detector_id`` pointer (legacy fallback for threads/CLI)
+    3. Empty fallback context
+    """
+    # 1. Per-request override
+    req_ctx = _request_detector_context()
+    if req_ctx is not None:
+        return req_ctx
+    # 2. Global active pointer
     if _active_detector_id is not None:
         ctx = _detector_contexts.get(_active_detector_id)
         if ctx is not None:
