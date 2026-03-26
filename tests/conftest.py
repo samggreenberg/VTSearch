@@ -52,6 +52,7 @@ _TEST_GROUPS = {
         "test_pickle_safety",
         "test_media_sources",
         "test_multi_dataset",
+        "test_request_context",
         "test_parallel_loading",
     ],
     "io": [
