@@ -57,10 +57,6 @@ export class TrainableModelsApiService {
     return this.http.post('/api/models/registry/load', { model_id: modelId });
   }
 
-  activateModel(modelId: string): Observable<unknown> {
-    return this.http.post(`/api/models/registry/${modelId}/activate`, {});
-  }
-
   unloadModel(modelId: string): Observable<unknown> {
     return this.http.post(`/api/models/registry/${modelId}/unload`, {});
   }

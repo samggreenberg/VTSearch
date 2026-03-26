@@ -31,7 +31,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - **Format**: `ruff format .`
 
 ## Architecture
-- `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware
+- `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Model-Id` headers
 - `vtsearch/auth/` — Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
 - `vtsearch/config.py` — Constants (CLAP_SAMPLE_RATE, paths, model IDs)
 - `vtsearch/medias.py` — Test media generation and embedding cache management
@@ -47,7 +47,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
 - `vtsearch/utils/` — Global state (`DatasetContext`, proxy dicts for `medias`/votes, multi-dataset context store), progress utilities
-- `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`
+- `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Model-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md, HANDOFF.md, ML.md, SETUP.md, demos.md, old_io.md, plan-media-sources.md, design/cli-detector-converter.md)
 - `tests/` — Test suite split by module:
@@ -111,7 +111,8 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
   - `test_load_sort_window.py` — Load Sort window endpoints: example-sort, server-media-files, detector server-files
   - `test_media_sources.py` — MediaSource abstraction: get_source_for_origin, LocalFolderSource, HTTP archive source
-  - `test_multi_dataset.py` — Multi-dataset support: DatasetContext, proxy dicts/lists, context store, switching preserves votes/history/scores, activate/unload API endpoints, scalar state isolation, empty context fallback
+  - `test_multi_dataset.py` — Multi-dataset support: DatasetContext, proxy dicts/lists, context store, switching preserves votes/history/scores, load/unload API endpoints, scalar state isolation, empty context fallback
+  - `test_request_context.py` — Request-scoped context resolution: X-Dataset-Id / X-Model-Id headers, proxy override per-request, fallback to global active, isolation between requests
   - `test_memory_errors.py` — Graceful MemoryError handling during dataset loading
   - `test_multi_user_dataset_access.py` — Multi-user dataset access control: readers list, access filtering, ownership checks, PUT readers endpoint
   - `test_multi_user_security.py` — LoginProvider ABC, DefaultLoginProvider, g.user middleware, created_by ownership, auth status endpoint, user data dir isolation
@@ -132,7 +133,7 @@ Tests are auto-grouped by area. Run a focused subset instead of the full suite:
 | `core` | audio, medias, votes, inclusion, settings, frontend | Basic app functionality |
 | `api` | api_contracts, error_recovery, dashboard, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
 | `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
-| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, parallel_loading | Dataset loading and management |
+| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
 | `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import, corrections_export | Import/export |
 | `models` | detectors, extractors, processors, trainable_models, clippers, eval*, resolver, new_embedders | ML models and evaluation |
 | `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract | Demo dataset downloads |
@@ -261,8 +262,9 @@ def slow_load():
 - **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
 ## Key Details
-- **Multi-dataset support**: Multiple datasets can be loaded in memory simultaneously. Per-dataset state is bundled in `DatasetContext` objects (`vtsearch/utils/state_core.py`). The module-level names `medias`, `good_votes`, `bad_votes`, etc. are **proxy objects** (`_ProxyDict`/`_ProxyList`) that delegate to the active context. Switching the active dataset via `set_active_dataset_id()` is instant — no re-embedding. Key functions: `register_context()`, `unregister_context()`, `get_context()`, `list_loaded_dataset_ids()`. Global (non-per-dataset) state: `autorun_detectors`, `autorun_extractors`, `autorun_localizers`. API: `POST /api/datasets/registry/<id>/activate` (instant switch), `POST /api/datasets/registry/<id>/unload` (free RAM). Registry tracks `_loaded_ids` (set) and `_loaded_id` (active).
-- Per-dataset state in `DatasetContext`: `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `last_learned_scores`, `textsort_suggestions`, `click_counter`, `diversity_tree`, `find_initial_labels`, `inclusion`, `dataset_display_name`
+- **Multi-dataset support**: Multiple datasets can be loaded in memory simultaneously. Per-dataset state is bundled in `DatasetContext` objects (`vtsearch/utils/state_core.py`). The module-level names `medias`, `good_votes`, `bad_votes`, etc. are **proxy objects** (`_ProxyDict`/`_ProxyList`) that delegate to the context resolved per-request. The frontend sends `X-Dataset-Id` and `X-Model-Id` HTTP headers to specify which loaded dataset/model each request operates on (see `ActiveContextService` and `activeContextInterceptor` in the Angular frontend). The `before_request` handler in `app.py` stashes the resolved contexts on Flask's `g`, and the proxy objects check `g` first. Outside a request context (background threads, tests), proxies fall back to a **thread-local** context set via `set_thread_dataset_context()` / `set_thread_detector_context()`. There is no global "active" pointer. Key functions: `register_context()`, `unregister_context()`, `get_context()`, `list_loaded_dataset_ids()`. Global (non-per-dataset) state: `autorun_detectors`, `autorun_extractors`, `autorun_localizers`. API: `POST /api/datasets/registry/<id>/load` (load from pkl), `POST /api/datasets/registry/<id>/unload` (free RAM). Registry tracks `_loaded_ids` (set of in-memory dataset IDs).
+- Per-dataset state in `DatasetContext`: `medias`, `diversity_tree`, `dataset_display_name`
+- Per-detector state in `DetectorContext`: `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `inclusion`, `training_medias`, `model`, `threshold`
 - All mutable state protected by `_state_lock` (RLock) in `vtsearch/utils/state_core.py`
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autorun_detector_names, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir

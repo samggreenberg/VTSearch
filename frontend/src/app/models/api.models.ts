@@ -233,7 +233,6 @@ export interface DatasetRegistryEntry {
   name: string;
   media_type: string;
   loaded?: boolean;
-  active?: boolean;
   readers?: string[];
   [key: string]: unknown;
 }
@@ -351,7 +350,6 @@ export interface ModelRegistryEntry {
   media_example?: string;
   detector_name?: string;
   loaded?: boolean;
-  active?: boolean;
   detector_loaded?: boolean;
   [key: string]: unknown;
 }

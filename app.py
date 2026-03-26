@@ -87,6 +87,37 @@ def _set_user_context():
     g.user = provider.get_user(request)
 
 
+@app.before_request
+def _set_request_context():
+    """Resolve per-request dataset/model context from HTTP headers.
+
+    If the frontend sends ``X-Dataset-Id`` or ``X-Model-Id``, the
+    corresponding context is stashed on ``g`` so that proxy objects
+    (``medias``, ``good_votes``, etc.) resolve to it for the duration
+    of this request — without mutating global "active" state.
+
+    When the headers are absent the proxies fall back to the global
+    active pointers, preserving backward compatibility.
+    """
+    from flask import request
+    from vtsearch.utils.state_core import (
+        get_context,
+        get_detector_context,
+    )
+
+    ds_id = request.headers.get("X-Dataset-Id")
+    if ds_id:
+        ctx = get_context(ds_id)
+        if ctx is not None:
+            g._dataset_context = ctx
+
+    model_id = request.headers.get("X-Model-Id")
+    if model_id:
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None:
+            g._detector_context = det_ctx
+
+
 # ---------------------------------------------------------------------------
 # Register Blueprints
 # ---------------------------------------------------------------------------
