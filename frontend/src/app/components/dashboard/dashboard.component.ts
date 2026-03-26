@@ -520,7 +520,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Add Labels modal ---
 
   openAddLabelsModal(model: ModelRegistryEntry): void {
-    this.addLabelsModelName = model.trainable_model_name || model.name;
+    this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
     this.addLabelsModalOpen = true;
   }
 
