@@ -50,34 +50,11 @@ def _score_clips_with_detector(
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON in detector file: {detector_path}") from exc
 
-    good_origins = detector_data.get("good_origins")
-    bad_origins = detector_data.get("bad_origins")
-    legacy_weights = detector_data.get("weights")
+    from vtsearch.models.weights_compat import normalize_detector_weights
 
-    weights = None
-    file_threshold = detector_data.get("threshold", 0.5)
-    threshold = file_threshold
-
-    if good_origins and bad_origins:
-        # Origin-based format: re-derive weights from origins
-        from vtsearch.models.training import train_detector_from_origins
-
-        media_type = detector_data.get("media_type", "audio")
-        inclusion = detector_data.get("inclusion", 0)
-        weights, threshold = train_detector_from_origins(
-            good_origins,
-            bad_origins,
-            inclusion,
-            media_type,
-        )
-
-    if weights is None and legacy_weights:
-        # Fallback to serialised weights (legacy or unresolvable origins)
-        weights = legacy_weights
-        threshold = file_threshold
-
-    if weights is None:
-        raise ValueError("Detector file missing 'weights' or origin fields")
+    nw = normalize_detector_weights(detector_data)
+    weights = nw.weights
+    threshold = nw.threshold
 
     # Reconstruct the MLP model from weights
     import torch  # noqa: PLC0415

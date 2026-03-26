@@ -22,10 +22,10 @@ POST /api/exporters/export
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from vtsearch.exporters import get_exporter, list_exporters
-from vtsearch.routes.helpers import validate_filepath_field
+from vtsearch.routes.helpers import get_json_safe, get_plugin_or_404, validate_filepath_field
 
 exporters_bp = Blueprint("exporters", __name__)
 
@@ -63,19 +63,15 @@ def run_export():
     ``field_values`` and ``results`` are both optional – they default to
     empty dicts – but a valid ``exporter_name`` is required.
     """
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
 
     exporter_name = data.get("exporter_name", "").strip()
     if not exporter_name:
         return jsonify({"error": "exporter_name is required"}), 400
 
-    exporter = get_exporter(exporter_name)
-    if exporter is None:
-        known = [exp.name for exp in list_exporters()]
-        return (
-            jsonify({"error": f"Unknown exporter '{exporter_name}'. Available: {known}"}),
-            404,
-        )
+    exporter, err = get_plugin_or_404(get_exporter, list_exporters, exporter_name, "exporter")
+    if err:
+        return err
 
     field_values: dict = data.get("field_values", {}) or {}
     results: dict = data.get("results", {}) or {}

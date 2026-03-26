@@ -397,15 +397,11 @@ def import_labels_into_model(name: str, importer_name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
+    from vtsearch.routes.helpers import extract_plugin_fields, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
 
-    importer = get_label_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_label_importers()]
-        return (
-            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
 
     field_values = extract_plugin_fields(importer)
     err = validate_required_fields(importer, field_values)

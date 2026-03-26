@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe
 from vtsearch.utils import (
     apply_label,
     apply_label_with_click_time,
@@ -175,7 +175,7 @@ def fill_labels_from_sort():
     labels and returns the resulting data as a results dict suitable for
     any exporter.
     """
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
 
     sort_results = data.get("sort_results")
     if not isinstance(sort_results, list):

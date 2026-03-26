@@ -32,10 +32,10 @@ POST /api/label-importers/ingest-missing
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
-from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
+from vtsearch.routes.helpers import extract_plugin_fields, get_json_safe, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
 from vtsearch.utils import (
     apply_label,
     build_media_lookup,
@@ -108,13 +108,9 @@ def run_label_import(importer_name: str):
     client should prompt the user and optionally call
     ``POST /api/label-importers/ingest-missing`` with the ``missing`` list.
     """
-    importer = get_label_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_label_importers()]
-        return (
-            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
 
     field_values = extract_plugin_fields(importer)
 
@@ -209,7 +205,7 @@ def ingest_missing():
 
         {"ingested": <int>, "applied": <int>, "message": "<str>"}
     """
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     entries = body.get("entries", [])
 
     if not isinstance(entries, list) or not entries:

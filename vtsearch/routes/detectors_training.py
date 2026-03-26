@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.routes.detectors_helpers import serialize_weights, train_and_threshold, validate_good_bad_split
-from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, validate_filepath_field
+from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, get_json_safe, validate_filepath_field
 from vtsearch.models import (
     build_model_from_weights,
     collect_media_origins,
@@ -309,14 +309,11 @@ def train_from_label_import(importer_name: str):
     saves it as an autorun detector.  Current votes are *not* modified.
     """
     from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtsearch.routes.helpers import get_plugin_or_404
 
-    importer = get_label_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_label_importers()]
-        return (
-            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
 
     snap = snapshot_medias()
     if not snap:
@@ -329,7 +326,7 @@ def train_from_label_import(importer_name: str):
     if has_file_fields:
         name = request.form.get("name", "").strip()
     else:
-        name = (request.get_json(force=True, silent=True) or {}).get("name", "").strip()
+        name = get_json_safe().get("name", "").strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400
@@ -473,7 +470,7 @@ def find_check_labels():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
     model_ids = body.get("model_ids", [])
 
@@ -584,7 +581,7 @@ def multi_find():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
     model_ids = body.get("model_ids", [])
 
