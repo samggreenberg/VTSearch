@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 import pytest
 
+from conftest import load_model_and_wait as _load_model_and_wait
 from vtsearch.settings import get_trainable_models_dir
 
 
@@ -270,7 +271,7 @@ class TestModelLoadEndpoints:
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadCtx")
-        res = client.post("/api/models/registry/load", json={"model_id": mid})
+        res = _load_model_and_wait(client, mid)
         assert res.status_code == 200
 
         det = get_detector_context(mid)
@@ -281,11 +282,11 @@ class TestModelLoadEndpoints:
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadTwice")
-        client.post("/api/models/registry/load", json={"model_id": mid})
+        _load_model_and_wait(client, mid)
         det1 = get_detector_context(mid)
 
         # Load again — should reuse, not create new
-        client.post("/api/models/registry/load", json={"model_id": mid})
+        _load_model_and_wait(client, mid)
         det2 = get_detector_context(mid)
         assert det1 is det2
 
@@ -293,8 +294,8 @@ class TestModelLoadEndpoints:
         mid1 = self._register_trainable_model(client, "Reg1")
         mid2 = self._register_trainable_model(client, "Reg2")
 
-        client.post("/api/models/registry/load", json={"model_id": mid1})
-        client.post("/api/models/registry/load", json={"model_id": mid2})
+        _load_model_and_wait(client, mid1)
+        _load_model_and_wait(client, mid2)
 
         res = client.get("/api/models/registry")
         models = {m["id"]: m for m in res.get_json()["models"]}
@@ -312,8 +313,8 @@ class TestModelLoadEndpoints:
         mid1 = self._register_trainable_model(client, "Act1")
         mid2 = self._register_trainable_model(client, "Act2")
 
-        client.post("/api/models/registry/load", json={"model_id": mid1})
-        client.post("/api/models/registry/load", json={"model_id": mid2})
+        _load_model_and_wait(client, mid1)
+        _load_model_and_wait(client, mid2)
 
         # mid2 is active. Activate mid1.
         res = client.post(f"/api/models/registry/{mid1}/activate")
@@ -330,7 +331,7 @@ class TestModelLoadEndpoints:
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "Unload")
-        client.post("/api/models/registry/load", json={"model_id": mid})
+        _load_model_and_wait(client, mid)
         assert get_detector_context(mid) is not None
 
         res = client.post(f"/api/models/registry/{mid}/unload")
@@ -348,7 +349,7 @@ class TestModelLoadEndpoints:
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "Delete")
-        client.post("/api/models/registry/load", json={"model_id": mid})
+        _load_model_and_wait(client, mid)
         assert get_detector_context(mid) is not None
 
         res = client.delete(f"/api/models/registry/{mid}")

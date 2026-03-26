@@ -5,6 +5,7 @@ import shutil
 
 import pytest
 
+from conftest import load_model_and_wait as _load_model_and_wait
 from vtsearch.settings import get_trainable_models_dir
 
 
@@ -419,7 +420,7 @@ class TestLoadModelEndpoint:
         )
         model_id = res.get_json()["model"]["id"]
 
-        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        res = _load_model_and_wait(client, model_id)
         assert res.status_code == 200
         assert get_loaded_id() == model_id
 
@@ -462,14 +463,14 @@ class TestLoadModelEndpoint:
         mid_b = res_b.get_json()["model"]["id"]
 
         # Load model A and cast some votes.
-        client.post("/api/models/registry/load", json={"model_id": mid_a})
+        _load_model_and_wait(client, mid_a)
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
         assert ids[0] in good_votes
         assert ids[1] in bad_votes
 
         # Now load model B — votes from A must be gone.
-        client.post("/api/models/registry/load", json={"model_id": mid_b})
+        _load_model_and_wait(client, mid_b)
         assert ids[0] not in good_votes, "good vote from model A leaked into model B"
         assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
 
@@ -492,7 +493,7 @@ class TestLoadModelEndpoint:
             json={"name": "Persist", "media_type": "audio", "trainable": True, "text_query": "test"},
         )
         mid = res.get_json()["model"]["id"]
-        client.post("/api/models/registry/load", json={"model_id": mid})
+        _load_model_and_wait(client, mid)
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         # Labels auto-sync on vote, so the trainable model file now has 1 label.
 
@@ -500,9 +501,8 @@ class TestLoadModelEndpoint:
         client.post("/api/models/registry/load", json={"model_id": None})
         assert ids[0] not in good_votes
 
-        res = client.post("/api/models/registry/load", json={"model_id": mid})
+        res = _load_model_and_wait(client, mid)
         assert res.status_code == 200
-        assert res.get_json().get("labels_restored", 0) >= 1
         assert ids[0] in good_votes, "saved label was not restored on model load"
 
 
@@ -529,7 +529,7 @@ class TestVoteSyncsToLoadedModel:
         model_id = res.get_json()["model"]["id"]
 
         # Load the model
-        client.post("/api/models/registry/load", json={"model_id": model_id})
+        _load_model_and_wait(client, model_id)
 
         # Cast a vote
         first_id = next(iter(medias))
@@ -562,7 +562,7 @@ class TestVoteSyncsToLoadedModel:
             json={"name": "ToggleSync", "media_type": "audio", "trainable": True, "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
-        client.post("/api/models/registry/load", json={"model_id": model_id})
+        _load_model_and_wait(client, model_id)
 
         first_id = next(iter(medias))
         # Vote good
@@ -611,7 +611,7 @@ class TestVoteSyncsToLoadedModel:
             json={"name": "ImportSync", "media_type": "audio", "trainable": True, "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
-        client.post("/api/models/registry/load", json={"model_id": model_id})
+        _load_model_and_wait(client, model_id)
 
         # Get an MD5 from the first media
         first_id = next(iter(medias))
@@ -864,11 +864,9 @@ class TestSeedVotesFromExamples:
         assert len(good_votes) == 0
 
         # Load model — should auto-seed
-        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        res = _load_model_and_wait(client, model_id)
         assert res.status_code == 200
-        data = res.get_json()
-        assert data["examples_seeded"] == 1
-        assert first_id in good_votes
+        assert first_id in good_votes, "example media should be seeded as good vote"
 
     def test_load_model_without_examples_seeds_nothing(self, client):
         """Loading a text-only model should seed 0 examples."""
@@ -890,9 +888,8 @@ class TestSeedVotesFromExamples:
         model_id = res.get_json()["model"]["id"]
 
         client.post("/api/votes/clear")
-        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        res = _load_model_and_wait(client, model_id)
         assert res.status_code == 200
-        assert res.get_json()["examples_seeded"] == 0
         assert len(good_votes) == 0
 
     def test_seeded_examples_enable_autopilot_skip(self, client):
@@ -930,8 +927,7 @@ class TestSeedVotesFromExamples:
         model_id = res.get_json()["model"]["id"]
 
         client.post("/api/votes/clear")
-        res = client.post("/api/models/registry/load", json={"model_id": model_id})
-        assert res.get_json()["examples_seeded"] == 4
+        _load_model_and_wait(client, model_id)
 
         # With default autopilot_top_greens=3, 4 good votes is enough to skip Good phase
         assert len(good_votes) >= 4
@@ -963,9 +959,8 @@ class TestSeedVotesFromExamples:
         model_id = res.get_json()["model"]["id"]
 
         client.post("/api/votes/clear")
-        res = client.post("/api/models/registry/load", json={"model_id": model_id})
+        res = _load_model_and_wait(client, model_id)
         assert res.status_code == 200
-        assert res.get_json()["examples_seeded"] == 1
 
         # A new media should have been inserted
         assert len(medias) == original_count + 1
@@ -1088,13 +1083,8 @@ class TestLoadModelCrossDatasetResolution:
             }
 
             try:
-                res = client.post("/api/models/registry/load", json={"model_id": model_id})
+                res = _load_model_and_wait(client, model_id)
                 assert res.status_code == 200
-                data = res.get_json()
-                assert data["ok"] is True
-                assert data["labels_restored"] == 2, (
-                    f"Expected 2 labels restored via origin resolution, got {data['labels_restored']}"
-                )
                 assert 1 in good_votes, "good label should be applied to media 1"
                 assert 2 in bad_votes, "bad label should be applied to media 2"
             finally:
@@ -1158,13 +1148,9 @@ class TestLoadModelCrossDatasetResolution:
             }
 
             try:
-                res = client.post("/api/models/registry/load", json={"model_id": model_id})
+                res = _load_model_and_wait(client, model_id)
                 assert res.status_code == 200
-                data = res.get_json()
-                assert data["labels_restored"] == 1, (
-                    "origin_name fallback should have matched the label"
-                )
-                assert 1 in good_votes
+                assert 1 in good_votes, "origin_name fallback should have matched the label"
             finally:
                 medias.clear()
                 medias.update(saved)
