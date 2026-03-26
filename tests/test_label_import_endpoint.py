@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 import app as app_module
 

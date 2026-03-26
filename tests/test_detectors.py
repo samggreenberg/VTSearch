@@ -554,11 +554,10 @@ class TestFindLabel:
         """
         from unittest.mock import patch
 
-        from vtsearch.datasets.labelset import LabelSet
         from vtsearch.models.registry import register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import medias, snapshot_medias
+        from vtsearch.utils import medias
 
         reset_for_tests()
 

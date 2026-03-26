@@ -2,7 +2,6 @@
 
 import threading
 import time
-from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -11,7 +10,6 @@ import pytest
 from vtsearch.utils.progress import (
     CancelledError,
     LoadingTasksTracker,
-    ProgressTracker,
     get_progress,
     loading_tasks,
     set_thread_progress,

@@ -3,7 +3,7 @@
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
 from vtsearch.models.registry import register_model
-from vtsearch.utils import add_autorun_detector, get_autorun_detectors, medias
+from vtsearch.utils import add_autorun_detector, medias
 
 
 class TestDashboardDatasetInfo:

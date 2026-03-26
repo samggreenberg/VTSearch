@@ -225,7 +225,6 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
     Writes the output to a temporary file and calls ``embed_media()``,
     which is the most general approach across all media types.
     """
-    import numpy as np  # noqa: PLC0415
 
     if target_emb is None:
         return None

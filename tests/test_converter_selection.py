@@ -16,12 +16,9 @@ import hashlib
 import io
 import struct
 import wave
-from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 
 # ---------------------------------------------------------------------------

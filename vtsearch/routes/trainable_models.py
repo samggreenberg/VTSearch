@@ -640,9 +640,6 @@ def load_model_route():
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
-    labels_restored = 0
-    examples_seeded = 0
-
     if model_id is None:
         # Deactivate and unload the currently active model.
         from vtsearch.models.registry import get_active_model_id, remove_loaded_model_id
@@ -696,9 +693,6 @@ def load_model_route():
         from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
 
         try:
-            labels_restored = 0
-            examples_seeded = 0
-
             if tm_name:
                 tracker.check_cancelled()
                 tracker.update(
@@ -707,14 +701,14 @@ def load_model_route():
                 )
                 tm_data = _read_model(_model_path(tm_name))
                 if tm_data:
-                    labels_restored = _restore_labels_from_trainable_model(tm_data)
+                    _restore_labels_from_trainable_model(tm_data)
 
                     tracker.check_cancelled()
                     tracker.update(
                         "loading", "Seeding examples…", 0, 0,
                         step=2, total_steps=_LOAD_STEPS,
                     )
-                    examples_seeded = _seed_good_votes_from_examples(
+                    _seed_good_votes_from_examples(
                         tm_data.get("examples", [])
                     )
 

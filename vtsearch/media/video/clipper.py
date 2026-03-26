@@ -150,7 +150,6 @@ def _detect_scene_boundaries(
     the video end.  An empty list means no scene changes were detected.
     """
     import cv2  # noqa: PLC0415
-    import numpy as np  # noqa: PLC0415
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
