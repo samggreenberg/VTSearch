@@ -11,7 +11,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { AuthService } from '../../services/auth.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -81,10 +81,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
+  private modelPolling$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
   private completedTaskIds = new Set<string>();
+  private completedModelTaskIds = new Set<string>();
 
   currentUser = '';
   isDefaultLogin = true;
@@ -320,6 +322,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     this.polling$.next();
     this.polling$.complete();
+    this.modelPolling$.next();
+    this.modelPolling$.complete();
   }
 
   get datasets(): DatasetRegistryEntry[] {
@@ -480,7 +484,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadModel(model: ModelRegistryEntry): void {
     this.modelsApi.loadModel(model.id).subscribe({
-      next: () => this.datasetState.refresh(),
+      next: () => this.startModelProgressPolling(),
     });
   }
 
@@ -668,6 +672,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
             }
             if (onComplete && failed.length === 0) {
               onComplete();
+            }
+          }
+        },
+      });
+  }
+
+  startModelProgressPolling(): void {
+    this.modelPolling$.next(); // cancel previous polling
+    this.completedModelTaskIds.clear();
+
+    timer(0, 1000)
+      .pipe(
+        takeUntil(this.modelPolling$),
+        takeUntil(this.destroy$),
+        switchMap(() => this.modelsApi.getModelLoadingTasks().pipe(
+          catchError(() => EMPTY),
+        )),
+      )
+      .subscribe({
+        next: (resp: LoadingTasksResponse) => {
+          const tasks = resp.tasks ?? [];
+          const active = tasks.filter((t) => t.status !== 'idle');
+          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
+          const failed = errored.filter((t) => t.error !== 'Cancelled');
+
+          this.modelLoadingTasks = [...active, ...failed];
+
+          // Detect tasks that just completed successfully
+          const justFinished = tasks.filter(
+            (t) => t.status === 'idle' && !t.error && !this.completedModelTaskIds.has(t.task_id),
+          );
+          for (const t of justFinished) {
+            this.completedModelTaskIds.add(t.task_id);
+          }
+          if (justFinished.length > 0) {
+            this.datasetState.refresh();
+          }
+
+          for (const t of failed) {
+            this.datasetState.setErrorMessage(t.error!);
+          }
+
+          if (active.length === 0) {
+            this.modelPolling$.next();
+            if (justFinished.length === 0) {
+              this.datasetState.refresh();
             }
           }
         },
