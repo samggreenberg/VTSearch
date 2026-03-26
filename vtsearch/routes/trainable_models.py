@@ -707,22 +707,20 @@ def _apply_and_retrain(
 
     Returns ``(resolved_count, trained_bool)``.
     """
+    from flask import g
     from vtsearch.utils import (
         apply_label,
         build_media_lookup,
         resolve_media_ids,
         snapshot_medias,
     )
-    from vtsearch.utils.state_core import (
-        get_active_detector_id,
-        set_active_detector_id,
-    )
 
-    # Save the current active context so we can restore it afterwards.
-    prev_active_id = get_active_detector_id()
+    # Override the request-scoped detector context so vote proxies
+    # resolve to this model's context for the duration of this call.
+    prev_det_ctx = getattr(g, "_detector_context", None)
 
     try:
-        set_active_detector_id(model_id)
+        g._detector_context = det_ctx
 
         snap = snapshot_medias()
         if not snap:
@@ -785,7 +783,7 @@ def _apply_and_retrain(
         return resolved, trained
 
     finally:
-        set_active_detector_id(prev_active_id)
+        g._detector_context = prev_det_ctx
 
 
 # ---------------------------------------------------------------------------
@@ -910,15 +908,12 @@ def load_model_route():
     from vtsearch.models.registry import (
         get_model,
         is_model_loaded,
-        set_active_model_id,
     )
     from vtsearch.utils import (
         DetectorContext,
         bad_votes,
-        get_detector_context,
         good_votes,
         register_detector_context,
-        set_active_detector_id,
     )
 
     data = request.get_json(force=True, silent=True) or {}
@@ -934,28 +929,12 @@ def load_model_route():
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
-    labels_restored = 0
-    examples_seeded = 0
-
     if model_id is None:
-        # Deactivate and unload the currently active model.
-        from vtsearch.models.registry import get_active_model_id, remove_loaded_model_id
-        from vtsearch.utils import unregister_detector_context
-
-        prev_id = get_active_model_id()
-        if prev_id is not None:
-            unregister_detector_context(prev_id)
-            remove_loaded_model_id(prev_id)
-        set_active_model_id(None)
-        set_active_detector_id(None)
+        # No model requested — nothing to load.
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
-        # Already loaded — just activate it (instant switch)
-        set_active_model_id(model_id)
-        det_ctx = get_detector_context(model_id)
-        if det_ctx is not None:
-            set_active_detector_id(model_id)
+        # Already loaded — nothing more to do.
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     # New load: create a DetectorContext, register it, then load labels
@@ -968,12 +947,6 @@ def load_model_route():
         media_type=entry.get("media_type", ""),
     )
     register_detector_context(det_ctx)
-    set_active_detector_id(model_id)
-    # Set the model as active so proxy objects resolve to this context,
-    # but do NOT mark as "loaded" yet — the background thread will call
-    # add_loaded_model_id() when it finishes so the UI shows a progress
-    # bar instead of an immediate green check.
-    set_active_model_id(model_id)
 
     _LOAD_STEPS = 2  # restore labels, seed examples
     task_id = f"_modload_{model_id[:8]}"

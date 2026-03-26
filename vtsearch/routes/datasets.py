@@ -40,7 +40,6 @@ from vtsearch.utils import (
     build_diversity_tree,
     cancel_dataset_progress,
     collapse_duplicates,
-    get_active_dataset_id,
     get_context,
     list_loaded_dataset_ids,
     medias,
@@ -49,8 +48,6 @@ from vtsearch.utils import (
     get_progress,
     good_votes,
     register_context,
-    set_active_dataset_id,
-    set_dataset_display_name,
     snapshot_medias,
     unregister_context,
     update_progress,
@@ -619,11 +616,18 @@ def export_dataset():
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
 def clear_dataset_route():
-    """Clear the active dataset from memory."""
-    active_id = get_active_dataset_id()
-    if active_id:
-        unregister_context(active_id)
-        _reg_remove_loaded(active_id)
+    """Clear the request-scoped dataset from memory.
+
+    Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to
+    determine which dataset to clear.
+    """
+    from vtsearch.utils import get_active_context
+
+    ctx = get_active_context()
+    ds_id = ctx.dataset_id if ctx.dataset_id else None
+    if ds_id:
+        unregister_context(ds_id)
+        _reg_remove_loaded(ds_id)
     else:
         clear_dataset()
     return jsonify({"ok": True})
@@ -686,8 +690,6 @@ def load_registered_dataset(dataset_id: str):
 
     # If already loaded in memory, nothing to do.
     if _reg_is_loaded(dataset_id):
-        set_active_dataset_id(dataset_id)
-        set_dataset_display_name(entry.get("name", ""))
         return jsonify({"ok": True, "message": "Dataset already loaded"})
 
     pkl_path = entry.get("pkl_path", "")
@@ -749,10 +751,6 @@ def load_registered_dataset(dataset_id: str):
             )
             _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
             ctx.dataset_display_name = entry.get("name", "")
-
-            # Activate if nothing else is currently active.
-            if get_active_dataset_id() is None:
-                set_active_dataset_id(dataset_id)
 
             # Warm up the embedder using the task tracker.
             def _task_progress(status, message="", current=0, total=0, **kw):

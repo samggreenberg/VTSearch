@@ -13,7 +13,6 @@ from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
-    set_active_dataset_id,
     snapshot_medias,
 )
 from vtsearch.utils.progress import update_find_progress
@@ -125,14 +124,16 @@ def find_label():
         update_find_progress("idle", "")
         return jsonify({"error": "model_id is required"}), 400
 
-    # Activate the explicitly selected dataset so scoring runs against the
-    # correct context instead of whichever dataset happens to be active.
+    # If the request body specifies a dataset_id, override the request-scoped
+    # context so scoring runs against the correct dataset.
     dataset_id = body.get("dataset_id")
     if dataset_id:
+        from flask import g
         from vtsearch.utils import get_context
 
-        if get_context(dataset_id) is not None:
-            set_active_dataset_id(dataset_id)
+        ctx = get_context(dataset_id)
+        if ctx is not None:
+            g._dataset_context = ctx
 
     update_find_progress(
         "running", "Resolving model…",

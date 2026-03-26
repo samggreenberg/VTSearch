@@ -23,12 +23,10 @@ from vtsearch.utils import (
     build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
-    get_active_dataset_id,
     get_dataset_display_name,
     get_dupe_count,
     medias,
     register_context,
-    set_active_dataset_id,
     snapshot_medias,
     update_progress,
 )
@@ -313,14 +311,13 @@ def _auto_register_dataset(
 
 
 def _activate_new_context(dataset_id: str) -> DatasetContext:
-    """Create a fresh DatasetContext, register it, and make it active.
+    """Create a fresh DatasetContext and register it.
 
-    The previous active context (if any) is *preserved* in the context
-    store — it is not cleared.  This enables the multi-dataset model.
+    The previous contexts (if any) are *preserved* in the context
+    store — nothing is cleared.  This enables the multi-dataset model.
     """
     ctx = DatasetContext(dataset_id)
     register_context(ctx)
-    set_active_dataset_id(dataset_id)
     return ctx
 
 
@@ -432,9 +429,6 @@ def _run_origin_load_in_background(
             if entry is not None:
                 _migrate_context_id(task_id, entry["id"])
                 ctx.dataset_display_name = entry.get("name", name)
-                # Activate this dataset if nothing else is currently active.
-                if get_active_dataset_id() is None:
-                    set_active_dataset_id(entry["id"])
 
             # Warm up the embedder.  Use a progress wrapper that updates the
             # task tracker, not the global singleton.
@@ -497,19 +491,13 @@ def _run_origin_load_in_background(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtsearch.utils.state_core import (
-        _contexts,
-        _active_dataset_id,
-        set_active_dataset_id,
-    )
+    from vtsearch.utils.state_core import _contexts
 
     ctx = _contexts.pop(old_id, None)
     if ctx is None:
         return
     ctx.dataset_id = new_id
     _contexts[new_id] = ctx
-    if _active_dataset_id == old_id:
-        set_active_dataset_id(new_id)
 
 
 def _run_importer_in_background(importer, field_values: dict) -> str:
