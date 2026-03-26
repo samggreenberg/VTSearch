@@ -912,8 +912,10 @@ def load_model_route():
     from vtsearch.utils import (
         DetectorContext,
         bad_votes,
+        get_detector_context,
         good_votes,
         register_detector_context,
+        set_active_detector_id,
     )
 
     data = request.get_json(force=True, silent=True) or {}
@@ -930,11 +932,15 @@ def load_model_route():
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # No model requested — nothing to load.
+        # No model requested — clear the global fallback.
+        set_active_detector_id(None)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
-        # Already loaded — nothing more to do.
+        # Already loaded — set as global fallback for non-header requests.
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None:
+            set_active_detector_id(model_id)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     # New load: create a DetectorContext, register it, then load labels
@@ -947,6 +953,8 @@ def load_model_route():
         media_type=entry.get("media_type", ""),
     )
     register_detector_context(det_ctx)
+    # Set as global fallback so tests and non-header requests resolve correctly.
+    set_active_detector_id(model_id)
 
     _LOAD_STEPS = 2  # restore labels, seed examples
     task_id = f"_modload_{model_id[:8]}"
