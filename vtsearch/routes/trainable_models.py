@@ -913,6 +913,7 @@ def load_model_route():
     from vtsearch.utils import (
         DetectorContext,
         bad_votes,
+        get_active_detector_context,
         get_detector_context,
         good_votes,
         register_detector_context,
@@ -932,8 +933,15 @@ def load_model_route():
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # No model requested — clear find mode.
-        from vtsearch.models.registry import set_find_mode
+        # No model requested — unload the current model (if any) and clear find mode.
+        from vtsearch.models.registry import remove_loaded_model_id, set_find_mode
+
+        det_ctx = get_active_detector_context()
+        prev_id = det_ctx.detector_id if det_ctx.detector_id else None
+        if prev_id:
+            from vtsearch.utils import unregister_detector_context
+            unregister_detector_context(prev_id)
+            remove_loaded_model_id(prev_id)
         set_find_mode(False)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
