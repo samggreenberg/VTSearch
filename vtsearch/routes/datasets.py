@@ -29,7 +29,7 @@ from vtsearch.datasets.registry import (
     list_datasets_for_user as _reg_list_for_user,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
-    set_loaded_id as _reg_set_loaded,
+    add_loaded_id as _reg_add_loaded,
     set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
@@ -743,7 +743,7 @@ def load_registered_dataset(dataset_id: str):
 
             _diversity_progress(0, 0)
             build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
-            _reg_set_loaded(dataset_id)
+            _reg_add_loaded(dataset_id)
             # Update item count and dupe count in case they changed
             num_dupes = sum(
                 1 for m in ctx.medias.values()
@@ -800,23 +800,6 @@ def unload_registered_dataset(dataset_id: str):
     unregister_context(dataset_id)
     _reg_remove_loaded(dataset_id)
     return jsonify({"ok": True})
-
-
-@datasets_bp.route("/api/datasets/registry/<dataset_id>/activate", methods=["POST"])
-def activate_registered_dataset(dataset_id: str):
-    """Deprecated — no-op kept for backward compatibility.
-
-    Active state is now request-scoped via ``X-Dataset-Id`` header.
-    This endpoint validates that the dataset exists and is loaded,
-    then returns success without mutating any global state.
-    """
-    from vtsearch.auth import get_current_user
-
-    if not _reg_can_access(dataset_id, get_current_user()):
-        return jsonify({"error": "Access denied"}), 403
-    if not _reg_is_loaded(dataset_id):
-        return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
-    return jsonify({"ok": True, "message": "Dataset activated"})
 
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])

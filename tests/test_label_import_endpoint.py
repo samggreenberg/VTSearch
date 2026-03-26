@@ -181,7 +181,7 @@ class TestLabelImportEndpoint:
 
     def test_import_syncs_model_registry_num_training(self, client, tmp_path):
         """Importing labels should update the loaded model's num_training in the registry."""
-        from vtsearch.models.registry import get_model, register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, get_model, register_model, reset_for_tests
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.routes.trainable_models import _write_model
 
@@ -208,7 +208,7 @@ class TestLabelImportEndpoint:
             trainable_model_name=tm_name,
             num_training=0,
         )
-        set_loaded_id(entry["id"])
+        add_loaded_model_id(entry["id"])
 
         # Set active detector so sync_labels_to_loaded_model() can find it
         from vtsearch.utils.state_core import DetectorContext, register_detector_context, set_active_detector_id

@@ -748,10 +748,11 @@ class TestFindLabel:
         training labels, not the N scoring labels from Dataset B.
         """
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -786,7 +787,10 @@ class TestFindLabel:
                 trainable_model_name=tm_name,
             )
             model_id = entry["id"]
-            set_loaded_id(model_id)
+            add_loaded_model_id(model_id)
+            det_ctx = DetectorContext(model_id)
+            register_detector_context(det_ctx)
+            set_active_detector_id(model_id)
 
             # --- Phase 2: simulate loading Dataset B (clear votes) ---
             good_votes.clear()
@@ -815,13 +819,14 @@ class TestFindLabel:
 
     def test_find_mode_cleared_on_model_load(self, client):
         """Loading a new model should clear find mode so training syncs resume."""
-        from vtsearch.models.registry import is_find_mode, reset_for_tests, set_find_mode, set_loaded_id
+        from vtsearch.models.registry import is_find_mode, reset_for_tests, set_find_mode
 
         reset_for_tests()
         set_find_mode(True)
         assert is_find_mode()
 
-        set_loaded_id(None)
+        # Loading null model via endpoint clears find mode
+        client.post("/api/models/registry/load", json={"model_id": None})
         assert not is_find_mode()
 
     def test_find_label_missing_model_id(self, client):

@@ -191,28 +191,6 @@ def update_dataset(dataset_id: str, **fields: Any) -> bool:
     return False
 
 
-def get_loaded_id() -> str | None:
-    """Deprecated — always returns ``None``.
-
-    Previously returned the "active" dataset ID.  Now that active state
-    is request-scoped (via ``X-Dataset-Id`` header), this always returns
-    ``None``.  Kept for backward compatibility with callers that check
-    the return value.
-    """
-    return None
-
-
-def set_loaded_id(dataset_id: str | None) -> None:
-    """Mark *dataset_id* as loaded (adds to ``_loaded_ids``).
-
-    Previously also set the "active" pointer.  Now just ensures the
-    dataset is in the loaded set.
-    """
-    with _lock:
-        if dataset_id is not None:
-            _loaded_ids.add(dataset_id)
-
-
 def get_loaded_ids() -> set[str]:
     """Return the set of all currently loaded (in-memory) dataset IDs."""
     with _lock:

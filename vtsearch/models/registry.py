@@ -200,38 +200,6 @@ def find_by_trainable_model_name(tm_name: str) -> dict[str, Any] | None:
     return None
 
 
-def get_loaded_id() -> str | None:
-    """Deprecated — always returns ``None``.
-
-    Previously returned the "active" model ID.  Now that active state
-    is request-scoped (via ``X-Model-Id`` header), this always returns
-    ``None``.  Kept for backward compatibility.
-    """
-    return None
-
-
-def get_active_model_id() -> str | None:
-    """Deprecated — always returns ``None``.
-
-    Previously returned the "active" model ID.  Kept for backward
-    compatibility with callers that check the return value.
-    """
-    return None
-
-
-def set_loaded_id(model_id: str | None) -> None:
-    """Mark *model_id* as loaded (adds to ``_loaded_ids``).
-
-    Previously also set the "active" pointer.  Now just ensures the
-    model is in the loaded set.
-    """
-    global _find_mode
-    with _lock:
-        if model_id is not None:
-            _loaded_ids.add(model_id)
-        _find_mode = False
-
-
 def add_loaded_model_id(model_id: str) -> None:
     """Add *model_id* to the set of loaded models (without changing active)."""
     with _lock:
@@ -242,18 +210,6 @@ def remove_loaded_model_id(model_id: str) -> None:
     """Remove *model_id* from the loaded set."""
     with _lock:
         _loaded_ids.discard(model_id)
-
-
-def set_active_model_id(model_id: str | None) -> None:
-    """Deprecated — no-op.
-
-    Previously switched the "active" model pointer.  Now that active
-    state is request-scoped, this is a no-op.  Kept so callers don't
-    need to be updated yet (they will be cleaned up in Phase 4).
-    """
-    global _find_mode
-    with _lock:
-        _find_mode = False
 
 
 def is_model_loaded(model_id: str) -> bool:

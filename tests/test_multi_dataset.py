@@ -425,37 +425,6 @@ class TestMultiDatasetAPI:
         assert datasets[e1["id"]]["loaded"] is True
         assert datasets[e2["id"]]["loaded"] is True
 
-    def test_activate_endpoint(self, client):
-        """POST /api/datasets/registry/<id>/activate returns ok for loaded datasets."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id
-
-        e1 = register_dataset(name="Act1", media_type="audio", num_items=5, pkl_path="/tmp/fake_act1.pkl")
-        e2 = register_dataset(name="Act2", media_type="audio", num_items=3, pkl_path="/tmp/fake_act2.pkl")
-
-        # Create contexts for both.
-        ctx1 = DatasetContext(e1["id"])
-        ctx1.medias[1] = self._make_test_media(1)
-        register_context(ctx1)
-        add_loaded_id(e1["id"])
-
-        ctx2 = DatasetContext(e2["id"])
-        ctx2.medias[2] = self._make_test_media(2)
-        register_context(ctx2)
-        add_loaded_id(e2["id"])
-
-        # Activate e2 via API — now a no-op but should return ok.
-        resp = client.post(f"/api/datasets/registry/{e2['id']}/activate")
-        assert resp.status_code == 200
-        assert resp.get_json()["ok"] is True
-
-    def test_activate_unloaded_returns_400(self, client):
-        """Cannot activate a dataset that's not loaded."""
-        from vtsearch.datasets.registry import register_dataset
-
-        e = register_dataset(name="NotLoaded", media_type="audio", num_items=1, pkl_path="/tmp/fake_notloaded.pkl")
-        resp = client.post(f"/api/datasets/registry/{e['id']}/activate")
-        assert resp.status_code == 400
-
     def test_unload_removes_from_loaded(self, client):
         """POST /api/datasets/registry/<id>/unload removes the context."""
         from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
@@ -507,7 +476,7 @@ class TestMultiDatasetAPI:
 
     def test_clear_only_clears_active(self, client):
         """POST /api/dataset/clear removes only the active dataset."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id, is_loaded
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e1 = register_dataset(name="Keep", media_type="audio", num_items=2, pkl_path="/tmp/fake_keep.pkl")
         e2 = register_dataset(name="Clear", media_type="audio", num_items=2, pkl_path="/tmp/fake_clear.pkl")
@@ -523,7 +492,6 @@ class TestMultiDatasetAPI:
         add_loaded_id(e2["id"])
 
         set_active_dataset_id(e2["id"])
-        set_loaded_id(e2["id"])
 
         resp = client.post("/api/dataset/clear")
         assert resp.status_code == 200
@@ -635,10 +603,11 @@ class TestSyncLabelsAcrossDatasets:
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -674,7 +643,10 @@ class TestSyncLabelsAcrossDatasets:
                 trainable_model_name=tm_name,
             )
             model_id = entry["id"]
-            set_loaded_id(model_id)
+            add_loaded_model_id(model_id)
+            det_ctx = DetectorContext(model_id)
+            register_detector_context(det_ctx)
+            set_active_detector_id(model_id)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()
@@ -699,10 +671,11 @@ class TestSyncLabelsAcrossDatasets:
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -738,7 +711,10 @@ class TestSyncLabelsAcrossDatasets:
                 trainable_model_name=tm_name,
             )
             model_id = entry["id"]
-            set_loaded_id(model_id)
+            add_loaded_model_id(model_id)
+            det_ctx = DetectorContext(model_id)
+            register_detector_context(det_ctx)
+            set_active_detector_id(model_id)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()

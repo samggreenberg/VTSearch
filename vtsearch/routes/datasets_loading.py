@@ -15,7 +15,7 @@ from vtsearch.datasets.loader import apply_custom_metadata_md5
 from vtsearch.datasets.registry import (
     get_saved_datasets_dir,
     register_dataset as _reg_register,
-    set_loaded_id as _reg_set_loaded,
+    add_loaded_id as _reg_add_loaded,
 )
 from vtsearch.utils import (
     DatasetContext,
@@ -306,7 +306,7 @@ def _auto_register_dataset(
         embedder=embedder,
         created_by=created_by,
     )
-    _reg_set_loaded(entry["id"])
+    _reg_add_loaded(entry["id"])
     return entry
 
 

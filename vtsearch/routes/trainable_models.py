@@ -932,8 +932,10 @@ def load_model_route():
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # No model requested — clear the global fallback.
+        # No model requested — clear the global fallback and find mode.
+        from vtsearch.models.registry import set_find_mode
         set_active_detector_id(None)
+        set_find_mode(False)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
@@ -1022,25 +1024,6 @@ def load_model_route():
         "message": "Loading started",
         "task_id": str(task_id),
     })
-
-
-@trainable_models_bp.route("/api/models/registry/<model_id>/activate", methods=["POST"])
-def activate_model_route(model_id: str):
-    """Deprecated — no-op kept for backward compatibility.
-
-    Active state is now request-scoped via ``X-Model-Id`` header.
-    This endpoint validates that the model exists and is loaded,
-    then returns success without mutating any global state.
-    """
-    from vtsearch.models.registry import get_model, is_model_loaded
-
-    entry = get_model(model_id)
-    if entry is None:
-        return jsonify({"error": "Model not found"}), 404
-    if not is_model_loaded(model_id):
-        return jsonify({"error": "Model is not loaded — load it first"}), 400
-
-    return jsonify({"ok": True, "message": "Model activated"})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])

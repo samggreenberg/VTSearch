@@ -212,33 +212,23 @@ class TestModelRegistryMultiLoaded:
 
     def test_remove_loaded_removes_from_set(self):
         from vtsearch.models.registry import (
+            add_loaded_model_id,
             is_model_loaded,
             remove_loaded_model_id,
-            set_loaded_id,
         )
 
-        set_loaded_id("m1")
+        add_loaded_model_id("m1")
         assert is_model_loaded("m1")
         remove_loaded_model_id("m1")
         assert not is_model_loaded("m1")
 
-    def test_set_loaded_id_adds_to_loaded_set(self):
+    def test_add_loaded_model_id_adds_to_loaded_set(self):
         from vtsearch.models.registry import (
+            add_loaded_model_id,
             is_model_loaded,
-            set_loaded_id,
         )
 
-        set_loaded_id("m1")
-        assert is_model_loaded("m1")
-
-    def test_set_loaded_id_none_does_not_remove(self):
-        from vtsearch.models.registry import (
-            is_model_loaded,
-            set_loaded_id,
-        )
-
-        set_loaded_id("m1")
-        set_loaded_id(None)
+        add_loaded_model_id("m1")
         assert is_model_loaded("m1")
 
 
@@ -302,19 +292,6 @@ class TestModelLoadEndpoints:
 
         assert models[mid1]["loaded"] is True
         assert models[mid2]["loaded"] is True
-
-    def test_activate_returns_ok_for_loaded(self, client):
-        mid1 = self._register_trainable_model(client, "Act1")
-        _load_model_and_wait(client, mid1)
-
-        res = client.post(f"/api/models/registry/{mid1}/activate")
-        assert res.status_code == 200
-        assert res.get_json()["ok"] is True
-
-    def test_activate_unloaded_returns_400(self, client):
-        mid = self._register_trainable_model(client, "NotLoaded")
-        res = client.post(f"/api/models/registry/{mid}/activate")
-        assert res.status_code == 400
 
     def test_unload_removes_context(self, client):
         from vtsearch.models.registry import is_model_loaded

@@ -425,9 +425,9 @@ class TestLoadModelEndpoint:
         assert is_model_loaded(model_id)
 
     def test_unload_model(self, client):
-        from vtsearch.models.registry import is_model_loaded, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, is_model_loaded
 
-        set_loaded_id("fake")
+        add_loaded_model_id("fake")
         assert is_model_loaded("fake")
         res = client.post("/api/models/registry/load", json={"model_id": None})
         assert res.status_code == 200
