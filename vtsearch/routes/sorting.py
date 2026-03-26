@@ -181,8 +181,9 @@ def learned_sort():
     """Train MLP on voted medias, return all medias sorted by predicted score."""
     if not good_votes or not bad_votes:
         return jsonify({"error": "need at least one good and one bad vote"}), 400
+    snap = snapshot_medias()
     results, threshold, model = train_and_score(
-        snapshot_medias(),
+        snap,
         good_votes,
         bad_votes,
         get_inclusion(),
@@ -197,6 +198,27 @@ def learned_sort():
     # than retraining an independent model from scratch.
     if model is not None:
         inject_live_model(good_votes, bad_votes, model, threshold)
+
+    # Cache the trained MLP and threshold in the active DetectorContext so
+    # that Find can use them directly without re-resolving and retraining.
+    from vtsearch.utils.state_core import get_active_detector_context, _empty_detector_context
+
+    det_ctx = get_active_detector_context()
+    if det_ctx is not _empty_detector_context and model is not None:
+        det_ctx.model = model
+        det_ctx.threshold = threshold
+        # Cache the voted media items with embeddings for cross-embedder scenarios.
+        training = {}
+        for cid in list(good_votes) + list(bad_votes):
+            if cid in snap:
+                training[cid] = snap[cid]
+        det_ctx.training_medias = training
+        # Record the embedder from the current dataset's media.
+        if snap:
+            first = next(iter(snap.values()), {})
+            det_ctx.embedder = first.get("embedder", "")
+            det_ctx.media_type = first.get("type", "")
+
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 

@@ -1,17 +1,26 @@
 import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { LoadingTask } from '../../../models/api.models';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
 @Component({
   selector: 'vt-model-card',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ProgressBarComponent],
   templateUrl: './model-card.component.html',
   styleUrl: './model-card.component.scss',
 })
 export class ModelCardComponent {
   @Input() model: any;
   @Input() @HostBinding('class.selected') selected = false;
+  @Input() loadingTask?: LoadingTask;
+
+  @HostBinding('class.loading-error')
+  get hasLoadingError(): boolean {
+    return !!this.loadingTask?.error;
+  }
+
   @Output() rowClick = new EventEmitter<MouseEvent>();
 
   @HostListener('click', ['$event'])
@@ -22,6 +31,9 @@ export class ModelCardComponent {
   @Output() delete = new EventEmitter<void>();
   @Output() export = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
+  @Output() unload = new EventEmitter<void>();
+  @Output() cancelTask = new EventEmitter<string>();
+  @Output() dismissTask = new EventEmitter<string>();
   @Output() autorunToggle = new EventEmitter<boolean>();
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
@@ -86,5 +98,29 @@ export class ModelCardComponent {
   capitalizeType(type: string | undefined): string {
     if (!type) return '-';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  onUnload(event: MouseEvent): void {
+    event.stopPropagation();
+    this.unload.emit();
+  }
+
+  onCancelTask(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.loadingTask) {
+      this.cancelTask.emit(this.loadingTask.task_id);
+    }
+  }
+
+  onDismissTask(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.loadingTask) {
+      this.dismissTask.emit(this.loadingTask.task_id);
+    }
+  }
+
+  taskIsIndeterminate(): boolean {
+    const t = this.loadingTask;
+    return !(t && t.current != null && t.total != null && t.total > 0);
   }
 }

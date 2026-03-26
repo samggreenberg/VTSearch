@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { TrainableModelsResponse, ModelsRegistryResponse } from '../models/api.models';
+import { LoadingTasksResponse, TrainableModelsResponse, ModelsRegistryResponse } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class TrainableModelsApiService {
@@ -55,5 +55,21 @@ export class TrainableModelsApiService {
 
   loadModel(modelId: string | null): Observable<unknown> {
     return this.http.post('/api/models/registry/load', { model_id: modelId });
+  }
+
+  activateModel(modelId: string): Observable<unknown> {
+    return this.http.post(`/api/models/registry/${modelId}/activate`, {});
+  }
+
+  unloadModel(modelId: string): Observable<unknown> {
+    return this.http.post(`/api/models/registry/${modelId}/unload`, {});
+  }
+
+  getModelLoadingTasks(): Observable<LoadingTasksResponse> {
+    return this.http.get<LoadingTasksResponse>('/api/models/loading-tasks');
+  }
+
+  cancelModelLoadingTask(taskId: string): Observable<unknown> {
+    return this.http.post(`/api/models/cancel/${taskId}`, {});
   }
 }

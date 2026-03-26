@@ -164,6 +164,7 @@ export interface LoadingTask {
   error?: string;
   created_at: number;
   dataset_id?: string;
+  model_id?: string;
 }
 
 export interface LoadingTasksResponse {
@@ -348,6 +349,8 @@ export interface ModelRegistryEntry {
   text_query?: string;
   media_example?: string;
   detector_name?: string;
+  loaded?: boolean;
+  active?: boolean;
   detector_loaded?: boolean;
   [key: string]: unknown;
 }

@@ -12,7 +12,8 @@ Models come in two flavours:
 * **Non-trainable** (pregen) — backed by weights (in-memory autorun detector
   or a detector JSON file on disk).  Shows "-" in the "# Training" column.
 
-At most one model is *loaded* into memory at a time.
+Multiple models can be *loaded* into memory simultaneously.  One of the
+loaded models is *active* — its vote state feeds the labeling UI.
 """
 
 from __future__ import annotations
@@ -33,10 +34,13 @@ _lock = threading.RLock()
 
 _entries: list[dict[str, Any]] | None = None
 
-# The ``id`` of the currently loaded model, or ``None``.
-_loaded_id: str | None = None
+# Set of model IDs currently loaded in memory (each has a DetectorContext).
+_loaded_ids: set[str] = set()
 
-# When ``True`` the loaded model is in "find mode" — it was used for scoring
+# The ``id`` of the *active* loaded model (feeds the labeling UI), or ``None``.
+_active_id: str | None = None
+
+# When ``True`` the active model is in "find mode" — it was used for scoring
 # via ``/api/find-label`` and the resulting labels should NOT be synced back
 # to the trainable model's saved labelset.
 _find_mode: bool = False
@@ -146,14 +150,15 @@ def register_model(
 
 def unregister_model(model_id: str) -> bool:
     """Remove a model from the registry. Returns ``True`` if found."""
-    global _loaded_id
+    global _active_id
     with _lock:
         entries = _ensure_loaded()
         for i, entry in enumerate(entries):
             if entry["id"] == model_id:
                 entries.pop(i)
-                if _loaded_id == model_id:
-                    _loaded_id = None
+                _loaded_ids.discard(model_id)
+                if _active_id == model_id:
+                    _active_id = None
                 _save(entries)
                 return True
     return False
@@ -202,27 +207,78 @@ def find_by_trainable_model_name(tm_name: str) -> dict[str, Any] | None:
 
 
 def get_loaded_id() -> str | None:
-    """Return the ID of the currently loaded model, or ``None``."""
+    """Return the ID of the active loaded model, or ``None``.
+
+    Backward-compatible alias for :func:`get_active_model_id`.
+    """
     with _lock:
-        return _loaded_id
+        return _active_id
+
+
+def get_active_model_id() -> str | None:
+    """Return the ID of the active loaded model, or ``None``."""
+    with _lock:
+        return _active_id
 
 
 def set_loaded_id(model_id: str | None) -> None:
-    """Mark *model_id* as the currently loaded model (or ``None``)."""
-    global _loaded_id, _find_mode
+    """Set the active model.  Also adds it to loaded set if not None.
+
+    Backward-compatible: when called with a model_id, that model becomes
+    both loaded and active.  When called with ``None``, the active model
+    is cleared but other loaded models remain.
+    """
+    global _active_id, _find_mode
     with _lock:
-        _loaded_id = model_id
+        _active_id = model_id
+        if model_id is not None:
+            _loaded_ids.add(model_id)
         _find_mode = False
 
 
+def add_loaded_model_id(model_id: str) -> None:
+    """Add *model_id* to the set of loaded models (without changing active)."""
+    with _lock:
+        _loaded_ids.add(model_id)
+
+
+def remove_loaded_model_id(model_id: str) -> None:
+    """Remove *model_id* from the loaded set.  Clears active if it matches."""
+    global _active_id
+    with _lock:
+        _loaded_ids.discard(model_id)
+        if _active_id == model_id:
+            _active_id = None
+
+
+def set_active_model_id(model_id: str | None) -> None:
+    """Switch the active model to *model_id* (must be in loaded set, or None)."""
+    global _active_id, _find_mode
+    with _lock:
+        _active_id = model_id
+        _find_mode = False
+
+
+def is_model_loaded(model_id: str) -> bool:
+    """Return ``True`` if *model_id* is in the loaded set."""
+    with _lock:
+        return model_id in _loaded_ids
+
+
+def get_loaded_model_ids() -> set[str]:
+    """Return a copy of all loaded model IDs."""
+    with _lock:
+        return set(_loaded_ids)
+
+
 def is_find_mode() -> bool:
-    """Return ``True`` if the loaded model is in find/scoring mode."""
+    """Return ``True`` if the active model is in find/scoring mode."""
     with _lock:
         return _find_mode
 
 
 def set_find_mode(enabled: bool = True) -> None:
-    """Set or clear find mode for the loaded model."""
+    """Set or clear find mode for the active model."""
     global _find_mode
     with _lock:
         _find_mode = enabled
@@ -230,8 +286,9 @@ def set_find_mode(enabled: bool = True) -> None:
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries, _loaded_id, _find_mode
+    global _entries, _active_id, _find_mode
     with _lock:
         _entries = None
-        _loaded_id = None
+        _loaded_ids.clear()
+        _active_id = None
         _find_mode = False

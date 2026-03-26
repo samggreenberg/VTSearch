@@ -38,42 +38,82 @@ _state_lock = threading.RLock()
 
 
 class DatasetContext:
-    """All mutable state that belongs to a single loaded dataset."""
+    """All mutable state that belongs to a single loaded dataset.
+
+    Vote-related state (``good_votes``, ``bad_votes``, ``label_history``, etc.)
+    lives in :class:`DetectorContext`, not here.  ``DatasetContext`` holds only
+    dataset-intrinsic state: the media items, diversity tree, and display name.
+    """
 
     __slots__ = (
         "dataset_id",
         "medias",
-        "good_votes",
-        "bad_votes",
-        "label_history",
-        "vote_click_times",
-        "click_counter",
-        "last_learned_scores",
-        "textsort_suggestions",
         "diversity_tree",
-        "find_initial_labels",
-        "inclusion",
         "dataset_display_name",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
         self.dataset_id: str = dataset_id
         self.medias: dict[int, dict[str, Any]] = {}
+        self.diversity_tree: Any = None  # DiversityTree | None
+        self.dataset_display_name: str | None = None
+
+
+class DetectorContext:
+    """All mutable state that belongs to a single loaded detector.
+
+    Bundles per-detector vote state, training artifacts, and cached in-memory
+    data (MLP, threshold, training media with embeddings).  Multiple detectors
+    can be loaded simultaneously; one is "active" (feeding the labeling UI).
+    """
+
+    __slots__ = (
+        "detector_id",
+        "name",
+        "media_type",
+        "embedder",
+        # Vote state
+        "good_votes",
+        "bad_votes",
+        "label_history",
+        "vote_click_times",
+        "click_counter",
+        # Training artifacts
+        "last_learned_scores",
+        "textsort_suggestions",
+        "find_initial_labels",
+        "inclusion",
+        # Cached in-memory data (never exported)
+        "training_medias",  # voted media items with embeddings
+        "model",            # nn.Sequential | None — current trained MLP
+        "threshold",        # decision threshold
+    )
+
+    def __init__(self, detector_id: str = "", *, name: str = "",
+                 media_type: str = "", embedder: str = "") -> None:
+        self.detector_id: str = detector_id
+        self.name: str = name
+        self.media_type: str = media_type
+        self.embedder: str = embedder
+        # Vote state
         self.good_votes: dict[int, None] = {}
         self.bad_votes: dict[int, None] = {}
         self.label_history: list[tuple[int, str, float]] = []
         self.vote_click_times: dict[int, int] = {}
         self.click_counter: int = 0
+        # Training artifacts
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
-        self.diversity_tree: Any = None  # DiversityTree | None
         self.find_initial_labels: dict[int, str] = {}
         self.inclusion: int | None = None
-        self.dataset_display_name: str | None = None
+        # Cached in-memory data (never exported)
+        self.training_medias: dict[int, dict[str, Any]] = {}
+        self.model: Any = None  # nn.Sequential | None
+        self.threshold: float = 0.5
 
 
 # ---------------------------------------------------------------------------
-# Context store and active-dataset pointer
+# Dataset context store and active-dataset pointer
 # ---------------------------------------------------------------------------
 
 # Maps dataset_id -> DatasetContext for every in-memory dataset.
@@ -84,9 +124,9 @@ _contexts: dict[str, DatasetContext] = {}
 _active_dataset_id: str | None = None
 
 # Fallback context used when no dataset is active.  Proxies delegate to
-# this so that code accessing ``medias``, ``good_votes``, etc. when nothing
-# is loaded sees empty containers rather than crashing.
-_empty_context = DatasetContext("")
+# this so that code accessing ``medias`` when nothing is loaded sees empty
+# containers rather than crashing.
+_empty_dataset_context = DatasetContext("")
 
 
 def get_active_context() -> DatasetContext:
@@ -95,7 +135,7 @@ def get_active_context() -> DatasetContext:
         ctx = _contexts.get(_active_dataset_id)
         if ctx is not None:
             return ctx
-    return _empty_context
+    return _empty_dataset_context
 
 
 def get_active_dataset_id() -> str | None:
@@ -134,12 +174,81 @@ def list_loaded_dataset_ids() -> list[str]:
 
 
 def clear_all_contexts() -> None:
-    """Remove all contexts and reset the active pointer.  For tests."""
+    """Remove all dataset contexts and reset the active pointer.  For tests."""
     global _active_dataset_id
     _contexts.clear()
     _active_dataset_id = None
     # Also reset the empty context's state
-    _empty_context.__init__("")  # type: ignore[misc]
+    _empty_dataset_context.__init__("")  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Detector context store and active-detector pointer
+# ---------------------------------------------------------------------------
+
+# Maps detector_id -> DetectorContext for every in-memory detector.
+_detector_contexts: dict[str, DetectorContext] = {}
+
+# The detector_id of the context whose vote state the UI is currently using,
+# or ``None`` when nothing is active.
+_active_detector_id: str | None = None
+
+# Fallback context used when no detector is active.  Vote proxies delegate
+# to this so that code accessing ``good_votes``, ``bad_votes``, etc. when
+# no detector is loaded sees empty containers rather than crashing.
+_empty_detector_context = DetectorContext("")
+
+
+def get_active_detector_context() -> DetectorContext:
+    """Return the active ``DetectorContext``, or the empty fallback."""
+    if _active_detector_id is not None:
+        ctx = _detector_contexts.get(_active_detector_id)
+        if ctx is not None:
+            return ctx
+    return _empty_detector_context
+
+
+def get_active_detector_id() -> str | None:
+    """Return the detector_id of the active detector, or ``None``."""
+    return _active_detector_id
+
+
+def set_active_detector_id(detector_id: str | None) -> None:
+    """Switch the active detector to *detector_id* (must already be registered, or None)."""
+    global _active_detector_id
+    _active_detector_id = detector_id
+
+
+def register_detector_context(ctx: DetectorContext) -> None:
+    """Add *ctx* to the detector context store, keyed by its ``detector_id``."""
+    _detector_contexts[ctx.detector_id] = ctx
+
+
+def unregister_detector_context(detector_id: str) -> DetectorContext | None:
+    """Remove and return the detector context for *detector_id*, or ``None``."""
+    global _active_detector_id
+    ctx = _detector_contexts.pop(detector_id, None)
+    if _active_detector_id == detector_id:
+        _active_detector_id = None
+    return ctx
+
+
+def get_detector_context(detector_id: str) -> DetectorContext | None:
+    """Return the detector context for *detector_id*, or ``None`` if not loaded."""
+    return _detector_contexts.get(detector_id)
+
+
+def list_loaded_detector_ids() -> list[str]:
+    """Return all detector IDs that have an in-memory context."""
+    return list(_detector_contexts.keys())
+
+
+def clear_all_detector_contexts() -> None:
+    """Remove all detector contexts and reset the active pointer.  For tests."""
+    global _active_detector_id
+    _detector_contexts.clear()
+    _active_detector_id = None
+    _empty_detector_context.__init__("")  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -150,23 +259,25 @@ def clear_all_contexts() -> None:
 class _ProxyDict(dict):
     """Dict-like proxy that forwards all operations to a target dict.
 
-    The *target_attr* names the attribute on ``DatasetContext`` that holds
-    the real dict.  Every method fetches the target lazily via
-    ``get_active_context()`` so that switching the active context is instant.
+    The *target_attr* names the attribute on the active context that holds
+    the real dict.  The *context_fn* is called to find that context.
+    Every method fetches the target lazily so switching contexts is instant.
 
     Inherits from ``dict`` so that ``isinstance(medias, dict)`` is ``True``
     and existing code that type-checks works.
     """
 
-    def __init__(self, target_attr: str) -> None:
+    def __init__(self, target_attr: str, context_fn=None) -> None:
         # Do NOT call super().__init__() with data — we are a proxy, not a
         # real container.  The empty super().__init__() satisfies the dict
         # constructor without storing anything in our own hash table.
         super().__init__()
         object.__setattr__(self, "_target_attr", target_attr)
+        object.__setattr__(self, "_context_fn", context_fn or get_active_context)
 
     def _target(self) -> dict:
-        return getattr(get_active_context(), object.__getattribute__(self, "_target_attr"))
+        ctx_fn = object.__getattribute__(self, "_context_fn")
+        return getattr(ctx_fn(), object.__getattribute__(self, "_target_attr"))
 
     # -- Core dict methods, all forwarded -----------------------------------
 
@@ -242,12 +353,14 @@ class _ProxyDict(dict):
 class _ProxyList(list):
     """List-like proxy forwarding to the active context's list attribute."""
 
-    def __init__(self, target_attr: str) -> None:
+    def __init__(self, target_attr: str, context_fn=None) -> None:
         super().__init__()
         object.__setattr__(self, "_target_attr", target_attr)
+        object.__setattr__(self, "_context_fn", context_fn or get_active_context)
 
     def _target(self) -> list:
-        return getattr(get_active_context(), object.__getattribute__(self, "_target_attr"))
+        ctx_fn = object.__getattribute__(self, "_context_fn")
+        return getattr(ctx_fn(), object.__getattribute__(self, "_target_attr"))
 
     def __getitem__(self, index):
         return self._target().__getitem__(index)
@@ -321,50 +434,50 @@ class _ProxyList(list):
 # ---------------------------------------------------------------------------
 # Module-level proxy instances — these ARE the public names that all other
 # modules import.  They look and behave like plain dicts/lists but delegate
-# to whichever DatasetContext is currently active.
+# to the appropriate active context.
+#
+# ``medias`` delegates to the active **DatasetContext** (dataset-intrinsic).
+# All vote/label proxies delegate to the active **DetectorContext**.
 # ---------------------------------------------------------------------------
 
 # Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, media_string, ...}
 medias: dict[int, dict[str, Any]] = _ProxyDict("medias")  # type: ignore[assignment]
 
 # Voting storage (OrderedDict behavior via dict in Python 3.7+)
-good_votes: dict[int, None] = _ProxyDict("good_votes")  # type: ignore[assignment]
-bad_votes: dict[int, None] = _ProxyDict("bad_votes")  # type: ignore[assignment]
+good_votes: dict[int, None] = _ProxyDict("good_votes", get_active_detector_context)  # type: ignore[assignment]
+bad_votes: dict[int, None] = _ProxyDict("bad_votes", get_active_detector_context)  # type: ignore[assignment]
 
 # Combined label history: [(media_id, label, timestamp), ...]
-label_history: list[tuple[int, str, float]] = _ProxyList("label_history")  # type: ignore[assignment]
+label_history: list[tuple[int, str, float]] = _ProxyList("label_history", get_active_detector_context)  # type: ignore[assignment]
 
 # Click-time tracking: media_id -> click order (1-indexed).
-vote_click_times: dict[int, int] = _ProxyDict("vote_click_times")  # type: ignore[assignment]
+vote_click_times: dict[int, int] = _ProxyDict("vote_click_times", get_active_detector_context)  # type: ignore[assignment]
 
 # Last learned-sort scores: media_id -> score (float in [0, 1]).
-last_learned_scores: dict[int, float] = _ProxyDict("last_learned_scores")  # type: ignore[assignment]
+last_learned_scores: dict[int, float] = _ProxyDict("last_learned_scores", get_active_detector_context)  # type: ignore[assignment]
 
 # Text-sort suggestions: text queries that received a Good vote, most recent last.
-textsort_suggestions: list[str] = _ProxyList("textsort_suggestions")  # type: ignore[assignment]
+textsort_suggestions: list[str] = _ProxyList("textsort_suggestions", get_active_detector_context)  # type: ignore[assignment]
 
 # Find-mode initial labels: media_id -> label assigned by the detector in find-label.
-_find_initial_labels: dict[int, str] = _ProxyDict("find_initial_labels")  # type: ignore[assignment]
+_find_initial_labels: dict[int, str] = _ProxyDict("find_initial_labels", get_active_detector_context)  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
-# Scalar per-dataset state accessors
+# Scalar state accessors
 # ---------------------------------------------------------------------------
-# _click_counter, inclusion, _dataset_display_name, _diversity_tree are
-# scalar fields on DatasetContext.  All production code accesses them via
-# the getter/setter helpers below (e.g. _get_click_counter()), which
-# delegate to the active context.  The conftest reset_state fixture resets
-# these by calling clear_all_contexts(), which creates a fresh
-# DatasetContext with all fields at their defaults.
+# Dataset-intrinsic scalars (diversity_tree, dataset_display_name) delegate
+# to the active DatasetContext.  Vote-related scalars (click_counter,
+# inclusion) delegate to the active DetectorContext.
 # ---------------------------------------------------------------------------
 
 
 def _get_click_counter() -> int:
-    return get_active_context().click_counter
+    return get_active_detector_context().click_counter
 
 
 def _set_click_counter(value: int) -> None:
-    get_active_context().click_counter = value
+    get_active_detector_context().click_counter = value
 
 
 def _get_diversity_tree() -> Any:
@@ -384,21 +497,15 @@ def _set_dataset_display_name(value: str | None) -> None:
 
 
 def _get_inclusion() -> int | None:
-    return get_active_context().inclusion
+    return get_active_detector_context().inclusion
 
 
 def _set_inclusion(value: int | None) -> None:
-    get_active_context().inclusion = value
+    get_active_detector_context().inclusion = value
 
 
-# NOTE: These module-level variables are DEAD CODE.  All production code
-# uses the getter/setter helpers above (which delegate to the active
-# DatasetContext).  The conftest reset_state fixture does NOT reset these
-# module-level variables — nor does it need to, since they are never read
-# or written.  Conftest resets the *DatasetContext* fields (e.g.
-# DatasetContext.click_counter) by creating a fresh context via
-# clear_all_contexts().  These names are kept only to avoid import errors
-# if any external code references them.
+# NOTE: These module-level variables are DEAD CODE.  Kept only to avoid
+# import errors if any external code references them.
 _click_counter: int = 0
 _dataset_display_name: str | None = None
 _diversity_tree: Any = None

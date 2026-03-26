@@ -72,6 +72,7 @@ _TEST_GROUPS = {
         "test_extractors",
         "test_processors",
         "test_trainable_models",
+        "test_multi_detector",
         "test_clippers",
         "test_eval",
         "test_eval_visualize",
@@ -170,11 +171,15 @@ def _fake_embed_text(text):
 _patch_embed_audio = patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
-# Create a default context so init_medias() has somewhere to write.
+# Create a default dataset context so init_medias() has somewhere to write,
+# and a default detector context so vote proxies have somewhere to delegate.
 import vtsearch.utils.state_core as _state_core
 _startup_ctx = _state_core.DatasetContext("_startup")
 _state_core.register_context(_startup_ctx)
 _state_core.set_active_dataset_id("_startup")
+_startup_det = _state_core.DetectorContext("_startup_det")
+_state_core.register_detector_context(_startup_det)
+_state_core.set_active_detector_id("_startup_det")
 
 import app as app_module
 
@@ -286,11 +291,18 @@ def reset_state():
     import vtsearch.utils.state_core as _core
 
     # Clear all dataset contexts and create a fresh default context so that
-    # tests that just write to ``medias`` / ``good_votes`` etc. still work.
+    # tests that just write to ``medias`` etc. still work.
     _core.clear_all_contexts()
     default_ctx = _core.DatasetContext("_test_default")
     _core.register_context(default_ctx)
     _core.set_active_dataset_id("_test_default")
+
+    # Clear all detector contexts and create a fresh default context so that
+    # tests that just write to ``good_votes`` / ``bad_votes`` etc. still work.
+    _core.clear_all_detector_contexts()
+    default_det = _core.DetectorContext("_test_default_det")
+    _core.register_detector_context(default_det)
+    _core.set_active_detector_id("_test_default_det")
 
     # Replay the test medias into the fresh context (medias is intentionally
     # NOT reset between tests to avoid expensive re-generation).
@@ -303,11 +315,12 @@ def reset_state():
     clear_progress_cache()
 
     # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks
+    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks, model_loading_tasks
 
     dataset_progress.reset_cancel()
     find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     loading_tasks.reset_for_tests()
+    model_loading_tasks.reset_for_tests()
 
     # Reset the login provider to DefaultLoginProvider
     from vtsearch.auth import DefaultLoginProvider, set_login_provider

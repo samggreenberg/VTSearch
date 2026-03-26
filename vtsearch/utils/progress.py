@@ -260,8 +260,11 @@ class LoadingTasksTracker:
             self._tasks.clear()
 
 
-#: Application-wide loading tasks tracker.
+#: Application-wide loading tasks tracker (for datasets).
 loading_tasks = LoadingTasksTracker()
+
+#: Application-wide loading tasks tracker (for models/detectors).
+model_loading_tasks = LoadingTasksTracker()
 
 
 # ---------------------------------------------------------------------------
