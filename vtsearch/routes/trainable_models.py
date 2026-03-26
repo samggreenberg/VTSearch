@@ -916,8 +916,6 @@ def load_model_route():
     from vtsearch.utils import (
         DetectorContext,
         bad_votes,
-        clear_votes,
-        get_active_detector_id,
         get_detector_context,
         good_votes,
         register_detector_context,
@@ -1028,7 +1026,6 @@ def unload_model_route(model_id: str):
         bad_votes,
         get_active_detector_id,
         good_votes,
-        set_active_detector_id,
         unregister_detector_context,
     )
 
