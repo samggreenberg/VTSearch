@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -911,7 +912,6 @@ def load_model_route():
         get_model,
         is_model_loaded,
         set_active_model_id,
-        set_loaded_id,
     )
     from vtsearch.utils import (
         DetectorContext,
@@ -949,37 +949,98 @@ def load_model_route():
             remove_loaded_model_id(prev_id)
         set_active_model_id(None)
         set_active_detector_id(None)
-    elif is_model_loaded(model_id):
+        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
+
+    if is_model_loaded(model_id):
         # Already loaded — just activate it (instant switch)
         set_active_model_id(model_id)
         det_ctx = get_detector_context(model_id)
         if det_ctx is not None:
             set_active_detector_id(model_id)
-    else:
-        # New load: create a DetectorContext, populate it, register it
-        det_ctx = DetectorContext(
-            model_id,
-            name=entry.get("name", ""),
-            media_type=entry.get("media_type", ""),
-        )
-        register_detector_context(det_ctx)
-        set_active_detector_id(model_id)
-        set_loaded_id(model_id)
+        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
-        # Restore saved labels and seed examples
-        tm_name = entry.get("trainable_model_name", "")
-        if tm_name:
-            tm_data = _read_model(_model_path(tm_name))
-            if tm_data:
-                labels_restored = _restore_labels_from_trainable_model(tm_data)
-                examples_seeded = _seed_good_votes_from_examples(
-                    tm_data.get("examples", [])
+    # New load: create a DetectorContext, register it, then load labels
+    # asynchronously so the frontend can show a progress bar.
+    from vtsearch.utils.progress import CancelledError, model_loading_tasks
+
+    det_ctx = DetectorContext(
+        model_id,
+        name=entry.get("name", ""),
+        media_type=entry.get("media_type", ""),
+    )
+    register_detector_context(det_ctx)
+    set_active_detector_id(model_id)
+    # Set the model as active so proxy objects resolve to this context,
+    # but do NOT mark as "loaded" yet — the background thread will call
+    # add_loaded_model_id() when it finishes so the UI shows a progress
+    # bar instead of an immediate green check.
+    set_active_model_id(model_id)
+
+    _LOAD_STEPS = 2  # restore labels, seed examples
+    task_id = f"_modload_{model_id[:8]}"
+    tracker = model_loading_tasks.create_task(
+        task_id, entry.get("name", model_id), model_id=model_id,
+        media_type=entry.get("media_type", ""),
+    )
+    tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+
+    # Capture values needed by the background thread.
+    tm_name = entry.get("trainable_model_name", "")
+
+    def load_task():
+        from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
+
+        try:
+            labels_restored = 0
+            examples_seeded = 0
+
+            if tm_name:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Restoring labels…", 0, 0,
+                    step=1, total_steps=_LOAD_STEPS,
                 )
+                tm_data = _read_model(_model_path(tm_name))
+                if tm_data:
+                    labels_restored = _restore_labels_from_trainable_model(tm_data)
 
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading", "Seeding examples…", 0, 0,
+                        step=2, total_steps=_LOAD_STEPS,
+                    )
+                    examples_seeded = _seed_good_votes_from_examples(
+                        tm_data.get("examples", [])
+                    )
+
+            # Mark as fully loaded so the registry shows detector_loaded=True.
+            add_loaded_model_id(model_id)
+            tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+        except CancelledError:
+            from vtsearch.utils import unregister_detector_context as _unreg
+
+            _unreg(model_id)
+            remove_loaded_model_id(model_id)
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
+            from vtsearch.utils import unregister_detector_context as _unreg
+
+            _unreg(model_id)
+            remove_loaded_model_id(model_id)
+            error_msg = str(e) or repr(e) or "Unknown error during model loading"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        finally:
+            model_loading_tasks.mark_finished(task_id)
+
+    thread = threading.Thread(target=load_task, daemon=True)
+    thread.start()
     return jsonify({
         "ok": True,
-        "labels_restored": labels_restored,
-        "examples_seeded": examples_seeded,
+        "message": "Loading started",
+        "task_id": str(task_id),
     })
 
 

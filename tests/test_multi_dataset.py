@@ -6,6 +6,8 @@ import hashlib
 import numpy as np
 import pytest
 
+from tests import load_model_and_wait as _load_model_and_wait
+
 from vtsearch.utils.state_core import (
     DatasetContext,
     DetectorContext,
@@ -690,7 +692,7 @@ class TestSyncLabelsAcrossDatasets:
             bad_votes.clear()
 
             # Phase 3: re-load the same model via the API endpoint
-            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            resp = _load_model_and_wait(client, model_id)
             assert resp.status_code == 200
 
             saved = _read_model(tm_path)
@@ -754,7 +756,7 @@ class TestSyncLabelsAcrossDatasets:
             bad_votes.clear()
 
             # Phase 3: re-load the same model (as the dashboard would)
-            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            resp = _load_model_and_wait(client, model_id)
             assert resp.status_code == 200
 
             # The model file must still have the original labels
