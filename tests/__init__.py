@@ -4,6 +4,10 @@
 def load_model_and_wait(client, model_id, timeout=5.0):
     """Load a model via POST and poll until the background task finishes.
 
+    After loading completes, updates the current thread's detector context
+    to point to the newly loaded model so that subsequent proxy accesses
+    (votes, etc.) resolve to the correct DetectorContext.
+
     Returns the initial POST response.
     """
     import time
@@ -19,4 +23,12 @@ def load_model_and_wait(client, model_id, timeout=5.0):
         if not active:
             break
         time.sleep(0.05)
+
+    # Update the test thread's context to the newly loaded model.
+    from vtsearch.utils.state_core import get_detector_context, set_thread_detector_context
+
+    det_ctx = get_detector_context(model_id)
+    if det_ctx is not None:
+        set_thread_detector_context(det_ctx)
+
     return res
