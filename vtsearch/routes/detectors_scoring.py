@@ -166,6 +166,19 @@ def find_label():
             weights = tm_data["weights"]
             threshold = tm_data.get("threshold", 0.5)
 
+    # Check the in-memory DetectorContext for a cached trained model.
+    # learned_sort() caches the MLP here after each sort, so if the user
+    # trained on Dataset A and then switched to Dataset B, the model is
+    # still available without expensive label-origin resolution.
+    if weights is None:
+        from vtsearch.routes.detectors_helpers import serialize_weights as _ser_weights
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None and det_ctx.model is not None:
+            weights = _ser_weights(det_ctx.model)
+            threshold = det_ctx.threshold
+
     # If still no weights, try training on-the-fly from the trainable model's
     # labelset.  This handles the cross-dataset scenario: user trains on
     # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
