@@ -23,7 +23,6 @@ from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importe
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     can_user_access as _reg_can_access,
-    get_loaded_id as _reg_loaded_id,
     get_loaded_ids as _reg_loaded_ids,
     is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
@@ -641,23 +640,17 @@ def list_registered_datasets():
 
     Each entry includes:
     - ``loaded``: whether the dataset is currently in memory
-    - ``active``: whether it is the currently active (UI-facing) dataset
     """
     from vtsearch.auth import get_current_user
 
     entries = _reg_list_for_user(get_current_user())
-    loaded_id = _reg_loaded_id()
     loaded_ids = _reg_loaded_ids()
     from vtsearch.media import get_clipper
 
     for entry in entries:
         ds_id = entry["id"]
         entry["loaded"] = ds_id in loaded_ids
-        entry["active"] = ds_id == loaded_id
-        if entry["active"]:
-            entry["num_dupes"] = get_dupe_count()
-        else:
-            entry.setdefault("num_dupes", 0)
+        entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
         # Resolve clipper name to display name; default clippers show as "-"
@@ -691,12 +684,11 @@ def load_registered_dataset(dataset_id: str):
     if not _reg_can_access(dataset_id, get_current_user()):
         return jsonify({"error": "Access denied"}), 403
 
-    # If already loaded in memory, just activate it (instant switch).
+    # If already loaded in memory, nothing to do.
     if _reg_is_loaded(dataset_id):
         set_active_dataset_id(dataset_id)
-        _reg_set_loaded(dataset_id)
         set_dataset_display_name(entry.get("name", ""))
-        return jsonify({"ok": True, "message": "Dataset activated (already loaded)"})
+        return jsonify({"ok": True, "message": "Dataset already loaded"})
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
@@ -814,10 +806,11 @@ def unload_registered_dataset(dataset_id: str):
 
 @datasets_bp.route("/api/datasets/registry/<dataset_id>/activate", methods=["POST"])
 def activate_registered_dataset(dataset_id: str):
-    """Make a loaded dataset the active (UI-facing) one.
+    """Deprecated — no-op kept for backward compatibility.
 
-    The dataset must already be loaded in memory.  This is an instant
-    operation — no data is re-read or re-embedded.
+    Active state is now request-scoped via ``X-Dataset-Id`` header.
+    This endpoint validates that the dataset exists and is loaded,
+    then returns success without mutating any global state.
     """
     from vtsearch.auth import get_current_user
 
@@ -825,11 +818,6 @@ def activate_registered_dataset(dataset_id: str):
         return jsonify({"error": "Access denied"}), 403
     if not _reg_is_loaded(dataset_id):
         return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
-    set_active_dataset_id(dataset_id)
-    _reg_set_loaded(dataset_id)
-    entry = _reg_get(dataset_id)
-    if entry:
-        set_dataset_display_name(entry.get("name", ""))
     return jsonify({"ok": True, "message": "Dataset activated"})
 
 
@@ -866,9 +854,13 @@ def rename_registered_dataset(dataset_id: str):
     ok = _reg_rename(dataset_id, new_name)
     if not ok:
         return jsonify({"error": "Dataset not found"}), 404
-    # Also update display name if this is the loaded dataset
-    if _reg_loaded_id() == dataset_id:
-        set_dataset_display_name(new_name)
+    # Also update display name if this dataset is loaded
+    if _reg_is_loaded(dataset_id):
+        from vtsearch.utils import get_context
+
+        ctx = get_context(dataset_id)
+        if ctx is not None:
+            ctx.dataset_display_name = new_name
     return jsonify({"ok": True, "name": new_name})
 
 

@@ -412,7 +412,7 @@ class TestLoadModelEndpoint:
     """Tests for POST /api/models/registry/load."""
 
     def test_load_model(self, client):
-        from vtsearch.models.registry import get_loaded_id
+        from vtsearch.models.registry import is_model_loaded
 
         res = client.post(
             "/api/models/registry",
@@ -422,15 +422,15 @@ class TestLoadModelEndpoint:
 
         res = _load_model_and_wait(client, model_id)
         assert res.status_code == 200
-        assert get_loaded_id() == model_id
+        assert is_model_loaded(model_id)
 
     def test_unload_model(self, client):
-        from vtsearch.models.registry import get_loaded_id, set_loaded_id
+        from vtsearch.models.registry import is_model_loaded, set_loaded_id
 
         set_loaded_id("fake")
+        assert is_model_loaded("fake")
         res = client.post("/api/models/registry/load", json={"model_id": None})
         assert res.status_code == 200
-        assert get_loaded_id() is None
 
     def test_load_nonexistent(self, client):
         res = client.post("/api/models/registry/load", json={"model_id": "nope"})

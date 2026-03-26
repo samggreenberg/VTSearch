@@ -587,15 +587,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- New model modal ---
 
-  /** Media type used as default for new models: single-selected dataset wins, then active dataset, then in-progress loads. */
+  /** Media type used as default for new models: single-selected dataset wins, then first loaded dataset, then in-progress loads. */
   get activeDatasetMediaType(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
       const sel = this.datasets.find((d) => d.id === selId);
       if (sel?.media_type) return sel.media_type;
     }
-    const active = this.datasets.find((d) => d.active);
-    if (active?.media_type) return active.media_type;
+    const loaded = this.datasets.find((d) => d.loaded);
+    if (loaded?.media_type) return loaded.media_type;
     // Fall back to in-progress loading tasks when no dataset is fully loaded yet.
     const loadingTypes = new Set(
       this.loadingTasks.filter((t) => t.media_type && !t.error).map((t) => t.media_type!),
@@ -919,22 +919,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     // --- Dataset loading (parallel) ---
-    if (dataset.active) {
+    if (dataset.loaded) {
       gate();
-    } else if (dataset.loaded) {
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => gate(),
-        error: () => gate(),
-      });
     } else {
       this.datasetsApi.loadRegistered(dataset.id).subscribe({
         next: () => {
-          this.startProgressPolling(() => {
-            this.datasetsApi.activateRegistered(dataset.id).subscribe({
-              next: () => gate(),
-              error: () => gate(),
-            });
-          });
+          this.startProgressPolling(() => gate());
         },
       });
     }
@@ -979,22 +969,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     // --- Dataset loading (parallel) ---
-    if (dataset.active) {
+    if (dataset.loaded) {
       gate();
-    } else if (dataset.loaded) {
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => gate(),
-        error: () => gate(),
-      });
     } else {
       this.datasetsApi.loadRegistered(dataset.id).subscribe({
         next: () => {
-          this.startProgressPolling(() => {
-            this.datasetsApi.activateRegistered(dataset.id).subscribe({
-              next: () => gate(),
-              error: () => gate(),
-            });
-          });
+          this.startProgressPolling(() => gate());
         },
       });
     }

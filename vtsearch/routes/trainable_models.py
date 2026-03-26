@@ -795,19 +795,17 @@ def _apply_and_retrain(
 @trainable_models_bp.route("/api/models/registry")
 def list_registered_models():
     """Return all registered models with their loaded state and autodetect flag."""
-    from vtsearch.models.registry import get_active_model_id, get_loaded_model_ids, list_models
+    from vtsearch.models.registry import get_loaded_model_ids, list_models
     from vtsearch.settings import get_autorun_detector_names
     from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
     loaded_ids = get_loaded_model_ids()
-    active_id = get_active_model_id()
     detectors = get_autorun_detectors()
     autorun_names = set(get_autorun_detector_names())
     for entry in entries:
         mid = entry["id"]
         entry["loaded"] = mid in loaded_ids
-        entry["active"] = mid == active_id
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
@@ -1046,32 +1044,19 @@ def load_model_route():
 
 @trainable_models_bp.route("/api/models/registry/<model_id>/activate", methods=["POST"])
 def activate_model_route(model_id: str):
-    """Switch the active model (must already be loaded).
+    """Deprecated — no-op kept for backward compatibility.
 
-    Saves the current model's labels before switching.
+    Active state is now request-scoped via ``X-Model-Id`` header.
+    This endpoint validates that the model exists and is loaded,
+    then returns success without mutating any global state.
     """
-    from vtsearch.models.registry import get_model, is_model_loaded, set_active_model_id
-    from vtsearch.utils import (
-        bad_votes,
-        get_detector_context,
-        good_votes,
-        set_active_detector_id,
-    )
+    from vtsearch.models.registry import get_model, is_model_loaded
 
     entry = get_model(model_id)
     if entry is None:
         return jsonify({"error": "Model not found"}), 404
     if not is_model_loaded(model_id):
         return jsonify({"error": "Model is not loaded — load it first"}), 400
-
-    # Save current model's labels before switching
-    if good_votes or bad_votes:
-        sync_labels_to_loaded_model()
-
-    set_active_model_id(model_id)
-    det_ctx = get_detector_context(model_id)
-    if det_ctx is not None:
-        set_active_detector_id(model_id)
 
     return jsonify({"ok": True, "message": "Model activated"})
 

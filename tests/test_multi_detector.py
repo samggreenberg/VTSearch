@@ -210,17 +210,17 @@ class TestModelRegistryMultiLoaded:
         assert is_model_loaded("m2")
         assert len(get_loaded_model_ids()) == 2
 
-    def test_remove_loaded_clears_active(self):
+    def test_remove_loaded_removes_from_set(self):
         from vtsearch.models.registry import (
-            get_active_model_id,
+            is_model_loaded,
             remove_loaded_model_id,
             set_loaded_id,
         )
 
         set_loaded_id("m1")
-        assert get_active_model_id() == "m1"
+        assert is_model_loaded("m1")
         remove_loaded_model_id("m1")
-        assert get_active_model_id() is None
+        assert not is_model_loaded("m1")
 
     def test_set_loaded_id_adds_to_loaded_set(self):
         from vtsearch.models.registry import (
@@ -290,7 +290,7 @@ class TestModelLoadEndpoints:
         det2 = get_detector_context(mid)
         assert det1 is det2
 
-    def test_registry_shows_loaded_and_active(self, client):
+    def test_registry_shows_loaded(self, client):
         mid1 = self._register_trainable_model(client, "Reg1")
         mid2 = self._register_trainable_model(client, "Reg2")
 
@@ -300,26 +300,16 @@ class TestModelLoadEndpoints:
         res = client.get("/api/models/registry")
         models = {m["id"]: m for m in res.get_json()["models"]}
 
-        # mid1 is loaded but not active (mid2 was loaded last)
         assert models[mid1]["loaded"] is True
-        assert models[mid1]["active"] is False
-        # mid2 is loaded and active
         assert models[mid2]["loaded"] is True
-        assert models[mid2]["active"] is True
 
-    def test_activate_switches_active(self, client):
-        from vtsearch.utils.state_core import get_active_detector_id
-
+    def test_activate_returns_ok_for_loaded(self, client):
         mid1 = self._register_trainable_model(client, "Act1")
-        mid2 = self._register_trainable_model(client, "Act2")
-
         _load_model_and_wait(client, mid1)
-        _load_model_and_wait(client, mid2)
 
-        # mid2 is active. Activate mid1.
         res = client.post(f"/api/models/registry/{mid1}/activate")
         assert res.status_code == 200
-        assert get_active_detector_id() == mid1
+        assert res.get_json()["ok"] is True
 
     def test_activate_unloaded_returns_400(self, client):
         mid = self._register_trainable_model(client, "NotLoaded")

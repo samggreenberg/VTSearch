@@ -406,31 +406,28 @@ class TestMultiDatasetAPI:
             "origin_name": f"api_media_{media_id}.wav",
         }
 
-    def test_registry_shows_loaded_and_active(self, client):
-        """Verify the registry endpoint distinguishes loaded vs active."""
-        from vtsearch.datasets.registry import register_dataset, set_loaded_id, add_loaded_id
+    def test_registry_shows_loaded(self, client):
+        """Verify the registry endpoint shows loaded flag."""
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id
 
         # Register two datasets in the registry.
         e1 = register_dataset(name="DS1", media_type="audio", num_items=5, pkl_path="/tmp/fake1.pkl")
         e2 = register_dataset(name="DS2", media_type="audio", num_items=3, pkl_path="/tmp/fake2.pkl")
 
-        # Mark both as loaded, but only e1 as active.
+        # Mark both as loaded.
         add_loaded_id(e1["id"])
         add_loaded_id(e2["id"])
-        set_loaded_id(e1["id"])
 
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         datasets = {d["id"]: d for d in data["datasets"]}
 
         assert datasets[e1["id"]]["loaded"] is True
-        assert datasets[e1["id"]]["active"] is True
         assert datasets[e2["id"]]["loaded"] is True
-        assert datasets[e2["id"]]["active"] is False
 
     def test_activate_endpoint(self, client):
-        """POST /api/datasets/registry/<id>/activate switches the active dataset."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id
+        """POST /api/datasets/registry/<id>/activate returns ok for loaded datasets."""
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id
 
         e1 = register_dataset(name="Act1", media_type="audio", num_items=5, pkl_path="/tmp/fake_act1.pkl")
         e2 = register_dataset(name="Act2", media_type="audio", num_items=3, pkl_path="/tmp/fake_act2.pkl")
@@ -446,16 +443,10 @@ class TestMultiDatasetAPI:
         register_context(ctx2)
         add_loaded_id(e2["id"])
 
-        set_active_dataset_id(e1["id"])
-        set_loaded_id(e1["id"])
-
-        # Activate e2 via API.
+        # Activate e2 via API — now a no-op but should return ok.
         resp = client.post(f"/api/datasets/registry/{e2['id']}/activate")
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
-
-        # Verify active dataset changed.
-        assert get_active_dataset_id() == e2["id"]
 
     def test_activate_unloaded_returns_400(self, client):
         """Cannot activate a dataset that's not loaded."""
@@ -467,14 +458,13 @@ class TestMultiDatasetAPI:
 
     def test_unload_removes_from_loaded(self, client):
         """POST /api/datasets/registry/<id>/unload removes the context."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id, is_loaded
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e = register_dataset(name="Unload", media_type="audio", num_items=2, pkl_path="/tmp/fake_unload.pkl")
         ctx = DatasetContext(e["id"])
         ctx.medias[1] = self._make_test_media(1)
         register_context(ctx)
         add_loaded_id(e["id"])
-        set_loaded_id(e["id"])
         set_active_dataset_id(e["id"])
 
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
@@ -490,8 +480,8 @@ class TestMultiDatasetAPI:
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
         assert resp.status_code == 400
 
-    def test_load_already_loaded_activates_instantly(self, client):
-        """Loading an already-loaded dataset just activates it."""
+    def test_load_already_loaded_returns_instantly(self, client):
+        """Loading an already-loaded dataset returns immediately."""
         from vtsearch.datasets.registry import register_dataset, add_loaded_id
 
         e = register_dataset(name="Already", media_type="audio", num_items=2, pkl_path="/tmp/fake_already.pkl")
@@ -504,7 +494,6 @@ class TestMultiDatasetAPI:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "already loaded" in data["message"].lower()
-        assert get_active_dataset_id() == e["id"]
 
     def test_dataset_status_reflects_active(self, client):
         """GET /api/dataset/status shows the active dataset's medias."""
