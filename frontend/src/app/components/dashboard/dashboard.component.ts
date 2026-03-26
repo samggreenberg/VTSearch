@@ -698,7 +698,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  startModelProgressPolling(): void {
+  startModelProgressPolling(onComplete?: () => void): void {
     this.modelPolling$.next(); // cancel previous polling
     this.completedModelTaskIds.clear();
 
@@ -738,6 +738,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.modelPolling$.next();
             if (justFinished.length === 0) {
               this.datasetState.refresh();
+            }
+            if (onComplete && failed.length === 0) {
+              onComplete();
             }
           }
         },
@@ -883,18 +886,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!dataset) return;
 
     const modelId = [...this.selectedModelIds][0] || null;
+    const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
     const navigateToLabel = (): void => {
+      this.router.navigate(['/label']);
+    };
+
+    const loadModelThenNavigate = (): void => {
       this.storeSelectedModelTextQuery();
-      // Tell the backend which model is loaded so votes auto-sync
-      this.modelsApi.loadModel(modelId).subscribe({
-        next: () => this.router.navigate(['/label']),
-        error: () => this.router.navigate(['/label']),
-      });
+      if (model && !model.detector_loaded) {
+        // Model not loaded — load it and wait for completion before navigating.
+        this.modelsApi.loadModel(modelId).subscribe({
+          next: () => {
+            this.startModelProgressPolling(() => {
+              this.datasetState.refresh();
+              navigateToLabel();
+            });
+          },
+          error: () => navigateToLabel(),
+        });
+      } else {
+        // Model already loaded (or no model) — just activate and navigate.
+        this.modelsApi.loadModel(modelId).subscribe({
+          next: () => navigateToLabel(),
+          error: () => navigateToLabel(),
+        });
+      }
     };
 
     if (dataset.active) {
-      navigateToLabel();
+      loadModelThenNavigate();
       return;
     }
 
@@ -903,9 +924,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.datasetsApi.activateRegistered(dataset.id).subscribe({
         next: () => {
           this.datasetState.refresh();
-          navigateToLabel();
+          loadModelThenNavigate();
         },
-        error: () => navigateToLabel(),
+        error: () => loadModelThenNavigate(),
       });
       return;
     }
@@ -919,9 +940,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.datasetsApi.activateRegistered(dataset.id).subscribe({
             next: () => {
               this.datasetState.refresh();
-              navigateToLabel();
+              loadModelThenNavigate();
             },
-            error: () => navigateToLabel(),
+            error: () => loadModelThenNavigate(),
           });
         });
       },
@@ -944,8 +965,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.router.navigate(['/find']);
     };
 
+    const loadModelThenNavigate = (): void => {
+      if (!model.detector_loaded) {
+        // Model not loaded — load it and wait for completion before navigating.
+        this.modelsApi.loadModel(model.id).subscribe({
+          next: () => {
+            this.startModelProgressPolling(() => {
+              this.datasetState.refresh();
+              navigateToFind();
+            });
+          },
+          error: () => navigateToFind(),
+        });
+      } else {
+        // Model already loaded — just activate and navigate.
+        this.modelsApi.loadModel(model.id).subscribe({
+          next: () => navigateToFind(),
+          error: () => navigateToFind(),
+        });
+      }
+    };
+
     if (dataset.active) {
-      navigateToFind();
+      loadModelThenNavigate();
       return;
     }
 
@@ -954,9 +996,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.datasetsApi.activateRegistered(dataset.id).subscribe({
         next: () => {
           this.datasetState.refresh();
-          navigateToFind();
+          loadModelThenNavigate();
         },
-        error: () => navigateToFind(),
+        error: () => loadModelThenNavigate(),
       });
       return;
     }
@@ -968,9 +1010,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.datasetsApi.activateRegistered(dataset.id).subscribe({
             next: () => {
               this.datasetState.refresh();
-              navigateToFind();
+              loadModelThenNavigate();
             },
-            error: () => navigateToFind(),
+            error: () => loadModelThenNavigate(),
           });
         });
       },
