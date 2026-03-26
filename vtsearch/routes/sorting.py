@@ -219,23 +219,6 @@ def learned_sort():
             det_ctx.embedder = first.get("embedder", "")
             det_ctx.media_type = first.get("type", "")
 
-        # Persist trained weights into the trainable model file so they
-        # survive restarts and Find can skip expensive label resolution.
-        from vtsearch.models.registry import get_model as _get_model
-
-        _entry = _get_model(det_ctx.detector_id)
-        _tm_name = _entry.get("trainable_model_name", "") if _entry else ""
-        if _tm_name:
-            from vtsearch.routes.detectors_helpers import serialize_weights as _ser
-            from vtsearch.routes.trainable_models import _model_path, _read_model, _write_model
-
-            _tm_path = _model_path(_tm_name)
-            _tm_data = _read_model(_tm_path)
-            if _tm_data is not None:
-                _tm_data["weights"] = _ser(model)
-                _tm_data["threshold"] = round(threshold, 4)
-                _write_model(_tm_path, _tm_data)
-
     return jsonify({"results": results, "threshold": round(threshold, 4)})
 
 
