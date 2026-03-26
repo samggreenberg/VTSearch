@@ -1,5 +1,5 @@
 <vt-modal [open]="dialog.dialogOpen" [title]="dialog.dialogTitle" [showCloseButton]="false" (closed)="onClosed()">
-  <p class="dialog-message"><vt-icon [type]="dialog.getIconType()" [size]="18"></vt-icon> {{ dialog.dialogMessage }}</p>
+  <p class="dialog-message"><vt-icon [type]="dialog.getIconType()" [size]="32"></vt-icon> {{ dialog.dialogMessage }}</p>
   @if (dialog.dialogShowInput) {
     <input
       class="form-input"
