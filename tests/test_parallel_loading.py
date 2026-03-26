@@ -113,6 +113,29 @@ class TestLoadingTasksTracker:
         tracker.reset_for_tests()
         assert tracker.list_tasks() == []
 
+    def test_media_type_in_task(self):
+        """Tasks created with media_type expose it in list_tasks output."""
+        tracker = LoadingTasksTracker()
+        tracker.create_task("t1", "Image DS", media_type="image")
+        tracker.create_task("t2", "Audio DS", media_type="audio")
+        tracker.create_task("t3", "No Type")
+
+        tasks = {t["task_id"]: t for t in tracker.list_tasks()}
+        assert tasks["t1"]["media_type"] == "image"
+        assert tasks["t2"]["media_type"] == "audio"
+        assert "media_type" not in tasks["t3"]
+
+    def test_media_type_in_finished_task(self):
+        """media_type is still visible on recently-finished tasks."""
+        tracker = LoadingTasksTracker()
+        pt = tracker.create_task("t1", "DS", media_type="image")
+        pt.update("idle", "Done")
+        tracker.mark_finished("t1")
+
+        tasks = tracker.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0]["media_type"] == "image"
+
 
 # ---------------------------------------------------------------------------
 # Thread-local progress tests
@@ -229,6 +252,33 @@ class TestLoadingTasksEndpoint:
             assert task["current"] == 25
         finally:
             loading_tasks.remove_task("api_test")
+
+
+class TestLoadingTasksMediaType:
+    """Test that /api/dataset/loading-tasks exposes media_type."""
+
+    def test_api_returns_media_type(self, client):
+        pt = loading_tasks.create_task("mt_test", "Image DS", media_type="image")
+        pt.update("loading", "Working", 10, 100)
+        try:
+            resp = client.get("/api/dataset/loading-tasks")
+            assert resp.status_code == 200
+            tasks = resp.get_json()["tasks"]
+            assert len(tasks) == 1
+            assert tasks[0]["media_type"] == "image"
+        finally:
+            loading_tasks.remove_task("mt_test")
+
+    def test_api_omits_empty_media_type(self, client):
+        pt = loading_tasks.create_task("mt_test2", "Unknown DS")
+        pt.update("loading", "Working", 10, 100)
+        try:
+            resp = client.get("/api/dataset/loading-tasks")
+            tasks = resp.get_json()["tasks"]
+            assert len(tasks) == 1
+            assert "media_type" not in tasks[0]
+        finally:
+            loading_tasks.remove_task("mt_test2")
 
 
 class TestCancelTaskEndpoint:

@@ -515,7 +515,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Importer modal ---
 
-  /** Guess the media type the user likely wants based on existing datasets/models. */
+  /** Guess the media type the user likely wants based on existing datasets, models, and in-progress loads. */
   get guessedMediaType(): string {
     const types = new Set<string>();
     for (const d of this.datasets) {
@@ -523,6 +523,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     for (const m of this.models) {
       if (m.media_type) types.add(m.media_type);
+    }
+    for (const t of this.loadingTasks) {
+      if (t.media_type && !t.error) types.add(t.media_type);
     }
     return types.size === 1 ? [...types][0] : '';
   }
@@ -558,7 +561,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- New model modal ---
 
-  /** Media type used as default for new models: single-selected dataset wins, then active dataset. */
+  /** Media type used as default for new models: single-selected dataset wins, then active dataset, then in-progress loads. */
   get activeDatasetMediaType(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
@@ -566,7 +569,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (sel?.media_type) return sel.media_type;
     }
     const active = this.datasets.find((d) => d.active);
-    return active?.media_type || '';
+    if (active?.media_type) return active.media_type;
+    // Fall back to in-progress loading tasks when no dataset is fully loaded yet.
+    const loadingTypes = new Set(
+      this.loadingTasks.filter((t) => t.media_type && !t.error).map((t) => t.media_type!),
+    );
+    return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
 
   openNewModelModal(): void {

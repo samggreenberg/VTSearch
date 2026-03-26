@@ -513,9 +513,23 @@ def load_demo_dataset_route():
     if importer is None:
         return jsonify({"error": "demo importer not available"}), 500
 
+    demo_info = DEMO_DATASETS[dataset_name]
     field_values: dict = {"name": dataset_name}
+    # Inject media_type so the loading task exposes it to the frontend,
+    # allowing the "guessed type" logic to consider in-progress loads.
     if converter_name:
+        # When a converter is used, the resulting dataset has the converter's
+        # target type, not the demo's original type.
+        from vtsearch.converters import get_converter  # noqa: PLC0415
+
+        conv = get_converter(converter_name)
+        if conv is not None:
+            field_values["media_type"] = conv.target_type
+        else:
+            field_values["media_type"] = demo_info.get("media_type", "")
         field_values["converter"] = converter_name
+    else:
+        field_values["media_type"] = demo_info.get("media_type", "")
     if clipper_name:
         field_values["clipper"] = clipper_name
     if embedder_name:
@@ -692,7 +706,9 @@ def load_registered_dataset(dataset_id: str):
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
-    tracker = _loading_tasks.create_task(task_id, entry.get("name", dataset_id), dataset_id=dataset_id)
+    tracker = _loading_tasks.create_task(
+        task_id, entry.get("name", dataset_id), dataset_id=dataset_id, media_type=entry.get("media_type", ""),
+    )
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):

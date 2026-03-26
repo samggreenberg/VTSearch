@@ -198,6 +198,22 @@ def _origin_to_str(origin: dict | None) -> str:
     return importer_name
 
 
+def _normalize_media_type(value: str) -> str:
+    """Normalize a media type string (folder_import_name or type_id) to a canonical type_id."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    try:
+        from vtsearch.media import get_by_folder_name, normalize_type_id  # noqa: PLC0415
+
+        try:
+            return get_by_folder_name(value).type_id
+        except KeyError:
+            return normalize_type_id(value)
+    except Exception:
+        return value
+
+
 def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
     """Apply a clipper to all medias in *clips_dict*, replacing them in-place."""
     if not clipper_name:
@@ -322,6 +338,7 @@ def _run_origin_load_in_background(
     clipper_params: dict | None = None,
     embedder: str = "",
     created_by: str = "",
+    media_type: str = "",
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -345,7 +362,7 @@ def _run_origin_load_in_background(
         dataset_progress.reset_cancel()
 
     task_id = f"_loading_{uuid4().hex[:8]}"
-    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin))
+    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type)
 
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
@@ -509,6 +526,10 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
+    # Extract media_type from field_values so in-progress tasks can expose it
+    # to the frontend (used for guessing the type in subsequent add dialogs).
+    media_type_hint = _normalize_media_type(field_values.get("media_type", ""))
+
     def _load(target_medias):
         importer.run(field_values, target_medias)
 
@@ -520,6 +541,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         clipper_params=clipper_params,
         embedder=embedder_name,
         created_by=created_by,
+        media_type=media_type_hint,
     )
 
 
