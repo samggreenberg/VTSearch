@@ -565,6 +565,103 @@ def save_trainable_model_labels(name: str):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/trainable-models/<name>/import-labels/<importer_name>
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route(
+    "/api/trainable-models/<name>/import-labels/<importer_name>",
+    methods=["POST"],
+)
+def import_labels_into_model(name: str, importer_name: str):
+    """Run a label importer and merge results into this model's labelset.
+
+    Unlike the regular ``/api/label-importers/import/`` route, this does
+    **not** require a dataset to be loaded.  The imported label entries are
+    merged directly into the trainable model's persisted labelset, and the
+    model-registry entry is updated so the dashboard reflects the new count.
+
+    Returns JSON with ``applied``, ``skipped``, ``num_labels``, and
+    ``message`` keys.
+    """
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+
+    from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
+
+    importer = get_label_importer(importer_name)
+    if importer is None:
+        known = [imp.name for imp in list_label_importers()]
+        return (
+            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
+            404,
+        )
+
+    field_values = extract_plugin_fields(importer)
+    err = validate_required_fields(importer, field_values)
+    if err:
+        return err
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
+
+    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
+    if not isinstance(label_entries, list):
+        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+
+    # Load the model's existing labelset
+    from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+    existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+
+    # Build a set of existing (md5, label) pairs for dedup
+    existing_keys: set[tuple[str, str]] = set()
+    for el in existing_ls.elements:
+        if el.md5:
+            existing_keys.add((el.md5, el.label))
+
+    applied = 0
+    skipped = 0
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+        md5 = entry.get("md5", "")
+        if md5 and (md5, label) in existing_keys:
+            skipped += 1
+            continue
+        elem = LabeledElement.from_dict(entry)
+        existing_ls.elements.append(elem)
+        if md5:
+            existing_keys.add((md5, label))
+        applied += 1
+
+    data["labelset"] = existing_ls.to_dict()
+    _write_model(path, data)
+
+    # Update the model registry entry
+    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        update_model(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
+
+    msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
+    return jsonify({
+        "applied": applied,
+        "skipped": skipped,
+        "num_labels": len(existing_ls),
+        "message": msg,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Model registry endpoints
 # ---------------------------------------------------------------------------
 

@@ -124,6 +124,7 @@
                 (load)="loadModel(model)"
                 (unload)="unloadModel(model)"
                 (export)="openExportModal(model)"
+                (addLabels)="openAddLabelsModal(model)"
                 (autorunToggle)="toggleAutorun(model, $event)"
                 (cancelTask)="cancelModelLoadingTask($event)"
                 (dismissTask)="dismissModelLoadingTask($event)"
@@ -195,6 +196,14 @@
     [detectorName]="exportModelName"
     (closed)="closeExportModal()"
     (exported)="closeExportModal()"
+  />
+}
+
+@if (addLabelsModalOpen) {
+  <vt-label-importer-modal
+    [targetModelName]="addLabelsModelName"
+    (closed)="closeAddLabelsModal()"
+    (imported)="onAddLabelsImported()"
   />
 }
 
