@@ -7,18 +7,24 @@ import {
   ViewChild,
   AfterViewChecked,
   OnChanges,
+  OnDestroy,
   SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { MediaItem } from '../../../models/api.models';
+import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SortedItem } from '../left-panel.component';
 
 /** Threshold above which we switch from plain DOM to CDK virtual scrolling (list mode only). */
 const VIRTUAL_SCROLL_THRESHOLD = 500;
 /** Approximate height of a single media-item row in list mode (px). */
 const LIST_ITEM_HEIGHT = 28;
+/** Extra items to prefetch beyond the visible viewport edges. */
+const PREFETCH_BUFFER = 50;
 
 @Component({
   selector: 'vt-media-list',
@@ -27,7 +33,7 @@ const LIST_ITEM_HEIGHT = 28;
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements AfterViewChecked, OnChanges {
+export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -51,6 +57,15 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
 
   private pendingScrollToSelected = false;
   private pendingScrollPct: number | null = null;
+  private readonly destroy$ = new Subject<void>();
+  private scrollSubscribed = false;
+
+  constructor(private metadataCache: MediaMetadataCacheService) {}
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
 
   /** Whether to use CDK virtual scrolling (list mode with many items). */
   get useVirtualScroll(): boolean {
@@ -106,6 +121,9 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
     }
 
     this.cachedOrderedItems = items;
+
+    // Prefetch metadata for the initial visible window.
+    this.prefetchVisibleMetadata();
   }
 
   getVoteLabel(id: number): 'good' | 'bad' | null {
@@ -147,6 +165,14 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
         }
       }
     }
+
+    // Subscribe to virtual viewport scroll events (once the viewport exists).
+    if (this.virtualViewport && !this.scrollSubscribed) {
+      this.scrollSubscribed = true;
+      this.virtualViewport.scrolledIndexChange
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => this.prefetchVisibleMetadata());
+    }
   }
 
   scrollToIndex(index: number): void {
@@ -175,5 +201,30 @@ export class MediaListComponent implements AfterViewChecked, OnChanges {
 
   trackByMediaId(_index: number, item: { media: MediaItem }): number {
     return item.media.id;
+  }
+
+  /**
+   * Ask the metadata cache to prefetch items around the currently visible
+   * viewport range.  This is a no-op when all metadata is already cached
+   * (small datasets) or when virtual scrolling is not active.
+   */
+  private prefetchVisibleMetadata(): void {
+    if (!this.useVirtualScroll || !this.virtualViewport) return;
+    const total = this.cachedOrderedItems.length;
+    if (total === 0) return;
+
+    const viewportEl = this.virtualViewport.elementRef.nativeElement;
+    const viewportHeight = viewportEl.clientHeight || 600;
+    const startIndex = this.virtualViewport.measureScrollOffset('top') / this.listItemHeight;
+    const visibleCount = Math.ceil(viewportHeight / this.listItemHeight);
+
+    const from = Math.max(0, Math.floor(startIndex) - PREFETCH_BUFFER);
+    const to = Math.min(total, Math.ceil(startIndex) + visibleCount + PREFETCH_BUFFER);
+
+    const ids: number[] = [];
+    for (let i = from; i < to; i++) {
+      ids.push(this.cachedOrderedItems[i].media.id);
+    }
+    this.metadataCache.ensureLoaded(ids);
   }
 }

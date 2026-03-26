@@ -224,6 +224,64 @@ def list_medias() -> Response:
     return jsonify(result)
 
 
+@medias_bp.route("/api/medias/batch", methods=["POST"])
+def batch_medias() -> tuple[Response, int] | Response:
+    """Return metadata for a specific set of media IDs.
+
+    This is the paginated counterpart of ``GET /api/medias`` — callers
+    request only the IDs they need (e.g. the ones currently visible in a
+    virtual-scrolling viewport), keeping payload size bounded.
+
+    Request body (JSON):
+        ``{"ids": [1, 2, 3, ...]}`` — list of integer media IDs.
+
+    Returns:
+        A JSON array of media metadata dicts (same shape as the full
+        ``/api/medias`` response) for the requested IDs that exist.
+        Unknown IDs are silently omitted.
+    """
+    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+    data = get_json_or_400()
+    if not isinstance(data, dict):
+        return data
+
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids must be a list"}), 400
+
+    snap = snapshot_medias()
+    result: list[dict[str, Any]] = []
+    for cid in ids:
+        if not isinstance(cid, int):
+            continue
+        c = snap.get(cid)
+        if c is None:
+            continue
+        media_type_id = c.get("type", "audio")
+        media_data: dict[str, Any] = {
+            "id": c["id"],
+            "type": media_type_id,
+            "filename": c.get("filename", f"media_{c['id']}.wav"),
+            "md5": c["md5"],
+        }
+        try:
+            mt = get_media_type(media_type_id)
+            custom: dict[str, Any] = mt.display_metadata(c)
+        except KeyError:
+            custom = {}
+        importer_custom = c.get("custom_metadata")
+        if importer_custom:
+            custom.update(importer_custom)
+        media_data["custom_metadata"] = custom
+        if "origin_name" in c:
+            media_data["origin_name"] = c["origin_name"]
+        if "description" in c:
+            media_data["description"] = c["description"]
+        result.append(media_data)
+    return jsonify(result)
+
+
 @medias_bp.route("/api/medias/<int:media_id>/audio")
 def media_audio(media_id: int) -> tuple[Response, int] | Response:
     """Stream the WAV audio bytes for a single media item.

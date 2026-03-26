@@ -271,6 +271,47 @@ class TestListMedias:
             assert "embedding" not in media
 
 
+class TestBatchMedias:
+    def test_returns_requested_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1, 2]})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data) == 2
+        returned_ids = {m["id"] for m in data}
+        assert returned_ids == {1, 2}
+
+    def test_same_fields_as_list_medias(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1]})
+        data = resp.get_json()
+        assert len(data) == 1
+        media = data[0]
+        assert "id" in media
+        assert "md5" in media
+        assert "filename" in media
+        assert "custom_metadata" in media
+        assert "media_bytes" not in media
+        assert "embedding" not in media
+
+    def test_unknown_ids_omitted(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1, 99999]})
+        data = resp.get_json()
+        assert len(data) == 1
+        assert data[0]["id"] == 1
+
+    def test_empty_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": []})
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
+    def test_missing_ids_field(self, client):
+        resp = client.post("/api/medias/batch", json={"foo": "bar"})
+        assert resp.status_code == 400
+
+    def test_non_list_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": "not a list"})
+        assert resp.status_code == 400
+
+
 class TestMediaAudio:
     def test_returns_wav_for_valid_id(self, client):
         resp = client.get("/api/medias/1/audio")

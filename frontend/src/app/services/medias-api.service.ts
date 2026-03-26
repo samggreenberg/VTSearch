@@ -15,6 +15,10 @@ export class MediasApiService {
     return this.http.get<MediaItem[]>('/api/medias');
   }
 
+  getMediasBatch(ids: number[]): Observable<MediaItem[]> {
+    return this.http.post<MediaItem[]>('/api/medias/batch', { ids });
+  }
+
   getAudio(id: number): Observable<Blob> {
     return this.http.get(`/api/medias/${id}/audio`, { responseType: 'blob' });
   }
