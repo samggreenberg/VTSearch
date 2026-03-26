@@ -19,6 +19,7 @@ import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { IconComponent } from '../icon/icon.component';
 
 @Component({
@@ -33,6 +34,7 @@ import { IconComponent } from '../icon/icon.component';
     DatasetImporterModalComponent,
     NewModelModalComponent,
     DetectorExportModalComponent,
+    LabelImporterModalComponent,
     IconComponent,
   ],
   templateUrl: './dashboard.component.html',
@@ -53,6 +55,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   newModelModalOpen = false;
   exportModalOpen = false;
   exportModelName = '';
+  addLabelsModalOpen = false;
+  addLabelsModelName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
 
@@ -511,6 +515,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeExportModal(): void {
     this.exportModalOpen = false;
     this.exportModelName = '';
+  }
+
+  // --- Add Labels modal ---
+
+  openAddLabelsModal(model: ModelRegistryEntry): void {
+    this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
+    this.addLabelsModalOpen = true;
+  }
+
+  closeAddLabelsModal(): void {
+    this.addLabelsModalOpen = false;
+    this.addLabelsModelName = '';
+  }
+
+  onAddLabelsImported(): void {
+    this.datasetState.refresh();
   }
 
   // --- Importer modal ---

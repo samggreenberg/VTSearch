@@ -30,6 +30,7 @@ export class ModelCardComponent {
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
   @Output() export = new EventEmitter<void>();
+  @Output() addLabels = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
   @Output() unload = new EventEmitter<void>();
   @Output() cancelTask = new EventEmitter<string>();
@@ -76,6 +77,11 @@ export class ModelCardComponent {
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();
+  }
+
+  onAddLabels(event: MouseEvent): void {
+    event.stopPropagation();
+    this.addLabels.emit();
   }
 
   onExport(event: MouseEvent): void {
