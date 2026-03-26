@@ -99,57 +99,30 @@ def preload_autoload_media_types() -> list[str]:
     :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each one so
     that models are warm before the user opens the GUI.
 
-    Falls back to ``autoload_media_types`` for backward compatibility: if
-    ``autoload_media_embedders`` is empty but ``autoload_media_types`` has
-    entries, the first registered embedder for each type is loaded.
-
     Prints intermediate status messages and download progress bars to
     the console so that the user can see what is happening during the
     (potentially long) model loading phase.
 
     Returns the list of embedder names that were preloaded.
     """
-    from vtsearch.media import embedders_for_type, get_embedder
-    from vtsearch.settings import get_autoload_media_embedders, get_autoload_media_types
+    from vtsearch.media import get_embedder
+    from vtsearch.settings import get_autoload_media_embedders
 
     preloaded: list[str] = []
 
-    # Prefer the new embedder-based setting
-    embedder_names = get_autoload_media_embedders()
-    if embedder_names:
-        for emb_name in embedder_names:
-            try:
-                emb = get_embedder(emb_name)
-                print(f"  Preloading {emb_name} embedder...", flush=True)
-                original_cb = emb._on_progress
-                emb._on_progress = _make_console_progress(original_cb)
-                try:
-                    emb.load_models()
-                finally:
-                    emb._on_progress = original_cb
-                preloaded.append(emb_name)
-            except Exception as exc:
-                print(f"  Warning: failed to preload {emb_name}: {exc}", flush=True)
-        return preloaded
-
-    # Legacy fallback: autoload_media_types → first embedder for each type
-    for type_id in get_autoload_media_types():
+    for emb_name in get_autoload_media_embedders():
         try:
-            avail = embedders_for_type(type_id)
-            if not avail:
-                print(f"  Warning: no embedder for media type {type_id}", flush=True)
-                continue
-            emb = avail[0]
-            print(f"  Preloading {emb.name} embedder...", flush=True)
+            emb = get_embedder(emb_name)
+            print(f"  Preloading {emb_name} embedder...", flush=True)
             original_cb = emb._on_progress
             emb._on_progress = _make_console_progress(original_cb)
             try:
                 emb.load_models()
             finally:
                 emb._on_progress = original_cb
-            preloaded.append(emb.name)
+            preloaded.append(emb_name)
         except Exception as exc:
-            print(f"  Warning: failed to preload {type_id}: {exc}", flush=True)
+            print(f"  Warning: failed to preload {emb_name}: {exc}", flush=True)
     return preloaded
 
 
