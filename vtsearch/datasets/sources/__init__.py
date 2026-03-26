@@ -10,6 +10,9 @@ Use :func:`get_source_for_origin` to instantiate the right source for a
 given origin dict.  Sources are **stateful** (e.g. an archive source may
 download and extract on first access), so each call returns a fresh
 instance — callers should call :meth:`~MediaSource.cleanup` when done.
+
+Source factories are auto-discovered via the ``SOURCE`` sentinel attribute,
+just like exporters and importers.
 """
 
 from __future__ import annotations
@@ -17,8 +20,16 @@ from __future__ import annotations
 from typing import Any
 
 from vtsearch.datasets.sources.base import MediaItem, MediaSource
+from vtsearch.utils.registry import PluginRegistry
 
 __all__ = ["MediaItem", "MediaSource", "get_source_for_origin"]
+
+_registry: PluginRegistry = PluginRegistry(
+    package="vtsearch.datasets.sources",
+    sentinel="SOURCE",
+    label="media source",
+    discover_modules=True,
+)
 
 
 def get_source_for_origin(origin: dict[str, Any] | None) -> MediaSource | None:
@@ -31,20 +42,7 @@ def get_source_for_origin(origin: dict[str, Any] | None) -> MediaSource | None:
         return None
 
     importer = origin.get("importer", "")
-    params = origin.get("params", {})
-
-    if importer == "folder":
-        path = params.get("path", "")
-        if path:
-            from vtsearch.datasets.sources.local_folder import LocalFolderSource
-
-            return LocalFolderSource(path)
-
-    if importer == "http_archive":
-        url = params.get("url", "")
-        if url:
-            from vtsearch.datasets.sources.http_archive import HttpArchiveSource
-
-            return HttpArchiveSource(url)
-
+    factory = _registry.get(importer)
+    if factory is not None:
+        return factory.create_from_origin(origin)
     return None

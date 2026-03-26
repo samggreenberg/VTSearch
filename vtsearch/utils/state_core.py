@@ -504,12 +504,77 @@ def _set_inclusion(value: int | None) -> None:
     get_active_detector_context().inclusion = value
 
 
-# NOTE: These module-level variables are DEAD CODE.  Kept only to avoid
-# import errors if any external code references them.
-_click_counter: int = 0
-_dataset_display_name: str | None = None
-_diversity_tree: Any = None
-inclusion: int | None = None
+# ---------------------------------------------------------------------------
+# Context managers for explicit, scoped context switching
+# ---------------------------------------------------------------------------
+
+
+class with_dataset_context:
+    """Context manager for temporarily switching the active dataset.
+
+    Saves the current active dataset ID on entry, switches to the
+    requested *dataset_id*, and restores the original on exit —
+    even if an exception occurs.
+
+    Usage::
+
+        with with_dataset_context("my_dataset"):
+            # code here sees my_dataset's medias, diversity tree, etc.
+            print(len(medias))
+        # original dataset is restored here
+
+    .. warning::
+        This is NOT thread-safe.  Only use from a single thread or
+        protect with ``_state_lock`` externally.
+    """
+
+    __slots__ = ("_target_id", "_previous_id")
+
+    def __init__(self, dataset_id: str) -> None:
+        self._target_id = dataset_id
+        self._previous_id: str | None = None
+
+    def __enter__(self) -> DatasetContext:
+        self._previous_id = get_active_dataset_id()
+        set_active_dataset_id(self._target_id)
+        return get_active_context()
+
+    def __exit__(self, *exc_info: object) -> None:
+        set_active_dataset_id(self._previous_id)
+
+
+class with_detector_context:
+    """Context manager for temporarily switching the active detector.
+
+    Saves the current active detector ID on entry, switches to the
+    requested *detector_id*, and restores the original on exit.
+
+    Usage::
+
+        with with_detector_context("my_detector"):
+            # code here sees my_detector's votes, scores, etc.
+            print(len(good_votes))
+        # original detector is restored here
+
+    .. warning::
+        This is NOT thread-safe.  Only use from a single thread or
+        protect with ``_state_lock`` externally.
+    """
+
+    __slots__ = ("_target_id", "_previous_id")
+
+    def __init__(self, detector_id: str) -> None:
+        self._target_id = detector_id
+        self._previous_id: str | None = None
+
+    def __enter__(self) -> DetectorContext:
+        self._previous_id = get_active_detector_id()
+        set_active_detector_id(self._target_id)
+        return get_active_detector_context()
+
+    def __exit__(self, *exc_info: object) -> None:
+        set_active_detector_id(self._previous_id)
+
 
 # Autorun detectors/extractors/localizers are GLOBAL (not per-dataset).
 autorun_detectors: dict[str, dict[str, Any]] = {}

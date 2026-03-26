@@ -4,12 +4,8 @@ A :class:`~vtsearch.converters.base.MediaConverter` takes a single media dict
 of one :class:`~vtsearch.media.base.MediaType` and returns one or more media
 dicts of a *different* media type.
 
-Built-in converters
--------------------
-* :class:`Document2ImageMediaConverter` — render document pages as images.
-* :class:`Document2TextMediaConverter` — extract embedded text from documents.
-* :class:`Video2AudioMediaConverter` — extract the audio track from a video.
-* :class:`Video2ImageMediaConverter` — sample frames from a video as images.
+Built-in converters are auto-discovered via the ``CONVERTER`` sentinel
+attribute, just like exporters and importers.
 """
 
 from vtsearch.converters.base import MediaConverter
@@ -17,40 +13,38 @@ from vtsearch.converters.document2image import Document2ImageMediaConverter
 from vtsearch.converters.document2text import Document2TextMediaConverter
 from vtsearch.converters.video2audio import Video2AudioMediaConverter
 from vtsearch.converters.video2image import Video2ImageMediaConverter
+from vtsearch.utils.registry import PluginRegistry
 
 # ---------------------------------------------------------------------------
-# Converter registry
+# Converter registry (auto-discovered via CONVERTER sentinel)
 # ---------------------------------------------------------------------------
 
-_ALL_CONVERTERS: list[MediaConverter] = [
-    Document2ImageMediaConverter(),
-    Document2TextMediaConverter(),
-    Video2AudioMediaConverter(),
-    Video2ImageMediaConverter(),
-]
+_registry: PluginRegistry[MediaConverter] = PluginRegistry(
+    package="vtsearch.converters",
+    sentinel="CONVERTER",
+    label="media converter",
+    discover_modules=True,
+)
 
 
 def list_converters() -> list[MediaConverter]:
     """Return all registered converters."""
-    return list(_ALL_CONVERTERS)
+    return _registry.list()
 
 
 def get_converter(name: str) -> MediaConverter | None:
     """Return the converter with *name*, or ``None``."""
-    for c in _ALL_CONVERTERS:
-        if c.name == name:
-            return c
-    return None
+    return _registry.get(name)
 
 
 def list_converters_for_target(target_type: str) -> list[MediaConverter]:
     """Return converters that produce *target_type* (a ``type_id``)."""
-    return [c for c in _ALL_CONVERTERS if c.target_type == target_type]
+    return [c for c in _registry.list() if c.target_type == target_type]
 
 
 def list_converters_for_source(source_type: str) -> list[MediaConverter]:
     """Return converters that consume *source_type* (a ``type_id``)."""
-    return [c for c in _ALL_CONVERTERS if c.source_type == source_type]
+    return [c for c in _registry.list() if c.source_type == source_type]
 
 
 __all__ = [

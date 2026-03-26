@@ -93,3 +93,6 @@ class Document2ImageMediaConverter(MediaConverter):
             doc.close()
 
         return results
+
+
+CONVERTER = Document2ImageMediaConverter()
