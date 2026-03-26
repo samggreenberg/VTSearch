@@ -83,12 +83,13 @@ def sync_labels_to_loaded_model() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the model's original training labels.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
+    from vtsearch.models.registry import get_model, is_find_mode, update_model
+    from vtsearch.utils import get_active_detector_id
 
     if is_find_mode():
         return
 
-    loaded_id = get_loaded_id()
+    loaded_id = get_active_detector_id()
     if not loaded_id:
         return
 
