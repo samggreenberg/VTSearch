@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from conftest import load_model_and_wait as _load_model_and_wait
+from tests import load_model_and_wait as _load_model_and_wait
 from vtsearch.settings import get_trainable_models_dir
 
 
