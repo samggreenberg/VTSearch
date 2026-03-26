@@ -8,12 +8,18 @@ embeddings for training.  This module handles that resolution:
 2. Embed the file using the appropriate embedder for the media type.
 3. Return resolved embeddings with availability stats.
 
-File resolution is **not** hardcoded to specific importers.  Instead,
-:func:`resolve_file_from_origin` looks up the importer by name from the
-auto-discovered registry and calls its
-:meth:`~vtsearch.datasets.importers.base.DatasetImporter.resolve_file` method.
-Adding a new ``DatasetImporter`` with a ``resolve_file`` override automatically
-extends the resolution capability — no changes to this module required.
+File resolution uses a pluggable :class:`FileResolver` protocol.  Two
+resolver implementations are auto-wired on first use:
+
+- **Source resolver** — delegates to
+  :func:`~vtsearch.datasets.sources.get_source_for_origin` and calls
+  :meth:`~MediaSource.resolve_path`.
+- **Importer resolver** — delegates to
+  :func:`~vtsearch.datasets.importers.get_importer` and calls
+  :meth:`~DatasetImporter.resolve_file`.
+
+External code can replace or extend these via
+:func:`register_source_resolver` and :func:`register_importer_resolver`.
 
 Two synthetic origin types (``dupe_set`` and ``converter``) are handled inline
 because they are not importers in the registry — they delegate to real
@@ -25,11 +31,111 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# FileResolver protocol — the contract for pluggable file resolution
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class FileResolver(Protocol):
+    """Callable that resolves a media file from origin metadata.
+
+    Implementations receive the origin dict, origin_name, and filename,
+    and return a :class:`~pathlib.Path` to the resolved file on disk
+    (or ``None`` if resolution fails).
+    """
+
+    def __call__(
+        self,
+        origin: dict[str, Any],
+        origin_name: str,
+        filename: str,
+    ) -> Path | None: ...
+
+
+# ---------------------------------------------------------------------------
+# Pluggable resolver registry
+# ---------------------------------------------------------------------------
+
+_source_resolver: FileResolver | None = None
+_importer_resolver: FileResolver | None = None
+_auto_wired = False
+
+
+def register_source_resolver(fn: FileResolver) -> None:
+    """Register a source-based file resolver.
+
+    The resolver is called with ``(origin, origin_name, filename)`` and
+    should return a :class:`~pathlib.Path` or ``None``.
+    """
+    global _source_resolver
+    _source_resolver = fn
+
+
+def register_importer_resolver(fn: FileResolver) -> None:
+    """Register an importer-based file resolver.
+
+    The resolver is called with ``(origin, origin_name, filename)`` and
+    should return a :class:`~pathlib.Path` or ``None``.
+    """
+    global _importer_resolver
+    _importer_resolver = fn
+
+
+def _auto_wire_resolvers() -> None:
+    """Auto-wire the default resolvers on first use.
+
+    Imports the datasets source and importer packages lazily and registers
+    them as the default resolvers.  This avoids hard-coding cross-package
+    imports throughout :func:`resolve_file_from_origin` while still
+    providing zero-config behaviour.
+    """
+    global _auto_wired
+    if _auto_wired:
+        return
+    _auto_wired = True
+
+    # Source-based resolver
+    if _source_resolver is None:
+        try:
+            from vtsearch.datasets.sources import get_source_for_origin
+
+            def _default_source_resolver(
+                origin: dict[str, Any], origin_name: str, filename: str,
+            ) -> Path | None:
+                source = get_source_for_origin(origin)
+                if source is not None:
+                    return source.resolve_path(origin_name, filename)
+                return None
+
+            register_source_resolver(_default_source_resolver)
+        except ImportError:
+            pass
+
+    # Importer-based resolver
+    if _importer_resolver is None:
+        try:
+            from vtsearch.datasets.importers import get_importer
+
+            def _default_importer_resolver(
+                origin: dict[str, Any], origin_name: str, filename: str,
+            ) -> Path | None:
+                importer_name = origin.get("importer", "")
+                importer = get_importer(importer_name)
+                if importer is not None:
+                    return importer.resolve_file(origin, origin_name, filename)
+                return None
+
+            register_importer_resolver(_default_importer_resolver)
+        except ImportError:
+            pass
 
 
 @dataclass
@@ -99,36 +205,32 @@ def resolve_file_from_origin(
 
     # -- Source-based dispatch (preferred) --
 
-    from vtsearch.datasets.sources import get_source_for_origin
+    _auto_wire_resolvers()
 
-    source = get_source_for_origin(origin)
-    if source is not None:
-        result = source.resolve_path(origin_name, filename)
+    if _source_resolver is not None:
+        result = _source_resolver(origin, origin_name, filename)
         if result is not None:
             log.debug("resolve_file: source-based dispatch succeeded → %s", result)
             return result
         log.debug(
-            "resolve_file: source %s returned None for origin_name=%r, filename=%r",
-            type(source).__name__, origin_name, filename,
+            "resolve_file: source resolver returned None for origin_name=%r, filename=%r",
+            origin_name, filename,
         )
 
     # -- Registry-based dispatch (fallback for importers without a source) --
 
-    from vtsearch.datasets.importers import get_importer
-
-    importer = get_importer(importer_name)
-    if importer is not None:
-        result = importer.resolve_file(origin, origin_name, filename)
+    if _importer_resolver is not None:
+        result = _importer_resolver(origin, origin_name, filename)
         if result is not None:
-            log.debug("resolve_file: registry dispatch (%s) succeeded → %s", importer_name, result)
+            log.debug("resolve_file: importer dispatch (%s) succeeded → %s", importer_name, result)
             return result
         log.debug(
-            "resolve_file: %s.resolve_file() returned None "
-            "(origin_name=%r, filename=%r, params=%r)",
-            type(importer).__name__, origin_name, filename, params,
+            "resolve_file: importer resolver returned None "
+            "(importer=%r, origin_name=%r, filename=%r, params=%r)",
+            importer_name, origin_name, filename, params,
         )
     else:
-        log.debug("resolve_file: no importer registered for %r", importer_name)
+        log.debug("resolve_file: no importer resolver registered")
 
     # -- Generic fallback for unregistered origins with a path param --
     # Handles synthetic origins like "pdf" that store a direct file path.

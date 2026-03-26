@@ -98,3 +98,6 @@ class Video2AudioMediaConverter(MediaConverter):
             "media_bytes": wav_bytes,
             "duration": duration,
         }]
+
+
+CONVERTER = Video2AudioMediaConverter()

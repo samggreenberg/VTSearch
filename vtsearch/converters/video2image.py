@@ -111,3 +111,6 @@ class Video2ImageMediaConverter(MediaConverter):
                 os.unlink(tmp_file.name)
 
         return results
+
+
+CONVERTER = Video2ImageMediaConverter()

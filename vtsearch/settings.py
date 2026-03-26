@@ -253,7 +253,7 @@ del _key, _cast, _coerce, _g, _s
 
 
 # -------------------------------------------------------------------
-# Per-media-type view mode settings
+# Per-media-type per-side settings factory
 # -------------------------------------------------------------------
 
 _VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
@@ -263,142 +263,6 @@ _PANEL_PX_DEFAULTS: dict[str, int] = {"left": 260, "right": 300}
 VALID_PANEL_PX = (150, 500)  # pixel range matching frontend LEFT/RIGHT_MIN/MAX
 
 
-def _get_view_mode_dict(key: str) -> dict[str, str]:
-    """Return the per-media-type view mode dict for *key* (``view_mode_left`` or ``view_mode_right``).
-
-    Handles backward compatibility: if the stored value is a plain string
-    (old format), it is treated as the mode for all known media types.
-    """
-    side = key.replace("view_mode_", "")
-    default_mode = _VIEW_MODE_DEFAULTS.get(side, "list")
-    with _settings_lock:
-        raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    if isinstance(raw, str):
-        # Legacy scalar value — expand to dict for all known types
-        return {tid: raw for tid in _valid_media_types()}
-    if isinstance(raw, dict):
-        # Fill in missing types with the side default
-        result = {}
-        for tid in _valid_media_types():
-            val = raw.get(tid, default_mode)
-            result[tid] = val if val in VALID_VIEW_MODES else default_mode
-        return result
-    return {tid: default_mode for tid in _valid_media_types()}
-
-
-def get_view_mode_left() -> dict[str, str]:
-    """Return a dict mapping media type ID -> view mode for the left panel."""
-    return _get_view_mode_dict("view_mode_left")
-
-
-def get_view_mode_right() -> dict[str, str]:
-    """Return a dict mapping media type ID -> view mode for the right panel."""
-    return _get_view_mode_dict("view_mode_right")
-
-
-def set_view_mode_left(value: dict[str, str] | str) -> None:
-    """Set the left panel view mode (per-media-type dict or legacy scalar)."""
-    _set_view_mode_dict("view_mode_left", value)
-
-
-def set_view_mode_right(value: dict[str, str] | str) -> None:
-    """Set the right panel view mode (per-media-type dict or legacy scalar)."""
-    _set_view_mode_dict("view_mode_right", value)
-
-
-def _set_view_mode_dict(key: str, value: dict[str, str] | str) -> None:
-    """Persist the per-media-type view mode dict for *key*."""
-    valid_types = _valid_media_types()
-    if isinstance(value, str):
-        # Legacy scalar — expand to all types
-        if value not in VALID_VIEW_MODES:
-            raise ValueError(f"Invalid {key}: {value!r}")
-        value = {tid: value for tid in valid_types}
-    if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or string")
-    for tid, mode in value.items():
-        if tid not in valid_types:
-            raise ValueError(f"Invalid media type: {tid!r}")
-        if mode not in VALID_VIEW_MODES:
-            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
-    with _settings_lock:
-        s = _ensure_loaded()
-        s[key] = dict(value)
-        _save(s)
-
-
-def _get_grid_icon_size_dict(key: str) -> dict[str, str]:
-    """Return the per-media-type grid icon size dict for *key*.
-
-    Handles backward compatibility: if the stored value is a plain string
-    (not a dict), it is treated as the size for all known media types.
-    Legacy integer values (old grid_columns format) fall back to the default.
-    """
-    with _settings_lock:
-        raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    if isinstance(raw, str):
-        val = raw.upper()
-        if val not in VALID_GRID_ICON_SIZES:
-            val = _GRID_ICON_SIZE_DEFAULT
-        return {tid: val for tid in _valid_media_types()}
-    if isinstance(raw, dict):
-        result = {}
-        for tid in _valid_media_types():
-            v = raw.get(tid, _GRID_ICON_SIZE_DEFAULT)
-            if isinstance(v, str):
-                v = v.upper()
-            if v not in VALID_GRID_ICON_SIZES:
-                v = _GRID_ICON_SIZE_DEFAULT
-            result[tid] = v
-        return result
-    return {tid: _GRID_ICON_SIZE_DEFAULT for tid in _valid_media_types()}
-
-
-def get_grid_icon_size_left() -> dict[str, str]:
-    """Return a dict mapping media type ID -> grid icon size for the left panel."""
-    return _get_grid_icon_size_dict("grid_icon_size_left")
-
-
-def get_grid_icon_size_right() -> dict[str, str]:
-    """Return a dict mapping media type ID -> grid icon size for the right panel."""
-    return _get_grid_icon_size_dict("grid_icon_size_right")
-
-
-def set_grid_icon_size_left(value: dict[str, str] | str) -> None:
-    """Set the left panel grid icon size (per-media-type dict or scalar)."""
-    _set_grid_icon_size_dict("grid_icon_size_left", value)
-
-
-def set_grid_icon_size_right(value: dict[str, str] | str) -> None:
-    """Set the right panel grid icon size (per-media-type dict or scalar)."""
-    _set_grid_icon_size_dict("grid_icon_size_right", value)
-
-
-def _set_grid_icon_size_dict(key: str, value: dict[str, str] | str) -> None:
-    """Persist the per-media-type grid icon size dict for *key*."""
-    valid_types = _valid_media_types()
-    if isinstance(value, str):
-        value = value.upper()
-        if value not in VALID_GRID_ICON_SIZES:
-            raise ValueError(f"Invalid {key}: {value!r}")
-        value = {tid: value for tid in valid_types}
-    if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or string")
-    coerced = {}
-    for tid, size in value.items():
-        if tid not in valid_types:
-            raise ValueError(f"Invalid media type: {tid!r}")
-        if isinstance(size, str):
-            size = size.upper()
-        if size not in VALID_GRID_ICON_SIZES:
-            raise ValueError(f"Invalid {key} value for {tid}: {size!r}")
-        coerced[tid] = size
-    with _settings_lock:
-        s = _ensure_loaded()
-        s[key] = coerced
-        _save(s)
-
-
 def _valid_media_types() -> tuple[str, ...]:
     """Return valid media type IDs from the media registry."""
     from vtsearch.media import all_type_ids
@@ -406,105 +270,158 @@ def _valid_media_types() -> tuple[str, ...]:
     return tuple(all_type_ids())
 
 
-# -------------------------------------------------------------------
-# Per-media-type focus mode settings
-# -------------------------------------------------------------------
+def _make_per_side_setting(
+    key_base: str,
+    defaults: dict[str, Any],
+    valid_values: tuple[str, ...] | None = None,
+    *,
+    read_coerce=None,
+    write_coerce=None,
+    value_type: str = "str",
+):
+    """Factory for per-media-type per-side settings.
 
+    Generates ``get_<key_base>_left()``, ``get_<key_base>_right()``,
+    ``set_<key_base>_left()``, ``set_<key_base>_right()`` and the
+    internal ``_get_<key_base>_dict()`` / ``_set_<key_base>_dict()``.
 
-def _get_focus_mode_dict(key: str) -> dict[str, str]:
-    """Return the per-media-type focus mode dict for *key* (``focus_mode_left`` or ``focus_mode_right``).
-
-    Handles backward compatibility: if the stored value is a plain string
-    (old format), it is treated as the mode for all known media types.
+    Parameters
+    ----------
+    key_base:
+        Setting name without the side suffix, e.g. ``"view_mode"``.
+    defaults:
+        ``{"left": default_value, "right": default_value}``.
+    valid_values:
+        Tuple of allowed string values (for enum-like settings).
+        ``None`` skips membership validation (for numeric settings).
+    read_coerce:
+        Optional ``(raw_value, default) -> coerced_value`` applied when
+        reading each per-type entry from storage.  Useful for legacy
+        format handling (e.g. uppercasing, integer → default).
+    write_coerce:
+        Optional ``(value, key) -> coerced_value`` applied to each entry
+        on write before persisting.  Should raise ``ValueError`` on
+        invalid input.  When ``None``, membership in *valid_values* is
+        checked directly.
+    value_type:
+        ``"str"`` or ``"int"`` — controls the setter's scalar expansion
+        and validation logic.
     """
-    side = key.replace("focus_mode_", "")
-    default_mode = _FOCUS_MODE_DEFAULTS.get(side, "click")
-    with _settings_lock:
-        raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    if isinstance(raw, str):
-        # Legacy scalar value — expand to dict for all known types
-        mode = raw if raw in VALID_FOCUS_MODES else default_mode
-        return {tid: mode for tid in _valid_media_types()}
-    if isinstance(raw, dict):
-        # Fill in missing types with the side default
-        result = {}
-        for tid in _valid_media_types():
-            val = raw.get(tid, default_mode)
-            result[tid] = val if val in VALID_FOCUS_MODES else default_mode
-        return result
-    return {tid: default_mode for tid in _valid_media_types()}
 
+    def _get_dict(key: str) -> dict[str, Any]:
+        side = key[len(key_base) + 1:]  # strip "<key_base>_" prefix
+        default_val = defaults.get(side, next(iter(defaults.values())))
+        with _settings_lock:
+            raw = _ensure_loaded().get(key, _DEFAULTS[key])
 
-def get_focus_mode_left() -> dict[str, str]:
-    """Return a dict mapping media type ID -> focus mode for the left panel."""
-    return _get_focus_mode_dict("focus_mode_left")
+        types = _valid_media_types()
 
+        # Scalar legacy value — expand to all types
+        if not isinstance(raw, dict):
+            if read_coerce is not None:
+                val = read_coerce(raw, default_val)
+            elif valid_values is not None and isinstance(raw, str):
+                val = raw if raw in valid_values else default_val
+            else:
+                val = default_val
+            return {tid: val for tid in types}
 
-def get_focus_mode_right() -> dict[str, str]:
-    """Return a dict mapping media type ID -> focus mode for the right panel."""
-    return _get_focus_mode_dict("focus_mode_right")
-
-
-def set_focus_mode_left(value: dict[str, str] | str) -> None:
-    """Set the left panel focus mode (per-media-type dict or legacy scalar)."""
-    _set_focus_mode_dict("focus_mode_left", value)
-
-
-def set_focus_mode_right(value: dict[str, str] | str) -> None:
-    """Set the right panel focus mode (per-media-type dict or legacy scalar)."""
-    _set_focus_mode_dict("focus_mode_right", value)
-
-
-def _set_focus_mode_dict(key: str, value: dict[str, str] | str) -> None:
-    """Persist the per-media-type focus mode dict for *key*."""
-    valid_types = _valid_media_types()
-    if isinstance(value, str):
-        # Legacy scalar — expand to all types
-        if value not in VALID_FOCUS_MODES:
-            raise ValueError(f"Invalid {key}: {value!r}")
-        value = {tid: value for tid in valid_types}
-    if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or string")
-    for tid, mode in value.items():
-        if tid not in valid_types:
-            raise ValueError(f"Invalid media type: {tid!r}")
-        if mode not in VALID_FOCUS_MODES:
-            raise ValueError(f"Invalid {key} value for {tid}: {mode!r}")
-    with _settings_lock:
-        s = _ensure_loaded()
-        s[key] = dict(value)
-        _save(s)
-
-
-# -------------------------------------------------------------------
-# Per-media-type panel percentage settings
-# -------------------------------------------------------------------
-
-
-def _get_panel_pct_dict(key: str) -> dict[str, int]:
-    """Return the per-media-type panel width dict for *key*.
-
-    Values are integers in [150, 500] representing pixel widths.
-    """
-    side = key.replace("panel_pct_", "")
-    default_val = _PANEL_PX_DEFAULTS.get(side, 260)
-    with _settings_lock:
-        raw = _ensure_loaded().get(key, _DEFAULTS[key])
-    lo, hi = VALID_PANEL_PX
-    if isinstance(raw, (int, float)):
-        # Scalar — expand to all types
-        val = _coerce_panel_px(raw, default_val, lo, hi)
-        return {tid: val for tid in _valid_media_types()}
-    if isinstance(raw, dict):
-        result: dict[str, int] = {}
-        for tid in _valid_media_types():
+        # Dict value — fill missing types, coerce each entry
+        result: dict[str, Any] = {}
+        for tid in types:
             v = raw.get(tid, default_val)
-            result[tid] = _coerce_panel_px(v, default_val, lo, hi)
+            if read_coerce is not None:
+                v = read_coerce(v, default_val)
+            elif valid_values is not None:
+                v = v if v in valid_values else default_val
+            result[tid] = v
         return result
-    return {tid: default_val for tid in _valid_media_types()}
+
+    def _set_dict(key: str, value) -> None:
+        valid_types = _valid_media_types()
+        lo_hi = VALID_PANEL_PX if value_type == "int" else None
+
+        # Scalar expansion
+        if value_type == "str" and isinstance(value, str):
+            if write_coerce is not None:
+                value = write_coerce(value, key)
+            elif valid_values is not None and value not in valid_values:
+                raise ValueError(f"Invalid {key}: {value!r}")
+            value = {tid: value for tid in valid_types}
+        elif value_type == "int" and isinstance(value, (int, float)):
+            iv = int(round(float(value)))
+            lo, hi = lo_hi  # type: ignore[misc]
+            if not (lo <= iv <= hi):
+                raise ValueError(f"Invalid {key}: {value!r} (must be between {lo} and {hi})")
+            value = {tid: iv for tid in valid_types}
+
+        if not isinstance(value, dict):
+            expected = "dict or string" if value_type == "str" else "dict or number"
+            raise ValueError(f"{key} must be a {expected}")
+
+        coerced: dict[str, Any] = {}
+        for tid, v in value.items():
+            if tid not in valid_types:
+                raise ValueError(f"Invalid media type: {tid!r}")
+            if write_coerce is not None:
+                v = write_coerce(v, key, tid)
+            elif value_type == "int":
+                lo, hi = lo_hi  # type: ignore[misc]
+                try:
+                    v = int(round(float(v)))
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid {key} value for {tid}: {v!r}")
+                if not (lo <= v <= hi):
+                    raise ValueError(f"Invalid {key} value for {tid}: {v} (must be between {lo} and {hi})")
+            elif valid_values is not None and v not in valid_values:
+                raise ValueError(f"Invalid {key} value for {tid}: {v!r}")
+            coerced[tid] = v
+
+        with _settings_lock:
+            s = _ensure_loaded()
+            s[key] = coerced
+            _save(s)
+
+    def get_left():
+        return _get_dict(f"{key_base}_left")
+
+    def get_right():
+        return _get_dict(f"{key_base}_right")
+
+    def set_left(value):
+        _set_dict(f"{key_base}_left", value)
+
+    def set_right(value):
+        _set_dict(f"{key_base}_right", value)
+
+    get_left.__name__ = f"get_{key_base}_left"
+    get_right.__name__ = f"get_{key_base}_right"
+    set_left.__name__ = f"set_{key_base}_left"
+    set_right.__name__ = f"set_{key_base}_right"
+    return get_left, get_right, set_left, set_right
 
 
-def _coerce_panel_px(v: Any, default: int, lo: int, hi: int) -> int:
+# -- grid_icon_size: legacy coercion (uppercase, old int grid_columns → default)
+
+def _read_coerce_grid_icon_size(v, default):
+    if isinstance(v, str):
+        v = v.upper()
+        return v if v in VALID_GRID_ICON_SIZES else default
+    return default  # legacy int or other type → default
+
+
+def _write_coerce_grid_icon_size(v, key, tid=None):
+    if isinstance(v, str):
+        v = v.upper()
+    if v not in VALID_GRID_ICON_SIZES:
+        label = f"{key} value for {tid}" if tid else key
+        raise ValueError(f"Invalid {label}: {v!r}")
+    return v
+
+
+# -- panel_pct: legacy coercion (percentage < 2.0 → default, clamp to [150, 500])
+
+def _coerce_panel_px(v: Any, default: int, lo: int = VALID_PANEL_PX[0], hi: int = VALID_PANEL_PX[1]) -> int:
     """Coerce a panel width value to a valid pixel integer.
 
     Legacy percentage values (< 2.0) are replaced with *default*.
@@ -516,57 +433,39 @@ def _coerce_panel_px(v: Any, default: int, lo: int, hi: int) -> int:
     except (ValueError, TypeError):
         return default
     if fv < 2.0:
-        # Legacy percentage value — replace with default
         return default
     return max(lo, min(hi, int(round(fv))))
 
 
-def get_panel_pct_left() -> dict[str, int]:
-    """Return a dict mapping media type ID -> panel pixel width for the left panel."""
-    return _get_panel_pct_dict("panel_pct_left")
+def _read_coerce_panel_pct(v, default):
+    return _coerce_panel_px(v, default)
 
 
-def get_panel_pct_right() -> dict[str, int]:
-    """Return a dict mapping media type ID -> panel pixel width for the right panel."""
-    return _get_panel_pct_dict("panel_pct_right")
+# Generate all four per-side settings
 
+get_view_mode_left, get_view_mode_right, set_view_mode_left, set_view_mode_right = _make_per_side_setting(
+    "view_mode", _VIEW_MODE_DEFAULTS, VALID_VIEW_MODES,
+)
 
-def set_panel_pct_left(value: dict[str, int | float] | int | float) -> None:
-    """Set the left panel pixel width (per-media-type dict or scalar)."""
-    _set_panel_pct_dict("panel_pct_left", value)
+get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_grid_icon_size_right = (
+    _make_per_side_setting(
+        "grid_icon_size",
+        {"left": _GRID_ICON_SIZE_DEFAULT, "right": _GRID_ICON_SIZE_DEFAULT},
+        VALID_GRID_ICON_SIZES,
+        read_coerce=_read_coerce_grid_icon_size,
+        write_coerce=_write_coerce_grid_icon_size,
+    )
+)
 
+get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_right = _make_per_side_setting(
+    "focus_mode", _FOCUS_MODE_DEFAULTS, VALID_FOCUS_MODES,
+)
 
-def set_panel_pct_right(value: dict[str, int | float] | int | float) -> None:
-    """Set the right panel pixel width (per-media-type dict or scalar)."""
-    _set_panel_pct_dict("panel_pct_right", value)
-
-
-def _set_panel_pct_dict(key: str, value: dict[str, int | float] | int | float) -> None:
-    """Persist the per-media-type panel pixel width dict for *key*."""
-    valid_types = _valid_media_types()
-    lo, hi = VALID_PANEL_PX
-    if isinstance(value, (int, float)):
-        iv = int(round(float(value)))
-        if not (lo <= iv <= hi):
-            raise ValueError(f"Invalid {key}: {value!r} (must be between {lo} and {hi})")
-        value = {tid: iv for tid in valid_types}
-    if not isinstance(value, dict):
-        raise ValueError(f"{key} must be a dict or number")
-    coerced: dict[str, int] = {}
-    for tid, px in value.items():
-        if tid not in valid_types:
-            raise ValueError(f"Invalid media type: {tid!r}")
-        try:
-            iv = int(round(float(px)))
-        except (ValueError, TypeError):
-            raise ValueError(f"Invalid {key} value for {tid}: {px!r}")
-        if not (lo <= iv <= hi):
-            raise ValueError(f"Invalid {key} value for {tid}: {iv} (must be between {lo} and {hi})")
-        coerced[tid] = iv
-    with _settings_lock:
-        s = _ensure_loaded()
-        s[key] = coerced
-        _save(s)
+get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
+    "panel_pct", _PANEL_PX_DEFAULTS, None,
+    read_coerce=_read_coerce_panel_pct,
+    value_type="int",
+)
 
 
 def get_autoload_media_types() -> list[str]:

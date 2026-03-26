@@ -82,3 +82,6 @@ class Document2TextMediaConverter(MediaConverter):
             "word_count": len(full_text.split()),
             "character_count": len(full_text),
         }]
+
+
+CONVERTER = Document2TextMediaConverter()

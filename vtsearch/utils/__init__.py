@@ -31,6 +31,8 @@ from vtsearch.utils.state import (
     set_thread_detector_context,
     unregister_context,
     unregister_detector_context,
+    with_dataset_context,
+    with_detector_context,
     add_autorun_detector,
     add_autorun_extractor,
     add_autorun_localizer,
@@ -210,4 +212,7 @@ __all__ = [
     "get_detector_context",
     "list_loaded_detector_ids",
     "clear_all_detector_contexts",
+    # Scoped context managers
+    "with_dataset_context",
+    "with_detector_context",
 ]
