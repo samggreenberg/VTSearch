@@ -7,50 +7,33 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe
 
 from vtsearch.config import DATA_DIR
 import vtsearch.utils.paths as _paths
 from vtsearch.models import (
-    analyze_labeling_progress,
-    calculate_cross_calibration_threshold,
-    calculate_diversity_level_over_time,
-    calculate_error_cost_over_time,
     calculate_gmm_threshold,
-    calculate_prediction_stability_over_time,
-    calculate_safe_threshold,
-    compute_labeling_status,
     embed_text_query,
     inject_live_model,
     train_and_score,
-    train_model,
 )
 from vtsearch.utils import (
     add_textsort_suggestion,
-    apply_label,
-    apply_label_with_click_time,
     bad_votes,
-    build_media_hit,
-    build_media_lookup,
     diversity_tree_next_sample,
     get_calibrate_count,
     get_calibration_fraction,
     get_diversity_tree,
-    get_eval_progress,
     get_inclusion,
     get_learned_scores,
-    get_media,
     get_safe_thresholds,
     get_sort_progress,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
-    label_history,
-    resolve_media_ids,
     set_inclusion,
     set_safe_thresholds,
     snapshot_medias,
-    update_eval_progress,
     update_learned_scores,
     update_sort_progress,
 )
@@ -266,7 +249,7 @@ def seed_votes_from_examples():
 
         {"seeded": 2, "skipped": 1}
     """
-    from vtsearch.routes.trainable_models import _seed_good_votes_from_examples
+    from vtsearch.models.media_seeding import seed_good_votes_from_examples
 
     data = get_json_or_400()
     if not isinstance(data, dict):
@@ -276,7 +259,7 @@ def seed_votes_from_examples():
     if not isinstance(examples, list):
         return jsonify({"error": "examples must be a list"}), 400
 
-    seeded = _seed_good_votes_from_examples(examples)
+    seeded = seed_good_votes_from_examples(examples)
     skipped = len(examples) - seeded
 
     if seeded > 0:
@@ -304,260 +287,6 @@ def add_textsort_suggestion_route():
         return jsonify({"error": "text is required"}), 400
     add_textsort_suggestion(text)
     return jsonify({"ok": True})
-
-
-@sorting_bp.route("/api/labels/export")
-def export_labels():
-    """Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.
-
-    Each label entry includes the element's ``origin`` and ``origin_name``
-    so that consumers know exactly where each labeled element came from.
-    The format is a superset of the legacy export format — old consumers
-    that only read ``md5`` and ``label`` keys continue to work unchanged.
-
-    Query params:
-        goods_only: If ``"1"`` or ``"true"``, only export good labels.
-        label_filter: ``"good"``, ``"bad"``, ``"both"`` (default), or
-            ``"corrections"`` (only items where the user changed the
-            detector's original label).  Overrides ``goods_only`` when
-            present.
-        enrich: If ``"1"`` or ``"true"``, include per-item
-            ``custom_metadata`` and a top-level ``available_columns`` list.
-    """
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import get_find_initial_labels
-
-    label_filter = request.args.get("label_filter", "").lower()
-    corrections_only = label_filter == "corrections"
-
-    if label_filter == "good":
-        goods, bads = good_votes, {}
-    elif label_filter == "bad":
-        goods, bads = {}, bad_votes
-    elif label_filter and not corrections_only:
-        goods, bads = good_votes, bad_votes
-    else:
-        if not corrections_only:
-            # Backward compat: fall back to goods_only flag
-            goods_only = request.args.get("goods_only", "").lower() in ("1", "true")
-            goods = good_votes
-            bads = {} if goods_only else bad_votes
-        else:
-            goods, bads = good_votes, bad_votes
-
-    all_medias = snapshot_medias()
-    labelset = LabelSet.from_clips_and_votes(all_medias, goods, bads)
-    result: dict = labelset.to_dict()
-
-    # Annotate corrections: items where the user changed the detector's label.
-    find_initial = get_find_initial_labels()
-    if find_initial:
-        for entry in result["labels"]:
-            # Match by media ID — look up from medias by MD5
-            md5 = entry.get("md5")
-            media_id = None
-            for mid, m in all_medias.items():
-                if m.get("md5") == md5:
-                    media_id = mid
-                    break
-            if media_id is not None and media_id in find_initial:
-                original = find_initial[media_id]
-                current = entry.get("label")
-                entry["is_correction"] = current != original
-            else:
-                entry["is_correction"] = False
-
-    if corrections_only:
-        result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
-
-    enrich = request.args.get("enrich", "").lower() in ("1", "true")
-    if enrich:
-        from vtsearch.media import get as get_media_type  # noqa: PLC0415
-
-        md5_to_media: dict = {}
-        for m in all_medias.values():
-            md5_val = m.get("md5")
-            if md5_val:
-                md5_to_media[md5_val] = m
-
-        all_meta_keys: set[str] = set()
-        for entry in result["labels"]:
-            media = md5_to_media.get(entry.get("md5"))
-            if not media:
-                continue
-            media_type_id = media.get("type", "audio")
-            try:
-                mt = get_media_type(media_type_id)
-                meta = mt.display_metadata(media)
-            except KeyError:
-                meta = {}
-            importer_custom = media.get("custom_metadata")
-            if importer_custom:
-                meta.update(importer_custom)
-            if meta:
-                entry["custom_metadata"] = meta
-                all_meta_keys.update(meta.keys())
-
-        base_columns = ["label", "md5", "origin_name", "filename", "category", "origin"]
-        base_lower = {c.lower() for c in base_columns}
-        extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
-        result["available_columns"] = base_columns + extra_keys
-
-    return jsonify(result)
-
-
-@sorting_bp.route("/api/labels/import", methods=["POST"])
-def import_labels():
-    """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    labels = data.get("labels")
-    if not isinstance(labels, list):
-        return jsonify({"error": "labels must be a list"}), 400
-
-    origin_lookup, md5_lookup, _ = build_media_lookup(snapshot_medias())
-
-    applied = 0
-    skipped = 0
-    for entry in labels:
-        label = entry.get("label")
-        if label not in ("good", "bad"):
-            skipped += 1
-            continue
-        cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
-        if not cids:
-            skipped += 1
-            continue
-
-        for cid in cids:
-            apply_label(cid, label)
-        applied += 1
-
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
-
-    sync_labels_to_loaded_model()
-
-    return jsonify({"applied": applied, "skipped": skipped})
-
-
-@sorting_bp.route("/api/labels/fill-from-sort", methods=["POST"])
-def fill_labels_from_sort():
-    """Fill labels from the current sort results.
-
-    Assigns Good/Bad labels to currently-unlabeled medias based on their
-    position relative to the sort threshold.
-
-    Request body (JSON)::
-
-        {
-            "sort_results": [{"id": 1, "score": 0.8}, ...],
-            "threshold": 0.5,
-            "sides": "good" | "bad" | "both",
-            "confirm": false
-        }
-
-    When ``confirm`` is false (dry run), returns the counts of unlabeled
-    medias that would be labeled.  When ``confirm`` is true, applies the
-    labels and returns the resulting data as a results dict suitable for
-    any exporter.
-    """
-    data = request.get_json(force=True, silent=True) or {}
-
-    sort_results = data.get("sort_results")
-    if not isinstance(sort_results, list):
-        return jsonify({"error": "sort_results must be a list"}), 400
-
-    thresh = data.get("threshold")
-    if thresh is None:
-        return jsonify({"error": "threshold is required"}), 400
-    try:
-        thresh = float(thresh)
-    except (TypeError, ValueError):
-        return jsonify({"error": "threshold must be a number"}), 400
-
-    sides = data.get("sides", "good")
-    if sides not in ("good", "bad", "both"):
-        return jsonify({"error": "sides must be 'good', 'bad', or 'both'"}), 400
-
-    confirm = bool(data.get("confirm", False))
-
-    # Find unlabeled medias above/below threshold
-    good_candidates = []
-    bad_candidates = []
-    for entry in sort_results:
-        cid = entry.get("id")
-        score = entry.get("score", entry.get("similarity"))
-        if cid is None or score is None:
-            continue
-        if not isinstance(score, (int, float)):
-            continue
-        if cid in good_votes or cid in bad_votes:
-            continue
-        if get_media(cid) is None:
-            continue
-        if score >= thresh:
-            good_candidates.append({"id": cid, "score": float(score)})
-        else:
-            bad_candidates.append({"id": cid, "score": float(score)})
-
-    if sides == "good":
-        bad_candidates = []
-    elif sides == "bad":
-        good_candidates = []
-    # "both" keeps both lists
-
-    if not confirm:
-        return jsonify(
-            {
-                "good_count": len(good_candidates),
-                "bad_count": len(bad_candidates),
-            }
-        )
-
-    # Apply labels
-    for entry in good_candidates:
-        apply_label_with_click_time(entry["id"], "good")
-
-    for entry in bad_candidates:
-        apply_label_with_click_time(entry["id"], "bad")
-
-    # Build a results dict compatible with exporters
-    snap = snapshot_medias()
-    good_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good") for e in good_candidates]
-    bad_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates]
-
-    media_type = "unknown"
-    for media in snap.values():
-        media_type = media.get("type", "unknown")
-        break
-
-    results_dict = {
-        "media_type": media_type,
-        "detectors_run": 1,
-        "results": {
-            "fill_from_sort": {
-                "detector_name": "fill_from_sort",
-                "threshold": round(thresh, 4),
-                "total_hits": len(good_hits),
-                "hits": good_hits,
-                "negative_hits": bad_hits,
-            },
-        },
-    }
-
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
-
-    sync_labels_to_loaded_model()
-
-    return jsonify(
-        {
-            "good_applied": len(good_candidates),
-            "bad_applied": len(bad_candidates),
-            "results": results_dict,
-        }
-    )
 
 
 @sorting_bp.route("/api/inclusion")
@@ -665,152 +394,6 @@ def example_sort():
         return jsonify({"error": "Example sort failed"}), 500
 
 
-#: Default directory for server-side example media files (single-user fallback).
-SERVER_MEDIA_DIR = DATA_DIR / "example_media"
-
-
-def _get_server_media_dir() -> Path:
-    """Return the per-user server media directory.
-
-    In multi-user mode each user gets their own ``example_media/``
-    subdirectory inside their data dir, preventing cross-user file access.
-    """
-    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
-
-    provider = get_login_provider()
-    if isinstance(provider, DefaultLoginProvider):
-        return SERVER_MEDIA_DIR
-    return get_user_data_dir() / "example_media"
-
-
-@sorting_bp.route("/api/server-media-files/upload", methods=["POST"])
-def upload_server_media_file():
-    """Upload a media file to data/example_media/ and return its filename."""
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
-
-    import uuid
-
-    suffix = Path(file.filename).suffix or ".bin"
-    safe_name = f"{uuid.uuid4().hex}{suffix}"
-    media_dir = _get_server_media_dir()
-    media_dir.mkdir(parents=True, exist_ok=True)
-    dest = media_dir / safe_name
-    file.save(dest)
-
-    return jsonify({"filename": safe_name, "original_name": file.filename}), 201
-
-
-@sorting_bp.route("/api/server-media-files", methods=["GET"])
-def list_server_media_files():
-    """List media files saved on the server in the user's example_media/ dir."""
-    media_dir = _get_server_media_dir()
-    if not media_dir.is_dir():
-        return jsonify({"files": []})
-
-    files = []
-    for p in sorted(media_dir.iterdir()):
-        if p.is_file() and not p.name.startswith("."):
-            files.append(
-                {
-                    "name": p.stem,
-                    "filename": p.name,
-                    "size_bytes": p.stat().st_size,
-                }
-            )
-    return jsonify({"files": files})
-
-
-@sorting_bp.route("/api/example-sort-server", methods=["POST"])
-def example_sort_server():
-    """Sort medias by similarity to a server-side media file."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    filename = data.get("filename", "").strip()
-    if not filename:
-        return jsonify({"error": "filename is required"}), 400
-
-    media_dir = _get_server_media_dir()
-    file_path = media_dir / filename
-
-    # Ensure path doesn't escape the server media directory
-    try:
-        file_path.resolve().relative_to(media_dir.resolve())
-    except ValueError:
-        return jsonify({"error": "Invalid filename"}), 400
-
-    if not file_path.is_file():
-        return jsonify({"error": f"File not found: {filename}"}), 404
-
-    try:
-        results, thresh = _example_sort_from_path(file_path)
-        return jsonify({"results": results, "threshold": thresh})
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("example-sort-server failed")
-        return jsonify({"error": "Example sort failed"}), 500
-
-
-@sorting_bp.route("/api/example-sort-origin", methods=["POST"])
-def example_sort_origin():
-    """Sort medias by similarity to a media file resolved from an origin.
-
-    Accepts a JSON body with ``origin`` (an origin dict as stored on medias)
-    and ``key`` (the item key / relative path within the source).  The file
-    is fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`
-    abstraction, embedded, and used for cosine-similarity sorting.
-
-    Example request::
-
-        {
-            "origin": {"importer": "folder", "params": {"path": "/data/sounds"}},
-            "key": "subdir/audio123.wav"
-        }
-    """
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    origin = data.get("origin")
-    if not isinstance(origin, dict):
-        return jsonify({"error": "origin dict is required"}), 400
-
-    key = data.get("key", "").strip()
-    if not key:
-        return jsonify({"error": "key is required"}), 400
-
-    if not snapshot_medias():
-        return jsonify({"error": "No medias loaded"}), 400
-
-    from vtsearch.datasets.sources import get_source_for_origin
-
-    source = get_source_for_origin(origin)
-    if source is None:
-        return jsonify({"error": f"No media source available for origin type: {origin.get('importer', '')}"}), 400
-
-    try:
-        file_path = source.fetch_item(key)
-        if file_path is None:
-            return jsonify({"error": f"File not found: {key}"}), 404
-
-        results, thresh = _example_sort_from_path(file_path)
-        return jsonify({"results": results, "threshold": thresh})
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("example-sort-origin failed")
-        return jsonify({"error": "Example sort failed"}), 500
-    finally:
-        source.cleanup()
-
-
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 def label_file_sort():
     """Train MLP on external media files from a label file, then sort all medias."""
@@ -891,46 +474,30 @@ def label_file_sort():
             )
 
         # Check if we have both good and bad examples
-        num_good = sum(1 for y in y_list if y == 1.0)
-        num_bad = len(y_list) - num_good
-        if num_good == 0 or num_bad == 0:
+        from vtsearch.routes.detectors_helpers import validate_good_bad_split
+
+        try:
+            validate_good_bad_split(y_list)
+        except ValueError:
             return (
                 jsonify({"error": "Need at least one good and one bad labeled example"}),
                 400,
             )
 
-        # Train MLP using the same approach as learned sort
+        # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
 
-        X = torch.tensor(np.array(X_list), dtype=torch.float32)
-        y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+        from vtsearch.routes.detectors_helpers import train_and_threshold
 
-        input_dim = X.shape[1]
-
-        # Calculate threshold using k-fold calibration
-        threshold = calculate_cross_calibration_threshold(
-            X_list,
-            y_list,
-            input_dim,
-            get_inclusion(),
-            calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
-        )
-
-        # Train final model on all data
-        model = train_model(X, y, input_dim, get_inclusion())
+        snap = snapshot_medias()
+        model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
         # Score every media in the dataset
-        snap = snapshot_medias()
         all_ids = sorted(snap.keys())
         all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
-
-        # Apply safe thresholds blending if enabled
-        if get_safe_thresholds():
-            threshold = calculate_safe_threshold(threshold, scores, len(y_list))
 
         # Sort by raw scores (full precision) before rounding for display.
         paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
@@ -950,79 +517,6 @@ def label_file_sort():
 
         logging.getLogger(__name__).exception("label-file-sort failed")
         return jsonify({"error": "Label file sort failed"}), 500
-
-
-@sorting_bp.route("/api/labeling-progress", methods=["POST"])
-def labeling_progress():
-    """Analyze labeling progress and calculate stopping condition metrics."""
-    if not good_votes or not bad_votes:
-        return jsonify({"error": "need at least one good and one bad vote"}), 400
-
-    if not label_history:
-        return jsonify({"error": "no label history available"}), 400
-
-    try:
-        analysis = analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
-        return jsonify(analysis)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("labeling-progress failed")
-        return jsonify({"error": "Labeling progress computation failed"}), 500
-
-
-@sorting_bp.route("/api/labeling-status", methods=["GET"])
-def labeling_status_indicator():
-    """Return per-metric red/yellow/green labeling statuses.
-
-    Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a
-    ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
-    """
-    try:
-        tree = get_diversity_tree()
-        span = tree.span_info() if tree is not None else None
-        status = compute_labeling_status(
-            snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span
-        )
-        return jsonify(status)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("labeling-status failed")
-        return jsonify({"error": "Labeling status computation failed"}), 500
-
-
-@sorting_bp.route("/api/indicator-score-history", methods=["GET"])
-def indicator_score_history():
-    """Return cached indicator score history for a given metric.
-
-    Query parameter ``metric`` must be one of ``smart``, ``stable``, or
-    ``diverse``.  Returns the cached per-step data without retraining
-    models — only data already computed by the labeling-status polling
-    is returned.
-    """
-    metric = request.args.get("metric", "").strip()
-    if metric not in ("smart", "stable", "diverse"):
-        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
-
-    clips = snapshot_medias()
-    inclusion = get_inclusion()
-
-    try:
-        if metric == "smart":
-            data = calculate_error_cost_over_time(clips, label_history, good_votes, bad_votes, inclusion)
-            return jsonify({"metric": "smart", "history": data})
-        elif metric == "stable":
-            data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
-            return jsonify({"metric": "stable", "history": data})
-        else:
-            data = calculate_diversity_level_over_time(clips, label_history, inclusion)
-            return jsonify({"metric": "diverse", "history": data})
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("indicator-score-history failed")
-        return jsonify({"error": "Score history computation failed"}), 500
 
 
 @sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
@@ -1046,7 +540,7 @@ def diversity_tree_next():
     scores = None
     threshold = None
     if request.method == "POST":
-        data = request.get_json(force=True, silent=True) or {}
+        data = get_json_safe()
         raw_scores = data.get("scores")
         if isinstance(raw_scores, dict):
             try:
@@ -1065,74 +559,3 @@ def diversity_tree_next():
     level = tree.diversity_level() if tree is not None else 0
     exhausted = tree is not None and next_id is None
     return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
-
-
-# ---------------------------------------------------------------------------
-# Eval routes
-# ---------------------------------------------------------------------------
-
-
-@sorting_bp.route("/api/eval/train-and-score", methods=["POST"])
-def eval_train_and_score():
-    """Compute indicator score history for a given metric.
-
-    Expects JSON::
-
-        {"metric": "smart" | "stable" | "diverse"}
-
-    Runs the computation in a background thread and returns the result
-    synchronously. Progress can be polled via ``/api/eval/voting-iterations``.
-    """
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    metric = data.get("metric", "").strip()
-    if metric not in ("smart", "stable", "diverse"):
-        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
-
-    clips = snapshot_medias()
-    inclusion = get_inclusion()
-    history = list(label_history)
-    n_total = max(len(history) - 1, 0)
-
-    update_eval_progress("running", f"Computing {metric}...", 0, n_total)
-
-    try:
-        if metric == "smart":
-            result_data = calculate_error_cost_over_time(clips, history, good_votes, bad_votes, inclusion)
-            update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"error_cost": result_data})
-        elif metric == "stable":
-            result_data = calculate_prediction_stability_over_time(clips, history, inclusion)
-            update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"stability": result_data})
-        else:
-            result_data = calculate_diversity_level_over_time(clips, history, inclusion)
-            update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"diversity": result_data})
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("eval train-and-score failed")
-        update_eval_progress("idle", "Error", 0, 0)
-        return jsonify({"error": "Evaluation computation failed"}), 500
-
-
-@sorting_bp.route("/api/eval/voting-iterations", methods=["GET"])
-def eval_voting_iterations():
-    """Return progress of the current eval computation.
-
-    Returns::
-
-        {"progress": <int>, "total": <int>, "done": <bool>}
-    """
-    prog = get_eval_progress()
-    done = prog["status"] == "idle" and prog["total"] > 0 and prog["current"] >= prog["total"]
-    return jsonify(
-        {
-            "progress": prog["current"],
-            "total": prog["total"],
-            "done": done,
-        }
-    )

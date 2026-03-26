@@ -18,7 +18,7 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400, get_request_field
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_or_404, get_request_field
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
@@ -363,21 +363,23 @@ def stage_file():
     return jsonify({"path": str(staging_path), "name": name, "count": count, "media_type": media_type})
 
 
-@datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
-def stage_import(importer_name: str):
-    """Run a registered importer in staging mode."""
-    importer = get_importer(importer_name)
-    if importer is None:
-        return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
+def _extract_importer_fields(importer):
+    """Build field_values for a dataset importer from the current request.
 
+    Unlike :func:`extract_plugin_fields`, this reads file contents into
+    :class:`io.BytesIO` so they remain valid after the Flask request context
+    ends (required for background-thread execution).
+
+    Returns ``(field_values, None)`` on success, or ``(None, error_tuple)``
+    when a required field is missing.
+    """
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
 
     field_values: dict = {}
     if file_keys:
         for key in file_keys:
             if key not in request.files:
-                return jsonify({"error": f"Missing file field: {key!r}"}), 400
-            # Read file contents before passing to background thread.
+                return None, (jsonify({"error": f"Missing file field: {key!r}"}), 400)
             file_bytes = io.BytesIO(request.files[key].read())
             file_bytes.name = request.files[key].filename
             field_values[key] = file_bytes
@@ -388,10 +390,25 @@ def stage_import(importer_name: str):
         body = request.get_json(force=True) or {}
         for f in importer.fields:
             if f.key not in body and f.required:
-                return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
+                return None, (jsonify({"error": f"Missing required field: {f.key!r}"}), 400)
             field_values[f.key] = body.get(f.key, f.default)
 
+    return field_values, None
+
+
+@datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
+def stage_import(importer_name: str):
+    """Run a registered importer in staging mode."""
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
+
+    field_values, field_err = _extract_importer_fields(importer)
+    if field_err:
+        return field_err
+
     # Pass through optional keys not declared as plugin fields.
+    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     for key in ("converters",):
         val = get_request_field(key, bool(file_keys))
         if val:
@@ -441,35 +458,16 @@ def clear_staging():
 @datasets_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
 def import_dataset(importer_name: str):
     """Run a registered importer by name in a background thread."""
-    importer = get_importer(importer_name)
-    if importer is None:
-        return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
 
-    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-
-    # Build field_values from either multipart or JSON body.
-    field_values: dict = {}
-    if file_keys:
-        for key in file_keys:
-            if key not in request.files:
-                return jsonify({"error": f"Missing file field: {key!r}"}), 400
-            # Read file contents before passing to background thread, since the
-            # Flask FileStorage stream is only valid during the request lifecycle.
-            file_bytes = io.BytesIO(request.files[key].read())
-            file_bytes.name = request.files[key].filename
-            field_values[key] = file_bytes
-        # Non-file fields come from form data when using multipart.
-        for f in importer.fields:
-            if f.field_type != "file":
-                field_values[f.key] = request.form.get(f.key, f.default)
-    else:
-        body = request.get_json(force=True) or {}
-        for f in importer.fields:
-            if f.key not in body and f.required:
-                return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
-            field_values[f.key] = body.get(f.key, f.default)
+    field_values, field_err = _extract_importer_fields(importer)
+    if field_err:
+        return field_err
 
     # Pass through optional keys not declared as plugin fields.
+    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     for key in ("converters", "clipper", "embedder"):
         val = get_request_field(key, bool(file_keys))
         if val:
@@ -828,7 +826,7 @@ def rename_registered_dataset(dataset_id: str):
     if not _reg_is_owner(dataset_id, get_current_user()):
         return jsonify({"error": "Only the dataset creator can rename it"}), 403
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     new_name = data.get("name", "").strip()
     if not new_name:
         return jsonify({"error": "name is required"}), 400
@@ -854,7 +852,7 @@ def update_dataset_readers(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     readers = data.get("readers")
     if not isinstance(readers, list) or not all(isinstance(r, str) for r in readers):
         return jsonify({"error": "readers must be a list of strings"}), 400
@@ -869,7 +867,7 @@ def update_dataset_readers(dataset_id: str):
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
 def load_dataset_from_source():
     """Reload a dataset from a stored source origin dict."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     source = data.get("source")
     if not isinstance(source, dict):
         return jsonify({"error": "source must be an origin dict"}), 400

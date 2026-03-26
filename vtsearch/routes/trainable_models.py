@@ -116,213 +116,14 @@ def sync_labels_to_loaded_model() -> None:
     update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
-def _seed_good_votes_from_examples(examples: list[dict]) -> int:
-    """Seed good votes from a model's media examples.
-
-    For each ``type: "media"`` example, reads the file from
-    ``data/example_media/`` and adds it to ``good_votes``:
-
-    * **Match by MD5** — if a loaded media has the same content hash,
-      that media is voted good (keeping its original dataset origin).
-    * **No match** — the example file is embedded using the dataset's
-      embedder, inserted into the ``medias`` dict as a new item with
-      an ``example_media`` origin, and voted good.  This makes it
-      available for training (its embedding is in the medias snapshot)
-      and for label export (LabelSet picks it up from medias + votes).
-
-    Returns the number of example entries successfully seeded.
-    """
-    import hashlib
-
-    from vtsearch.config import DATA_DIR
-    from vtsearch.utils import (
-        _state_lock,
-        apply_label,
-        build_media_lookup,
-        medias,
-        next_media_id,
-        snapshot_medias,
-    )
-
-    media_examples = [
-        ex
-        for ex in examples
-        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
-    ]
-    if not media_examples:
-        return 0
-
-    snap = snapshot_medias()
-    if not snap:
-        return 0
-
-    _, md5_lookup, _ = build_media_lookup(snap)
-    server_media_dir = DATA_DIR / "example_media"
-
-    # Determine the embedder and media type from the loaded dataset so we
-    # can embed example files that aren't already in the dataset.
-    first_media = next(iter(snap.values()))
-    dataset_media_type = first_media.get("type", "audio")
-    dataset_embedder_name = first_media.get("embedder", "")
-    embedder = None  # lazily loaded only when needed
-
-    seeded = 0
-    for ex in media_examples:
-        filename = ex["value"].strip()
-        file_path = server_media_dir / filename
-        # Prevent directory traversal
-        try:
-            file_path.resolve().relative_to(server_media_dir.resolve())
-        except ValueError:
-            continue
-        if not file_path.is_file():
-            continue
-
-        file_bytes = file_path.read_bytes()
-        file_md5 = hashlib.md5(file_bytes).hexdigest()
-        cids = md5_lookup.get(file_md5, [])
-
-        if cids:
-            # Example matches existing dataset media — just vote good.
-            for cid in cids:
-                apply_label(cid, "good")
-            seeded += 1
-        else:
-            # Example is NOT in the dataset — embed and insert as new media.
-            if embedder is None:
-                from vtsearch.media import embedders_for_type, get_embedder
-
-                if dataset_embedder_name:
-                    try:
-                        embedder = get_embedder(dataset_embedder_name)
-                    except KeyError:
-                        pass
-                if embedder is None:
-                    avail = embedders_for_type(dataset_media_type)
-                    embedder = avail[0] if avail else None
-                if embedder is None:
-                    # No embedder available; skip remaining examples.
-                    continue
-
-            embedding = embedder.embed_media(file_path)
-            if embedding is None:
-                continue
-
-            with _state_lock:
-                new_id = next_media_id(medias)
-                medias[new_id] = {
-                    "id": new_id,
-                    "type": dataset_media_type,
-                    "embedder": dataset_embedder_name,
-                    "md5": file_md5,
-                    "embedding": embedding,
-                    "media_bytes": file_bytes,
-                    "filename": filename,
-                    "file_size": len(file_bytes),
-                    "category": "",
-                    "origin": {
-                        "importer": "example_media",
-                        "params": {"filename": filename},
-                    },
-                    "origin_name": filename,
-                }
-
-            apply_label(new_id, "good")
-            seeded += 1
-
-    return seeded
+# Canonical location: vtsearch.models.media_seeding
+from vtsearch.models.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 
 
-def _restore_labels_from_trainable_model(tm_data: dict) -> int:
-    """Restore saved labels from a trainable model's labelset into votes.
-
-    Matches labelset entries to loaded medias by origin+origin_name, MD5, and
-    origin_name fallback.  For entries that still don't match (cross-dataset
-    scenario), resolves the original file from its origin trail, computes its
-    MD5, and checks for a match in the loaded dataset.
-
-    Returns the number of labels successfully restored.
-    """
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import (
-        apply_label,
-        build_media_lookup,
-        resolve_media_ids,
-        snapshot_medias,
-    )
-
-    labelset_dict = tm_data.get("labelset")
-    if not labelset_dict:
-        return 0
-
-    labelset = LabelSet.from_dict(labelset_dict)
-    if not labelset.elements:
-        return 0
-
-    snap = snapshot_medias()
-    if not snap:
-        return 0
-
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
-
-    restored = 0
-    unresolved: list[tuple] = []  # (elem, label) pairs needing origin resolution
-    for elem in labelset.elements:
-        if elem.label not in ("good", "bad"):
-            continue
-        cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
-        if cids:
-            for cid in cids:
-                apply_label(cid, elem.label)
-            restored += 1
-        else:
-            unresolved.append(elem)
-
-    # Second pass: resolve unmatched labels from their origin files.
-    # When a detector was trained on Dataset A and we're now on Dataset B,
-    # the origin+name keys won't match.  But if the same underlying file
-    # exists in both datasets, resolving the origin file and computing its
-    # MD5 lets us match by content hash.
-    if unresolved:
-        import hashlib
-        import logging
-
-        from vtsearch.models.resolver import resolve_file_from_origin
-
-        _log = logging.getLogger(__name__)
-
-        for elem in unresolved:
-            entry = elem.to_dict()
-            origin = entry.get("origin")
-            origin_name = entry.get("origin_name", "")
-            filename = entry.get("filename", "")
-            resolved_path = resolve_file_from_origin(origin, origin_name, filename)
-            if resolved_path is None:
-                continue
-
-            # Compute MD5 of the resolved file and check against loaded medias
-            try:
-                h = hashlib.md5()
-                with open(resolved_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        h.update(chunk)
-                resolved_md5 = h.hexdigest()
-            except OSError:
-                _log.debug("restore-labels: could not read resolved file %s", resolved_path)
-                continue
-
-            cids = md5_lookup.get(resolved_md5, [])
-            if cids:
-                for cid in cids:
-                    apply_label(cid, elem.label)
-                restored += 1
-            else:
-                _log.debug(
-                    "restore-labels: resolved %s but MD5 %s not in loaded dataset",
-                    resolved_path, resolved_md5,
-                )
-
-    return restored
+# Canonical location: vtsearch.models.label_restoration
+from vtsearch.models.label_restoration import (  # noqa: E402
+    restore_labels_from_trainable_model as _restore_labels_from_trainable_model,
+)
 
 
 def _list_all() -> list[dict]:
@@ -598,15 +399,11 @@ def import_labels_into_model(name: str, importer_name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes.helpers import extract_plugin_fields, run_plugin_or_error, validate_filepath_field, validate_required_fields
+    from vtsearch.routes.helpers import extract_plugin_fields, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
 
-    importer = get_label_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_label_importers()]
-        return (
-            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
 
     field_values = extract_plugin_fields(importer)
     err = validate_required_fields(importer, field_values)
@@ -693,98 +490,8 @@ def import_labels_into_model(name: str, importer_name: str):
     })
 
 
-def _apply_and_retrain(
-    model_id: str,
-    det_ctx: object,
-    new_entries: list[dict],
-    tm_name: str,
-) -> tuple[int, bool]:
-    """Resolve new label entries into a loaded detector and retrain its MLP.
-
-    Temporarily switches the active detector context to *model_id*, resolves
-    the entries against the loaded dataset's medias, applies matching labels,
-    retrains the MLP with cross-validated threshold, then restores the
-    previously active context.
-
-    Returns ``(resolved_count, trained_bool)``.
-    """
-    from flask import g
-    from vtsearch.utils import (
-        apply_label,
-        build_media_lookup,
-        resolve_media_ids,
-        snapshot_medias,
-    )
-
-    # Override the request-scoped detector context so vote proxies
-    # resolve to this model's context for the duration of this call.
-    prev_det_ctx = getattr(g, "_detector_context", None)
-
-    try:
-        g._detector_context = det_ctx
-
-        snap = snapshot_medias()
-        if not snap:
-            return 0, False
-
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
-
-        resolved = 0
-        for entry in new_entries:
-            label = entry.get("label", "")
-            if label not in ("good", "bad"):
-                continue
-            cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
-            for cid in cids:
-                apply_label(cid, label)
-            if cids:
-                resolved += 1
-
-        # Persist the updated votes back to the trainable-model file so the
-        # labelset reflects any newly-resolved medias.
-        sync_labels_to_loaded_model()
-
-        # Retrain MLP if we have at least one good and one bad vote.
-        from vtsearch.utils import bad_votes, good_votes
-
-        trained = False
-        if good_votes and bad_votes:
-            from vtsearch.models.training import train_and_score
-            from vtsearch.utils import (
-                get_calibrate_count,
-                get_calibration_fraction,
-                get_inclusion,
-                get_safe_thresholds,
-            )
-
-            _, threshold, model = train_and_score(
-                snap,
-                dict(good_votes),
-                dict(bad_votes),
-                get_inclusion(),
-                safe_thresholds=get_safe_thresholds(),
-                calibrate_count=get_calibrate_count(),
-                calibration_fraction=get_calibration_fraction(),
-            )
-            if model is not None:
-                det_ctx.model = model
-                det_ctx.threshold = threshold
-                # Cache voted media items with embeddings.
-                training = {}
-                for cid in list(good_votes) + list(bad_votes):
-                    if cid in snap:
-                        training[cid] = snap[cid]
-                det_ctx.training_medias = training
-                if snap:
-                    first = next(iter(snap.values()), {})
-                    det_ctx.embedder = first.get("embedder", "")
-                    det_ctx.media_type = first.get("type", "")
-                trained = True
-
-        return resolved, trained
-
-    finally:
-        g._detector_context = prev_det_ctx
+# Canonical location: vtsearch.models.training_workflow
+from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

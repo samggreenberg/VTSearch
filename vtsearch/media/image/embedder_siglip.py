@@ -7,30 +7,18 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import MODELS_CACHE_DIR, SIGLIP_MODEL_ID
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
+from vtsearch.config import SIGLIP_MODEL_ID
+from vtsearch.media.base import (
+    MediaEmbedder,
+    embedder_load_setup,
+    extract_tensor as _extract_tensor,
+    intercept_tqdm_progress,
+    intercept_weight_loading_progress,
+)
 
 if TYPE_CHECKING:
-    import torch
     from PIL import Image
     from transformers import SiglipModel, SiglipProcessor
-
-
-def _extract_tensor(output: object) -> torch.Tensor:
-    """Extract a plain tensor from model output.
-
-    Depending on the transformers version, get_image_features() / get_text_features()
-    may return either a raw tensor or a dataclass with embedding attributes.
-    """
-    import torch  # noqa: PLC0415
-
-    if isinstance(output, torch.Tensor):
-        return output
-    for attr in ("image_embeds", "text_embeds", "pooler_output"):
-        val = getattr(output, attr, None)
-        if isinstance(val, torch.Tensor):
-            return val
-    return output[0]  # type: ignore[index]
 
 
 class ImageSiglipEmbedder(MediaEmbedder):
@@ -66,16 +54,10 @@ class ImageSiglipEmbedder(MediaEmbedder):
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return
-        import gc
 
         from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
 
-        from vtsearch.models.loader import ensure_torch_configured
-
-        ensure_torch_configured()
-        gc.collect()
-        cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading SigLIP model weights…", 0, 0)
+        cache_dir = embedder_load_setup(self._on_progress, "Loading SigLIP model weights…")
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
             self._on_progress, "Loading SigLIP model weights…"
         ):

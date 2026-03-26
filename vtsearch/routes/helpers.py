@@ -12,6 +12,40 @@ if TYPE_CHECKING:
 import vtsearch.utils.paths as _paths
 
 
+def get_json_safe() -> dict:
+    """Parse the request body as JSON, returning ``{}`` on missing or invalid input.
+
+    Unlike :func:`get_json_or_400`, this never returns an error tuple — it
+    silently falls back to an empty dict.  Use this when the JSON body is
+    entirely optional (e.g. endpoints that accept both GET and POST).
+    """
+    return request.get_json(force=True, silent=True) or {}
+
+
+def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
+    """Look up a plugin by *name*, returning a 404 response on failure.
+
+    Args:
+        get_fn: Callable that takes a name and returns the plugin or ``None``.
+        list_fn: Callable that returns an iterable of all known plugins.
+        name: The plugin name to look up.
+        type_label: Human-readable label for the plugin type (e.g.
+            ``"exporter"``, ``"label importer"``).
+
+    Returns:
+        ``(plugin, None)`` on success, or ``(None, (response, 404))`` on
+        failure — the caller returns the error tuple directly.
+    """
+    plugin = get_fn(name)
+    if plugin is not None:
+        return plugin, None
+    known = [p.name for p in list_fn()]
+    return None, (
+        jsonify({"error": f"Unknown {type_label} '{name}'. Available: {known}"}),
+        404,
+    )
+
+
 def get_json_or_400():
     """Parse the request body as JSON, returning a 400 response on failure.
 
@@ -58,7 +92,7 @@ def extract_plugin_fields(plugin: PluginBase) -> dict:
             else:
                 field_values[f.key] = request.form.get(f.key, f.default if f.default is not None else "")
     else:
-        body = request.get_json(force=True, silent=True) or {}
+        body = get_json_safe()
         for f in plugin.fields:
             field_values[f.key] = body.get(f.key, f.default if f.default is not None else "")
 
@@ -118,7 +152,7 @@ def get_request_field(key: str, has_file_fields: bool) -> str:
     """Read a single pass-through parameter from form data or JSON body."""
     if has_file_fields:
         return request.form.get(key, "")
-    return (request.get_json(force=True, silent=True) or {}).get(key, "")
+    return get_json_safe().get(key, "")
 
 
 def format_mtime(entry) -> str:
