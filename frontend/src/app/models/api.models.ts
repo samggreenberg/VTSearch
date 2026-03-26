@@ -165,6 +165,7 @@ export interface LoadingTask {
   created_at: number;
   dataset_id?: string;
   model_id?: string;
+  media_type?: string;
 }
 
 export interface LoadingTasksResponse {
