@@ -1,23 +1,47 @@
-<div class="media-list" [class.grid-layout]="viewMode === 'grid'" [style.--grid-goal-width]="gridGoalWidth + 'px'" role="listbox" aria-label="Media items" #listContainer>
-  @for (item of orderedItems; track trackByMediaId($index, item)) {
-    @if (item.showThreshold) {
-      <div class="media-threshold-line" aria-label="Good/Bad threshold">
-        <span class="threshold-label">threshold</span>
-      </div>
+@if (useVirtualScroll) {
+  <!-- Virtual scrolling for large datasets in list mode -->
+  <cdk-virtual-scroll-viewport [itemSize]="listItemHeight" class="media-list virtual-scroll-viewport">
+    <ng-container *cdkVirtualFor="let item of cachedOrderedItems; trackBy: trackByMediaId">
+      @if (item.showThreshold) {
+        <div class="media-threshold-line" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
+        </div>
+      }
+      <vt-media-item
+        [media]="item.media"
+        [active]="selectedId === item.media.id"
+        [voteLabel]="getVoteLabel(item.media.id)"
+        [score]="item.score"
+        [viewMode]="viewMode"
+        [focusMode]="focusMode"
+        (select)="onMediaSelect($event)"
+        (vote)="onMediaVote($event)"
+      />
+    </ng-container>
+  </cdk-virtual-scroll-viewport>
+} @else {
+  <!-- Plain DOM rendering for small datasets or grid mode -->
+  <div class="media-list" [class.grid-layout]="viewMode === 'grid'" [style.--grid-goal-width]="gridGoalWidth + 'px'" role="listbox" aria-label="Media items" #listContainer>
+    @for (item of cachedOrderedItems; track trackByMediaId($index, item)) {
+      @if (item.showThreshold) {
+        <div class="media-threshold-line" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
+        </div>
+      }
+      <vt-media-item
+        [media]="item.media"
+        [active]="selectedId === item.media.id"
+        [voteLabel]="getVoteLabel(item.media.id)"
+        [score]="item.score"
+        [viewMode]="viewMode"
+        [focusMode]="focusMode"
+        (select)="onMediaSelect($event)"
+        (vote)="onMediaVote($event)"
+      />
     }
-    <vt-media-item
-      [media]="item.media"
-      [active]="selectedId === item.media.id"
-      [voteLabel]="getVoteLabel(item.media.id)"
-      [score]="item.score"
-      [viewMode]="viewMode"
-      [focusMode]="focusMode"
-      (select)="onMediaSelect($event)"
-      (vote)="onMediaVote($event)"
-    />
-  }
 
-  @if (medias.length === 0) {
-    <div class="empty-list">No media loaded</div>
-  }
-</div>
+    @if (medias.length === 0) {
+      <div class="empty-list">No media loaded</div>
+    }
+  </div>
+}
