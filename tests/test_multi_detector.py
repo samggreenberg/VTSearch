@@ -83,17 +83,17 @@ class TestDetectorContextStore:
     def test_unregister_clears_active_if_match(self):
         from vtsearch.utils.state_core import (
             DetectorContext,
-            get_active_detector_id,
+            get_thread_detector_context,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
             unregister_detector_context,
         )
 
         ctx = DetectorContext("det_active_unreg")
         register_detector_context(ctx)
-        set_active_detector_id("det_active_unreg")
+        set_thread_detector_context(ctx)
         unregister_detector_context("det_active_unreg")
-        assert get_active_detector_id() is None
+        assert get_thread_detector_context() is None
 
     def test_clear_all_detector_contexts(self):
         from vtsearch.utils.state_core import (
@@ -125,18 +125,18 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det_a = DetectorContext("iso_a")
         register_detector_context(det_a)
-        set_active_detector_id("iso_a")
+        set_thread_detector_context(det_a)
         good_votes[1] = None
         good_votes[2] = None
 
         det_b = DetectorContext("iso_b")
         register_detector_context(det_b)
-        set_active_detector_id("iso_b")
+        set_thread_detector_context(det_b)
         bad_votes[3] = None
 
         # B sees only its own votes
@@ -144,7 +144,7 @@ class TestVoteIsolation:
         assert 3 in bad_votes
 
         # A sees only its own votes
-        set_active_detector_id("iso_a")
+        set_thread_detector_context(det_a)
         assert len(good_votes) == 2
         assert len(bad_votes) == 0
 
@@ -153,12 +153,12 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det = DetectorContext("toggle_det")
         register_detector_context(det)
-        set_active_detector_id("toggle_det")
+        set_thread_detector_context(det)
 
         toggle_vote(1, "good")
         assert 1 in good_votes
@@ -169,23 +169,23 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det_a = DetectorContext("clear_a")
         register_detector_context(det_a)
-        set_active_detector_id("clear_a")
+        set_thread_detector_context(det_a)
         good_votes[1] = None
 
         det_b = DetectorContext("clear_b")
         register_detector_context(det_b)
-        set_active_detector_id("clear_b")
+        set_thread_detector_context(det_b)
         good_votes[2] = None
         clear_votes()
         assert len(good_votes) == 0
 
         # A's votes are untouched
-        set_active_detector_id("clear_a")
+        set_thread_detector_context(det_a)
         assert 1 in good_votes
 
 

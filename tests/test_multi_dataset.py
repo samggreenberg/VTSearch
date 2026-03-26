@@ -18,14 +18,16 @@ from vtsearch.utils.state_core import (
     clear_all_contexts,
     clear_all_detector_contexts,
     get_active_context,
-    get_active_dataset_id,
     get_active_detector_context,
     get_context,
+    get_detector_context,
+    get_thread_dataset_context,
+    get_thread_detector_context,
     list_loaded_dataset_ids,
     register_context,
     register_detector_context,
-    set_active_dataset_id,
-    set_active_detector_id,
+    set_thread_dataset_context,
+    set_thread_detector_context,
     unregister_context,
 )
 
@@ -109,9 +111,9 @@ class TestContextStore:
     def test_unregister_clears_active_if_match(self):
         ctx = DatasetContext("ds_active_unreg")
         register_context(ctx)
-        set_active_dataset_id("ds_active_unreg")
+        set_thread_dataset_context(ctx)
         unregister_context("ds_active_unreg")
-        assert get_active_dataset_id() is None
+        assert get_thread_dataset_context() is None
 
 
 class TestProxyDict:
@@ -125,14 +127,14 @@ class TestProxyDict:
         ctx2 = DatasetContext("proxy_test")
         ctx2.medias[999] = {"id": 999, "type": "test"}
         register_context(ctx2)
-        set_active_dataset_id("proxy_test")
+        set_thread_dataset_context(ctx2)
 
         assert 999 in medias
         assert len(medias) == 1
         assert list(medias.keys()) == [999]
 
         # Switch back
-        set_active_dataset_id("_test_default")
+        set_thread_dataset_context(get_context("_test_default"))
         assert 999 not in medias
         assert len(medias) > 0  # test medias
 
@@ -253,19 +255,19 @@ class TestMultiDatasetSwitching:
         from vtsearch.utils import (
             medias,
             register_context,
-            set_active_dataset_id,
+            set_thread_dataset_context,
         )
 
         # Setup context A with medias
         ctx_a = DatasetContext("switch_a")
         register_context(ctx_a)
-        set_active_dataset_id("switch_a")
+        set_thread_dataset_context(ctx_a)
         medias[1] = self._make_test_media(1)
 
         # Setup context B with different medias
         ctx_b = DatasetContext("switch_b")
         register_context(ctx_b)
-        set_active_dataset_id("switch_b")
+        set_thread_dataset_context(ctx_b)
         medias[2] = self._make_test_media(2)
 
         # Verify B state
@@ -273,7 +275,7 @@ class TestMultiDatasetSwitching:
         assert 1 not in medias
 
         # Switch back to A — medias preserved
-        set_active_dataset_id("switch_a")
+        set_thread_dataset_context(ctx_a)
         assert 1 in medias
         assert 2 not in medias
 
@@ -283,17 +285,17 @@ class TestMultiDatasetSwitching:
             good_votes,
             bad_votes,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det_a = DetectorContext("det_a")
         register_detector_context(det_a)
-        set_active_detector_id("det_a")
+        set_thread_detector_context(det_a)
         good_votes[1] = None
 
         det_b = DetectorContext("det_b")
         register_detector_context(det_b)
-        set_active_detector_id("det_b")
+        set_thread_detector_context(det_b)
         bad_votes[2] = None
 
         # Verify B state
@@ -301,12 +303,12 @@ class TestMultiDatasetSwitching:
         assert len(good_votes) == 0
 
         # Switch back to A — votes preserved
-        set_active_detector_id("det_a")
+        set_thread_detector_context(det_a)
         assert 1 in good_votes
         assert len(bad_votes) == 0
 
         # Switch to B again — still intact
-        set_active_detector_id("det_b")
+        set_thread_detector_context(det_b)
         assert 2 in bad_votes
 
     def test_switch_detectors_preserves_label_history(self):
@@ -314,18 +316,18 @@ class TestMultiDatasetSwitching:
             label_history,
             medias,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
             toggle_vote,
         )
 
         det_a = DetectorContext("hist_det_a")
         register_detector_context(det_a)
-        set_active_detector_id("hist_det_a")
+        set_thread_detector_context(det_a)
         toggle_vote(1, "good")
 
         det_b = DetectorContext("hist_det_b")
         register_detector_context(det_b)
-        set_active_detector_id("hist_det_b")
+        set_thread_detector_context(det_b)
         toggle_vote(2, "bad")
 
         # B's history
@@ -333,7 +335,7 @@ class TestMultiDatasetSwitching:
         assert label_history[0][0] == 2
 
         # Switch to A — A's history
-        set_active_detector_id("hist_det_a")
+        set_thread_detector_context(det_a)
         assert len(label_history) == 1
         assert label_history[0][0] == 1
 
@@ -341,42 +343,42 @@ class TestMultiDatasetSwitching:
         from vtsearch.utils import (
             get_learned_scores,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
             update_learned_scores,
         )
 
         det_a = DetectorContext("scores_det_a")
         register_detector_context(det_a)
-        set_active_detector_id("scores_det_a")
+        set_thread_detector_context(det_a)
         update_learned_scores({1: 0.9, 2: 0.1})
 
         det_b = DetectorContext("scores_det_b")
         register_detector_context(det_b)
-        set_active_detector_id("scores_det_b")
+        set_thread_detector_context(det_b)
         update_learned_scores({3: 0.5})
 
         assert get_learned_scores() == {3: 0.5}
 
-        set_active_detector_id("scores_det_a")
+        set_thread_detector_context(det_a)
         assert get_learned_scores() == {1: 0.9, 2: 0.1}
 
     def test_unload_frees_context(self):
         from vtsearch.utils import (
             medias,
             register_context,
-            set_active_dataset_id,
+            set_thread_dataset_context,
             unregister_context,
         )
 
         ctx = DatasetContext("unload_me")
         ctx.medias[100] = self._make_test_media(100)
         register_context(ctx)
-        set_active_dataset_id("unload_me")
+        set_thread_dataset_context(ctx)
         assert 100 in medias
 
         unregister_context("unload_me")
         assert get_context("unload_me") is None
-        assert get_active_dataset_id() is None
+        assert get_thread_dataset_context() is None
         # After unload, medias delegates to empty fallback
         assert len(medias) == 0
 
@@ -434,7 +436,7 @@ class TestMultiDatasetAPI:
         ctx.medias[1] = self._make_test_media(1)
         register_context(ctx)
         add_loaded_id(e["id"])
-        set_active_dataset_id(e["id"])
+        set_thread_dataset_context(ctx)
 
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
         assert resp.status_code == 200
@@ -491,7 +493,7 @@ class TestMultiDatasetAPI:
         register_context(ctx2)
         add_loaded_id(e2["id"])
 
-        set_active_dataset_id(e2["id"])
+        set_thread_dataset_context(ctx2)
 
         resp = client.post("/api/dataset/clear")
         assert resp.status_code == 200
@@ -517,17 +519,17 @@ class TestScalarContextState:
 
         det_a = DetectorContext("cc_det_a")
         register_detector_context(det_a)
-        set_active_detector_id("cc_det_a")
+        set_thread_detector_context(det_a)
         _set_click_counter(10)
         assert _get_click_counter() == 10
 
         det_b = DetectorContext("cc_det_b")
         register_detector_context(det_b)
-        set_active_detector_id("cc_det_b")
+        set_thread_detector_context(det_b)
         assert _get_click_counter() == 0  # fresh context
         _set_click_counter(20)
 
-        set_active_detector_id("cc_det_a")
+        set_thread_detector_context(det_a)
         assert _get_click_counter() == 10  # preserved
 
     def test_inclusion_per_detector(self):
@@ -536,16 +538,16 @@ class TestScalarContextState:
 
         det_a = DetectorContext("inc_det_a")
         register_detector_context(det_a)
-        set_active_detector_id("inc_det_a")
+        set_thread_detector_context(det_a)
         _set_inclusion(5)
 
         det_b = DetectorContext("inc_det_b")
         register_detector_context(det_b)
-        set_active_detector_id("inc_det_b")
+        set_thread_detector_context(det_b)
         _set_inclusion(-3)
 
         assert _get_inclusion() == -3
-        set_active_detector_id("inc_det_a")
+        set_thread_detector_context(det_a)
         assert _get_inclusion() == 5
 
     def test_display_name_per_dataset(self):
@@ -553,16 +555,16 @@ class TestScalarContextState:
 
         ctx_a = DatasetContext("dn_a")
         register_context(ctx_a)
-        set_active_dataset_id("dn_a")
+        set_thread_dataset_context(ctx_a)
         _set_dataset_display_name("Dataset A")
 
         ctx_b = DatasetContext("dn_b")
         register_context(ctx_b)
-        set_active_dataset_id("dn_b")
+        set_thread_dataset_context(ctx_b)
         _set_dataset_display_name("Dataset B")
 
         assert _get_dataset_display_name() == "Dataset B"
-        set_active_dataset_id("dn_a")
+        set_thread_dataset_context(ctx_a)
         assert _get_dataset_display_name() == "Dataset A"
 
 
@@ -577,14 +579,14 @@ class TestEmptyContextFallback:
     def test_empty_medias_when_no_dataset(self):
         from vtsearch.utils.state_core import medias
 
-        set_active_dataset_id(None)
+        set_thread_dataset_context(None)
         assert len(medias) == 0
         assert list(medias.keys()) == []
 
     def test_empty_votes_when_no_detector(self):
         from vtsearch.utils.state_core import good_votes, bad_votes
 
-        set_active_detector_id(None)
+        set_thread_detector_context(None)
         assert len(good_votes) == 0
         assert len(bad_votes) == 0
 
@@ -606,7 +608,7 @@ class TestSyncLabelsAcrossDatasets:
         from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
@@ -646,7 +648,7 @@ class TestSyncLabelsAcrossDatasets:
             add_loaded_model_id(model_id)
             det_ctx = DetectorContext(model_id)
             register_detector_context(det_ctx)
-            set_active_detector_id(model_id)
+            set_thread_detector_context(det_ctx)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()
@@ -674,7 +676,7 @@ class TestSyncLabelsAcrossDatasets:
         from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
@@ -714,7 +716,7 @@ class TestSyncLabelsAcrossDatasets:
             add_loaded_model_id(model_id)
             det_ctx = DetectorContext(model_id)
             register_detector_context(det_ctx)
-            set_active_detector_id(model_id)
+            set_thread_detector_context(det_ctx)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()

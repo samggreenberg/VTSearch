@@ -416,9 +416,10 @@ class TestFindLabel:
         """
         from vtsearch.utils import (
             DatasetContext,
-            get_active_dataset_id,
+            get_context,
+            get_thread_dataset_context,
             register_context,
-            set_active_dataset_id,
+            set_thread_dataset_context,
             snapshot_medias,
             unregister_context,
         )
@@ -426,7 +427,8 @@ class TestFindLabel:
         model_id = self._create_model_with_detector(client)
 
         # Remember the default dataset (has test medias)
-        original_id = get_active_dataset_id()
+        original_ctx = get_thread_dataset_context()
+        original_id = original_ctx.dataset_id if original_ctx else None
         original_count = len(snapshot_medias())
 
         # Create a second dataset with different (fewer) items
@@ -442,8 +444,8 @@ class TestFindLabel:
 
         try:
             # Switch active to dataset_b — simulates user browsing Dataset B
-            set_active_dataset_id("dataset_b")
-            assert get_active_dataset_id() == "dataset_b"
+            set_thread_dataset_context(ctx_b)
+            assert get_thread_dataset_context().dataset_id == "dataset_b"
 
             # Call find-label with dataset_id pointing to the ORIGINAL dataset
             resp = client.post(
@@ -457,7 +459,7 @@ class TestFindLabel:
             total = data["good_count"] + data["bad_count"]
             assert total == original_count
         finally:
-            set_active_dataset_id(original_id)
+            set_thread_dataset_context(original_ctx)
             unregister_context("dataset_b")
 
     def test_find_label_overwrites_existing_votes(self, client):
@@ -751,7 +753,7 @@ class TestFindLabel:
         from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, set_active_detector_id, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
@@ -790,7 +792,7 @@ class TestFindLabel:
             add_loaded_model_id(model_id)
             det_ctx = DetectorContext(model_id)
             register_detector_context(det_ctx)
-            set_active_detector_id(model_id)
+            set_thread_detector_context(det_ctx)
 
             # --- Phase 2: simulate loading Dataset B (clear votes) ---
             good_votes.clear()

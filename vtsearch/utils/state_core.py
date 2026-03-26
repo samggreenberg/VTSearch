@@ -149,51 +149,56 @@ class DetectorContext:
 
 
 # ---------------------------------------------------------------------------
-# Dataset context store and active-dataset pointer
+# Dataset context store and thread-local fallback
 # ---------------------------------------------------------------------------
 
 # Maps dataset_id -> DatasetContext for every in-memory dataset.
 _contexts: dict[str, DatasetContext] = {}
 
-# The dataset_id of the context whose state the UI is currently using,
-# or ``None`` when nothing is active.
-_active_dataset_id: str | None = None
+# Thread-local storage for the fallback dataset/detector context.
+# Used by background threads and tests that operate outside a Flask
+# request context.  Each thread sets its own value; no global "active"
+# pointer exists.
+_thread_local = threading.local()
 
-# Fallback context used when no dataset is active.  Proxies delegate to
+# Fallback context used when no dataset is set.  Proxies delegate to
 # this so that code accessing ``medias`` when nothing is loaded sees empty
 # containers rather than crashing.
 _empty_dataset_context = DatasetContext("")
 
 
 def get_active_context() -> DatasetContext:
-    """Return the active ``DatasetContext``, or the empty fallback.
+    """Return the ``DatasetContext`` for the current execution context.
 
     Resolution order:
     1. Request-scoped context (set by ``before_request`` from ``X-Dataset-Id`` header)
-    2. Global ``_active_dataset_id`` pointer (legacy fallback for threads/CLI)
+    2. Thread-local context (set by ``set_thread_dataset_context`` — for
+       background threads and tests)
     3. Empty fallback context
     """
     # 1. Per-request override
     req_ctx = _request_dataset_context()
     if req_ctx is not None:
         return req_ctx
-    # 2. Global active pointer
-    if _active_dataset_id is not None:
-        ctx = _contexts.get(_active_dataset_id)
-        if ctx is not None:
-            return ctx
+    # 2. Thread-local fallback
+    ctx = getattr(_thread_local, "dataset_context", None)
+    if ctx is not None:
+        return ctx
     return _empty_dataset_context
 
 
-def get_active_dataset_id() -> str | None:
-    """Return the dataset_id of the active context, or ``None``."""
-    return _active_dataset_id
+def set_thread_dataset_context(ctx: DatasetContext | None) -> None:
+    """Set the thread-local dataset context for the current thread.
+
+    Called by test fixtures and background threads to direct proxy
+    resolution without global state.
+    """
+    _thread_local.dataset_context = ctx
 
 
-def set_active_dataset_id(dataset_id: str | None) -> None:
-    """Switch the active context to *dataset_id* (must already be in _contexts, or None)."""
-    global _active_dataset_id
-    _active_dataset_id = dataset_id
+def get_thread_dataset_context() -> DatasetContext | None:
+    """Return the thread-local dataset context, or ``None``."""
+    return getattr(_thread_local, "dataset_context", None)
 
 
 def register_context(ctx: DatasetContext) -> None:
@@ -203,10 +208,11 @@ def register_context(ctx: DatasetContext) -> None:
 
 def unregister_context(dataset_id: str) -> DatasetContext | None:
     """Remove and return the context for *dataset_id*, or ``None``."""
-    global _active_dataset_id
     ctx = _contexts.pop(dataset_id, None)
-    if _active_dataset_id == dataset_id:
-        _active_dataset_id = None
+    # Clear thread-local if it was pointing to the removed context.
+    tl_ctx = getattr(_thread_local, "dataset_context", None)
+    if tl_ctx is not None and tl_ctx.dataset_id == dataset_id:
+        _thread_local.dataset_context = None
     return ctx
 
 
@@ -221,60 +227,53 @@ def list_loaded_dataset_ids() -> list[str]:
 
 
 def clear_all_contexts() -> None:
-    """Remove all dataset contexts and reset the active pointer.  For tests."""
-    global _active_dataset_id
+    """Remove all dataset contexts and clear the thread-local.  For tests."""
     _contexts.clear()
-    _active_dataset_id = None
+    _thread_local.dataset_context = None
     # Also reset the empty context's state
     _empty_dataset_context.__init__("")  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
-# Detector context store and active-detector pointer
+# Detector context store and thread-local fallback
 # ---------------------------------------------------------------------------
 
 # Maps detector_id -> DetectorContext for every in-memory detector.
 _detector_contexts: dict[str, DetectorContext] = {}
 
-# The detector_id of the context whose vote state the UI is currently using,
-# or ``None`` when nothing is active.
-_active_detector_id: str | None = None
-
-# Fallback context used when no detector is active.  Vote proxies delegate
+# Fallback context used when no detector is set.  Vote proxies delegate
 # to this so that code accessing ``good_votes``, ``bad_votes``, etc. when
 # no detector is loaded sees empty containers rather than crashing.
 _empty_detector_context = DetectorContext("")
 
 
 def get_active_detector_context() -> DetectorContext:
-    """Return the active ``DetectorContext``, or the empty fallback.
+    """Return the ``DetectorContext`` for the current execution context.
 
     Resolution order:
     1. Request-scoped context (set by ``before_request`` from ``X-Model-Id`` header)
-    2. Global ``_active_detector_id`` pointer (legacy fallback for threads/CLI)
+    2. Thread-local context (set by ``set_thread_detector_context``)
     3. Empty fallback context
     """
     # 1. Per-request override
     req_ctx = _request_detector_context()
     if req_ctx is not None:
         return req_ctx
-    # 2. Global active pointer
-    if _active_detector_id is not None:
-        ctx = _detector_contexts.get(_active_detector_id)
-        if ctx is not None:
-            return ctx
+    # 2. Thread-local fallback
+    ctx = getattr(_thread_local, "detector_context", None)
+    if ctx is not None:
+        return ctx
     return _empty_detector_context
 
 
-def get_active_detector_id() -> str | None:
-    """Return the detector_id of the active detector, or ``None``."""
-    return _active_detector_id
+def set_thread_detector_context(ctx: DetectorContext | None) -> None:
+    """Set the thread-local detector context for the current thread."""
+    _thread_local.detector_context = ctx
 
 
-def set_active_detector_id(detector_id: str | None) -> None:
-    """Switch the active detector to *detector_id* (must already be registered, or None)."""
-    global _active_detector_id
-    _active_detector_id = detector_id
+def get_thread_detector_context() -> DetectorContext | None:
+    """Return the thread-local detector context, or ``None``."""
+    return getattr(_thread_local, "detector_context", None)
 
 
 def register_detector_context(ctx: DetectorContext) -> None:
@@ -284,10 +283,10 @@ def register_detector_context(ctx: DetectorContext) -> None:
 
 def unregister_detector_context(detector_id: str) -> DetectorContext | None:
     """Remove and return the detector context for *detector_id*, or ``None``."""
-    global _active_detector_id
     ctx = _detector_contexts.pop(detector_id, None)
-    if _active_detector_id == detector_id:
-        _active_detector_id = None
+    tl_ctx = getattr(_thread_local, "detector_context", None)
+    if tl_ctx is not None and tl_ctx.detector_id == detector_id:
+        _thread_local.detector_context = None
     return ctx
 
 
@@ -302,10 +301,9 @@ def list_loaded_detector_ids() -> list[str]:
 
 
 def clear_all_detector_contexts() -> None:
-    """Remove all detector contexts and reset the active pointer.  For tests."""
-    global _active_detector_id
+    """Remove all detector contexts and clear the thread-local.  For tests."""
     _detector_contexts.clear()
-    _active_detector_id = None
+    _thread_local.detector_context = None
     _empty_detector_context.__init__("")  # type: ignore[misc]
 
 

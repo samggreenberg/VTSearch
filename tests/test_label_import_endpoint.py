@@ -211,11 +211,11 @@ class TestLabelImportEndpoint:
         add_loaded_model_id(entry["id"])
 
         # Set active detector so sync_labels_to_loaded_model() can find it
-        from vtsearch.utils.state_core import DetectorContext, register_detector_context, set_active_detector_id
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context, set_thread_detector_context
 
         det_ctx = DetectorContext(entry["id"])
         register_detector_context(det_ctx)
-        set_active_detector_id(entry["id"])
+        set_thread_detector_context(det_ctx)
 
         # Import a label
         md5 = app_module.medias[1]["md5"]

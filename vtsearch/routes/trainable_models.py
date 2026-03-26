@@ -84,12 +84,13 @@ def sync_labels_to_loaded_model() -> None:
     not the model's original training labels.
     """
     from vtsearch.models.registry import get_model, is_find_mode, update_model
-    from vtsearch.utils import get_active_detector_id
+    from vtsearch.utils import get_active_detector_context
 
     if is_find_mode():
         return
 
-    loaded_id = get_active_detector_id()
+    det_ctx = get_active_detector_context()
+    loaded_id = det_ctx.detector_id if det_ctx.detector_id else None
     if not loaded_id:
         return
 
@@ -915,7 +916,6 @@ def load_model_route():
         get_detector_context,
         good_votes,
         register_detector_context,
-        set_active_detector_id,
     )
 
     data = request.get_json(force=True, silent=True) or {}
@@ -932,17 +932,13 @@ def load_model_route():
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # No model requested — clear the global fallback and find mode.
+        # No model requested — clear find mode.
         from vtsearch.models.registry import set_find_mode
-        set_active_detector_id(None)
         set_find_mode(False)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
-        # Already loaded — set as global fallback for non-header requests.
-        det_ctx = get_detector_context(model_id)
-        if det_ctx is not None:
-            set_active_detector_id(model_id)
+        # Already loaded — nothing more to do.
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     # New load: create a DetectorContext, register it, then load labels
@@ -955,8 +951,6 @@ def load_model_route():
         media_type=entry.get("media_type", ""),
     )
     register_detector_context(det_ctx)
-    # Set as global fallback so tests and non-header requests resolve correctly.
-    set_active_detector_id(model_id)
 
     _LOAD_STEPS = 2  # restore labels, seed examples
     task_id = f"_modload_{model_id[:8]}"
@@ -968,9 +962,18 @@ def load_model_route():
 
     # Capture values needed by the background thread.
     tm_name = entry.get("trainable_model_name", "")
+    # Capture the dataset context so the thread can resolve medias.
+    from vtsearch.utils import get_active_context
+    _thread_ds_ctx = get_active_context()
 
     def load_task():
         from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
+        from vtsearch.utils.state_core import set_thread_dataset_context, set_thread_detector_context
+
+        # Set thread-local contexts so proxy objects (medias, good_votes, etc.)
+        # resolve correctly in this background thread.
+        set_thread_dataset_context(_thread_ds_ctx)
+        set_thread_detector_context(det_ctx)
 
         try:
             labels_restored = 0
@@ -1035,7 +1038,7 @@ def unload_model_route(model_id: str):
     from vtsearch.models.registry import get_model, is_model_loaded, remove_loaded_model_id
     from vtsearch.utils import (
         bad_votes,
-        get_active_detector_id,
+        get_active_detector_context,
         good_votes,
         unregister_detector_context,
     )
@@ -1046,8 +1049,9 @@ def unload_model_route(model_id: str):
     if not is_model_loaded(model_id):
         return jsonify({"error": "Model is not loaded"}), 400
 
-    # Save labels if this is the active model
-    if get_active_detector_id() == model_id and (good_votes or bad_votes):
+    # Save labels if this model is currently resolved by the context
+    det_ctx = get_active_detector_context()
+    if det_ctx.detector_id == model_id and (good_votes or bad_votes):
         sync_labels_to_loaded_model()
 
     # Remove from memory

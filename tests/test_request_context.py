@@ -13,13 +13,13 @@ from vtsearch.utils.state_core import (
     DetectorContext,
     get_active_context,
     get_active_detector_context,
-    get_active_dataset_id,
-    get_active_detector_id,
     get_context,
+    get_thread_dataset_context,
+    get_thread_detector_context,
     register_context,
     register_detector_context,
-    set_active_dataset_id,
-    set_active_detector_id,
+    set_thread_dataset_context,
+    set_thread_detector_context,
     medias,
     good_votes,
     bad_votes,
@@ -63,11 +63,11 @@ class TestRequestScopedDataset:
         """Sending X-Dataset-Id routes proxy reads to that dataset."""
         _make_dataset("req_ds_a", [100, 101])
         _make_dataset("req_ds_b", [200, 201])
-        set_active_dataset_id("req_ds_a")
+        set_thread_dataset_context(get_context("req_ds_a"))
 
         from app import app
 
-        # Without header: proxy resolves to global active (A)
+        # Without header: proxy resolves to thread-local active (A)
         with app.test_request_context():
             app.preprocess_request()
             assert get_active_context().dataset_id == "req_ds_a"
@@ -81,13 +81,13 @@ class TestRequestScopedDataset:
             assert 200 in medias
             assert 100 not in medias
 
-        # Global active pointer was NOT mutated
-        assert get_active_dataset_id() == "req_ds_a"
+        # Thread-local active pointer was NOT mutated
+        assert get_thread_dataset_context().dataset_id == "req_ds_a"
 
     def test_header_with_unloaded_id_falls_back_to_active(self, client):
         """If X-Dataset-Id refers to a dataset not in memory, fall back to global active."""
         _make_dataset("req_fallback", [300])
-        set_active_dataset_id("req_fallback")
+        set_thread_dataset_context(get_context("req_fallback"))
 
         from app import app
 
@@ -101,7 +101,7 @@ class TestRequestScopedDataset:
     def test_no_header_uses_global_active(self, client):
         """Without the header, behaviour is identical to before (global active)."""
         _make_dataset("req_global", [400])
-        set_active_dataset_id("req_global")
+        set_thread_dataset_context(get_context("req_global"))
 
         from app import app
 
@@ -128,7 +128,8 @@ class TestRequestScopedModel:
         det_a.good_votes[1] = None
         det_b.good_votes[2] = None
 
-        set_active_detector_id("req_det_a")
+        from vtsearch.utils.state_core import get_detector_context
+        set_thread_detector_context(get_detector_context("req_det_a"))
 
         # Without header: votes come from A
         resp = client.get("/api/votes")
@@ -144,14 +145,15 @@ class TestRequestScopedModel:
         assert 2 in good_ids
         assert 1 not in good_ids
 
-        # Global active pointer was NOT mutated
-        assert get_active_detector_id() == "req_det_a"
+        # Thread-local active pointer was NOT mutated
+        assert get_thread_detector_context().detector_id == "req_det_a"
 
     def test_model_header_with_unloaded_id_falls_back(self, client):
         """If X-Model-Id refers to a detector not in memory, fall back to global."""
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
-        set_active_detector_id("req_det_fb")
+        from vtsearch.utils.state_core import get_detector_context
+        set_thread_detector_context(get_detector_context("req_det_fb"))
 
         resp = client.get("/api/votes", headers={"X-Model-Id": "nonexistent"})
         assert resp.status_code == 200
@@ -164,7 +166,8 @@ class TestRequestScopedModel:
         det_b = _make_detector("req_det_ctx_b")
         det_a.good_votes[10] = None
         det_b.bad_votes[20] = None
-        set_active_detector_id("req_det_ctx_a")
+        from vtsearch.utils.state_core import get_detector_context
+        set_thread_detector_context(get_detector_context("req_det_ctx_a"))
 
         from app import app
 
@@ -190,8 +193,9 @@ class TestRequestScopedBoth:
         det = _make_detector("req_both_det")
         det.good_votes[500] = None
 
-        set_active_dataset_id("req_both_ds")
-        set_active_detector_id("req_both_det")
+        set_thread_dataset_context(get_context("req_both_ds"))
+        from vtsearch.utils.state_core import get_detector_context
+        set_thread_detector_context(get_detector_context("req_both_det"))
 
         from app import app
 
@@ -217,7 +221,7 @@ class TestRequestIsolation:
         """Two sequential requests with different headers see different data."""
         _make_dataset("req_iso_a", [600])
         _make_dataset("req_iso_b", [700])
-        set_active_dataset_id("req_iso_a")
+        set_thread_dataset_context(get_context("req_iso_a"))
 
         from app import app
 
@@ -237,7 +241,7 @@ class TestRequestIsolation:
         """Using X-Dataset-Id never changes the global _active_dataset_id."""
         _make_dataset("req_nomut_a", [800])
         _make_dataset("req_nomut_b", [900])
-        set_active_dataset_id("req_nomut_a")
+        set_thread_dataset_context(get_context("req_nomut_a"))
 
         from app import app
 
@@ -246,6 +250,6 @@ class TestRequestIsolation:
                 app.preprocess_request()
                 assert 900 in medias
 
-        # Global pointer untouched
-        assert get_active_dataset_id() == "req_nomut_a"
+        # Thread-local pointer untouched
+        assert get_thread_dataset_context().dataset_id == "req_nomut_a"
         assert 800 in medias
