@@ -377,7 +377,7 @@ def client():
 
 
 @pytest.hookimpl(trylast=True)
-def pytest_sessionfinish(session, exitstatus):
+def pytest_unconfigure(config):
     """Force-exit to avoid SIGABRT (exit code 134) from native library cleanup.
 
     PyTorch, OpenMP, numba (via librosa), and other native libraries spin up
@@ -388,13 +388,17 @@ def pytest_sessionfinish(session, exitstatus):
     ``os._exit()`` skips the normal interpreter teardown (atexit handlers,
     C++ static destructors) so the problematic cleanup never runs.
 
-    Prints a clear PASS/FAIL summary right before exiting, since os._exit()
-    prevents the normal pytest summary from being flushed.
+    We use ``pytest_unconfigure`` (the very last hook) instead of
+    ``pytest_sessionfinish`` so that ``pytest_terminal_summary`` still runs
+    first — ensuring failure tracebacks and the short test summary are fully
+    printed before we force-exit.
+
+    Prints an additional PASS/FAIL summary right before exiting for clarity.
     """
     import sys
 
     # Grab stats from the terminal reporter (if available)
-    reporter = session.config.pluginmanager.getplugin("terminalreporter")
+    reporter = config.pluginmanager.getplugin("terminalreporter")
     if reporter:
         passed = len(reporter.stats.get("passed", []))
         failed = len(reporter.stats.get("failed", []))
@@ -418,4 +422,12 @@ def pytest_sessionfinish(session, exitstatus):
 
     sys.stdout.flush()
     sys.stderr.flush()
+
+    # Retrieve the exit status stashed by pytest_sessionfinish.
+    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
     os._exit(exitstatus)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Stash the exit status so pytest_unconfigure can use it."""
+    session.config._vtsearch_exitstatus = exitstatus
