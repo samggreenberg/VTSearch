@@ -492,8 +492,8 @@ class TestDemoDatasetEmbedderStatus:
         for ds in data["datasets"]:
             assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
 
-    def test_fallback_reads_embedder_from_pkl_medias(self, client):
-        """When no sidecar file exists, embedder is read from the pkl medias and cached."""
+    def test_no_sidecar_returns_none_embedder(self, client):
+        """When no sidecar file exists, pkl_embedder is None."""
         import pickle
 
         from vtsearch.config import EMBEDDINGS_DIR
@@ -525,11 +525,8 @@ class TestDemoDatasetEmbedderStatus:
             data = resp.get_json()
             ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
             assert ds is not None
-            assert ds["pkl_embedder"] == "FallbackEmb"
-            assert ds["status"] == "ready"
-            # Sidecar should have been created as a cache
-            assert sidecar.exists(), "Sidecar should be written as cache after fallback read"
-            assert sidecar.read_text(encoding="utf-8").strip() == "FallbackEmb"
+            # Without a sidecar, embedder is unknown
+            assert ds["pkl_embedder"] is None
         finally:
             pkl_file.unlink(missing_ok=True)
             sidecar.unlink(missing_ok=True)

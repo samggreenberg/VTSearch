@@ -391,18 +391,18 @@ class TestPickleChunked:
         assert media["media_path"] is not None
         assert "report.pdf" in media["media_path"]
 
-    def test_text_legacy_key_via_registry(self, tmp_path):
-        """Legacy text_content key is resolved via the registry for text type."""
+    def test_text_media_string_key(self, tmp_path):
+        """Text media using media_string key loads correctly."""
         medias_data = {
             1: {
                 "type": "text",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
-                "text_content": "Some text paragraph",
+                "media_string": "Some text paragraph",
                 "filename": "para.txt",
                 "category": "test",
             }
         }
-        pkl_path = tmp_path / "txt_legacy.pkl"
+        pkl_path = tmp_path / "txt.pkl"
         with open(pkl_path, "wb") as f:
             pickle.dump({"medias": medias_data}, f)
 
