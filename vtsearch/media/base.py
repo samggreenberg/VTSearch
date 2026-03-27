@@ -46,6 +46,7 @@ __all__ = [
     "extract_tensor",
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
+    "load_pretrained_local_first",
 ]
 
 
@@ -96,6 +97,25 @@ def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
     gc.collect()
     on_progress("loading", message, 0, 0)
     return str(MODELS_CACHE_DIR)
+
+
+def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Call *load_fn* preferring cached model files, falling back to download.
+
+    HuggingFace ``from_pretrained`` (and ``SentenceTransformer()``) contact the
+    Hub to check for updates **even when model files are already cached**.  If
+    the network is unreachable or slow this HTTP request hangs indefinitely,
+    making the UI appear frozen on "Loading … model weights".
+
+    This helper tries ``local_files_only=True`` first.  If that raises
+    ``OSError`` (model not yet cached), it retries without the flag so the
+    model can be downloaded normally.
+    """
+    try:
+        return load_fn(*args, local_files_only=True, **kwargs)
+    except OSError:
+        # Model not in local cache — allow network download.
+        return load_fn(*args, **kwargs)
 
 
 @contextlib.contextmanager

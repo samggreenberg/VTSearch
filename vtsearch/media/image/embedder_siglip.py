@@ -14,6 +14,7 @@ from vtsearch.media.base import (
     extract_tensor as _extract_tensor,
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
+    load_pretrained_local_first,
 )
 
 if TYPE_CHECKING:
@@ -61,13 +62,15 @@ class ImageSiglipEmbedder(MediaEmbedder):
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
             self._on_progress, "Loading SigLIP model weights…"
         ):
-            self._model = SiglipModel.from_pretrained(
-                SIGLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            self._model = load_pretrained_local_first(
+                SiglipModel.from_pretrained, SIGLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading SigLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = SiglipProcessor.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False)
+            self._processor = load_pretrained_local_first(
+                SiglipProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+            )
 
     # ------------------------------------------------------------------
     # Embedding

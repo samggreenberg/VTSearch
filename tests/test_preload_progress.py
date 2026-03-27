@@ -7,6 +7,9 @@ happening during the (potentially long) startup phase.
 Also tests ``intercept_weight_loading_progress`` which tracks tensor-level
 progress during model weight loading via ``set_module_tensor_to_device``
 and ``load_state_dict``.
+
+Also tests ``load_pretrained_local_first`` which avoids network hangs by
+preferring locally cached model files.
 """
 
 from unittest.mock import MagicMock, patch
@@ -14,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from vtsearch.media.base import intercept_weight_loading_progress
+from vtsearch.media.base import intercept_weight_loading_progress, load_pretrained_local_first
 from vtsearch.models.loader import _make_console_progress, preload_autoload_media_types
 
 
@@ -365,3 +368,87 @@ class TestInterceptWeightLoadingProgress:
         assert len(weight_calls) == 5
         assert weight_calls[-1][2] == 5
         assert weight_calls[-1][3] == 5
+
+
+class TestLoadPretrainedLocalFirst:
+    """Unit tests for load_pretrained_local_first."""
+
+    def test_returns_result_from_local_only_when_available(self):
+        """When local_files_only=True succeeds, the result is returned directly."""
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            assert kwargs.get("local_files_only") is True
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id", cache_dir="/tmp")
+        assert result is sentinel
+
+    def test_falls_back_to_network_on_oserror(self):
+        """When local_files_only=True raises OSError, retry without it."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise OSError("model not cached")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id", cache_dir="/tmp")
+        assert result is sentinel
+        assert call_count[0] == 2
+
+    def test_falls_back_on_file_not_found_error(self):
+        """FileNotFoundError (subclass of OSError) should also trigger fallback."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise FileNotFoundError("No cached files")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert call_count[0] == 2
+
+    def test_passes_through_all_args_and_kwargs(self):
+        """Positional and keyword arguments should be forwarded to load_fn."""
+        captured = {}
+
+        def fake_load(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = {k: v for k, v in kwargs.items() if k != "local_files_only"}
+            return "ok"
+
+        load_pretrained_local_first(fake_load, "model-id", low_cpu_mem_usage=True, token=False)
+        assert captured["args"] == ("model-id",)
+        assert captured["kwargs"] == {"low_cpu_mem_usage": True, "token": False}
+
+    def test_non_oserror_exceptions_propagate(self):
+        """Non-OSError exceptions (e.g. ImportError) should not be caught."""
+
+        def fake_load(*args, **kwargs):
+            raise ImportError("missing transformers")
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised ImportError"
+        except ImportError:
+            pass
+
+    def test_network_fallback_error_propagates(self):
+        """If both local and network attempts fail, the network error propagates."""
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            raise ConnectionError("network down")
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised ConnectionError"
+        except ConnectionError:
+            pass
