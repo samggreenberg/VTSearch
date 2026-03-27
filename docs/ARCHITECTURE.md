@@ -13,7 +13,7 @@ which pieces you need and how to pull them out.
 4. [Extractability matrix](#extractability-matrix)
 5. [How to extract specific components](#how-to-extract-specific-components)
 6. [Plugin architecture details](#plugin-architecture-details)
-7. [State management](#state-management)
+7. [State management](#state-management) (includes [Multi-dataset support](#multi-dataset-support))
 8. [Authentication and multi-user support](#authentication-and-multi-user-support)
 9. [Element-level origin tracking](#element-level-origin-tracking)
 
@@ -58,11 +58,15 @@ VTSearch/
 │   │   ├── audio/embedder.py       AudioClapEmbedder (LAION CLAP, 512-d)
 │   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
 │   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
+│   │   ├── audio/speech_extractor.py  SpeechExtractor processor
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
 │   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
 │   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
-│   │   ├── text/media_type.py      Text/paragraph media type (JSON serving)
+│   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
+│   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)
+│   │   ├── image/ocr_extractor.py  OCRExtractor
+│   │   ├── text/media_type.py      Text media type (JSON serving, type_id="text")
 │   │   ├── text/embedder.py        TextE5Embedder (E5-base-v2, 768-d)
 │   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
 │   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
@@ -87,7 +91,11 @@ VTSearch/
 │   │   ├── loader.py               Model initialisation (delegates to media)
 │   │   ├── diversity_tree.py       Hierarchical k-means tree for diverse sampling
 │   │   ├── registry.py             Persistent model registry/manifest management
-│   │   └── resolver.py             Label resolution by following origin trails
+│   │   ├── resolver.py             Label resolution by following origin trails
+│   │   ├── media_seeding.py        Media seeding utilities
+│   │   ├── label_restoration.py    Label restoration functionality
+│   │   ├── training_workflow.py    Training workflow orchestration
+│   │   └── weights_compat.py       Model weights compatibility layer
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -101,9 +109,17 @@ VTSearch/
 │   │   │   ├── video.py            UCF-101 subset
 │   │   │   ├── text.py             20 Newsgroups, BBC News, AG News, IMDB
 │   │   │   └── documents.py        UCSF Industry Documents
+│   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
+│   │   ├── pickle_security.py      Restricted pickle unpickler (RCE prevention)
+│   │   ├── metadata.py             Metadata extraction (CSV, MAT, CIFAR, folders)
+│   │   ├── pdf.py                  PDF rendering (render_pdf_pages)
 │   │   ├── ingest.py               Clip ingestion (file → clip dict)
 │   │   ├── config.py               Demo dataset catalogue
 │   │   ├── split.py                Train/test splitting
+│   │   ├── sources/                MediaSource abstraction for resolving media files
+│   │   │   ├── base.py             MediaSource ABC (list_items, fetch_item, resolve_path)
+│   │   │   ├── local_folder.py     LocalFolderSource implementation
+│   │   │   └── http_archive.py     HTTP archive source implementation
 │   │   └── importers/              Plugin system for data sources
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
@@ -147,9 +163,13 @@ VTSearch/
 │   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
 │   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
 │   │   ├── detectors_training.py   Detector training from votes
+│   │   ├── detectors_helpers.py    Shared helpers for detector routes
 │   │   ├── datasets.py             Dataset loading, demos, dashboard
 │   │   ├── datasets_loading.py     Dataset loading and import orchestration
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
+│   │   ├── labels.py               Label export, import, fill-from-sort
+│   │   ├── eval.py                 Evaluation and labeling progress routes
+│   │   ├── media_server.py         Server media file management, example-sort by origin
 │   │   ├── exporters.py            Exporter registry & execution
 │   │   ├── label_importers.py      Label importer registry & execution
 │   │   ├── processor_importers.py  Processor importer registry & execution
@@ -462,6 +482,43 @@ dicts.
 | `state_media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking |
 
 All are imported and re-exported by `state.py` so call-sites remain unchanged.
+
+### Multi-dataset support
+
+Multiple datasets can be loaded simultaneously. Per-dataset state is
+bundled in `DatasetContext` objects (`state_core.py`), and per-detector
+state in `DetectorContext` objects:
+
+| Context | Key state |
+|---------|-----------|
+| `DatasetContext` | `medias`, `diversity_tree`, `dataset_display_name` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `inclusion`, `training_medias`, `model`, `threshold` |
+
+The module-level names (`medias`, `good_votes`, etc.) are **proxy
+objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
+resolved per-request:
+
+1. **Inside a Flask request** — the `before_request` handler reads
+   `X-Dataset-Id` and `X-Model-Id` headers, resolves the matching
+   contexts, and stashes them on Flask's `g`. Proxies check `g` first.
+2. **Outside a request** (background threads, CLI, tests) — proxies
+   fall back to a thread-local context set via
+   `set_thread_dataset_context()` / `set_thread_detector_context()`.
+
+There is no single global "active" pointer. Key functions:
+`register_context()`, `unregister_context()`, `get_context()`,
+`list_loaded_dataset_ids()`.
+
+**Dataset registry** (`datasets/registry.py`) maintains a persistent
+JSON manifest at `data/dataset_registry.json` tracking which datasets
+are available and which are currently loaded in memory (`_loaded_ids`).
+
+API endpoints: `POST /api/datasets/registry/<id>/load` (load from pkl),
+`POST /api/datasets/registry/<id>/unload` (free RAM).
+
+The Angular frontend's `ActiveContextService` tracks which dataset/model
+the user selected, and `activeContextInterceptor` attaches
+`X-Dataset-Id` / `X-Model-Id` headers to every API request.
 
 ---
 

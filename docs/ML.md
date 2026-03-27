@@ -78,8 +78,8 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Image (`image`) | `clip` (default) | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
 | Image (`image`) | `siglip` | SigLIP (`google/siglip-base-patch16-224`) | 768 |
 | Video (`video`) | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
-| Text (`paragraph`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
-| Text (`paragraph`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
+| Text (`text`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
+| Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
 | Document (`document`) | — | None (no embedder) | N/A |
 
 Audio, image, and text media types each have an **alternative embedder** in addition to the default. Alternative embedders are registered in `vtsearch/media/__init__.py` and live in files like `embedder_clap_music.py`, `embedder_siglip.py`, and `embedder_bge.py` alongside the primary `embedder.py` in each media type directory.
