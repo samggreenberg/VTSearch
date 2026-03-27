@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ImageViewerComponent } from './image-viewer.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('ImageViewerComponent', () => {
@@ -17,6 +18,7 @@ describe('ImageViewerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ImageViewerComponent],
+      providers: [ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;
