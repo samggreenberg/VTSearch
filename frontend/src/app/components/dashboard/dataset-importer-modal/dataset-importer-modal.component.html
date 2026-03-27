@@ -74,14 +74,14 @@
         }
 
         <div class="demo-content-area">
-          <table class="demo-table">
+          <table class="demo-table" [class.demo-table-fixed]="demoTableFixed" [style.width]="demoTableFixed ? (demoTableWidth + 'px') : '100%'">
             <thead>
               <tr>
-                <th (click)="sortDemoBy('label')" class="sortable col-name">Name{{ demoSortIndicator('label') }}</th>
-                <th (click)="sortDemoBy('num_files')" class="sortable col-num"># Media{{ demoSortIndicator('num_files') }}</th>
-                <th (click)="sortDemoBy('num_categories')" class="sortable col-num"># Cat.{{ demoSortIndicator('num_categories') }}</th>
-                <th (click)="sortDemoBy('description')" class="sortable col-desc">Description{{ demoSortIndicator('description') }}</th>
-                <th (click)="sortDemoBy('status')" class="sortable col-status">Readiness{{ demoSortIndicator('status') }}</th>
+                <th (click)="sortDemoBy('label')" class="sortable" data-col="label" [style.width.px]="demoTableFixed ? demoColWidths['label'] : null">Name<span class="sort-indicator" [class.active]="demoSortKey === 'label'">{{ demoSortIndicator('label') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'label')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('num_files')" class="sortable col-num" data-col="num_files" [style.width.px]="demoTableFixed ? demoColWidths['num_files'] : null"># Media<span class="sort-indicator" [class.active]="demoSortKey === 'num_files'">{{ demoSortIndicator('num_files') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'num_files')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('num_categories')" class="sortable col-num" data-col="num_categories" [style.width.px]="demoTableFixed ? demoColWidths['num_categories'] : null"># Cat.<span class="sort-indicator" [class.active]="demoSortKey === 'num_categories'">{{ demoSortIndicator('num_categories') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'num_categories')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('description')" class="sortable" data-col="description" [style.width.px]="demoTableFixed ? demoColWidths['description'] : null">Description<span class="sort-indicator" [class.active]="demoSortKey === 'description'">{{ demoSortIndicator('description') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'description')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('status')" class="sortable" data-col="status" [style.width.px]="demoTableFixed ? demoColWidths['status'] : null">Readiness<span class="sort-indicator" [class.active]="demoSortKey === 'status'">{{ demoSortIndicator('status') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'status')" (click)="$event.stopPropagation()"></div></th>
               </tr>
             </thead>
             <tbody>

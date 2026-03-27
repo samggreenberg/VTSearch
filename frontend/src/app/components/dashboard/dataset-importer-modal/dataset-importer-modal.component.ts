@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -55,6 +55,19 @@ export class DatasetImporterModalComponent implements OnInit {
   demoEmbedder = '';
   demoClippers: ClipperInfo[] = [];
   selectedDemoClipper = '';
+
+  // Demo table column resize state
+  demoColWidths: Record<string, number> = {};
+  demoTableFixed = false;
+  demoTableWidth = 0;
+  private demoResizeInit = false;
+  private demoResizeState: {
+    startX: number;
+    startWidth: number;
+    col: string;
+    dragged: boolean;
+    tableEl: HTMLTableElement;
+  } | null = null;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -367,6 +380,115 @@ export class DatasetImporterModalComponent implements OnInit {
   demoSortIndicator(key: string): string {
     if (this.demoSortKey !== key) return '';
     return this.demoSortAsc ? ' \u25B2' : ' \u25BC';
+  }
+
+  // --- Demo table column resize ---
+
+  startDemoResize(event: MouseEvent, col: string): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
+    const tableEl = th.closest('table') as HTMLTableElement;
+
+    if (!this.demoResizeInit) {
+      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+      let totalWidth = 0;
+      ths.forEach((t) => {
+        const colKey = t.getAttribute('data-col');
+        const w = t.offsetWidth;
+        if (colKey) this.demoColWidths[colKey] = w;
+        totalWidth += w;
+      });
+      this.demoTableWidth = totalWidth;
+      this.demoResizeInit = true;
+      this.demoTableFixed = true;
+    }
+
+    this.demoResizeState = {
+      startX: event.clientX,
+      startWidth: this.demoColWidths[col] ?? 100,
+      col,
+      dragged: false,
+      tableEl,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDemoResizeMove(event: MouseEvent): void {
+    if (!this.demoResizeState) return;
+    const delta = event.clientX - this.demoResizeState.startX;
+    if (Math.abs(delta) > 3) this.demoResizeState.dragged = true;
+    if (!this.demoResizeState.dragged) return;
+    const newWidth = Math.max(30, this.demoResizeState.startWidth + delta);
+    const prevWidth = this.demoColWidths[this.demoResizeState.col] ?? this.demoResizeState.startWidth;
+    this.demoColWidths[this.demoResizeState.col] = newWidth;
+    this.demoTableWidth = Math.max(100, this.demoTableWidth + (newWidth - prevWidth));
+  }
+
+  @HostListener('document:mouseup')
+  onDemoResizeEnd(): void {
+    if (!this.demoResizeState) return;
+    const state = this.demoResizeState;
+    this.demoResizeState = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    if (!state.dragged) {
+      this.autoSizeDemoColumn(state.tableEl, state.col);
+    }
+  }
+
+  private autoSizeDemoColumn(tableEl: HTMLTableElement, col: string): void {
+    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+    let colIndex = -1;
+    for (let i = 0; i < ths.length; i++) {
+      if (ths[i].getAttribute('data-col') === col) {
+        colIndex = i;
+        break;
+      }
+    }
+    if (colIndex < 0) return;
+
+    const prevTableWidth = tableEl.style.width;
+    tableEl.classList.remove('demo-table-fixed');
+    tableEl.style.width = 'auto';
+    ths[colIndex].style.width = '';
+
+    let maxWidth = 0;
+    const rows = tableEl.querySelectorAll('tbody tr');
+    rows.forEach((row) => {
+      const cell = row.children[colIndex] as HTMLElement | undefined;
+      if (cell) {
+        if (cell.hasAttribute('colspan')) return;
+        maxWidth = Math.max(maxWidth, cell.scrollWidth);
+      }
+    });
+    if (maxWidth === 0) {
+      maxWidth = ths[colIndex].offsetWidth;
+    }
+    maxWidth = Math.max(30, maxWidth + 2);
+
+    this.demoColWidths[col] = maxWidth;
+    this.demoTableFixed = true;
+    this.demoResizeInit = true;
+
+    let total = 0;
+    ths.forEach((t) => {
+      const key = t.getAttribute('data-col');
+      if (key && key !== col) {
+        if (!this.demoColWidths[key]) this.demoColWidths[key] = t.offsetWidth;
+        total += this.demoColWidths[key];
+      } else if (key === col) {
+        total += maxWidth;
+      }
+    });
+    this.demoTableWidth = total;
+
+    tableEl.style.width = prevTableWidth;
+    tableEl.classList.add('demo-table-fixed');
   }
 
   /** Convert a type_id (e.g. "image") to the corresponding folder_import_name (e.g. "images"). */
