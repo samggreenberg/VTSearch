@@ -14,7 +14,6 @@ from vtsearch.utils import (
     get_find_initial_labels,
     set_find_initial_labels,
 )
-import vtsearch.utils.state_core as _core
 
 
 class TestFindInitialLabelsState:

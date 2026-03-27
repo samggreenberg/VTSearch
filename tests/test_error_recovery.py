@@ -248,10 +248,6 @@ class TestTypeMismatches:
         resp = self.client.put("/api/settings", json={"autopilot_hard_reds": "few"})
         assert resp.status_code == 400
 
-    def test_settings_autoload_media_types_string(self):
-        resp = self.client.put("/api/settings", json={"autoload_media_types": "audio"})
-        assert resp.status_code == 400
-
     def test_fill_from_sort_threshold_string(self):
         resp = self.client.post(
             "/api/labels/fill-from-sort",

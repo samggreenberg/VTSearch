@@ -111,18 +111,15 @@ class TestMakeConsoleProgress:
 class TestPreloadConsoleOutput:
     """Integration-style tests for console output during preload_autoload_media_types."""
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_prints_preloading_banner_and_progress(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, mock_emb_favs, capsys):
         """preload_autoload_media_types should print the banner and forward progress to console."""
         mock_emb = MagicMock()
         mock_emb.name = "clap"
-        mock_emb.media_type_id = "audio"
         mock_emb._on_progress = lambda *a, **kw: None
 
         def fake_load_models():
-            # Simulate what a real load_models does
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_emb._on_progress("loading", "model.safetensors", 50, 100)
             mock_emb._on_progress("loading", "model.safetensors", 100, 100)
@@ -132,7 +129,7 @@ class TestPreloadConsoleOutput:
             mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 4, 4)
 
         mock_emb.load_models = fake_load_models
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         result = preload_autoload_media_types()
 
@@ -143,44 +140,42 @@ class TestPreloadConsoleOutput:
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_restores_original_callback_after_load(self, mock_embedders_for_type, mock_favs, mock_emb_favs):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_restores_original_callback_after_load(self, mock_get_embedder, mock_emb_favs):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = original_cb
         mock_emb.load_models = MagicMock()
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         preload_autoload_media_types()
 
         assert mock_emb._on_progress is original_cb
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_restores_callback_on_exception(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_restores_callback_on_exception(self, mock_get_embedder, mock_emb_favs, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = original_cb
         mock_emb.load_models.side_effect = RuntimeError("boom")
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         result = preload_autoload_media_types()
 
         assert mock_emb._on_progress is original_cb
-        assert result == []  # failed, so not in preloaded list
+        assert result == []
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=[])
-    def test_no_autoload_types_produces_no_output(self, mock_favs, capsys):
-        """When there are no autoload media types, nothing should be printed."""
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
+    def test_no_autoload_embedders_produces_no_output(self, mock_emb_favs, capsys):
+        """When there are no autoload embedders, nothing should be printed."""
         result = preload_autoload_media_types()
 
         assert result == []

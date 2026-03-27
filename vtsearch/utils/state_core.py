@@ -584,19 +584,22 @@ class with_dataset_context:
         protect with ``_state_lock`` externally.
     """
 
-    __slots__ = ("_target_id", "_previous_id")
+    __slots__ = ("_target_id", "_previous_ctx")
 
     def __init__(self, dataset_id: str) -> None:
         self._target_id = dataset_id
-        self._previous_id: str | None = None
+        self._previous_ctx: DatasetContext | None = None
 
     def __enter__(self) -> DatasetContext:
-        self._previous_id = get_active_dataset_id()
-        set_active_dataset_id(self._target_id)
-        return get_active_context()
+        self._previous_ctx = get_thread_dataset_context()
+        ctx = get_context(self._target_id)
+        if ctx is None:
+            raise ValueError(f"No dataset context registered for {self._target_id!r}")
+        set_thread_dataset_context(ctx)
+        return ctx
 
     def __exit__(self, *exc_info: object) -> None:
-        set_active_dataset_id(self._previous_id)
+        set_thread_dataset_context(self._previous_ctx)
 
 
 class with_detector_context:
@@ -617,19 +620,22 @@ class with_detector_context:
         protect with ``_state_lock`` externally.
     """
 
-    __slots__ = ("_target_id", "_previous_id")
+    __slots__ = ("_target_id", "_previous_ctx")
 
     def __init__(self, detector_id: str) -> None:
         self._target_id = detector_id
-        self._previous_id: str | None = None
+        self._previous_ctx: DetectorContext | None = None
 
     def __enter__(self) -> DetectorContext:
-        self._previous_id = get_active_detector_id()
-        set_active_detector_id(self._target_id)
-        return get_active_detector_context()
+        self._previous_ctx = get_thread_detector_context()
+        ctx = get_detector_context(self._target_id)
+        if ctx is None:
+            raise ValueError(f"No detector context registered for {self._target_id!r}")
+        set_thread_detector_context(ctx)
+        return ctx
 
     def __exit__(self, *exc_info: object) -> None:
-        set_active_detector_id(self._previous_id)
+        set_thread_detector_context(self._previous_ctx)
 
 
 # Autorun detectors/extractors/localizers are GLOBAL (not per-dataset).

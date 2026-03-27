@@ -6,7 +6,6 @@ dataset/model a request operates on, without mutating global "active" state.
 """
 
 import numpy as np
-import pytest
 
 from vtsearch.utils.state_core import (
     DatasetContext,

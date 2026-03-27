@@ -621,7 +621,6 @@ def load_model_route():
         DetectorContext,
         bad_votes,
         get_active_detector_context,
-        get_detector_context,
         good_votes,
         register_detector_context,
     )
@@ -691,9 +690,6 @@ def load_model_route():
         set_thread_detector_context(det_ctx)
 
         try:
-            labels_restored = 0
-            examples_seeded = 0
-
             if tm_name:
                 tracker.check_cancelled()
                 tracker.update(
@@ -702,14 +698,14 @@ def load_model_route():
                 )
                 tm_data = _read_model(_model_path(tm_name))
                 if tm_data:
-                    labels_restored = _restore_labels_from_trainable_model(tm_data)
+                    _restore_labels_from_trainable_model(tm_data)
 
                     tracker.check_cancelled()
                     tracker.update(
                         "loading", "Seeding examples…", 0, 0,
                         step=2, total_steps=_LOAD_STEPS,
                     )
-                    examples_seeded = _seed_good_votes_from_examples(
+                    _seed_good_votes_from_examples(
                         tm_data.get("examples", [])
                     )
 

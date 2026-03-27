@@ -4,7 +4,6 @@ multiple datasets without re-resolving media or re-embedding vectors."""
 import hashlib
 
 import numpy as np
-import pytest
 
 from tests import load_model_and_wait as _load_model_and_wait
 
@@ -12,17 +11,8 @@ from vtsearch.utils.state_core import (
     DatasetContext,
     DetectorContext,
     _ProxyDict,
-    _ProxyList,
-    _empty_dataset_context,
-    _empty_detector_context,
-    clear_all_contexts,
-    clear_all_detector_contexts,
-    get_active_context,
-    get_active_detector_context,
     get_context,
-    get_detector_context,
     get_thread_dataset_context,
-    get_thread_detector_context,
     list_loaded_dataset_ids,
     register_context,
     register_detector_context,
@@ -314,7 +304,6 @@ class TestMultiDatasetSwitching:
     def test_switch_detectors_preserves_label_history(self):
         from vtsearch.utils import (
             label_history,
-            medias,
             register_detector_context,
             set_thread_detector_context,
             toggle_vote,

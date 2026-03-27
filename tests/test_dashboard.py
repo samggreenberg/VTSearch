@@ -3,7 +3,7 @@
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
 from vtsearch.models.registry import register_model
-from vtsearch.utils import add_autorun_detector, get_autorun_detectors, medias
+from vtsearch.utils import add_autorun_detector, medias
 
 
 class TestDashboardDatasetInfo:
@@ -136,7 +136,7 @@ class TestGuessMediaType:
 
     The guessing logic lives in the Angular frontend (dashboard component):
     1. If all datasets in the registry share a single media_type, use that.
-    2. Otherwise, if settings.autoload_media_types has exactly one entry, use it.
+    2. Otherwise, if settings.autoload_media_embedders has exactly one entry, use it.
 
     These tests verify the underlying data contracts that the frontend logic relies on.
     """
@@ -178,30 +178,30 @@ class TestGuessMediaType:
         types = {d["media_type"] for d in data["datasets"]}
         assert len(types) > 1
 
-    def test_autoload_single_type_from_settings(self, client):
-        """When autoload_media_types has exactly one entry, settings returns it."""
-        client.put("/api/settings", json={"autoload_media_types": ["video"]})
+    def test_autoload_single_embedder_from_settings(self, client):
+        """When autoload_media_embedders has exactly one entry, settings returns it."""
+        client.put("/api/settings", json={"autoload_media_embedders": ["clip"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert data["autoload_media_types"] == ["video"]
+        assert data["autoload_media_embedders"] == ["clip"]
 
-    def test_autoload_multiple_types_no_single_guess(self, client):
-        """When autoload_media_types has multiple entries, no single guess."""
-        client.put("/api/settings", json={"autoload_media_types": ["audio", "image"]})
+    def test_autoload_multiple_embedders_no_single_guess(self, client):
+        """When autoload_media_embedders has multiple entries, no single guess."""
+        client.put("/api/settings", json={"autoload_media_embedders": ["clap", "clip"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert len(data["autoload_media_types"]) > 1
+        assert len(data["autoload_media_embedders"]) > 1
 
     def test_empty_registry_falls_back_to_settings(self, client):
         """With no datasets, the frontend should fall back to autoload settings."""
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         assert len(data["datasets"]) == 0
-        # Set a single autoload type
-        client.put("/api/settings", json={"autoload_media_types": ["text"]})
+        # Set a single autoload embedder
+        client.put("/api/settings", json={"autoload_media_embedders": ["e5"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert data["autoload_media_types"] == ["text"]
+        assert data["autoload_media_embedders"] == ["e5"]
 
 
 class TestDashboardDatasetRegistryColumns:

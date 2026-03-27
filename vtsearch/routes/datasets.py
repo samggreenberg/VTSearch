@@ -37,12 +37,8 @@ from vtsearch.datasets.registry import (
 )
 from vtsearch.utils import (
     bad_votes,
-    build_diversity_tree,
     cancel_dataset_progress,
     collapse_duplicates,
-    get_context,
-    list_loaded_dataset_ids,
-    medias,
     get_dataset_display_name,
     get_dupe_count,
     get_progress,
@@ -50,11 +46,9 @@ from vtsearch.utils import (
     register_context,
     snapshot_medias,
     unregister_context,
-    update_progress,
     DatasetContext,
 )
 from vtsearch.utils.progress import CancelledError
-from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
 from vtsearch.utils.progress import loading_tasks as _loading_tasks
 import vtsearch.utils.paths as _paths
 

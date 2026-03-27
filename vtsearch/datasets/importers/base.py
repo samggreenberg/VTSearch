@@ -49,6 +49,7 @@ importer's directory for reference).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterator
 
 from vtsearch.utils.registry import PluginBase, PluginField
@@ -350,7 +351,7 @@ class DatasetImporter(PluginBase):
         origin: dict[str, Any],
         origin_name: str = "",
         filename: str = "",
-    ) -> "Path | None":
+    ) -> Path | None:
         """Resolve a media file from its origin information.
 
         Given the origin dict that this importer produced, plus the

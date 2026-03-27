@@ -19,13 +19,9 @@ from vtsearch.datasets.registry import (
 )
 from vtsearch.utils import (
     DatasetContext,
-    build_diversity_tree,
     build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
-    get_dataset_display_name,
-    get_dupe_count,
-    medias,
     register_context,
     snapshot_medias,
     update_progress,

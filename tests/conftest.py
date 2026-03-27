@@ -194,10 +194,6 @@ from vtsearch.utils import (
     bad_votes,
     medias,
     good_votes,
-    label_history,
-    last_learned_scores,
-    textsort_suggestions,
-    vote_click_times,
 )
 
 # Attach to app_module for backward compatibility with existing tests

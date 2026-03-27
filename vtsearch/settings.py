@@ -55,7 +55,6 @@ _DEFAULTS: dict[str, Any] = {
     "focus_mode_right": {},
     "panel_pct_left": {},
     "panel_pct_right": {},
-    "autoload_media_types": [],
     "autoload_media_embedders": [],
     "autorun_processors": [],
     "autorun_detector_names": [],
@@ -84,8 +83,8 @@ _EXCLUDE_FROM_DEFAULTS = {
 _settings: dict[str, Any] | None = None
 
 # Reentrant lock protecting the in-memory cache.  RLock is used because
-# some public functions (e.g. toggle_autoload_media_type) call other public
-# functions that also acquire the lock.
+# some public functions (e.g. toggle_autoload_media_embedder) call other
+# public functions that also acquire the lock.
 _settings_lock = threading.RLock()
 
 
@@ -275,15 +274,13 @@ def _make_per_side_setting(
     defaults: dict[str, Any],
     valid_values: tuple[str, ...] | None = None,
     *,
-    read_coerce=None,
-    write_coerce=None,
+    normalize=None,
     value_type: str = "str",
 ):
     """Factory for per-media-type per-side settings.
 
     Generates ``get_<key_base>_left()``, ``get_<key_base>_right()``,
-    ``set_<key_base>_left()``, ``set_<key_base>_right()`` and the
-    internal ``_get_<key_base>_dict()`` / ``_set_<key_base>_dict()``.
+    ``set_<key_base>_left()``, ``set_<key_base>_right()``.
 
     Parameters
     ----------
@@ -294,19 +291,13 @@ def _make_per_side_setting(
     valid_values:
         Tuple of allowed string values (for enum-like settings).
         ``None`` skips membership validation (for numeric settings).
-    read_coerce:
-        Optional ``(raw_value, default) -> coerced_value`` applied when
-        reading each per-type entry from storage.  Useful for legacy
-        format handling (e.g. uppercasing, integer → default).
-    write_coerce:
-        Optional ``(value, key) -> coerced_value`` applied to each entry
-        on write before persisting.  Should raise ``ValueError`` on
-        invalid input.  When ``None``, membership in *valid_values* is
-        checked directly.
+    normalize:
+        Optional ``str -> str`` applied to string values on read and
+        write (e.g. ``str.upper`` for grid_icon_size).
     value_type:
-        ``"str"`` or ``"int"`` — controls the setter's scalar expansion
-        and validation logic.
+        ``"str"`` or ``"int"`` — controls validation and coercion.
     """
+    lo_hi = VALID_PANEL_PX if value_type == "int" else None
 
     def _get_dict(key: str) -> dict[str, Any]:
         side = key[len(key_base) + 1:]  # strip "<key_base>_" prefix
@@ -316,44 +307,55 @@ def _make_per_side_setting(
 
         types = _valid_media_types()
 
-        # Scalar legacy value — expand to all types
         if not isinstance(raw, dict):
-            if read_coerce is not None:
-                val = read_coerce(raw, default_val)
-            elif valid_values is not None and isinstance(raw, str):
-                val = raw if raw in valid_values else default_val
-            else:
-                val = default_val
-            return {tid: val for tid in types}
+            return {tid: default_val for tid in types}
 
-        # Dict value — fill missing types, coerce each entry
         result: dict[str, Any] = {}
         for tid in types:
             v = raw.get(tid, default_val)
-            if read_coerce is not None:
-                v = read_coerce(v, default_val)
-            elif valid_values is not None:
-                v = v if v in valid_values else default_val
+            if normalize is not None and isinstance(v, str):
+                v = normalize(v)
+            if valid_values is not None and v not in valid_values:
+                v = default_val
+            elif value_type == "int":
+                lo, hi = lo_hi  # type: ignore[misc]
+                try:
+                    v = max(lo, min(hi, int(round(float(v)))))
+                except (ValueError, TypeError):
+                    v = default_val
             result[tid] = v
         return result
 
+    def _validate_str(v, key, tid=None):
+        if normalize is not None and isinstance(v, str):
+            v = normalize(v)
+        if valid_values is not None and v not in valid_values:
+            label = f"{key} value for {tid}" if tid else key
+            raise ValueError(f"Invalid {label}: {v!r}")
+        return v
+
+    def _validate_int(v, key, tid=None):
+        lo, hi = lo_hi  # type: ignore[misc]
+        try:
+            v = int(round(float(v)))
+        except (ValueError, TypeError):
+            label = f"{key} value for {tid}" if tid else key
+            raise ValueError(f"Invalid {label}: {v!r}")
+        if not (lo <= v <= hi):
+            label = f"{key} value for {tid}" if tid else key
+            raise ValueError(f"Invalid {label}: {v} (must be between {lo} and {hi})")
+        return v
+
+    _validate_entry = _validate_int if value_type == "int" else _validate_str
+
     def _set_dict(key: str, value) -> None:
         valid_types = _valid_media_types()
-        lo_hi = VALID_PANEL_PX if value_type == "int" else None
 
-        # Scalar expansion
+        # Scalar expansion: "grid" → {"audio": "grid", "image": "grid", ...}
         if value_type == "str" and isinstance(value, str):
-            if write_coerce is not None:
-                value = write_coerce(value, key)
-            elif valid_values is not None and value not in valid_values:
-                raise ValueError(f"Invalid {key}: {value!r}")
-            value = {tid: value for tid in valid_types}
+            value = {tid: _validate_entry(value, key) for tid in valid_types}
         elif value_type == "int" and isinstance(value, (int, float)):
-            iv = int(round(float(value)))
-            lo, hi = lo_hi  # type: ignore[misc]
-            if not (lo <= iv <= hi):
-                raise ValueError(f"Invalid {key}: {value!r} (must be between {lo} and {hi})")
-            value = {tid: iv for tid in valid_types}
+            value = {tid: _validate_entry(value, key) for tid in valid_types}
 
         if not isinstance(value, dict):
             expected = "dict or string" if value_type == "str" else "dict or number"
@@ -363,19 +365,7 @@ def _make_per_side_setting(
         for tid, v in value.items():
             if tid not in valid_types:
                 raise ValueError(f"Invalid media type: {tid!r}")
-            if write_coerce is not None:
-                v = write_coerce(v, key, tid)
-            elif value_type == "int":
-                lo, hi = lo_hi  # type: ignore[misc]
-                try:
-                    v = int(round(float(v)))
-                except (ValueError, TypeError):
-                    raise ValueError(f"Invalid {key} value for {tid}: {v!r}")
-                if not (lo <= v <= hi):
-                    raise ValueError(f"Invalid {key} value for {tid}: {v} (must be between {lo} and {hi})")
-            elif valid_values is not None and v not in valid_values:
-                raise ValueError(f"Invalid {key} value for {tid}: {v!r}")
-            coerced[tid] = v
+            coerced[tid] = _validate_entry(v, key, tid)
 
         with _settings_lock:
             s = _ensure_loaded()
@@ -401,46 +391,6 @@ def _make_per_side_setting(
     return get_left, get_right, set_left, set_right
 
 
-# -- grid_icon_size: legacy coercion (uppercase, old int grid_columns → default)
-
-def _read_coerce_grid_icon_size(v, default):
-    if isinstance(v, str):
-        v = v.upper()
-        return v if v in VALID_GRID_ICON_SIZES else default
-    return default  # legacy int or other type → default
-
-
-def _write_coerce_grid_icon_size(v, key, tid=None):
-    if isinstance(v, str):
-        v = v.upper()
-    if v not in VALID_GRID_ICON_SIZES:
-        label = f"{key} value for {tid}" if tid else key
-        raise ValueError(f"Invalid {label}: {v!r}")
-    return v
-
-
-# -- panel_pct: legacy coercion (percentage < 2.0 → default, clamp to [150, 500])
-
-def _coerce_panel_px(v: Any, default: int, lo: int = VALID_PANEL_PX[0], hi: int = VALID_PANEL_PX[1]) -> int:
-    """Coerce a panel width value to a valid pixel integer.
-
-    Legacy percentage values (< 2.0) are replaced with *default*.
-    """
-    if v is None:
-        return default
-    try:
-        fv = float(v)
-    except (ValueError, TypeError):
-        return default
-    if fv < 2.0:
-        return default
-    return max(lo, min(hi, int(round(fv))))
-
-
-def _read_coerce_panel_pct(v, default):
-    return _coerce_panel_px(v, default)
-
-
 # Generate all four per-side settings
 
 get_view_mode_left, get_view_mode_right, set_view_mode_left, set_view_mode_right = _make_per_side_setting(
@@ -452,8 +402,7 @@ get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_
         "grid_icon_size",
         {"left": _GRID_ICON_SIZE_DEFAULT, "right": _GRID_ICON_SIZE_DEFAULT},
         VALID_GRID_ICON_SIZES,
-        read_coerce=_read_coerce_grid_icon_size,
-        write_coerce=_write_coerce_grid_icon_size,
+        normalize=str.upper,
     )
 )
 
@@ -462,57 +411,8 @@ get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_r
 )
 
 get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
-    "panel_pct", _PANEL_PX_DEFAULTS, None,
-    read_coerce=_read_coerce_panel_pct,
-    value_type="int",
+    "panel_pct", _PANEL_PX_DEFAULTS, None, value_type="int",
 )
-
-
-def get_autoload_media_types() -> list[str]:
-    """Return the list of autoload media type IDs (empty list if none set).
-
-    .. deprecated:: Use :func:`get_autoload_media_embedders` instead.
-    """
-    from vtsearch.media import normalize_type_id
-
-    valid = _valid_media_types()
-    with _settings_lock:
-        raw = _ensure_loaded().get("autoload_media_types", _DEFAULTS["autoload_media_types"])
-        if isinstance(raw, list):
-            return [normalize_type_id(v) for v in raw if normalize_type_id(v) in valid]
-        return []
-
-
-def set_autoload_media_types(value: list[str]) -> None:
-    """Set and persist the full list of autoload media types.
-
-    .. deprecated:: Use :func:`set_autoload_media_embedders` instead.
-    """
-    valid = _valid_media_types()
-    for v in value:
-        if v not in valid:
-            raise ValueError(f"Invalid media type: {v!r}")
-    with _settings_lock:
-        s = _ensure_loaded()
-        s["autoload_media_types"] = list(dict.fromkeys(value))  # deduplicate, preserve order
-        _save(s)
-
-
-def toggle_autoload_media_type(type_id: str) -> list[str]:
-    """Toggle a single media type's autoload status.  Returns the updated list.
-
-    .. deprecated:: Use :func:`toggle_autoload_media_embedder` instead.
-    """
-    if type_id not in _valid_media_types():
-        raise ValueError(f"Invalid media type: {type_id!r}")
-    with _settings_lock:
-        current = get_autoload_media_types()
-        if type_id in current:
-            current.remove(type_id)
-        else:
-            current.append(type_id)
-        set_autoload_media_types(current)
-        return current
 
 
 def _valid_embedder_names() -> tuple[str, ...]:
