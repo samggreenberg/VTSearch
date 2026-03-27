@@ -56,6 +56,15 @@
     border: 1px solid var(--accent-highlight-border);
   }
 
+  &.clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: var(--accent-highlight-hover-bg, var(--accent-highlight-bg));
+      filter: brightness(1.1);
+    }
+  }
+
   &.done {
     opacity: 0.7;
   }
@@ -145,6 +154,10 @@
   align-items: center;
   justify-content: center;
   cursor: default;
+
+  &.clickable {
+    cursor: pointer;
+  }
 
   &.done {
     opacity: 0.5;

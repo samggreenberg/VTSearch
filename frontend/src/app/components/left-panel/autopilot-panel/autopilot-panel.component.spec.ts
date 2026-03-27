@@ -209,8 +209,25 @@ describe('AutopilotPanelComponent', () => {
   it('should show tooltip on each step label via title attribute', () => {
     const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
     expect(stepLabels.length).toBe(5);
-    expect(stepLabels[0].title).toContain('good');
+    // Active step shows reselect hint; future steps show help text
+    expect(stepLabels[0].title).toContain('reselect');
     expect(stepLabels[1].title).toContain('not what you want');
+  });
+
+  it('should emit refocus when clicking the active step', () => {
+    spyOn(component.refocus, 'emit');
+    fixture.detectChanges();
+    const activeStep = fixture.nativeElement.querySelector('.ap-step.active');
+    activeStep.click();
+    expect(component.refocus.emit).toHaveBeenCalled();
+  });
+
+  it('should not emit refocus when clicking a future step', () => {
+    spyOn(component.refocus, 'emit');
+    fixture.detectChanges();
+    const futureSteps = fixture.nativeElement.querySelectorAll('.ap-step.future');
+    futureSteps[0].click();
+    expect(component.refocus.emit).not.toHaveBeenCalled();
   });
 
   it('should mark current step as active and future steps as future', () => {
