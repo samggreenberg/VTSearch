@@ -108,6 +108,40 @@ class TestDetectorContextStore:
         clear_all_detector_contexts()
         assert list_loaded_detector_ids() == []
 
+    def test_register_clears_progress_cache(self):
+        """Registering a new detector must clear the progress cache so stale
+        training indicators from a previous detector don't carry over."""
+        from vtsearch.models.progress import _cached_steps, clear_progress_cache
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
+
+        # Seed the cache with a fake entry (simulating a previous detector's training)
+        clear_progress_cache()
+        _cached_steps.append({"model": None, "threshold": 0.5, "good_ids": set(), "bad_ids": set(), "stability": None})
+        assert len(_cached_steps) == 1
+
+        # Registering a new detector should clear the stale cache
+        register_detector_context(DetectorContext("det_progress_clear"))
+        assert len(_cached_steps) == 0
+
+    def test_unregister_clears_progress_cache(self):
+        """Unregistering a detector must clear the progress cache so stale
+        training indicators don't leak to the next detector."""
+        from vtsearch.models.progress import _cached_steps, clear_progress_cache
+        from vtsearch.utils.state_core import (
+            DetectorContext,
+            register_detector_context,
+            unregister_detector_context,
+        )
+
+        ctx = DetectorContext("det_progress_unreg")
+        register_detector_context(ctx)
+        # clear after register (since register also clears)
+        _cached_steps.append({"model": None, "threshold": 0.5, "good_ids": set(), "bad_ids": set(), "stability": None})
+        assert len(_cached_steps) == 1
+
+        unregister_detector_context("det_progress_unreg")
+        assert len(_cached_steps) == 0
+
 
 # ---------------------------------------------------------------------------
 # Vote isolation across detectors
@@ -395,3 +429,87 @@ class TestMLPCaching:
         model2 = det_ctx.model
         assert model2 is not model1
         assert len(det_ctx.training_medias) == 7  # 4 good + 3 bad
+
+
+# ---------------------------------------------------------------------------
+# Labeling-status indicator reset on detector switch
+# ---------------------------------------------------------------------------
+
+
+class TestLabelingStatusResetOnDetectorSwitch:
+    """Regression: deleting a detector and loading a new one must not
+    inherit stale training indicators from the old detector.
+
+    The progress cache is module-level, not per-detector.  Without
+    clearing it on detector switch, _ensure_cache sees
+    len(_cached_steps) >= len(new_label_history) and returns stale
+    all-green indicators, causing autopilot to skip to 'Done'.
+    """
+
+    def test_labeling_status_not_green_after_detector_switch(self, client):
+        """After building up green indicators on detector A, switching to
+        a fresh detector B must NOT return green smart/stable status."""
+        import torch
+
+        from vtsearch.models.progress import _cached_steps, _progress_lock
+        from vtsearch.utils import good_votes, bad_votes, label_history
+        from vtsearch.utils.state_core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+
+        # --- Set up detector A with enough training history for green indicators ---
+        det_a = DetectorContext("det_a_status", name="Detector A", media_type="audio")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
+
+        # Add votes through detector A
+        good_votes[1] = None
+        good_votes[2] = None
+        good_votes[3] = None
+        good_votes[4] = None
+        good_votes[5] = None
+        bad_votes[16] = None
+        bad_votes[17] = None
+        bad_votes[18] = None
+        bad_votes[19] = None
+        bad_votes[20] = None
+
+        # Run learned-sort to build the progress cache
+        res = client.post("/api/learned-sort")
+        assert res.status_code == 200
+
+        with _progress_lock:
+            cached_before = len(_cached_steps)
+        assert cached_before > 0, "Progress cache should be populated after training"
+
+        # --- Delete detector A and create detector B ---
+        unregister_detector_context("det_a_status")
+
+        with _progress_lock:
+            cached_after_unreg = len(_cached_steps)
+        assert cached_after_unreg == 0, "Progress cache must be cleared on unregister"
+
+        det_b = DetectorContext("det_b_status", name="Detector B", media_type="audio")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
+
+        # Detector B has NO votes and NO label history
+        assert len(good_votes) == 0
+        assert len(bad_votes) == 0
+        assert len(label_history) == 0
+
+        # --- Check labeling-status ---
+        res = client.get("/api/labeling-status")
+        assert res.status_code == 200
+        data = res.get_json()
+
+        # With 0 good and 0 bad votes the indicators must NOT be green
+        assert data["smart"]["status"] == "red", (
+            f"smart should be red with 0 votes, got {data['smart']['status']}"
+        )
+        assert data["stable"]["status"] == "red", (
+            f"stable should be red with 0 votes, got {data['stable']['status']}"
+        )

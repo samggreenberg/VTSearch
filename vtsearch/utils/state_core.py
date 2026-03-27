@@ -277,16 +277,30 @@ def get_thread_detector_context() -> DetectorContext | None:
 
 
 def register_detector_context(ctx: DetectorContext) -> None:
-    """Add *ctx* to the detector context store, keyed by its ``detector_id``."""
+    """Add *ctx* to the detector context store, keyed by its ``detector_id``.
+
+    Also clears the module-level progress cache so that stale training
+    indicators from a previously-active detector are not reused.
+    """
+    from vtsearch.models.progress import clear_progress_cache
+
     _detector_contexts[ctx.detector_id] = ctx
+    clear_progress_cache()
 
 
 def unregister_detector_context(detector_id: str) -> DetectorContext | None:
-    """Remove and return the detector context for *detector_id*, or ``None``."""
+    """Remove and return the detector context for *detector_id*, or ``None``.
+
+    Also clears the progress cache so stale cached steps from the removed
+    detector are not used by a subsequent detector.
+    """
+    from vtsearch.models.progress import clear_progress_cache
+
     ctx = _detector_contexts.pop(detector_id, None)
     tl_ctx = getattr(_thread_local, "detector_context", None)
     if tl_ctx is not None and tl_ctx.detector_id == detector_id:
         _thread_local.detector_context = None
+    clear_progress_cache()
     return ctx
 
 
