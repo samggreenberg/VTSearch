@@ -156,7 +156,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
         if (newIds.length > 0 && this.knownModelIds.size > 0) {
-          // Items were added after initial load — select the new ones
+          // Items were added after initial load — select only the new ones
+          this.selectedModelIds.clear();
           for (const id of newIds) {
             this.selectedModelIds.add(id);
           }
