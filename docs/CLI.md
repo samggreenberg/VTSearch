@@ -65,12 +65,14 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 ```
 Predicted Good (5 items):
 
-  1-34094-A-6.wav  (score: 0.9832, category: cat)
-  1-30226-A-0.wav  (score: 0.9541, category: dog)
-  1-17150-B-2.wav  (score: 0.8923, category: cat)
-  1-22694-A-4.wav  (score: 0.7612, category: dog)
-  1-77445-A-1.wav  (score: 0.6204, category: cat)
+  1-34094-A-6.wav
+  1-30226-A-0.wav
+  1-17150-B-2.wav
+  1-22694-A-4.wav
+  1-77445-A-1.wav
 ```
+
+Items with origin information include the origin display string before the filename.
 
 ## Web server modes
 
