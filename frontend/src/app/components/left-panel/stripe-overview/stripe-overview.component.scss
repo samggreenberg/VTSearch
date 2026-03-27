@@ -37,7 +37,7 @@
   }
 
   &.selected {
-    background: #ffffff;
+    background: var(--accent);
     height: 3px;
     left: 4px;
     right: 4px;

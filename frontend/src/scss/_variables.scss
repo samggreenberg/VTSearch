@@ -46,6 +46,26 @@
   --scrollbar-thumb: #3a3d52;
   --scrollbar-thumb-hover: #7c8aff;
   --badge-embedding: #e0a020;
+
+  // Aliases used by component SCSS files
+  --border-color: var(--border);
+  --bg-secondary: var(--bg-subtle);
+  --bg-primary: var(--bg-panel);
+  --accent-color: var(--accent);
+  --color-accent: var(--accent);
+  --error: var(--color-bad);
+  --error-text: var(--color-bad);
+  --error-border: var(--border-secondary);
+  --error-bg: var(--bad-bg);
+  --header-bg: #2a5cba;
+  --header-border: #1f4a9a;
+  --header-text: #ffffff;
+  --header-text-dim: rgba(255, 255, 255, 0.8);
+  --header-btn-bg: rgba(255, 255, 255, 0.12);
+  --header-btn-border: rgba(255, 255, 255, 0.3);
+  --header-btn-hover-bg: rgba(255, 255, 255, 0.22);
+  --header-btn-hover-border: rgba(255, 255, 255, 0.6);
+  --toggle-active-text: #000;
 }
 
 [data-theme="light"] {
@@ -93,6 +113,26 @@
   --scrollbar-thumb: #c0c3cc;
   --scrollbar-thumb-hover: #5a68d8;
   --badge-embedding: #c99000;
+
+  // Aliases
+  --border-color: var(--border);
+  --bg-secondary: var(--bg-subtle);
+  --bg-primary: var(--bg-panel);
+  --accent-color: var(--accent);
+  --color-accent: var(--accent);
+  --error: var(--color-bad);
+  --error-text: var(--color-bad);
+  --error-border: #e57373;
+  --error-bg: var(--bad-bg);
+  --header-bg: #4a7ad8;
+  --header-border: #3a6ac8;
+  --header-text: #ffffff;
+  --header-text-dim: rgba(255, 255, 255, 0.9);
+  --header-btn-bg: rgba(255, 255, 255, 0.18);
+  --header-btn-border: rgba(255, 255, 255, 0.4);
+  --header-btn-hover-bg: rgba(255, 255, 255, 0.3);
+  --header-btn-hover-border: rgba(255, 255, 255, 0.7);
+  --toggle-active-text: #ffffff;
 }
 
 [data-theme="highviz"] {
@@ -140,4 +180,24 @@
   --scrollbar-thumb: #888888;
   --scrollbar-thumb-hover: #ffff00;
   --badge-embedding: #ffff00;
+
+  // Aliases
+  --border-color: var(--border);
+  --bg-secondary: var(--bg-subtle);
+  --bg-primary: var(--bg-panel);
+  --accent-color: var(--accent);
+  --color-accent: var(--accent);
+  --error: var(--color-bad);
+  --error-text: var(--color-bad);
+  --error-border: #ff4444;
+  --error-bg: var(--bad-bg);
+  --header-bg: #000000;
+  --header-border: #ffffff;
+  --header-text: #ffffff;
+  --header-text-dim: #ffffff;
+  --header-btn-bg: transparent;
+  --header-btn-border: #ffffff;
+  --header-btn-hover-bg: #333333;
+  --header-btn-hover-border: #ffff00;
+  --toggle-active-text: #000;
 }

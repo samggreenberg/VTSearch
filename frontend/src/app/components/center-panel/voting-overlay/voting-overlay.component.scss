@@ -54,7 +54,7 @@ button {
   &.voted,
   &.vote-flash {
     background: var(--color-good);
-    color: #fff;
+    color: var(--header-text, #fff);
   }
 }
 
@@ -69,6 +69,6 @@ button {
   &.voted,
   &.vote-flash {
     background: var(--color-bad);
-    color: #fff;
+    color: var(--header-text, #fff);
   }
 }
