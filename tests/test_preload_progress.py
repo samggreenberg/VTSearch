@@ -456,7 +456,7 @@ class TestLoadPretrainedLocalFirst:
     @patch("vtsearch.media.base.time.sleep")
     def test_retries_on_transient_hf_hub_error(self, mock_sleep):
         """Transient HfHubHTTPError (5xx) should be retried with backoff."""
-        call_count = [0]
+        network_calls = [0]
         sentinel = object()
 
         # Simulate HfHubHTTPError by creating a class with the right name.
@@ -464,17 +464,17 @@ class TestLoadPretrainedLocalFirst:
             pass
 
         def fake_load(*args, **kwargs):
-            call_count[0] += 1
             if kwargs.get("local_files_only"):
                 raise OSError("not cached")
-            if call_count[0] <= 2:
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
                 raise HfHubHTTPError("Server error '504 Gateway Time-out' for url '...'")
             return sentinel
 
         result = load_pretrained_local_first(fake_load, "model-id")
         assert result is sentinel
-        # 1 local attempt + 2 failed network + 1 successful network = 4
-        assert call_count[0] == 4
+        # 2 failed network + 1 successful network = 3
+        assert network_calls[0] == 3
         # Should have slept twice (2s, 4s backoff).
         assert mock_sleep.call_count == 2
         assert mock_sleep.call_args_list[0][0][0] == 2
@@ -525,14 +525,14 @@ class TestLoadPretrainedLocalFirst:
     @patch("vtsearch.media.base.time.sleep")
     def test_retries_on_connection_error(self, mock_sleep):
         """ConnectionError should be retried as transient."""
-        call_count = [0]
+        network_calls = [0]
         sentinel = object()
 
         def fake_load(*args, **kwargs):
-            call_count[0] += 1
             if kwargs.get("local_files_only"):
                 raise OSError("not cached")
-            if call_count[0] <= 2:
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
                 raise ConnectionError("connection reset by peer")
             return sentinel
 
@@ -543,14 +543,14 @@ class TestLoadPretrainedLocalFirst:
     @patch("vtsearch.media.base.time.sleep")
     def test_retries_on_timeout_error(self, mock_sleep):
         """TimeoutError should be retried as transient."""
-        call_count = [0]
+        network_calls = [0]
         sentinel = object()
 
         def fake_load(*args, **kwargs):
-            call_count[0] += 1
             if kwargs.get("local_files_only"):
                 raise OSError("not cached")
-            if call_count[0] <= 2:
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
                 raise TimeoutError("request timed out")
             return sentinel
 
