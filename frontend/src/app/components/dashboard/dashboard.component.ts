@@ -12,6 +12,7 @@ import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
+import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
@@ -107,6 +108,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     public datasetState: DatasetStateService,
     private activeContext: ActiveContextService,
     private authService: AuthService,
+    private topBarState: TopBarStateService,
   ) {}
 
   ngOnInit(): void {
@@ -137,6 +139,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.selectedDatasetIds.add(datasets[0].id);
         }
         this.knownDatasetIds = currentIds;
+        this.pushTopBarLabels();
       });
     this.datasetState.models$
       .pipe(takeUntil(this.destroy$))
@@ -157,6 +160,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.selectedModelIds.add(models[0].id);
         }
         this.knownModelIds = currentIds;
+        this.pushTopBarLabels();
       });
     this.refresh();
   }
@@ -386,6 +390,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Dataset selection ---
 
+  private pushTopBarLabels(): void {
+    const selDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (selDatasets.length === 0) this.topBarState.setDatasetLabel('None');
+    else if (selDatasets.length === 1) this.topBarState.setDatasetLabel(selDatasets[0].name);
+    else this.topBarState.setDatasetLabel('Multiple');
+
+    const selModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (selModels.length === 0) this.topBarState.setModelLabel('None');
+    else if (selModels.length === 1) this.topBarState.setModelLabel(selModels[0].name);
+    else this.topBarState.setModelLabel('Multiple');
+  }
+
   toggleDatasetSelection(id: string, event: MouseEvent): void {
     if (event.ctrlKey || event.metaKey) {
       if (this.selectedDatasetIds.has(id)) {
@@ -401,6 +417,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedDatasetIds.add(id);
       }
     }
+    this.pushTopBarLabels();
   }
 
   isDatasetSelected(id: string): boolean {
@@ -424,6 +441,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedModelIds.add(id);
       }
     }
+    this.pushTopBarLabels();
   }
 
   isModelSelected(id: string): boolean {

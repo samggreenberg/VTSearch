@@ -45,10 +45,27 @@
         </svg> Settings</div>
     </div>
   </nav>
-  <h1>VTSearch</h1>
   <a href="mailto:?subject=VTSearch%20Isssue%3A" title="Email us with any comments, concerns, or suggestions!">
     <img src="logo.png" alt="VTSearch logo" class="header-logo">
   </a>
+  <button
+    class="top-bar-btn"
+    [class.disabled]="!isOnLabelView"
+    [disabled]="!isOnLabelView"
+    (click)="onDashboard()"
+  >Dashboard</button>
+  <span class="top-bar-field">Data: {{ datasetDisplayName }}</span>
+  <span class="top-bar-field">Model: {{ modelDisplayName }}</span>
+  <span class="top-bar-spacer"></span>
+  <button
+    class="settings-btn"
+    aria-label="Settings"
+    title="Settings"
+    (click)="onSettings()"
+  ><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6.7 1.5h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 5.5l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+      <circle cx="8" cy="7.85" r="1.6" fill="currentColor"/>
+    </svg></button>
 </header>
 <div class="main-content" role="main">
   <router-outlet />
