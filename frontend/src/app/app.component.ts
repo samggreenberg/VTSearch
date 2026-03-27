@@ -7,6 +7,8 @@ import { SettingsModalComponent } from './components/modals/settings-modal/setti
 import { LoginComponent } from './components/login/login.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
+import { ActiveContextService } from './services/active-context.service';
+import { TopBarStateService } from './services/top-bar-state.service';
 import { AuthService } from './services/auth.service';
 @Component({
   selector: 'app-root',
@@ -20,11 +22,15 @@ export class AppComponent {
   showSettings = false;
   isOnLabelView = false;
   settingsViewTab = '';
+  datasetDisplayName = '';
+  modelDisplayName = '';
 
   constructor(
     private router: Router,
     private mediaState: MediaStateService,
     private datasetState: DatasetStateService,
+    private activeContext: ActiveContextService,
+    public topBarState: TopBarStateService,
     public auth: AuthService,
   ) {
     this.auth.checkStatus();
@@ -33,7 +39,28 @@ export class AppComponent {
       .subscribe((e) => {
         this.isOnLabelView =
           e.urlAfterRedirects.startsWith('/label') || e.urlAfterRedirects.startsWith('/find');
+        this.updateDisplayNames();
       });
+
+    this.topBarState.datasetLabel$.subscribe(() => this.updateDisplayNames());
+    this.topBarState.modelLabel$.subscribe(() => this.updateDisplayNames());
+    this.activeContext.datasetId$.subscribe(() => this.updateDisplayNames());
+    this.activeContext.modelId$.subscribe(() => this.updateDisplayNames());
+  }
+
+  private updateDisplayNames(): void {
+    if (this.isOnLabelView) {
+      const dsId = this.activeContext.datasetId;
+      const ds = this.datasetState.datasets.find((d) => d.id === dsId);
+      this.datasetDisplayName = ds?.name || '';
+
+      const mId = this.activeContext.modelId;
+      const m = this.datasetState.models.find((mod) => mod.id === mId);
+      this.modelDisplayName = m?.name || '';
+    } else {
+      this.datasetDisplayName = this.topBarState.datasetLabel;
+      this.modelDisplayName = this.topBarState.modelLabel;
+    }
   }
 
   toggleMenu(event: Event): void {

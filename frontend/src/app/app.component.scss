@@ -9,18 +9,12 @@ header {
   align-items: center;
   gap: 12px;
   padding: 3px 8px;
-  background: #1a3b8a;
-  border-bottom: 1px solid #152e6b;
+  background: #2a5cba;
+  border-bottom: 1px solid #1f4a9a;
 
   .header-logo {
     height: 36px;
     width: auto;
-  }
-
-  h1 {
-    font-size: 1.2rem;
-    margin: 0;
-    color: #ffffff;
   }
 }
 
@@ -116,6 +110,67 @@ header {
   font-size: 0.7rem;
   color: var(--text-dim);
   padding: 4px 16px 8px;
+}
+
+.top-bar-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+
+  &:disabled,
+  &.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.top-bar-field {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.top-bar-spacer {
+  flex: 1;
+}
+
+.settings-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.6);
+
+    svg {
+      color: #ffffff;
+    }
+  }
 }
 
 .main-content {
