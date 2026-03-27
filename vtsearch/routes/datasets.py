@@ -857,6 +857,23 @@ def update_dataset_readers(dataset_id: str):
     return jsonify({"ok": True, "readers": readers})
 
 
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/stats")
+def get_dataset_stats(dataset_id: str):
+    """Return ingest statistics for a registered dataset."""
+    from vtsearch.datasets.registry import get_dataset as _reg_get
+
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        return jsonify({"error": "Dataset not found"}), 404
+    return jsonify({
+        "num_items": entry.get("num_items", 0),
+        "num_dupes": entry.get("num_dupes", 0),
+        "file_type_counts": entry.get("file_type_counts", {}),
+        "ingest_started_at": entry.get("ingest_started_at"),
+        "ingest_finished_at": entry.get("ingest_finished_at"),
+    })
+
+
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
 def load_dataset_from_source():
     """Reload a dataset from a stored source origin dict."""

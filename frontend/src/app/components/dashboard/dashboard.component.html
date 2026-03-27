@@ -72,6 +72,7 @@
                 [loadingTask]="getInlineTask(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
+                (stats)="showDatasetStats(dataset)"
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
@@ -211,5 +212,13 @@
   <vt-autodetect-results-modal
     [data]="findResultsData"
     (closed)="closeFindResults()"
+  />
+}
+
+@if (statsModalOpen) {
+  <vt-dataset-stats-modal
+    [datasetId]="statsDatasetId"
+    [datasetName]="statsDatasetName"
+    (closed)="closeStatsModal()"
   />
 }
