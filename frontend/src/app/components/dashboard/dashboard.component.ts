@@ -14,6 +14,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
+import { formatProgressFraction } from '../../utils/format-progress';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -1074,7 +1075,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
           }
           if (progress.current != null && progress.total != null && progress.total > 0) {
-            const fraction = `(${progress.current}/${progress.total})`;
+            const fraction = `(${formatProgressFraction(progress.current, progress.total)})`;
             const stepEnd = msg.indexOf('] ');
             if (stepEnd !== -1) {
               msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
@@ -1177,7 +1178,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const fraction = `(${task.current}/${task.total})`;
+      const fraction = `(${formatProgressFraction(task.current, task.total)})`;
       const stepEnd = msg.indexOf('] ');
       if (stepEnd !== -1) {
         msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
