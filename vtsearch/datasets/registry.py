@@ -113,6 +113,8 @@ def register_dataset(
     embedder: str = "",
     created_by: str = "default",
     readers: list[str] | None = None,
+    file_type_counts: dict[str, int] | None = None,
+    ingest_started_at: float | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -121,11 +123,14 @@ def register_dataset(
         readers: List of usernames granted read access.  An empty list
             (the default) means only the creator can see the dataset.
             Include ``"*"`` to make it visible to all users.
+        file_type_counts: Mapping of file extension to count.
+        ingest_started_at: Unix timestamp when ingest began.
 
     Returns the newly created entry (with a generated ``id``).
     """
     import uuid
 
+    now = time.time()
     entry: dict[str, Any] = {
         "id": uuid.uuid4().hex,
         "name": name,
@@ -138,8 +143,11 @@ def register_dataset(
         "clipper": clipper,
         "embedder": embedder,
         "created_by": created_by,
-        "created_at": time.time(),
+        "created_at": now,
         "readers": readers or [],
+        "file_type_counts": file_type_counts or {},
+        "ingest_started_at": ingest_started_at,
+        "ingest_finished_at": now,
     }
     with _lock:
         entries = _ensure_loaded()

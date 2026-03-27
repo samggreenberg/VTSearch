@@ -232,6 +232,7 @@ def _auto_register_dataset(
     embedder: str = "",
     created_by: str = "",
     display_name: str | None = None,
+    ingest_started_at: float | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -261,6 +262,18 @@ def _auto_register_dataset(
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
+    # Count file types by extension
+    from collections import Counter
+
+    ext_counter: Counter[str] = Counter()
+    for m in media_dict.values():
+        fn = m.get("filename", "")
+        if fn and "." in fn:
+            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
+        else:
+            ext_counter["(no extension)"] += 1
+    file_type_counts = dict(ext_counter.most_common())
+
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
@@ -283,6 +296,8 @@ def _auto_register_dataset(
         clipper=clipper,
         embedder=embedder,
         created_by=created_by,
+        file_type_counts=file_type_counts,
+        ingest_started_at=ingest_started_at,
     )
     _reg_add_loaded(entry["id"])
     return entry
@@ -336,7 +351,10 @@ def _run_origin_load_in_background(
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
 
+    import time as _time
+
     task_id = f"_loading_{uuid4().hex[:8]}"
+    ingest_started_at = _time.time()
     tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type)
 
     # Set initial progress synchronously so the first poll sees it.
@@ -407,6 +425,7 @@ def _run_origin_load_in_background(
                 embedder=embedder,
                 created_by=created_by,
                 display_name=name,
+                ingest_started_at=ingest_started_at,
             )
 
             # Migrate the context from the temp task_id to the real registry ID.

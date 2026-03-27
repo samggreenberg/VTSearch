@@ -29,6 +29,7 @@ export class DatasetCardComponent {
     this.rowClick.emit(event);
   }
   @Output() rename = new EventEmitter<string>();
+  @Output() stats = new EventEmitter<void>();
   @Output() delete = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
   @Output() security = new EventEmitter<void>();
@@ -69,6 +70,11 @@ export class DatasetCardComponent {
     } else if (event.key === 'Escape') {
       this.cancelRename();
     }
+  }
+
+  onStats(event: MouseEvent): void {
+    event.stopPropagation();
+    this.stats.emit();
   }
 
   onSecurity(event: MouseEvent): void {

@@ -22,6 +22,7 @@ import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
+import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 
 @Component({
@@ -37,6 +38,7 @@ import { IconComponent } from '../icon/icon.component';
     NewModelModalComponent,
     DetectorExportModalComponent,
     LabelImporterModalComponent,
+    DatasetStatsModalComponent,
     IconComponent,
   ],
   templateUrl: './dashboard.component.html',
@@ -61,6 +63,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   addLabelsModelName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
+  statsModalOpen = false;
+  statsDatasetId = '';
+  statsDatasetName = '';
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -481,6 +486,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.updateReaders(dataset.id, readers).subscribe({
       next: () => this.datasetState.refresh(),
     });
+  }
+
+  showDatasetStats(dataset: DatasetRegistryEntry): void {
+    this.statsDatasetId = dataset.id;
+    this.statsDatasetName = dataset.name;
+    this.statsModalOpen = true;
+  }
+
+  closeStatsModal(): void {
+    this.statsModalOpen = false;
+    this.statsDatasetId = '';
+    this.statsDatasetName = '';
   }
 
   // --- Model actions ---
