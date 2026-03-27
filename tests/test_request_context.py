@@ -252,3 +252,62 @@ class TestRequestIsolation:
         # Thread-local pointer untouched
         assert get_thread_dataset_context().dataset_id == "req_nomut_a"
         assert 800 in medias
+
+
+# ---------------------------------------------------------------------------
+# Tests: Query-param context resolution (for browser-native requests)
+# ---------------------------------------------------------------------------
+
+
+class TestQueryParamContext:
+    """Query params ``dataset_id`` / ``model_id`` work as fallback for
+    browser-native requests (``<img src>``, ``<audio src>``, etc.) that
+    bypass Angular's HttpClient interceptor and therefore cannot send
+    custom headers.
+    """
+
+    def test_dataset_id_query_param(self, client):
+        """?dataset_id= resolves the correct dataset context."""
+        _make_dataset("qp_ds_a", [1000])
+        _make_dataset("qp_ds_b", [2000])
+        set_thread_dataset_context(get_context("qp_ds_a"))
+
+        from app import app
+
+        with app.test_request_context("/?dataset_id=qp_ds_b"):
+            app.preprocess_request()
+            assert get_active_context().dataset_id == "qp_ds_b"
+            assert 2000 in medias
+            assert 1000 not in medias
+
+    def test_model_id_query_param(self, client):
+        """?model_id= resolves the correct detector context."""
+        det_a = _make_detector("qp_det_a")
+        det_b = _make_detector("qp_det_b")
+        det_a.good_votes[10] = None
+        det_b.good_votes[20] = None
+        from vtsearch.utils.state_core import get_detector_context
+        set_thread_detector_context(get_detector_context("qp_det_a"))
+
+        from app import app
+
+        with app.test_request_context("/?model_id=qp_det_b"):
+            app.preprocess_request()
+            assert get_active_detector_context().detector_id == "qp_det_b"
+            assert 20 in good_votes
+            assert 10 not in good_votes
+
+    def test_header_takes_precedence_over_query_param(self, client):
+        """X-Dataset-Id header wins over ?dataset_id= query param."""
+        _make_dataset("qp_hdr", [3000])
+        _make_dataset("qp_qp", [4000])
+
+        from app import app
+
+        with app.test_request_context(
+            "/?dataset_id=qp_qp",
+            headers={"X-Dataset-Id": "qp_hdr"},
+        ):
+            app.preprocess_request()
+            assert get_active_context().dataset_id == "qp_hdr"
+            assert 3000 in medias

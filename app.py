@@ -105,13 +105,16 @@ def _set_request_context():
         get_detector_context,
     )
 
-    ds_id = request.headers.get("X-Dataset-Id")
+    # Headers (Angular HttpClient interceptor) take priority, with query
+    # params as fallback for browser-native requests (<img src>, <audio src>,
+    # <video src>, etc.) that bypass Angular's interceptor.
+    ds_id = request.headers.get("X-Dataset-Id") or request.args.get("dataset_id")
     if ds_id:
         ctx = get_context(ds_id)
         if ctx is not None:
             g._dataset_context = ctx
 
-    model_id = request.headers.get("X-Model-Id")
+    model_id = request.headers.get("X-Model-Id") or request.args.get("model_id")
     if model_id:
         det_ctx = get_detector_context(model_id)
         if det_ctx is not None:

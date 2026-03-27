@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-media-item',
@@ -20,6 +21,8 @@ export class MediaItemComponent {
   @Output() select = new EventEmitter<number>();
   @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
+  constructor(private activeContext: ActiveContextService) {}
+
   get isGrid(): boolean {
     return this.viewMode === 'grid';
   }
@@ -27,7 +30,7 @@ export class MediaItemComponent {
   get thumbnailUrl(): string | null {
     if (!this.isGrid) return null;
     if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document') {
-      return `/api/medias/${this.media.id}/image`;
+      return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
     }
     return null;
   }

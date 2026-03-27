@@ -1,5 +1,6 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-video-player',
@@ -17,9 +18,11 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
 
   videoSrc = '';
 
+  constructor(private activeContext: ActiveContextService) {}
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
-      this.videoSrc = `/api/medias/${this.media.id}/video`;
+      this.videoSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/video`);
     }
     if (changes['volume'] && this.videoRef?.nativeElement) {
       this.videoRef.nativeElement.volume = this.volume;
