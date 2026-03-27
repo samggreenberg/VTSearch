@@ -585,19 +585,6 @@ class MediaType(ABC):
         return self.type_id + "_dir"
 
     @property
-    def legacy_bytes_keys(self) -> list[str]:
-        """Legacy key names for inline bytes in old pickle files.
-
-        Old pickle formats stored media bytes under type-specific keys
-        (e.g. ``"wav_bytes"``, ``"video_bytes"``).  New pickles use the
-        generic ``"media_bytes"`` / ``"media_string"`` keys.  When loading
-        old pickles, these keys are tried in order as fallbacks.
-
-        Defaults to an empty list (no legacy keys).
-        """
-        return []
-
-    @property
     def pickle_extra_fields(self) -> list[str]:
         """Extra field names to preserve when loading media from pickle files.
 

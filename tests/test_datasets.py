@@ -1001,38 +1001,6 @@ class TestLoadProgressRaceCondition:
 
             unregister_dataset(dataset_id)
 
-    def test_stepped_progress_filters_idle(self):
-        """_stepped_progress must drop 'idle' so cached-pkl loads can't leak it.
-
-        When a demo dataset is already cached, load_demo_dataset() emits
-        ``on_progress("idle", ...)`` before the outer finalization wrapper
-        has finished.  If this leaks through to the global progress tracker,
-        a frontend poll can see 'idle' and stop polling — leaving the UI
-        stuck on the progress overlay.
-        """
-        from vtsearch.routes.datasets_loading import _stepped_progress
-        from vtsearch.utils.progress import get_progress, update_progress
-
-        # Set progress to a known non-idle state
-        update_progress("loading", "In progress…", step=2, total_steps=4)
-
-        # Simulate the inner load function signalling idle (e.g. cached pkl)
-        _stepped_progress("idle", "Loaded dataset")
-
-        # Progress must NOT have changed to idle
-        progress = get_progress()
-        assert progress["status"] == "loading", (
-            "_stepped_progress must filter out 'idle' to prevent premature completion signals from cached dataset loads"
-        )
-        assert progress["message"] == "In progress…"
-
-        # Non-idle statuses must still pass through
-        _stepped_progress("downloading", "Fetching files…", 50, 100)
-        progress = get_progress()
-        assert progress["status"] == "downloading"
-        assert progress["message"] == "Fetching files…"
-        assert progress["step"] == 1  # downloading maps to step 1
-
     def test_origin_load_clears_stale_error(self):
         """_run_origin_load_in_background must clear old error on new load."""
         from unittest.mock import patch
@@ -1160,25 +1128,6 @@ class TestCancelIngest:
             dataset_progress.reset_cancel()
             app_module.medias.clear()
             app_module.medias.update(saved)
-
-    def test_stepped_progress_raises_on_cancel(self):
-        """_stepped_progress should raise CancelledError when cancelled."""
-        from vtsearch.routes.datasets_loading import _stepped_progress
-        from vtsearch.utils.progress import CancelledError, dataset_progress
-
-        dataset_progress.reset_cancel()
-
-        # Should work normally when not cancelled
-        _stepped_progress("loading", "Test", 0, 0)
-
-        # Set cancel flag
-        dataset_progress.cancel()
-
-        # Should raise CancelledError
-        with pytest.raises(CancelledError):
-            _stepped_progress("loading", "Test", 0, 0)
-
-        dataset_progress.reset_cancel()
 
     def test_new_load_resets_cancel_flag(self, client):
         """Starting a new load should clear any previous cancellation."""

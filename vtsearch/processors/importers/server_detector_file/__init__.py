@@ -110,10 +110,9 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     nw = normalize_detector_weights(data, media_type=media_type)
 
     result: dict[str, Any] = {"media_type": media_type}
-    if nw.origin_derived:
-        result["good_origins"] = nw.good_origins
-        result["bad_origins"] = nw.bad_origins
-        result["inclusion"] = nw.inclusion
+    result["good_origins"] = nw.good_origins
+    result["bad_origins"] = nw.bad_origins
+    result["inclusion"] = nw.inclusion
     result["weights"] = nw.weights
     result["threshold"] = nw.threshold
 

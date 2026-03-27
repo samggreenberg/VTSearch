@@ -1,14 +1,10 @@
-"""Legacy detector weight format normalisation.
+"""Detector weight normalisation.
 
-Detector JSON files may use two formats:
+Detector JSON files store origin-based training data (``good_origins`` /
+``bad_origins``).  The :func:`normalize_detector_weights` helper re-derives
+weights by resolving the original media, embedding, and training.
 
-- **Origin-based** (``good_origins`` / ``bad_origins``): re-derives weights
-  by resolving the original media, embedding, and training.
-- **Legacy** (``weights`` / ``threshold``): pre-computed weight matrices used
-  directly.
-
-The :func:`normalize_detector_weights` helper encapsulates the shared
-fallback logic that appears in ``detectors_crud.py``, ``cli.py``, and
+Shared by ``detectors_crud.py``, ``cli.py``, and the
 ``server_detector_file`` importer.
 """
 
@@ -27,8 +23,6 @@ class NormalizedWeights:
     good_origins: list | None = None
     bad_origins: list | None = None
     inclusion: int = 0
-    origin_derived: bool = False
-    """True when weights were successfully re-derived from origins."""
 
 
 def normalize_detector_weights(
@@ -36,12 +30,10 @@ def normalize_detector_weights(
     *,
     media_type: str = "audio",
 ) -> NormalizedWeights:
-    """Resolve detector weights from *detector_data*, trying origins first.
+    """Resolve detector weights from *detector_data* by training from origins.
 
-    1. If ``good_origins`` and ``bad_origins`` are present, attempt to
-       re-derive weights via :func:`train_detector_from_origins`.
-    2. Fall back to the ``weights`` key (legacy format).
-    3. Raise :class:`ValueError` if neither source provides weights.
+    Requires ``good_origins`` and ``bad_origins`` to be present.
+    Raises :class:`ValueError` if the origins are missing or training fails.
 
     Args:
         detector_data: Parsed detector JSON dict.
@@ -54,43 +46,28 @@ def normalize_detector_weights(
     """
     good_origins = detector_data.get("good_origins")
     bad_origins = detector_data.get("bad_origins")
-    legacy_weights = detector_data.get("weights")
-    file_threshold = detector_data.get("threshold", 0.5)
     inclusion = detector_data.get("inclusion", 0)
-    # Some callers pass media_type explicitly; others rely on the file.
     media_type = detector_data.get("media_type", "") or media_type
 
-    weights = None
-    threshold = file_threshold
-    origin_derived = False
+    if not good_origins or not bad_origins:
+        raise ValueError("Detector file missing 'good_origins' or 'bad_origins' fields.")
 
-    if good_origins and bad_origins:
-        from vtsearch.models.training import train_detector_from_origins
+    from vtsearch.models.training import train_detector_from_origins
 
-        weights, threshold = train_detector_from_origins(
-            good_origins,
-            bad_origins,
-            inclusion,
-            media_type,
-        )
-        if weights is not None:
-            origin_derived = True
-
-    if weights is None and legacy_weights:
-        # Fallback to serialised weights (legacy or unresolvable origins)
-        weights = legacy_weights
-        threshold = file_threshold
-        good_origins = None
-        bad_origins = None
+    weights, threshold = train_detector_from_origins(
+        good_origins,
+        bad_origins,
+        inclusion,
+        media_type,
+    )
 
     if weights is None:
-        raise ValueError("Detector file missing 'weights' or origin fields.")
+        raise ValueError("Failed to derive weights from detector origins.")
 
     return NormalizedWeights(
         weights=weights,
         threshold=threshold,
-        good_origins=good_origins if origin_derived else None,
-        bad_origins=bad_origins if origin_derived else None,
+        good_origins=good_origins,
+        bad_origins=bad_origins,
         inclusion=inclusion,
-        origin_derived=origin_derived,
     )

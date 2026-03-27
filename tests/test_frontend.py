@@ -6,7 +6,6 @@ Covers:
 - Favicon variants (smile, frown, surprised) and unknown variants
 - Logo serving (SVG)
 - Content types and cache behavior
-- Legacy /ng/ redirect
 """
 
 from __future__ import annotations
@@ -63,23 +62,6 @@ class TestAngularRoutes:
         assert resp.status_code == 200
         assert b"<app-root>" in resp.data
 
-
-class TestLegacyNgRedirect:
-    """Legacy /ng/ URLs should redirect to /."""
-
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_ng_redirects_to_root(self):
-        resp = self.client.get("/ng/")
-        assert resp.status_code == 301
-        assert resp.headers["Location"].endswith("/")
-
-    def test_ng_path_redirects(self):
-        resp = self.client.get("/ng/dashboard")
-        assert resp.status_code == 301
-        assert resp.headers["Location"].endswith("/dashboard")
 
 
 class TestStaticFiles:

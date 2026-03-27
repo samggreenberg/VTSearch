@@ -51,10 +51,6 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
-  /** @deprecated No longer used — auto-resolve happens server-side. */
-  missingEntries: unknown[] = [];
-  /** @deprecated No longer used — auto-resolve happens server-side. */
-  ingesting = false;
 
   constructor(
     private labelImportersApi: LabelImportersApiService,

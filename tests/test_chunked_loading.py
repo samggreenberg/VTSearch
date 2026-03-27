@@ -331,25 +331,25 @@ class TestPickleChunked:
         assert len(chunks) == 1
         assert chunks[0][1]["type"] == "document"
 
-    def test_legacy_bytes_keys_via_registry(self, tmp_path):
-        """Legacy pickle keys (e.g. wav_bytes, image_bytes) are resolved via the registry."""
+    def test_standard_bytes_keys_via_registry(self, tmp_path):
+        """Standard media_bytes key is used for all media types."""
         medias_data = {
             1: {
                 "type": "audio",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
-                "wav_bytes": _make_wav_bytes(),
+                "media_bytes": _make_wav_bytes(),
                 "filename": "clip.wav",
                 "category": "test",
             },
             2: {
                 "type": "image",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
-                "image_bytes": b"\x89PNG fake",
+                "media_bytes": b"\x89PNG fake",
                 "filename": "pic.png",
                 "category": "test",
             },
         }
-        pkl_path = tmp_path / "legacy.pkl"
+        pkl_path = tmp_path / "standard.pkl"
         with open(pkl_path, "wb") as f:
             pickle.dump({"medias": medias_data}, f)
 
