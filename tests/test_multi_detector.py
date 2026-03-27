@@ -447,10 +447,8 @@ class TestLabelingStatusResetOnDetectorSwitch:
     """
 
     def test_labeling_status_not_green_after_detector_switch(self, client):
-        """After building up green indicators on detector A, switching to
+        """After building up cached progress on detector A, switching to
         a fresh detector B must NOT return green smart/stable status."""
-        import torch
-
         from vtsearch.models.progress import _cached_steps, _progress_lock
         from vtsearch.utils import good_votes, bad_votes, label_history
         from vtsearch.utils.state_core import (
@@ -460,30 +458,25 @@ class TestLabelingStatusResetOnDetectorSwitch:
             unregister_detector_context,
         )
 
-        # --- Set up detector A with enough training history for green indicators ---
+        # --- Set up detector A with votes and build progress cache ---
         det_a = DetectorContext("det_a_status", name="Detector A", media_type="audio")
         register_detector_context(det_a)
         set_thread_detector_context(det_a)
 
-        # Add votes through detector A
-        good_votes[1] = None
-        good_votes[2] = None
-        good_votes[3] = None
-        good_votes[4] = None
-        good_votes[5] = None
-        bad_votes[16] = None
-        bad_votes[17] = None
-        bad_votes[18] = None
-        bad_votes[19] = None
-        bad_votes[20] = None
+        # Add votes through apply_label so label_history is also populated
+        from vtsearch.utils import apply_label
+        for mid in [1, 2, 3, 4, 5]:
+            apply_label(mid, "good")
+        for mid in [16, 17, 18, 19, 20]:
+            apply_label(mid, "bad")
 
-        # Run learned-sort to build the progress cache
-        res = client.post("/api/learned-sort")
+        # Call labeling-status to populate the progress cache
+        res = client.get("/api/labeling-status")
         assert res.status_code == 200
 
         with _progress_lock:
             cached_before = len(_cached_steps)
-        assert cached_before > 0, "Progress cache should be populated after training"
+        assert cached_before > 0, "Progress cache should be populated after labeling-status call"
 
         # --- Delete detector A and create detector B ---
         unregister_detector_context("det_a_status")
