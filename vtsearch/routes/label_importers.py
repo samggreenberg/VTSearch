@@ -153,6 +153,7 @@ def run_label_import(importer_name: str):
             origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
             resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
             applied += resolved_applied
+            skipped -= resolved_applied
 
         # Check which entries still couldn't be resolved
         if ingested < len(missing):

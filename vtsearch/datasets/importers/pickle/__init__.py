@@ -55,7 +55,10 @@ class PickleDatasetImporter(DatasetImporter):
             import os
 
             os.close(fd)
-            file_obj.save(temp_path)
+            if hasattr(file_obj, "save"):
+                file_obj.save(temp_path)
+            else:
+                temp_path.write_bytes(file_obj.read())
             load_dataset_from_pickle(temp_path, medias, thin=thin)
         finally:
             temp_path.unlink(missing_ok=True)

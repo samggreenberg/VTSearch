@@ -11,6 +11,7 @@ import {
   AfterViewInit,
 } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-audio-player',
@@ -32,6 +33,8 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
 
   private audioCtx: AudioContext | null = null;
   private viewReady = false;
+
+  constructor(private activeContext: ActiveContextService) {}
 
   ngAfterViewInit(): void {
     this.viewReady = true;
@@ -136,7 +139,10 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     ctx.fillRect(0, 0, width, height);
 
     try {
-      const response = await fetch(`/api/medias/${mediaId}/audio`);
+      const headers: Record<string, string> = {};
+      if (this.activeContext.datasetId) headers['X-Dataset-Id'] = this.activeContext.datasetId;
+      if (this.activeContext.modelId) headers['X-Model-Id'] = this.activeContext.modelId;
+      const response = await fetch(`/api/medias/${mediaId}/audio`, { headers });
       const arrayBuffer = await response.arrayBuffer();
 
       if (!this.audioCtx || this.audioCtx.state === 'closed') {

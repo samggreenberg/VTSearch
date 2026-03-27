@@ -314,7 +314,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
@@ -476,7 +476,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected_pages)
             on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
 
@@ -537,7 +537,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected_images)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 

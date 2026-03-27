@@ -100,7 +100,16 @@ def run_processor_import(importer_name: str):
 
     # Use suggested name from the importer if the user didn't provide one
     # (already checked above that name is non-empty, but importer may suggest)
-    add_autorun_detector(name, media_type, weights, threshold, created_by=get_current_user())
+    add_autorun_detector(
+        name,
+        media_type,
+        weights,
+        threshold,
+        created_by=get_current_user(),
+        good_origins=result.get("good_origins"),
+        bad_origins=result.get("bad_origins"),
+        inclusion=result.get("inclusion", 0),
+    )
 
     # Register in the persistent model registry for the dashboard grid.
     from vtsearch.models.registry import find_by_detector_name, register_model

@@ -1,6 +1,8 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import {
@@ -17,7 +19,7 @@ import {
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
-export class AutoDetectResultsModalComponent implements OnInit {
+export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   @Input() data: AutoDetectResultsData = { results: {} };
   @Output() closed = new EventEmitter<void>();
 
@@ -30,10 +32,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
   copySeparator = 'newline';
   copyButtonText = 'Copy To Clipboard';
 
+  private destroy$ = new Subject<void>();
+
   constructor(private exportersApi: ExportersApiService) {}
 
   ngOnInit(): void {
-    this.exportersApi.getExporters().subscribe({
+    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
         this.exporters = list;
         if (list.length > 0) {
@@ -42,6 +46,11 @@ export class AutoDetectResultsModalComponent implements OnInit {
         }
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get allHits(): AutoDetectHit[] {

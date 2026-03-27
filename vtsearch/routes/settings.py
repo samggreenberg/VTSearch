@@ -34,9 +34,12 @@ settings_bp = Blueprint("settings", __name__)
 def get_settings():
     """Return all settings."""
     data = settings.get_all()
-    # Include settings JSON snippets for each autorun processor
-    for proc in data.get("autorun_processors", []):
+    # Include settings JSON snippets for each autorun processor.
+    # Copy each proc dict to avoid mutating the live in-memory settings.
+    procs = [dict(p) for p in data.get("autorun_processors", [])]
+    for proc in procs:
         proc["settings_json"] = settings.to_settings_json(proc)
+    data["autorun_processors"] = procs
     return jsonify(data)
 
 
@@ -237,7 +240,7 @@ def get_defaults():
 @settings_bp.route("/api/settings/autorun-processors", methods=["GET"])
 def get_autorun_processors():
     """List all autorun processor recipes."""
-    procs = settings.get_autorun_processors()
+    procs = [dict(p) for p in settings.get_autorun_processors()]
     for proc in procs:
         proc["settings_json"] = settings.to_settings_json(proc)
     return jsonify({"autorun_processors": procs})
@@ -253,6 +256,8 @@ def add_autorun_processor():
     processor_name = (body.get("processor_name") or "").strip()
     processor_importer = (body.get("processor_importer") or "").strip()
     field_values = body.get("field_values", {})
+    if not isinstance(field_values, dict):
+        return jsonify({"error": "field_values must be an object"}), 400
 
     if not processor_name:
         return jsonify({"error": "processor_name is required"}), 400

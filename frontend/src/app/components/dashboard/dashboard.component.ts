@@ -330,6 +330,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.polling$.complete();
     this.modelPolling$.next();
     this.modelPolling$.complete();
+    this.findPolling$.next();
+    this.findPolling$.complete();
   }
 
   get datasets(): DatasetRegistryEntry[] {
@@ -911,10 +913,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         error: () => gate(),
       });
     } else {
-      this.modelsApi.loadModel(modelId).subscribe({
-        next: () => gate(),
-        error: () => gate(),
-      });
+      gate();
     }
 
     // --- Dataset loading (parallel) ---
@@ -961,10 +960,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         error: () => gate(),
       });
     } else {
-      this.modelsApi.loadModel(model.id).subscribe({
-        next: () => gate(),
-        error: () => gate(),
-      });
+      gate();
     }
 
     // --- Dataset loading (parallel) ---
