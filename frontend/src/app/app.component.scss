@@ -139,6 +139,20 @@ header {
   color: rgba(255, 255, 255, 0.85);
   font-size: 0.8rem;
   white-space: nowrap;
+  width: 160px;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+
+  strong {
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+}
+
+.top-bar-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top-bar-spacer {
