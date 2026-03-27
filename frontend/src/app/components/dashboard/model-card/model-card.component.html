@@ -64,7 +64,7 @@
       {{ capitalizeType(model.media_type) }}
     </span>
   </td>
-  <td>{{ model.num_training ?? 0 }}</td>
+  <td>{{ (model.num_training ?? 0) | number }}</td>
   <td>
     @if (model.trainable) {
       <span class="check" aria-label="Trainable">&#10003;</span>

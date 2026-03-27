@@ -59,8 +59,8 @@
       {{ capitalizeType(dataset.media_type) }}
     </span>
   </td>
-  <td>{{ dataset.num_items ?? '-' }}</td>
-  <td>{{ dataset.num_dupes ?? 0 }}</td>
+  <td>{{ dataset.num_items != null ? (dataset.num_items | number) : '-' }}</td>
+  <td>{{ (dataset.num_dupes ?? 0) | number }}</td>
   <td>{{ formatDate(dataset.created_at) }}</td>
   <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
   <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
