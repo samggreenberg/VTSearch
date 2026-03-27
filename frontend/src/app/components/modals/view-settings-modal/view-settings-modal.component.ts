@@ -5,12 +5,13 @@ import { forkJoin } from 'rxjs';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { IconComponent } from '../../icon/icon.component';
 import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 
 @Component({
   selector: 'vt-view-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './view-settings-modal.component.html',
   styleUrl: './view-settings-modal.component.scss',
 })
