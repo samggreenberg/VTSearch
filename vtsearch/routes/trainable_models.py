@@ -83,12 +83,14 @@ def sync_labels_to_loaded_model() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the model's original training labels.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
+    from vtsearch.models.registry import get_model, is_find_mode, update_model
+    from vtsearch.utils import get_active_detector_context
 
     if is_find_mode():
         return
 
-    loaded_id = get_loaded_id()
+    det_ctx = get_active_detector_context()
+    loaded_id = det_ctx.detector_id if det_ctx.detector_id else None
     if not loaded_id:
         return
 
@@ -500,19 +502,17 @@ from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_re
 @trainable_models_bp.route("/api/models/registry")
 def list_registered_models():
     """Return all registered models with their loaded state and autodetect flag."""
-    from vtsearch.models.registry import get_active_model_id, get_loaded_model_ids, list_models
+    from vtsearch.models.registry import get_loaded_model_ids, list_models
     from vtsearch.settings import get_autorun_detector_names
     from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
     loaded_ids = get_loaded_model_ids()
-    active_id = get_active_model_id()
     detectors = get_autorun_detectors()
     autorun_names = set(get_autorun_detector_names())
     for entry in entries:
         mid = entry["id"]
         entry["loaded"] = mid in loaded_ids
-        entry["active"] = mid == active_id
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
@@ -616,15 +616,13 @@ def load_model_route():
     from vtsearch.models.registry import (
         get_model,
         is_model_loaded,
-        set_active_model_id,
     )
     from vtsearch.utils import (
         DetectorContext,
         bad_votes,
-        get_detector_context,
+        get_active_detector_context,
         good_votes,
         register_detector_context,
-        set_active_detector_id,
     )
 
     data = request.get_json(force=True, silent=True) or {}
@@ -641,24 +639,20 @@ def load_model_route():
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # Deactivate and unload the currently active model.
-        from vtsearch.models.registry import get_active_model_id, remove_loaded_model_id
-        from vtsearch.utils import unregister_detector_context
+        # No model requested — unload the current model (if any) and clear find mode.
+        from vtsearch.models.registry import remove_loaded_model_id, set_find_mode
 
-        prev_id = get_active_model_id()
-        if prev_id is not None:
+        det_ctx = get_active_detector_context()
+        prev_id = det_ctx.detector_id if det_ctx.detector_id else None
+        if prev_id:
+            from vtsearch.utils import unregister_detector_context
             unregister_detector_context(prev_id)
             remove_loaded_model_id(prev_id)
-        set_active_model_id(None)
-        set_active_detector_id(None)
+        set_find_mode(False)
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
-        # Already loaded — just activate it (instant switch)
-        set_active_model_id(model_id)
-        det_ctx = get_detector_context(model_id)
-        if det_ctx is not None:
-            set_active_detector_id(model_id)
+        # Already loaded — nothing more to do.
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     # New load: create a DetectorContext, register it, then load labels
@@ -671,12 +665,6 @@ def load_model_route():
         media_type=entry.get("media_type", ""),
     )
     register_detector_context(det_ctx)
-    set_active_detector_id(model_id)
-    # Set the model as active so proxy objects resolve to this context,
-    # but do NOT mark as "loaded" yet — the background thread will call
-    # add_loaded_model_id() when it finishes so the UI shows a progress
-    # bar instead of an immediate green check.
-    set_active_model_id(model_id)
 
     _LOAD_STEPS = 2  # restore labels, seed examples
     task_id = f"_modload_{model_id[:8]}"
@@ -688,9 +676,18 @@ def load_model_route():
 
     # Capture values needed by the background thread.
     tm_name = entry.get("trainable_model_name", "")
+    # Capture the dataset context so the thread can resolve medias.
+    from vtsearch.utils import get_active_context
+    _thread_ds_ctx = get_active_context()
 
     def load_task():
         from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
+        from vtsearch.utils.state_core import set_thread_dataset_context, set_thread_detector_context
+
+        # Set thread-local contexts so proxy objects (medias, good_votes, etc.)
+        # resolve correctly in this background thread.
+        set_thread_dataset_context(_thread_ds_ctx)
+        set_thread_detector_context(det_ctx)
 
         try:
             if tm_name:
@@ -743,38 +740,6 @@ def load_model_route():
     })
 
 
-@trainable_models_bp.route("/api/models/registry/<model_id>/activate", methods=["POST"])
-def activate_model_route(model_id: str):
-    """Switch the active model (must already be loaded).
-
-    Saves the current model's labels before switching.
-    """
-    from vtsearch.models.registry import get_model, is_model_loaded, set_active_model_id
-    from vtsearch.utils import (
-        bad_votes,
-        get_detector_context,
-        good_votes,
-        set_active_detector_id,
-    )
-
-    entry = get_model(model_id)
-    if entry is None:
-        return jsonify({"error": "Model not found"}), 404
-    if not is_model_loaded(model_id):
-        return jsonify({"error": "Model is not loaded — load it first"}), 400
-
-    # Save current model's labels before switching
-    if good_votes or bad_votes:
-        sync_labels_to_loaded_model()
-
-    set_active_model_id(model_id)
-    det_ctx = get_detector_context(model_id)
-    if det_ctx is not None:
-        set_active_detector_id(model_id)
-
-    return jsonify({"ok": True, "message": "Model activated"})
-
-
 @trainable_models_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])
 def unload_model_route(model_id: str):
     """Unload a model from memory (frees its DetectorContext).
@@ -784,7 +749,7 @@ def unload_model_route(model_id: str):
     from vtsearch.models.registry import get_model, is_model_loaded, remove_loaded_model_id
     from vtsearch.utils import (
         bad_votes,
-        get_active_detector_id,
+        get_active_detector_context,
         good_votes,
         unregister_detector_context,
     )
@@ -795,8 +760,9 @@ def unload_model_route(model_id: str):
     if not is_model_loaded(model_id):
         return jsonify({"error": "Model is not loaded"}), 400
 
-    # Save labels if this is the active model
-    if get_active_detector_id() == model_id and (good_votes or bad_votes):
+    # Save labels if this model is currently resolved by the context
+    det_ctx = get_active_detector_context()
+    if det_ctx.detector_id == model_id and (good_votes or bad_votes):
         sync_labels_to_loaded_model()
 
     # Remove from memory

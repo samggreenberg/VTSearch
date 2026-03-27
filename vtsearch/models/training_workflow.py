@@ -16,13 +16,14 @@ def apply_and_retrain(
 ) -> tuple[int, bool]:
     """Resolve new label entries into a loaded detector and retrain its MLP.
 
-    Temporarily switches the active detector context to *model_id*, resolves
-    the entries against the loaded dataset's medias, applies matching labels,
-    retrains the MLP with cross-validated threshold, then restores the
-    previously active context.
+    Temporarily overrides the request-scoped detector context so vote
+    proxies resolve to *det_ctx* for the duration of this call, then
+    restores the previous context.
 
     Returns ``(resolved_count, trained_bool)``.
     """
+    from flask import g
+
     from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
     from vtsearch.utils import (
         apply_label,
@@ -30,16 +31,13 @@ def apply_and_retrain(
         resolve_media_ids,
         snapshot_medias,
     )
-    from vtsearch.utils.state_core import (
-        get_active_detector_id,
-        set_active_detector_id,
-    )
 
-    # Save the current active context so we can restore it afterwards.
-    prev_active_id = get_active_detector_id()
+    # Override the request-scoped detector context so vote proxies
+    # resolve to this model's context for the duration of this call.
+    prev_det_ctx = getattr(g, "_detector_context", None)
 
     try:
-        set_active_detector_id(model_id)
+        g._detector_context = det_ctx
 
         snap = snapshot_medias()
         if not snap:
@@ -102,4 +100,4 @@ def apply_and_retrain(
         return resolved, trained
 
     finally:
-        set_active_detector_id(prev_active_id)
+        g._detector_context = prev_det_ctx

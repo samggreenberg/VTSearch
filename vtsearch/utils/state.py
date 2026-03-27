@@ -34,11 +34,11 @@ from vtsearch.utils.state_core import (  # noqa: F401
     DatasetContext,
     clear_all_contexts,
     get_active_context,
-    get_active_dataset_id,
     get_context,
+    get_thread_dataset_context,
     list_loaded_dataset_ids,
     register_context,
-    set_active_dataset_id,
+    set_thread_dataset_context,
     unregister_context,
 )
 # Detector context management -----------------------------------------------
@@ -46,11 +46,11 @@ from vtsearch.utils.state_core import (  # noqa: F401
     DetectorContext,
     clear_all_detector_contexts,
     get_active_detector_context,
-    get_active_detector_id,
     get_detector_context,
+    get_thread_detector_context,
     list_loaded_detector_ids,
     register_detector_context,
-    set_active_detector_id,
+    set_thread_detector_context,
     unregister_detector_context,
 )
 # Scoped context managers ---------------------------------------------------

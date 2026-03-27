@@ -521,14 +521,14 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_detector_loaded_trainable_follows_loaded(self, client):
         """For trainable models without a detector, detector_loaded follows loaded."""
-        from vtsearch.models.registry import set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id
 
         entry = register_model(name="train-ld", media_type="audio", trainable=True)
         resp = client.get("/api/models/registry")
         m = resp.get_json()["models"][0]
         assert m["detector_loaded"] is False
 
-        set_loaded_id(entry["id"])
+        add_loaded_model_id(entry["id"])
         resp = client.get("/api/models/registry")
         m = resp.get_json()["models"][0]
         assert m["detector_loaded"] is True

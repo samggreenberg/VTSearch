@@ -83,17 +83,17 @@ class TestDetectorContextStore:
     def test_unregister_clears_active_if_match(self):
         from vtsearch.utils.state_core import (
             DetectorContext,
-            get_active_detector_id,
+            get_thread_detector_context,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
             unregister_detector_context,
         )
 
         ctx = DetectorContext("det_active_unreg")
         register_detector_context(ctx)
-        set_active_detector_id("det_active_unreg")
+        set_thread_detector_context(ctx)
         unregister_detector_context("det_active_unreg")
-        assert get_active_detector_id() is None
+        assert get_thread_detector_context() is None
 
     def test_clear_all_detector_contexts(self):
         from vtsearch.utils.state_core import (
@@ -125,18 +125,18 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det_a = DetectorContext("iso_a")
         register_detector_context(det_a)
-        set_active_detector_id("iso_a")
+        set_thread_detector_context(det_a)
         good_votes[1] = None
         good_votes[2] = None
 
         det_b = DetectorContext("iso_b")
         register_detector_context(det_b)
-        set_active_detector_id("iso_b")
+        set_thread_detector_context(det_b)
         bad_votes[3] = None
 
         # B sees only its own votes
@@ -144,7 +144,7 @@ class TestVoteIsolation:
         assert 3 in bad_votes
 
         # A sees only its own votes
-        set_active_detector_id("iso_a")
+        set_thread_detector_context(det_a)
         assert len(good_votes) == 2
         assert len(bad_votes) == 0
 
@@ -153,12 +153,12 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det = DetectorContext("toggle_det")
         register_detector_context(det)
-        set_active_detector_id("toggle_det")
+        set_thread_detector_context(det)
 
         toggle_vote(1, "good")
         assert 1 in good_votes
@@ -169,23 +169,23 @@ class TestVoteIsolation:
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
-            set_active_detector_id,
+            set_thread_detector_context,
         )
 
         det_a = DetectorContext("clear_a")
         register_detector_context(det_a)
-        set_active_detector_id("clear_a")
+        set_thread_detector_context(det_a)
         good_votes[1] = None
 
         det_b = DetectorContext("clear_b")
         register_detector_context(det_b)
-        set_active_detector_id("clear_b")
+        set_thread_detector_context(det_b)
         good_votes[2] = None
         clear_votes()
         assert len(good_votes) == 0
 
         # A's votes are untouched
-        set_active_detector_id("clear_a")
+        set_thread_detector_context(det_a)
         assert 1 in good_votes
 
 
@@ -210,35 +210,25 @@ class TestModelRegistryMultiLoaded:
         assert is_model_loaded("m2")
         assert len(get_loaded_model_ids()) == 2
 
-    def test_remove_loaded_clears_active(self):
+    def test_remove_loaded_removes_from_set(self):
         from vtsearch.models.registry import (
-            get_active_model_id,
+            add_loaded_model_id,
+            is_model_loaded,
             remove_loaded_model_id,
-            set_loaded_id,
         )
 
-        set_loaded_id("m1")
-        assert get_active_model_id() == "m1"
-        remove_loaded_model_id("m1")
-        assert get_active_model_id() is None
-
-    def test_set_loaded_id_adds_to_loaded_set(self):
-        from vtsearch.models.registry import (
-            is_model_loaded,
-            set_loaded_id,
-        )
-
-        set_loaded_id("m1")
+        add_loaded_model_id("m1")
         assert is_model_loaded("m1")
+        remove_loaded_model_id("m1")
+        assert not is_model_loaded("m1")
 
-    def test_set_loaded_id_none_does_not_remove(self):
+    def test_add_loaded_model_id_adds_to_loaded_set(self):
         from vtsearch.models.registry import (
+            add_loaded_model_id,
             is_model_loaded,
-            set_loaded_id,
         )
 
-        set_loaded_id("m1")
-        set_loaded_id(None)
+        add_loaded_model_id("m1")
         assert is_model_loaded("m1")
 
 
@@ -290,7 +280,7 @@ class TestModelLoadEndpoints:
         det2 = get_detector_context(mid)
         assert det1 is det2
 
-    def test_registry_shows_loaded_and_active(self, client):
+    def test_registry_shows_loaded(self, client):
         mid1 = self._register_trainable_model(client, "Reg1")
         mid2 = self._register_trainable_model(client, "Reg2")
 
@@ -300,31 +290,8 @@ class TestModelLoadEndpoints:
         res = client.get("/api/models/registry")
         models = {m["id"]: m for m in res.get_json()["models"]}
 
-        # mid1 is loaded but not active (mid2 was loaded last)
         assert models[mid1]["loaded"] is True
-        assert models[mid1]["active"] is False
-        # mid2 is loaded and active
         assert models[mid2]["loaded"] is True
-        assert models[mid2]["active"] is True
-
-    def test_activate_switches_active(self, client):
-        from vtsearch.utils.state_core import get_active_detector_id
-
-        mid1 = self._register_trainable_model(client, "Act1")
-        mid2 = self._register_trainable_model(client, "Act2")
-
-        _load_model_and_wait(client, mid1)
-        _load_model_and_wait(client, mid2)
-
-        # mid2 is active. Activate mid1.
-        res = client.post(f"/api/models/registry/{mid1}/activate")
-        assert res.status_code == 200
-        assert get_active_detector_id() == mid1
-
-    def test_activate_unloaded_returns_400(self, client):
-        mid = self._register_trainable_model(client, "NotLoaded")
-        res = client.post(f"/api/models/registry/{mid}/activate")
-        assert res.status_code == 400
 
     def test_unload_removes_context(self, client):
         from vtsearch.models.registry import is_model_loaded
