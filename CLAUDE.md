@@ -4,10 +4,10 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 
 ## Branch Policy (CRITICAL)
 
-- **All pull requests MUST target `dev`**, never `main` or `master`.
-- **Claude must NEVER open a PR that merges into `main` or `master`.** The `main`/`master` branch is protected and only updated by human maintainers.
+- **All pull requests MUST target `dev`**, never `main`.
+- **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
-- If your feature branch was forked from `master`/`main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
+- If your feature branch was forked from `main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
 
 ## Backwards Compatibility
 
