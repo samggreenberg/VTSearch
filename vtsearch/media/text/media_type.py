@@ -130,6 +130,24 @@ class TextMediaType(MediaType):
                 slice_start=75, slice_end=200, download_size_mb=15,
             ),
             DemoDataset(
+                id="ag_news_s", label="AG News (S)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=0, slice_end=4286, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="ag_news_m", label="AG News (M)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=4286, slice_end=12858, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="ag_news_l", label="AG News (L)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=12858, slice_end=30000, download_size_mb=15,
+            ),
+            DemoDataset(
                 id="ag_news_a", label="AG News (A)",
                 description="Short news summaries, well-balanced across world, sports, business, and tech.",
                 categories=self._AG_NEWS_CATEGORIES, source="ag_news",
@@ -140,6 +158,24 @@ class TextMediaType(MediaType):
                 description="Full BBC news articles — professionally written and cleanly labeled.",
                 categories=self._BBC_NEWS_CATEGORIES, source="bbc_news",
                 slice_start=0, slice_end=445, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_s", label="IMDB Movie Reviews (S)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=0, slice_end=3571, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_m", label="IMDB Movie Reviews (M)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=3571, slice_end=10713, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_l", label="IMDB Movie Reviews (L)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=10713, slice_end=25000, download_size_mb=15,
             ),
             DemoDataset(
                 id="imdb_a", label="IMDB Movie Reviews (A)",

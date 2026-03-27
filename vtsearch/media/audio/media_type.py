@@ -159,6 +159,24 @@ class AudioMediaType(MediaType):
                 slice_start=0, slice_end=100, download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="speech_commands_v2_s", label="Speech Commands v2 (S)",
+                description="One-second keyword utterances from crowd-sourced speakers.",
+                categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
+                slice_start=0, slice_end=429, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="speech_commands_v2_m", label="Speech Commands v2 (M)",
+                description="One-second keyword utterances from crowd-sourced speakers.",
+                categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
+                slice_start=429, slice_end=1287, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="speech_commands_v2_l", label="Speech Commands v2 (L)",
+                description="One-second keyword utterances from crowd-sourced speakers.",
+                categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
+                slice_start=1287, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="speech_commands_v2_a", label="Speech Commands v2 (A)",
                 description="One-second keyword utterances from crowd-sourced speakers.",
                 categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
