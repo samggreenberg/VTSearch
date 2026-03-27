@@ -210,7 +210,7 @@ initialize_models()
 app_module.init_medias()
 
 # Save the test medias so we can replay them into each test's fresh context.
-_test_medias_snapshot = dict(medias)
+_test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 # Stop the module-level patch (init_medias is done); the per-test autouse
 # fixture below re-applies the patches for every test so that /api/sort and
@@ -303,7 +303,7 @@ def reset_state():
 
     # Replay the test medias into the fresh context (medias is intentionally
     # NOT reset between tests to avoid expensive re-generation).
-    medias.update(_test_medias_snapshot)
+    medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
     # Clear global (non-per-dataset) state.
     _core.autorun_detectors.clear()
@@ -312,10 +312,12 @@ def reset_state():
     clear_progress_cache()
 
     # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, find_progress, loading_tasks, model_loading_tasks
+    from vtsearch.utils.progress import dataset_progress, eval_progress, find_progress, loading_tasks, model_loading_tasks, sort_progress
 
     dataset_progress.reset_cancel()
     find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+    sort_progress.update("idle", "", 0, 0)
+    eval_progress.update("idle", "", 0, 0)
     loading_tasks.reset_for_tests()
     model_loading_tasks.reset_for_tests()
 

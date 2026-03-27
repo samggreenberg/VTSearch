@@ -185,6 +185,7 @@ def find_label():
     # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
     # origin info lets us resolve the original files, embed them, and train.
     _resolution_diagnostic: dict | None = None
+    snap_for_train: dict | None = None
     if weights is None and tm_data:
         label_entries = tm_data.get("labelset", {}).get("labels", [])
         if label_entries:
@@ -341,7 +342,7 @@ def find_label():
             resp["warning"] = f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
         return jsonify(resp), 400
 
-    snap = snapshot_medias()
+    snap = snap_for_train if snap_for_train else snapshot_medias()
     if not snap:
         update_find_progress("idle", "")
         return jsonify({"error": "No medias loaded"}), 400

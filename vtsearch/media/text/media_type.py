@@ -114,20 +114,38 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="20newsgroups_s", label="20 Newsgroups (S)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=0, slice_end=25, download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_m", label="20 Newsgroups (M)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=25, slice_end=75, download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_l", label="20 Newsgroups (L)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=75, slice_end=200, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="ag_news_s", label="AG News (S)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=0, slice_end=4286, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="ag_news_m", label="AG News (M)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=4286, slice_end=12858, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="ag_news_l", label="AG News (L)",
+                description="Short news summaries, well-balanced across world, sports, business, and tech.",
+                categories=self._AG_NEWS_CATEGORIES, source="ag_news",
+                slice_start=12858, slice_end=30000, download_size_mb=15,
             ),
             DemoDataset(
                 id="ag_news_a", label="AG News (A)",
@@ -140,6 +158,24 @@ class TextMediaType(MediaType):
                 description="Full BBC news articles — professionally written and cleanly labeled.",
                 categories=self._BBC_NEWS_CATEGORIES, source="bbc_news",
                 slice_start=0, slice_end=445, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_s", label="IMDB Movie Reviews (S)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=0, slice_end=3571, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_m", label="IMDB Movie Reviews (M)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=3571, slice_end=10713, download_size_mb=15,
+            ),
+            DemoDataset(
+                id="imdb_l", label="IMDB Movie Reviews (L)",
+                description="Long-form user-written movie reviews with binary positive/negative sentiment labels.",
+                categories=self._IMDB_CATEGORIES, source="imdb",
+                slice_start=10713, slice_end=25000, download_size_mb=15,
             ),
             DemoDataset(
                 id="imdb_a", label="IMDB Movie Reviews (A)",
@@ -172,7 +208,7 @@ class TextMediaType(MediaType):
         selected_texts = []
         selected_categories = []
 
-        if source == "ag_news_sample":
+        if source == "20newsgroups":
             from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
 
             texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
@@ -230,7 +266,7 @@ class TextMediaType(MediaType):
             finally:
                 embedder._on_progress = original_cb
 
-        clip_id = 1
+        clip_id = max(clips.keys(), default=0) + 1
         total = len(selected_texts)
         on_progress("embedding", f"Starting embedding for {total} paragraphs...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}

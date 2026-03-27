@@ -126,11 +126,21 @@ export class MediaMetadataCacheService implements OnDestroy {
       this.mediasApi
         .getMediasBatch(chunk)
         .pipe(takeUntil(this.destroy$))
-        .subscribe((items) => {
-          for (const item of items) {
-            this.cache.set(item.id, item);
-          }
-          this.versionSubject.next(this.versionSubject.value + 1);
+        .subscribe({
+          next: (items) => {
+            for (const item of items) {
+              this.cache.set(item.id, item);
+            }
+            this.versionSubject.next(this.versionSubject.value + 1);
+          },
+          error: () => {
+            // Re-queue failed IDs so they can be retried on the next request.
+            for (const id of chunk) {
+              if (!this.cache.has(id)) {
+                this.pendingIds.add(id);
+              }
+            }
+          },
         });
     }
   }

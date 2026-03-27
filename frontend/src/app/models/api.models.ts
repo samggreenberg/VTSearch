@@ -237,6 +237,14 @@ export interface DatasetRegistryEntry {
   [key: string]: unknown;
 }
 
+export interface DatasetStatsResponse {
+  num_items: number;
+  num_dupes: number;
+  file_type_counts: Record<string, number>;
+  ingest_started_at: number | null;
+  ingest_finished_at: number | null;
+}
+
 export interface DatasetRegistryResponse {
   datasets: DatasetRegistryEntry[];
 }

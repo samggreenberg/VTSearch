@@ -141,38 +141,40 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
     # Redirect intercepted bars' output to devnull so they don't print
     # to the console.  The callback receives all progress updates instead.
     _devnull = open(os.devnull, "w")  # noqa: SIM115
+    try:
 
-    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        # Force file=devnull so tqdm never writes to the console.
-        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
-        # so we must override unconditionally (not just when absent).
-        kwargs["file"] = _devnull
-        _orig_init(self, *args, **kwargs)
-        total = getattr(self, "total", None)
-        if total and total > 0 and not getattr(self, "disable", False):
-            _bars.append(self)
+        def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+            # Force file=devnull so tqdm never writes to the console.
+            # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
+            # so we must override unconditionally (not just when absent).
+            kwargs["file"] = _devnull
+            _orig_init(self, *args, **kwargs)
+            total = getattr(self, "total", None)
+            if total and total > 0 and not getattr(self, "disable", False):
+                _bars.append(self)
+                if _primary_bar() is self:
+                    _report(self)
+
+        def _patched_update(self: Any, n: int = 1) -> None:
+            _orig_update(self, n)
             if _primary_bar() is self:
                 _report(self)
 
-    def _patched_update(self: Any, n: int = 1) -> None:
-        _orig_update(self, n)
-        if _primary_bar() is self:
-            _report(self)
+        def _patched_close(self: Any) -> None:
+            _orig_close(self)
+            if self in _bars:
+                _bars.remove(self)
 
-    def _patched_close(self: Any) -> None:
-        _orig_close(self)
-        if self in _bars:
-            _bars.remove(self)
-
-    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
-    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
-    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
-    try:
-        yield
+        tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
+        tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
+        tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
+            tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
+            tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
     finally:
-        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
-        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
-        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
         _devnull.close()
 
 

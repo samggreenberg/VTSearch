@@ -232,6 +232,7 @@ def _auto_register_dataset(
     embedder: str = "",
     created_by: str = "",
     display_name: str | None = None,
+    ingest_started_at: float | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -261,6 +262,18 @@ def _auto_register_dataset(
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
+    # Count file types by extension
+    from collections import Counter
+
+    ext_counter: Counter[str] = Counter()
+    for m in media_dict.values():
+        fn = m.get("filename", "")
+        if fn and "." in fn:
+            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
+        else:
+            ext_counter["(no extension)"] += 1
+    file_type_counts = dict(ext_counter.most_common())
+
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
@@ -283,6 +296,8 @@ def _auto_register_dataset(
         clipper=clipper,
         embedder=embedder,
         created_by=created_by,
+        file_type_counts=file_type_counts,
+        ingest_started_at=ingest_started_at,
     )
     _reg_add_loaded(entry["id"])
     return entry
@@ -336,7 +351,10 @@ def _run_origin_load_in_background(
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
 
+    import time as _time
+
     task_id = f"_loading_{uuid4().hex[:8]}"
+    ingest_started_at = _time.time()
     tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type)
 
     # Set initial progress synchronously so the first poll sees it.
@@ -344,6 +362,7 @@ def _run_origin_load_in_background(
 
     def task():
         ctx = DatasetContext(task_id)
+        context_id = task_id  # tracks the current context key (may change after migration)
         stepped = _make_stepped_progress(tracker)
         try:
             tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
@@ -406,11 +425,13 @@ def _run_origin_load_in_background(
                 embedder=embedder,
                 created_by=created_by,
                 display_name=name,
+                ingest_started_at=ingest_started_at,
             )
 
             # Migrate the context from the temp task_id to the real registry ID.
             if entry is not None:
                 _migrate_context_id(task_id, entry["id"])
+                context_id = entry["id"]
                 ctx.dataset_display_name = entry.get("name", name)
 
             # Warm up the embedder.  Use a progress wrapper that updates the
@@ -422,14 +443,14 @@ def _run_origin_load_in_background(
         except CancelledError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except ImportError as e:
             traceback.print_exc()
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update(
                 "idle",
@@ -446,7 +467,7 @@ def _run_origin_load_in_background(
         except MemoryError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update(
                 "idle",
@@ -461,7 +482,8 @@ def _run_origin_load_in_background(
             traceback.print_exc()
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
+            gc.collect()
             error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
             tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
@@ -539,7 +561,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             apply_custom_metadata_md5(temp_medias)
 
             if not temp_medias:
-                update_progress("idle", "", 0, 0, "Import produced no medias.")
+                update_progress("idle", "", 0, 0, error="Import produced no medias.")
                 return
 
             first = next(iter(temp_medias.values()))
@@ -572,7 +594,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 "",
                 0,
                 0,
-                f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
+                error=f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
             )
         except MemoryError:
             gc.collect()
@@ -581,12 +603,12 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 "",
                 0,
                 0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                error="Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
             )
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e) or repr(e) or "Unknown error during staging"
-            update_progress("idle", "", 0, 0, error_msg)
+            update_progress("idle", "", 0, 0, error=error_msg)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()

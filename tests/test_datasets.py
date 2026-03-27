@@ -9,6 +9,11 @@ import app as app_module
 
 class TestIndex:
     def test_serves_index_html(self, client):
+        from pathlib import Path
+
+        static_index = Path(app_module.app.static_folder) / "index.html"
+        if not static_index.exists():
+            pytest.skip("Angular build not present (run 'npm run build:prod' in frontend/)")
         resp = client.get("/")
         assert resp.status_code == 200
         assert b"VTSearch" in resp.data
