@@ -8,7 +8,9 @@
           [class.done]="step.state === 'done'"
           [class.active]="step.state === 'active'"
           [class.future]="step.state === 'future'"
-          [title]="step.label"
+          [class.clickable]="step.state === 'active'"
+          [title]="step.state === 'active' ? 'Click to reselect recommendation' : step.label"
+          (click)="step.state === 'active' && refocus.emit()"
         >
           @if (step.state === 'active') {
             <span class="collapsed-step-label">{{ step.shortLabel }}</span>
@@ -30,6 +32,8 @@
             [class.done]="step.state === 'done'"
             [class.active]="step.state === 'active'"
             [class.future]="step.state === 'future'"
+            [class.clickable]="step.state === 'active'"
+            (click)="step.state === 'active' && refocus.emit()"
           >
             <div class="ap-step-marker">
               @if (step.state === 'done') {
@@ -41,7 +45,7 @@
               }
             </div>
             <div class="ap-step-content">
-              <span class="ap-step-label" [title]="step.helpText">
+              <span class="ap-step-label" [title]="step.state === 'active' ? 'Click to reselect recommendation' : step.helpText">
                 {{ step.label }}
               </span>
               @if (step.detail || step.statusIcons.length) {

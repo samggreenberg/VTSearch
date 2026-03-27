@@ -41,6 +41,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Output() started = new EventEmitter<void>();
   @Output() stopped = new EventEmitter<void>();
   @Output() toggleCollapse = new EventEmitter<void>();
+  @Output() refocus = new EventEmitter<void>();
 
   constructor(public autopilotState: AutopilotStateService) {}
 
