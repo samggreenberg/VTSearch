@@ -326,7 +326,7 @@ def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Pa
     images_dir = _core.DATA_DIR / "stanford_dogs" / "Images"
     _core._download_and_extract(
         url=_core.STANFORD_DOGS_URL,
-        archive_name="stanford_dogs_images.tar",
+        archive_name="stanford_dogs_images.tar.gz",
         extract_to=_core.DATA_DIR / "stanford_dogs",
         check_path=images_dir,
         download_size_mb=_core.STANFORD_DOGS_DOWNLOAD_SIZE_MB,

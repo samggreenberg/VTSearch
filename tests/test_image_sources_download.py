@@ -72,8 +72,8 @@ def _make_eurosat_zip(tmp_path: Path) -> Path:
 
 
 def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
-    """Create a minimal Stanford Dogs tar fixture."""
-    tar_path = tmp_path / "stanford_dogs_images.tar"
+    """Create a minimal Stanford Dogs tar.gz fixture."""
+    tar_path = tmp_path / "stanford_dogs_images.tar.gz"
 
     tree_root = tmp_path / "tar_staging" / "Images"
     for breed_dir_name in ("n02085620-Chihuahua", "n02099601-golden_retriever"):
@@ -82,7 +82,7 @@ def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
         for i in range(3):
             (d / f"{breed_dir_name}_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
 
-    with tarfile.open(tar_path, "w:") as tf:
+    with tarfile.open(tar_path, "w:gz") as tf:
         tf.add(tree_root, arcname="Images")
 
     return tar_path

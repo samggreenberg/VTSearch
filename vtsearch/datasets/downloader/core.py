@@ -40,7 +40,7 @@ OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowe
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
 EUROSAT_URL = "https://huggingface.co/datasets/blanchon/EuroSAT_RGB/resolve/main/EuroSAT_RGB.zip"
-STANFORD_DOGS_URL = "http://vision.stanford.edu/aditya86/ImageNetDogDataset/images.tar"
+STANFORD_DOGS_URL = "https://huggingface.co/datasets/Alanox/stanford-dogs/resolve/main/images.tar.gz"
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
