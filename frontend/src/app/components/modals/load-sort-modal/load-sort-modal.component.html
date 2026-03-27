@@ -93,8 +93,8 @@
     <div class="load-sort-sections">
       <!-- Sort by Detector -->
       <div class="sort-section">
-        <h3>Sort by Detector</h3>
-        <h4>Server Detectors</h4>
+        <h3 title="Load a saved detector model and rank all items by its predicted scores">Sort by Detector</h3>
+        <h4 title="Detector weight files saved on the server">Server Detectors</h4>
         @if (serverDetectors.length > 0) {
           <div class="file-list">
             @for (det of serverDetectors; track det.name) {
@@ -104,7 +104,7 @@
         } @else {
           <p class="empty-state">No server detector files found.</p>
         }
-        <h4>Dashboard Models</h4>
+        <h4 title="Trained models created from the Dashboard">Dashboard Models</h4>
         @if (registryModels.length > 0) {
           <div class="file-list">
             @for (model of registryModels; track model.id) {
@@ -123,14 +123,14 @@
 
       <!-- Sort by Examples -->
       <div class="sort-section">
-        <h3>Sort by Examples</h3>
-        <label class="btn btn--secondary file-btn">
+        <h3 title="Upload or select an example media file and rank all items by similarity to it">Sort by Examples</h3>
+        <label class="btn btn--secondary file-btn" title="Upload a media file from your computer to use as the sort example">
           Local example media
           <input type="file" (change)="onMediaFileSelected($event)" hidden />
         </label>
-        <button class="btn btn--secondary file-btn" (click)="openMediaPicker()">Browse media sources...</button>
+        <button class="btn btn--secondary file-btn" (click)="openMediaPicker()" title="Browse server media sources to pick an example file">Browse media sources...</button>
         @if (serverMediaFiles.length > 0) {
-          <h4>Server Example Media</h4>
+          <h4 title="Example media files available on the server">Server Example Media</h4>
           <div class="file-list">
             @for (file of serverMediaFiles; track file.name) {
               <button class="file-item" (click)="loadServerMedia(file.filename || file.name)">{{ file.filename || file.name }}</button>

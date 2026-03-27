@@ -15,7 +15,7 @@
             }
           }
         </div>
-        <label class="btn btn--secondary btn--sm add-btn">
+        <label class="btn btn--secondary btn--sm add-btn" title="Upload a media file to use as a good (positive) example">
           + Add Good
           <input type="file" (change)="onFileSelected($event, 'good')" hidden />
         </label>
@@ -33,7 +33,7 @@
             }
           }
         </div>
-        <label class="btn btn--secondary btn--sm add-btn">
+        <label class="btn btn--secondary btn--sm add-btn" title="Upload a media file to use as a bad (negative) example">
           + Add Bad
           <input type="file" (change)="onFileSelected($event, 'bad')" hidden />
         </label>

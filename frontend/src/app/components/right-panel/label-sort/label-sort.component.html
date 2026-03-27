@@ -1,11 +1,12 @@
 <div class="label-sort-bar">
-  <span class="sort-label">Sort:</span>
+  <span class="sort-label" title="Choose how the labeled items in the Good and Bad lists are ordered">Sort:</span>
   <label for="label-sort-select" class="sr-only">Sort labels</label>
   <select
     id="label-sort-select"
     class="label-sort-select"
     [ngModel]="mode"
     (ngModelChange)="onSortChange($event)"
+    title="Order labeled items by time, name, model confidence, or ID"
   >
     <option value="time-desc">Newest first</option>
     <option value="time-asc">Oldest first</option>
