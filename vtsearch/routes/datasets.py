@@ -18,19 +18,18 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400, get_request_field
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_or_404, get_request_field
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import load_dataset_from_pickle, safe_pickle_load
 from vtsearch.datasets.registry import (
     can_user_access as _reg_can_access,
-    get_loaded_id as _reg_loaded_id,
     get_loaded_ids as _reg_loaded_ids,
     is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
     list_datasets_for_user as _reg_list_for_user,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
-    set_loaded_id as _reg_set_loaded,
+    add_loaded_id as _reg_add_loaded,
     set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
@@ -38,27 +37,18 @@ from vtsearch.datasets.registry import (
 )
 from vtsearch.utils import (
     bad_votes,
-    build_diversity_tree,
     cancel_dataset_progress,
     collapse_duplicates,
-    get_active_dataset_id,
-    get_context,
-    list_loaded_dataset_ids,
-    medias,
     get_dataset_display_name,
     get_dupe_count,
     get_progress,
     good_votes,
     register_context,
-    set_active_dataset_id,
-    set_dataset_display_name,
     snapshot_medias,
     unregister_context,
-    update_progress,
     DatasetContext,
 )
 from vtsearch.utils.progress import CancelledError
-from vtsearch.utils.progress import dataset_progress as _dataset_progress_tracker
 from vtsearch.utils.progress import loading_tasks as _loading_tasks
 import vtsearch.utils.paths as _paths
 
@@ -72,7 +62,6 @@ from vtsearch.routes.datasets_loading import (  # noqa: F401
     _origin_to_str,
     _run_importer_in_background,
     _run_origin_load_in_background,
-    _set_clip_origins,
     _stage_importer_in_background,
     clear_dataset,
 )
@@ -91,7 +80,7 @@ def _normalize_media_type_param(value: str) -> str:
     try:
         return get_by_folder_name(value).type_id
     except KeyError:
-        return normalize_type_id(value)  # normalize legacy IDs like "paragraph" → "text"
+        return normalize_type_id(value)
 
 
 # Register the UI sub-blueprint.
@@ -367,21 +356,23 @@ def stage_file():
     return jsonify({"path": str(staging_path), "name": name, "count": count, "media_type": media_type})
 
 
-@datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
-def stage_import(importer_name: str):
-    """Run a registered importer in staging mode."""
-    importer = get_importer(importer_name)
-    if importer is None:
-        return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
+def _extract_importer_fields(importer):
+    """Build field_values for a dataset importer from the current request.
 
+    Unlike :func:`extract_plugin_fields`, this reads file contents into
+    :class:`io.BytesIO` so they remain valid after the Flask request context
+    ends (required for background-thread execution).
+
+    Returns ``(field_values, None)`` on success, or ``(None, error_tuple)``
+    when a required field is missing.
+    """
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
 
     field_values: dict = {}
     if file_keys:
         for key in file_keys:
             if key not in request.files:
-                return jsonify({"error": f"Missing file field: {key!r}"}), 400
-            # Read file contents before passing to background thread.
+                return None, (jsonify({"error": f"Missing file field: {key!r}"}), 400)
             file_bytes = io.BytesIO(request.files[key].read())
             file_bytes.name = request.files[key].filename
             field_values[key] = file_bytes
@@ -392,10 +383,25 @@ def stage_import(importer_name: str):
         body = request.get_json(force=True) or {}
         for f in importer.fields:
             if f.key not in body and f.required:
-                return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
+                return None, (jsonify({"error": f"Missing required field: {f.key!r}"}), 400)
             field_values[f.key] = body.get(f.key, f.default)
 
+    return field_values, None
+
+
+@datasets_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
+def stage_import(importer_name: str):
+    """Run a registered importer in staging mode."""
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
+
+    field_values, field_err = _extract_importer_fields(importer)
+    if field_err:
+        return field_err
+
     # Pass through optional keys not declared as plugin fields.
+    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     for key in ("converters",):
         val = get_request_field(key, bool(file_keys))
         if val:
@@ -445,35 +451,16 @@ def clear_staging():
 @datasets_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
 def import_dataset(importer_name: str):
     """Run a registered importer by name in a background thread."""
-    importer = get_importer(importer_name)
-    if importer is None:
-        return jsonify({"error": f"Unknown importer: {importer_name!r}"}), 404
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
 
-    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-
-    # Build field_values from either multipart or JSON body.
-    field_values: dict = {}
-    if file_keys:
-        for key in file_keys:
-            if key not in request.files:
-                return jsonify({"error": f"Missing file field: {key!r}"}), 400
-            # Read file contents before passing to background thread, since the
-            # Flask FileStorage stream is only valid during the request lifecycle.
-            file_bytes = io.BytesIO(request.files[key].read())
-            file_bytes.name = request.files[key].filename
-            field_values[key] = file_bytes
-        # Non-file fields come from form data when using multipart.
-        for f in importer.fields:
-            if f.field_type != "file":
-                field_values[f.key] = request.form.get(f.key, f.default)
-    else:
-        body = request.get_json(force=True) or {}
-        for f in importer.fields:
-            if f.key not in body and f.required:
-                return jsonify({"error": f"Missing required field: {f.key!r}"}), 400
-            field_values[f.key] = body.get(f.key, f.default)
+    field_values, field_err = _extract_importer_fields(importer)
+    if field_err:
+        return field_err
 
     # Pass through optional keys not declared as plugin fields.
+    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     for key in ("converters", "clipper", "embedder"):
         val = get_request_field(key, bool(file_keys))
         if val:
@@ -513,9 +500,23 @@ def load_demo_dataset_route():
     if importer is None:
         return jsonify({"error": "demo importer not available"}), 500
 
+    demo_info = DEMO_DATASETS[dataset_name]
     field_values: dict = {"name": dataset_name}
+    # Inject media_type so the loading task exposes it to the frontend,
+    # allowing the "guessed type" logic to consider in-progress loads.
     if converter_name:
+        # When a converter is used, the resulting dataset has the converter's
+        # target type, not the demo's original type.
+        from vtsearch.converters import get_converter  # noqa: PLC0415
+
+        conv = get_converter(converter_name)
+        if conv is not None:
+            field_values["media_type"] = conv.target_type
+        else:
+            field_values["media_type"] = demo_info.get("media_type", "")
         field_values["converter"] = converter_name
+    else:
+        field_values["media_type"] = demo_info.get("media_type", "")
     if clipper_name:
         field_values["clipper"] = clipper_name
     if embedder_name:
@@ -606,11 +607,18 @@ def export_dataset():
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])
 def clear_dataset_route():
-    """Clear the active dataset from memory."""
-    active_id = get_active_dataset_id()
-    if active_id:
-        unregister_context(active_id)
-        _reg_remove_loaded(active_id)
+    """Clear the request-scoped dataset from memory.
+
+    Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to
+    determine which dataset to clear.
+    """
+    from vtsearch.utils import get_active_context
+
+    ctx = get_active_context()
+    ds_id = ctx.dataset_id if ctx.dataset_id else None
+    if ds_id:
+        unregister_context(ds_id)
+        _reg_remove_loaded(ds_id)
     else:
         clear_dataset()
     return jsonify({"ok": True})
@@ -627,23 +635,17 @@ def list_registered_datasets():
 
     Each entry includes:
     - ``loaded``: whether the dataset is currently in memory
-    - ``active``: whether it is the currently active (UI-facing) dataset
     """
     from vtsearch.auth import get_current_user
 
     entries = _reg_list_for_user(get_current_user())
-    loaded_id = _reg_loaded_id()
     loaded_ids = _reg_loaded_ids()
     from vtsearch.media import get_clipper
 
     for entry in entries:
         ds_id = entry["id"]
         entry["loaded"] = ds_id in loaded_ids
-        entry["active"] = ds_id == loaded_id
-        if entry["active"]:
-            entry["num_dupes"] = get_dupe_count()
-        else:
-            entry.setdefault("num_dupes", 0)
+        entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
         # Resolve clipper name to display name; default clippers show as "-"
@@ -677,12 +679,9 @@ def load_registered_dataset(dataset_id: str):
     if not _reg_can_access(dataset_id, get_current_user()):
         return jsonify({"error": "Access denied"}), 403
 
-    # If already loaded in memory, just activate it (instant switch).
+    # If already loaded in memory, nothing to do.
     if _reg_is_loaded(dataset_id):
-        set_active_dataset_id(dataset_id)
-        _reg_set_loaded(dataset_id)
-        set_dataset_display_name(entry.get("name", ""))
-        return jsonify({"ok": True, "message": "Dataset activated (already loaded)"})
+        return jsonify({"ok": True, "message": "Dataset already loaded"})
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
@@ -692,7 +691,9 @@ def load_registered_dataset(dataset_id: str):
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
-    tracker = _loading_tasks.create_task(task_id, entry.get("name", dataset_id), dataset_id=dataset_id)
+    tracker = _loading_tasks.create_task(
+        task_id, entry.get("name", dataset_id), dataset_id=dataset_id, media_type=entry.get("media_type", ""),
+    )
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
@@ -733,7 +734,7 @@ def load_registered_dataset(dataset_id: str):
 
             _diversity_progress(0, 0)
             build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
-            _reg_set_loaded(dataset_id)
+            _reg_add_loaded(dataset_id)
             # Update item count and dupe count in case they changed
             num_dupes = sum(
                 1 for m in ctx.medias.values()
@@ -741,10 +742,6 @@ def load_registered_dataset(dataset_id: str):
             )
             _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
             ctx.dataset_display_name = entry.get("name", "")
-
-            # Activate if nothing else is currently active.
-            if get_active_dataset_id() is None:
-                set_active_dataset_id(dataset_id)
 
             # Warm up the embedder using the task tracker.
             def _task_progress(status, message="", current=0, total=0, **kw):
@@ -796,27 +793,6 @@ def unload_registered_dataset(dataset_id: str):
     return jsonify({"ok": True})
 
 
-@datasets_bp.route("/api/datasets/registry/<dataset_id>/activate", methods=["POST"])
-def activate_registered_dataset(dataset_id: str):
-    """Make a loaded dataset the active (UI-facing) one.
-
-    The dataset must already be loaded in memory.  This is an instant
-    operation — no data is re-read or re-embedded.
-    """
-    from vtsearch.auth import get_current_user
-
-    if not _reg_can_access(dataset_id, get_current_user()):
-        return jsonify({"error": "Access denied"}), 403
-    if not _reg_is_loaded(dataset_id):
-        return jsonify({"error": "Dataset is not loaded in memory; load it first"}), 400
-    set_active_dataset_id(dataset_id)
-    _reg_set_loaded(dataset_id)
-    entry = _reg_get(dataset_id)
-    if entry:
-        set_dataset_display_name(entry.get("name", ""))
-    return jsonify({"ok": True, "message": "Dataset activated"})
-
-
 @datasets_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
 def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
@@ -843,16 +819,20 @@ def rename_registered_dataset(dataset_id: str):
     if not _reg_is_owner(dataset_id, get_current_user()):
         return jsonify({"error": "Only the dataset creator can rename it"}), 403
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     new_name = data.get("name", "").strip()
     if not new_name:
         return jsonify({"error": "name is required"}), 400
     ok = _reg_rename(dataset_id, new_name)
     if not ok:
         return jsonify({"error": "Dataset not found"}), 404
-    # Also update display name if this is the loaded dataset
-    if _reg_loaded_id() == dataset_id:
-        set_dataset_display_name(new_name)
+    # Also update display name if this dataset is loaded
+    if _reg_is_loaded(dataset_id):
+        from vtsearch.utils import get_context
+
+        ctx = get_context(dataset_id)
+        if ctx is not None:
+            ctx.dataset_display_name = new_name
     return jsonify({"ok": True, "name": new_name})
 
 
@@ -865,7 +845,7 @@ def update_dataset_readers(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     readers = data.get("readers")
     if not isinstance(readers, list) or not all(isinstance(r, str) for r in readers):
         return jsonify({"error": "readers must be a list of strings"}), 400
@@ -877,10 +857,27 @@ def update_dataset_readers(dataset_id: str):
     return jsonify({"ok": True, "readers": readers})
 
 
+@datasets_bp.route("/api/datasets/registry/<dataset_id>/stats")
+def get_dataset_stats(dataset_id: str):
+    """Return ingest statistics for a registered dataset."""
+    from vtsearch.datasets.registry import get_dataset as _reg_get
+
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        return jsonify({"error": "Dataset not found"}), 404
+    return jsonify({
+        "num_items": entry.get("num_items", 0),
+        "num_dupes": entry.get("num_dupes", 0),
+        "file_type_counts": entry.get("file_type_counts", {}),
+        "ingest_started_at": entry.get("ingest_started_at"),
+        "ingest_finished_at": entry.get("ingest_finished_at"),
+    })
+
+
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])
 def load_dataset_from_source():
     """Reload a dataset from a stored source origin dict."""
-    data = request.get_json(force=True, silent=True) or {}
+    data = get_json_safe()
     source = data.get("source")
     if not isinstance(source, dict):
         return jsonify({"error": "source must be an origin dict"}), 400

@@ -29,7 +29,7 @@ export class AuthService {
         this.readySubject.next(true);
       },
       error: () => {
-        // If the endpoint fails, assume no login required (backwards compat).
+        // If the endpoint fails, assume no login required.
         this.statusSubject.next({
           provider: 'default',
           user: 'default',

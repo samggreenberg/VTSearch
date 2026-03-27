@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 
 from vtsearch.config import DATA_DIR
 from vtsearch.media.base import (
@@ -69,10 +67,6 @@ class ImageMediaType(MediaType):
     @property
     def dir_key(self) -> str:
         return "image_dir"
-
-    @property
-    def legacy_bytes_keys(self) -> list[str]:
-        return ["image_bytes"]
 
     @property
     def pickle_extra_fields(self) -> list[str]:
@@ -253,6 +247,27 @@ class ImageMediaType(MediaType):
                 slice_start=0, slice_end=80, download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="food101_s", label="Food-101 (S)",
+                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
+                categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=DATA_DIR / "food-101" / "images",
+                slice_start=0, slice_end=143, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="food101_m", label="Food-101 (M)",
+                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
+                categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=DATA_DIR / "food-101" / "images",
+                slice_start=143, slice_end=429, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="food101_l", label="Food-101 (L)",
+                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
+                categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=DATA_DIR / "food-101" / "images",
+                slice_start=429, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="food101_a", label="Food-101 (A)",
                 description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
                 categories=self._FOOD101_CATEGORIES, source="food101",
@@ -260,11 +275,53 @@ class ImageMediaType(MediaType):
                 slice_start=0, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="eurosat_s", label="EuroSAT (S)",
+                description="Sentinel-2 satellite imagery classified by land use type.",
+                categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=DATA_DIR / "EuroSAT_RGB",
+                slice_start=0, slice_end=386, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="eurosat_m", label="EuroSAT (M)",
+                description="Sentinel-2 satellite imagery classified by land use type.",
+                categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=DATA_DIR / "EuroSAT_RGB",
+                slice_start=386, slice_end=1158, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="eurosat_l", label="EuroSAT (L)",
+                description="Sentinel-2 satellite imagery classified by land use type.",
+                categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=DATA_DIR / "EuroSAT_RGB",
+                slice_start=1158, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="eurosat_a", label="EuroSAT (A)",
                 description="Sentinel-2 satellite imagery classified by land use type.",
                 categories=self._EUROSAT_CATEGORIES, source="eurosat",
                 required_folder=DATA_DIR / "EuroSAT_RGB",
                 slice_start=0, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="stanford_dogs_s", label="Stanford Dogs (S)",
+                description="Fine-grained dog breed photos — many visually similar breeds.",
+                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=DATA_DIR / "stanford_dogs" / "Images",
+                slice_start=0, slice_end=24, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="stanford_dogs_m", label="Stanford Dogs (M)",
+                description="Fine-grained dog breed photos — many visually similar breeds.",
+                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=DATA_DIR / "stanford_dogs" / "Images",
+                slice_start=24, slice_end=72, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="stanford_dogs_l", label="Stanford Dogs (L)",
+                description="Fine-grained dog breed photos — many visually similar breeds.",
+                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=DATA_DIR / "stanford_dogs" / "Images",
+                slice_start=72, slice_end=171, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a", label="Stanford Dogs (A)",
@@ -320,7 +377,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
@@ -482,7 +539,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected_pages)
             on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
 
@@ -543,7 +600,7 @@ class ImageMediaType(MediaType):
                 finally:
                     embedder._on_progress = original_cb
 
-            clip_id = 1
+            clip_id = max(clips.keys(), default=0) + 1
             total = len(selected_images)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 

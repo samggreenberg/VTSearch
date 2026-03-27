@@ -59,8 +59,8 @@
       {{ capitalizeType(dataset.media_type) }}
     </span>
   </td>
-  <td>{{ dataset.num_items ?? '-' }}</td>
-  <td>{{ dataset.num_dupes ?? 0 }}</td>
+  <td>{{ dataset.num_items != null ? (dataset.num_items | number) : '-' }}</td>
+  <td>{{ (dataset.num_dupes ?? 0) | number }}</td>
   <td>{{ formatDate(dataset.created_at) }}</td>
   <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
   <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
@@ -88,6 +88,15 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>
+    </button>
+    <button class="stats-btn" (click)="onStats($event)" aria-label="Dataset stats" title="Stats">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20"/>
+        <line x1="12" y1="12" x2="12" y2="2"/>
+        <line x1="12" y1="12" x2="20.66" y2="17"/>
+        <line x1="12" y1="12" x2="2" y2="12"/>
       </svg>
     </button>
     <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete dataset" title="Delete">

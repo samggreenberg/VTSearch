@@ -10,8 +10,11 @@ import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../../models/api.models';
+import { TopBarStateService } from '../../services/top-bar-state.service';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
+import { formatProgressFraction } from '../../utils/format-progress';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -19,6 +22,8 @@ import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
 import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
+import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 
 @Component({
@@ -33,6 +38,8 @@ import { IconComponent } from '../icon/icon.component';
     DatasetImporterModalComponent,
     NewModelModalComponent,
     DetectorExportModalComponent,
+    LabelImporterModalComponent,
+    DatasetStatsModalComponent,
     IconComponent,
   ],
   templateUrl: './dashboard.component.html',
@@ -47,13 +54,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressIndeterminate = false;
 
   loadingTasks: LoadingTask[] = [];
+  modelLoadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
   newModelModalOpen = false;
   exportModalOpen = false;
   exportModelName = '';
+  addLabelsModalOpen = false;
+  addLabelsModelName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
+  statsModalOpen = false;
+  statsDatasetId = '';
+  statsDatasetName = '';
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -80,10 +93,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
+  private modelPolling$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownModelIds = new Set<string>();
   private completedTaskIds = new Set<string>();
+  private completedModelTaskIds = new Set<string>();
+  private datasetPollingActive = false;
+  private modelPollingActive = false;
 
   currentUser = '';
   isDefaultLogin = true;
@@ -97,7 +114,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private labelSession: LabelSessionService,
     private findSession: FindSessionService,
     public datasetState: DatasetStateService,
+    private activeContext: ActiveContextService,
     private authService: AuthService,
+    private topBarState: TopBarStateService,
   ) {}
 
   ngOnInit(): void {
@@ -128,6 +147,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.selectedDatasetIds.add(datasets[0].id);
         }
         this.knownDatasetIds = currentIds;
+        this.pushTopBarLabels();
       });
     this.datasetState.models$
       .pipe(takeUntil(this.destroy$))
@@ -139,7 +159,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
         if (newIds.length > 0 && this.knownModelIds.size > 0) {
-          // Items were added after initial load — select the new ones
+          // Items were added after initial load — select only the new ones
+          this.selectedModelIds.clear();
           for (const id of newIds) {
             this.selectedModelIds.add(id);
           }
@@ -148,8 +169,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.selectedModelIds.add(models[0].id);
         }
         this.knownModelIds = currentIds;
+        this.pushTopBarLabels();
       });
     this.refresh();
+    this.resumeActivePolling();
+  }
+
+  /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
+  private resumeActivePolling(): void {
+    this.datasetsApi.getLoadingTasks().subscribe((tasks) => {
+      if (tasks.some((t) => t.status !== 'idle')) {
+        this.startProgressPolling();
+      }
+    });
+    this.modelsApi.getModelLoadingTasks().subscribe((resp) => {
+      if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
+        this.startModelProgressPolling();
+      }
+    });
   }
 
   // --- Column resize ---
@@ -319,6 +356,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     this.polling$.next();
     this.polling$.complete();
+    this.modelPolling$.next();
+    this.modelPolling$.complete();
+    this.findPolling$.next();
+    this.findPolling$.complete();
   }
 
   get datasets(): DatasetRegistryEntry[] {
@@ -373,6 +414,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Dataset selection ---
 
+  private pushTopBarLabels(): void {
+    const selDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (selDatasets.length === 0) this.topBarState.setDatasetLabel('None');
+    else if (selDatasets.length === 1) this.topBarState.setDatasetLabel(selDatasets[0].name);
+    else this.topBarState.setDatasetLabel('Multiple');
+
+    const selModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (selModels.length === 0) this.topBarState.setModelLabel('None');
+    else if (selModels.length === 1) this.topBarState.setModelLabel(selModels[0].name);
+    else this.topBarState.setModelLabel('Multiple');
+  }
+
   toggleDatasetSelection(id: string, event: MouseEvent): void {
     if (event.ctrlKey || event.metaKey) {
       if (this.selectedDatasetIds.has(id)) {
@@ -388,6 +441,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedDatasetIds.add(id);
       }
     }
+    this.pushTopBarLabels();
   }
 
   isDatasetSelected(id: string): boolean {
@@ -411,6 +465,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedModelIds.add(id);
       }
     }
+    this.pushTopBarLabels();
   }
 
   isModelSelected(id: string): boolean {
@@ -452,6 +507,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  showDatasetStats(dataset: DatasetRegistryEntry): void {
+    this.statsDatasetId = dataset.id;
+    this.statsDatasetName = dataset.name;
+    this.statsModalOpen = true;
+  }
+
+  closeStatsModal(): void {
+    this.statsModalOpen = false;
+    this.statsDatasetId = '';
+    this.statsDatasetName = '';
+  }
+
   // --- Model actions ---
 
   renameModel(model: ModelRegistryEntry, newName: string): void {
@@ -479,8 +546,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadModel(model: ModelRegistryEntry): void {
     this.modelsApi.loadModel(model.id).subscribe({
+      next: () => this.startModelProgressPolling(),
+    });
+  }
+
+  unloadModel(model: ModelRegistryEntry): void {
+    this.modelsApi.unloadModel(model.id).subscribe({
       next: () => this.datasetState.refresh(),
     });
+  }
+
+  getInlineModelTask(modelId: string): LoadingTask | undefined {
+    return this.modelLoadingTasks.find((t) => t.model_id === modelId);
   }
 
   toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
@@ -502,9 +579,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.exportModelName = '';
   }
 
+  // --- Add Labels modal ---
+
+  openAddLabelsModal(model: ModelRegistryEntry): void {
+    this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
+    this.addLabelsModalOpen = true;
+  }
+
+  closeAddLabelsModal(): void {
+    this.addLabelsModalOpen = false;
+    this.addLabelsModelName = '';
+  }
+
+  onAddLabelsImported(): void {
+    this.datasetState.refresh();
+  }
+
   // --- Importer modal ---
 
-  /** Guess the media type the user likely wants based on existing datasets/models. */
+  /** Guess the media type the user likely wants based on existing datasets, models, and in-progress loads. */
   get guessedMediaType(): string {
     const types = new Set<string>();
     for (const d of this.datasets) {
@@ -512,6 +605,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     for (const m of this.models) {
       if (m.media_type) types.add(m.media_type);
+    }
+    for (const t of this.loadingTasks) {
+      if (t.media_type && !t.error) types.add(t.media_type);
     }
     return types.size === 1 ? [...types][0] : '';
   }
@@ -547,15 +643,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- New model modal ---
 
-  /** Media type used as default for new models: single-selected dataset wins, then active dataset. */
+  /** Media type used as default for new models: single-selected dataset wins, then first loaded dataset, then in-progress loads. */
   get activeDatasetMediaType(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
       const sel = this.datasets.find((d) => d.id === selId);
       if (sel?.media_type) return sel.media_type;
     }
-    const active = this.datasets.find((d) => d.active);
-    return active?.media_type || '';
+    const loaded = this.datasets.find((d) => d.loaded);
+    if (loaded?.media_type) return loaded.media_type;
+    // Fall back to in-progress loading tasks when no dataset is fully loaded yet.
+    const loadingTypes = new Set(
+      this.loadingTasks.filter((t) => t.media_type && !t.error).map((t) => t.media_type!),
+    );
+    return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
 
   openNewModelModal(): void {
@@ -585,11 +686,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
   }
 
+  cancelModelLoadingTask(taskId: string): void {
+    this.modelsApi.cancelModelLoadingTask(taskId).subscribe();
+  }
+
+  dismissModelLoadingTask(taskId: string): void {
+    this.modelLoadingTasks = this.modelLoadingTasks.filter((t) => t.task_id !== taskId);
+  }
+
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
     this.datasetState.setErrorMessage('');
-    this.polling$.next(); // cancel previous polling
+
+    // If polling is already active, don't restart — the existing loop
+    // already covers all tasks.  This avoids clearing completedTaskIds
+    // and losing track of tasks that just finished.
+    if (this.datasetPollingActive) {
+      return;
+    }
+    this.datasetPollingActive = true;
     this.completedTaskIds.clear();
 
     timer(0, 1000)
@@ -629,13 +745,66 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.datasetState.setErrorMessage(t.error!);
           }
 
-          // Keep legacy loading flag for backward compat
           this.datasetState.setLoading(active.length > 0);
 
           if (active.length === 0) {
             // No more active tasks — stop polling
             this.polling$.next();
+            this.datasetPollingActive = false;
             // Refresh unless we just did (justFinished already triggered it)
+            if (justFinished.length === 0) {
+              this.datasetState.refresh();
+            }
+            if (onComplete && failed.length === 0) {
+              onComplete();
+            }
+          }
+        },
+      });
+  }
+
+  startModelProgressPolling(onComplete?: () => void): void {
+    if (this.modelPollingActive) {
+      return;
+    }
+    this.modelPollingActive = true;
+    this.completedModelTaskIds.clear();
+
+    timer(0, 1000)
+      .pipe(
+        takeUntil(this.modelPolling$),
+        takeUntil(this.destroy$),
+        switchMap(() => this.modelsApi.getModelLoadingTasks().pipe(
+          catchError(() => EMPTY),
+        )),
+      )
+      .subscribe({
+        next: (resp: LoadingTasksResponse) => {
+          const tasks = resp.tasks ?? [];
+          const active = tasks.filter((t) => t.status !== 'idle');
+          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
+          const failed = errored.filter((t) => t.error !== 'Cancelled');
+
+          this.modelLoadingTasks = [...active, ...failed];
+
+          // Detect tasks that just completed successfully
+          const justFinished = tasks.filter(
+            (t) => t.status === 'idle' && !t.error && !this.completedModelTaskIds.has(t.task_id),
+          );
+          for (const t of justFinished) {
+            this.completedModelTaskIds.add(t.task_id);
+          }
+          if (justFinished.length > 0) {
+            this.datasetState.refresh();
+          }
+
+          for (const t of failed) {
+            this.datasetState.setErrorMessage(t.error!);
+          }
+
+          if (active.length === 0) {
+            this.modelPolling$.next();
+            this.modelPollingActive = false;
             if (justFinished.length === 0) {
               this.datasetState.refresh();
             }
@@ -786,49 +955,43 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!dataset) return;
 
     const modelId = [...this.selectedModelIds][0] || null;
+    const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
-    const navigateToLabel = (): void => {
-      this.storeSelectedModelTextQuery();
-      // Tell the backend which model is loaded so votes auto-sync
-      this.modelsApi.loadModel(modelId).subscribe({
-        next: () => this.router.navigate(['/label']),
-        error: () => this.router.navigate(['/label']),
-      });
+    this.storeSelectedModelTextQuery();
+
+    // Set active context so the HTTP interceptor attaches headers
+    this.activeContext.setDatasetId(dataset.id);
+    this.activeContext.setModelId(modelId || '');
+
+    // Gate: navigate only once both dataset and model are ready.
+    let pending = 2;
+    const gate = (): void => {
+      if (--pending === 0) {
+        this.datasetState.refresh();
+        this.router.navigate(['/label']);
+      }
     };
 
-    if (dataset.active) {
-      navigateToLabel();
-      return;
-    }
-
-    if (dataset.loaded) {
-      // Already in memory — activate instantly (no progress needed).
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => {
-          this.datasetState.refresh();
-          navigateToLabel();
-        },
-        error: () => navigateToLabel(),
+    // --- Model loading (parallel) ---
+    if (model && !model.detector_loaded) {
+      this.modelsApi.loadModel(modelId).subscribe({
+        next: () => this.startModelProgressPolling(() => gate()),
+        error: () => gate(),
       });
-      return;
+    } else {
+      gate();
     }
 
-    // Dataset not loaded — load it first, then activate and navigate.
-    // The background loader only auto-activates when no other dataset is
-    // active, so we must explicitly activate after loading completes.
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => {
-        this.startProgressPolling(() => {
-          this.datasetsApi.activateRegistered(dataset.id).subscribe({
-            next: () => {
-              this.datasetState.refresh();
-              navigateToLabel();
-            },
-            error: () => navigateToLabel(),
-          });
-        });
-      },
-    });
+    // --- Dataset loading (parallel) ---
+    if (dataset.loaded) {
+      gate();
+    } else {
+      this.datasetsApi.loadRegistered(dataset.id).subscribe({
+        next: () => {
+          this.startProgressPolling(() => gate());
+        },
+      });
+    }
   }
 
   onFind(): void {
@@ -843,41 +1006,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.findSession.modelName = model.name;
     this.findSession.datasetId = dataset.id;
 
-    const navigateToFind = (): void => {
-      this.router.navigate(['/find']);
+    // Set active context so the HTTP interceptor attaches headers
+    this.activeContext.setDatasetId(dataset.id);
+    this.activeContext.setModelId(model.id);
+
+    // Gate: navigate only once both dataset and model are ready.
+    let pending = 2;
+    const gate = (): void => {
+      if (--pending === 0) {
+        this.datasetState.refresh();
+        this.router.navigate(['/find']);
+      }
     };
 
-    if (dataset.active) {
-      navigateToFind();
-      return;
-    }
-
-    if (dataset.loaded) {
-      // Already in memory — activate instantly (no progress needed).
-      this.datasetsApi.activateRegistered(dataset.id).subscribe({
-        next: () => {
-          this.datasetState.refresh();
-          navigateToFind();
-        },
-        error: () => navigateToFind(),
+    // --- Model loading (parallel) ---
+    if (!model.detector_loaded) {
+      this.modelsApi.loadModel(model.id).subscribe({
+        next: () => this.startModelProgressPolling(() => gate()),
+        error: () => gate(),
       });
-      return;
+    } else {
+      gate();
     }
 
-    // Dataset not loaded — load it first, then activate and navigate.
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => {
-        this.startProgressPolling(() => {
-          this.datasetsApi.activateRegistered(dataset.id).subscribe({
-            next: () => {
-              this.datasetState.refresh();
-              navigateToFind();
-            },
-            error: () => navigateToFind(),
-          });
-        });
-      },
-    });
+    // --- Dataset loading (parallel) ---
+    if (dataset.loaded) {
+      gate();
+    } else {
+      this.datasetsApi.loadRegistered(dataset.id).subscribe({
+        next: () => {
+          this.startProgressPolling(() => gate());
+        },
+      });
+    }
   }
 
   /** Old Find window — runs multi-dataset multi-model find and shows results modal. */
@@ -943,7 +1104,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
           }
           if (progress.current != null && progress.total != null && progress.total > 0) {
-            const fraction = `(${progress.current}/${progress.total})`;
+            const fraction = `(${formatProgressFraction(progress.current, progress.total)})`;
             const stepEnd = msg.indexOf('] ');
             if (stepEnd !== -1) {
               msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
@@ -1046,7 +1207,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const fraction = `(${task.current}/${task.total})`;
+      const fraction = `(${formatProgressFraction(task.current, task.total)})`;
       const stepEnd = msg.indexOf('] ');
       if (stepEnd !== -1) {
         msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);

@@ -200,54 +200,84 @@ class PluginRegistry(Generic[T]):
         ``"EXPORTER"``.
     label:
         Human-readable noun used in warning messages, e.g. ``"exporter"``.
+    discover_modules:
+        When ``True``, also scan flat ``.py`` files (not just sub-packages)
+        for the sentinel.  Useful for plugin families where each plugin is
+        a single module rather than a sub-package (e.g. converters, sources).
     """
 
-    def __init__(self, package: str, sentinel: str, label: str) -> None:
+    def __init__(self, package: str, sentinel: str, label: str, *,
+                 discover_modules: bool = False) -> None:
         self._package = package
         self._sentinel = sentinel
         self._label = label
+        self._discover_modules = discover_modules
         self._items: dict[str, T] = {}
         self._discovered = False
+        self._discovering = False
         self._lock = threading.Lock()
 
     # -- Discovery ----------------------------------------------------------
 
     def _discover(self) -> None:
-        """Scan sub-packages for sentinel objects and register them.
+        """Scan sub-packages (and optionally flat modules) for sentinel objects.
 
         Uses direct filesystem scanning instead of :func:`pkgutil.iter_modules`
         so that symlinked directories are reliably discovered.  A symlink to a
         package directory (containing ``__init__.py``) is treated identically to
         a regular sub-package.
+
+        When :attr:`_discover_modules` is ``True``, also scans ``.py`` files
+        (excluding ``__init__.py`` and ``base.py``) for the sentinel.
         """
         parent = importlib.import_module(self._package)
         package_dir = Path(parent.__file__).parent
         for entry in sorted(package_dir.iterdir()):
-            # Accept both real directories and symlinks that resolve to
-            # directories.  entry.is_dir() follows symlinks by default.
-            if not entry.is_dir() or entry.name.startswith((".", "_")):
+            if entry.name.startswith((".", "_")):
                 continue
-            # Must contain __init__.py to be a proper Python package.
-            if not (entry / "__init__.py").exists():
-                continue
-            module_name = entry.name
-            try:
-                mod = importlib.import_module(f"{self._package}.{module_name}")
-                plugin = getattr(mod, self._sentinel, None)
-                if plugin is not None:
-                    self._items[plugin.name] = plugin
-            except Exception as exc:  # pragma: no cover
-                warnings.warn(
-                    f"Failed to load {self._label} '{module_name}': {exc}",
-                    stacklevel=2,
-                )
+
+            # Sub-packages (directories with __init__.py)
+            if entry.is_dir():
+                if not (entry / "__init__.py").exists():
+                    continue
+                self._try_load(entry.name)
+            # Flat modules (.py files)
+            elif self._discover_modules and entry.is_file() and entry.suffix == ".py":
+                if entry.name in ("__init__.py", "base.py"):
+                    continue
+                self._try_load(entry.stem)
+
+    def _try_load(self, module_name: str) -> None:
+        """Import *module_name* under this registry's package and register its sentinel."""
+        try:
+            mod = importlib.import_module(f"{self._package}.{module_name}")
+            plugin = getattr(mod, self._sentinel, None)
+            if plugin is not None:
+                self._items[plugin.name] = plugin
+        except Exception as exc:  # pragma: no cover
+            warnings.warn(
+                f"Failed to load {self._label} '{module_name}': {exc}",
+                stacklevel=2,
+            )
 
     def _ensure_discovered(self) -> None:
         if self._discovered:
             return
         with self._lock:
             if not self._discovered:
-                self._discover()
+                # Guard against re-entrant discovery.  When discover_modules
+                # is True, importing a sibling module may trigger get()/list()
+                # on this registry before discovery finishes (e.g. runner.py
+                # importing from its own package's __init__).  In that case
+                # we return early with a partial registry — the ongoing
+                # discovery will complete shortly and fill in the rest.
+                if self._discovering:
+                    return
+                self._discovering = True
+                try:
+                    self._discover()
+                finally:
+                    self._discovering = False
                 self._discovered = True
 
     # -- Public API ---------------------------------------------------------

@@ -77,7 +77,7 @@ def _resolve_mx(domain: str) -> str:
     """Return the highest-priority MX host for *domain*."""
     import dns.resolver  # lazy import – dnspython is optional
 
-    answers = dns.resolver.resolve(domain, "MX")
+    answers = dns.resolver.resolve(domain, "MX", lifetime=10)
     best = min(answers, key=lambda r: r.preference)
     return str(best.exchange).rstrip(".")
 

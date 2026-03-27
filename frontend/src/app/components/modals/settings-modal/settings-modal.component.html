@@ -7,25 +7,29 @@
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'appearance'"
-          (click)="activeSettingsTab = 'appearance'">
+          (click)="activeSettingsTab = 'appearance'"
+          title="Theme, animations, and view layout options">
           Appearance
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'sorting'"
-          (click)="activeSettingsTab = 'sorting'">
+          (click)="activeSettingsTab = 'sorting'"
+          title="Options that control how learned sorting and calibration behave">
           Sorting
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
-          (click)="activeSettingsTab = 'autopilot'">
+          (click)="activeSettingsTab = 'autopilot'"
+          title="Configure the guided autopilot labeling workflow">
           Autopilot
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'autoload'"
-          (click)="activeSettingsTab = 'autoload'">
+          (click)="activeSettingsTab = 'autoload'"
+          title="Choose which embedding models to load automatically when a dataset is opened">
           Autoload
         </button>
       </nav>
@@ -35,24 +39,24 @@
         @if (activeSettingsTab === 'appearance') {
           <h3>Appearance</h3>
           <div class="form-group">
-            <label class="form-label">Theme</label>
-            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)">
+            <label class="form-label" title="Color theme for the application interface">Theme</label>
+            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme">
               <option value="dark">Dark</option>
               <option value="light">Light</option>
               <option value="highviz">High Visibility</option>
             </select>
           </div>
-          <label class="checkbox-row">
+          <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
             Swipe animation
           </label>
-          <label class="checkbox-row">
+          <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
             <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
 
           @if (mediaTypes.length > 0) {
-            <h4>Scroll Style</h4>
+            <h4 title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
                 <button
@@ -65,36 +69,32 @@
             </div>
             <div class="view-tab-content">
               <div class="view-side-section">
-                <h4>Left Side</h4>
+                <h4 title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
-                  <label class="form-label">View Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_left', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'list')" />
-                      List
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'grid')" />
-                      Grid
-                    </label>
+                  <label class="form-label" title="Display media as a vertical list or a thumbnail grid">View Mode:</label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'list')" title="Show items as a single-column list with names">
+                      <vt-icon type="list" [size]="14"></vt-icon> List
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'grid')" title="Show items as a thumbnail grid">
+                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Focus Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" />
-                      Click
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')" />
-                      Hover
-                    </label>
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" title="Click an item to preview it in the center panel">
+                      <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')" title="Hover over an item to immediately preview it">
+                      <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab, $event)">
+                  <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab, $event)" title="Choose thumbnail size for the grid view">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -104,36 +104,32 @@
                 </div>
               </div>
               <div class="view-side-section">
-                <h4>Right Side</h4>
+                <h4 title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
-                  <label class="form-label">View Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_right', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'list')" />
-                      List
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'grid')" />
-                      Grid
-                    </label>
+                  <label class="form-label" title="Display labeled items as a vertical list or a thumbnail grid">View Mode:</label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'list')" title="Show items as a single-column list with names">
+                      <vt-icon type="list" [size]="14"></vt-icon> List
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'grid')" title="Show items as a thumbnail grid">
+                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Focus Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" />
-                      Click
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')" />
-                      Hover
-                    </label>
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" title="Click an item to preview it in the center panel">
+                      <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')" title="Hover over an item to immediately preview it">
+                      <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab, $event)">
+                  <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab, $event)" title="Choose thumbnail size for the grid view">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -149,46 +145,46 @@
         <!-- Sorting & Calibration -->
         @if (activeSettingsTab === 'sorting') {
           <h3>Sorting &amp; Calibration</h3>
-          <label class="checkbox-row">
+          <label class="checkbox-row" title="Prepend item filenames to text-sort queries to improve semantic matching for named items">
             <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row">
+          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the model has few training examples.">
             <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>
           <div class="form-group">
-            <label class="form-label">Calibrate count</label>
-            <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" />
+            <label class="form-label" title="Number of items to evaluate when calibrating the decision threshold after training">Calibrate count</label>
+            <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to evaluate during threshold calibration" />
           </div>
           <div class="form-group">
-            <label class="form-label">Calibration fraction</label>
-            <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" />
+            <label class="form-label" title="Fraction of labeled items to hold out for calibration (0 = none, 1 = all)">Calibration fraction</label>
+            <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Hold-out fraction for threshold calibration (0.0 to 1.0)" />
           </div>
         }
 
         <!-- Autopilot & Actions -->
         @if (activeSettingsTab === 'autopilot') {
           <h3>Autopilot &amp; Actions</h3>
-          <label class="checkbox-row">
+          <label class="checkbox-row" title="Hide the Autopilot tab from the left panel in labeling mode">
             <input type="checkbox" [ngModel]="settings.hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
             Hide autopilot panel
           </label>
           <div class="form-group">
-            <label class="form-label"># Good to start</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" />
+            <label class="form-label" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
           </div>
           <div class="form-group">
-            <label class="form-label"># Bad to start</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" />
+            <label class="form-label" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
           </div>
           <div class="form-group">
-            <label class="form-label"># Start to re-sort</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" />
+            <label class="form-label" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
           </div>
           <div class="form-group">
-            <label class="form-label">Goal Diversity</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" />
+            <label class="form-label" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal Diversity</label>
+            <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
         }
@@ -199,8 +195,8 @@
           @if (embedders.length > 0) {
             <div class="embedder-grid">
               <div class="embedder-grid-header">
-                <span>Embedder</span>
-                <span>Media Type</span>
+                <span title="Name of the embedding model (e.g. CLIP, CLAP, E5)">Embedder</span>
+                <span title="Which media type this embedder processes (audio, image, text, video, document)">Media Type</span>
               </div>
               @for (embedder of embedders; track embedder.name) {
                 <label class="embedder-row">
@@ -223,12 +219,12 @@
   }
 
   <div class="settings-actions" modal-footer>
-    <button class="btn btn--secondary" (click)="resetDefaults()">Default</button>
-    <label class="btn btn--secondary">
+    <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
+    <label class="btn btn--secondary" title="Import settings from a previously exported JSON file">
       Import
       <input type="file" accept=".json" (change)="importSettings($event)" hidden />
     </label>
-    <button class="btn btn--secondary" (click)="exportSettings()">Export</button>
-    <button class="btn btn--primary" (click)="close()">Close</button>
+    <button class="btn btn--secondary" (click)="exportSettings()" title="Download current settings as a JSON file for backup or sharing">Export</button>
+    <button class="btn btn--primary" (click)="close()" title="Close the settings panel">Close</button>
   </div>
 </vt-modal>

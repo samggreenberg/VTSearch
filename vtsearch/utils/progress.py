@@ -153,7 +153,10 @@ class LoadingTasksTracker:
         self._lock = threading.Lock()
         self._tasks: dict[str, dict[str, Any]] = {}
 
-    def create_task(self, task_id: str, name: str = "", dataset_id: str = "") -> ProgressTracker:
+    def create_task(
+        self, task_id: str, name: str = "", dataset_id: str = "", media_type: str = "",
+        model_id: str = "",
+    ) -> ProgressTracker:
         """Create and register a new loading task.
 
         Returns the per-task :class:`ProgressTracker` instance.
@@ -168,6 +171,8 @@ class LoadingTasksTracker:
                 "created_at": time.time(),
                 "finished_at": None,
                 "dataset_id": dataset_id,
+                "media_type": media_type,
+                "model_id": model_id,
             }
         return tracker
 
@@ -233,6 +238,10 @@ class LoadingTasksTracker:
                 snapshot["created_at"] = entry["created_at"]
                 if entry.get("dataset_id"):
                     snapshot["dataset_id"] = entry["dataset_id"]
+                if entry.get("model_id"):
+                    snapshot["model_id"] = entry["model_id"]
+                if entry.get("media_type"):
+                    snapshot["media_type"] = entry["media_type"]
                 result.append(snapshot)
             else:
                 snapshot = entry["tracker"].get()
@@ -241,6 +250,10 @@ class LoadingTasksTracker:
                 snapshot["created_at"] = entry["created_at"]
                 if entry.get("dataset_id"):
                     snapshot["dataset_id"] = entry["dataset_id"]
+                if entry.get("model_id"):
+                    snapshot["model_id"] = entry["model_id"]
+                if entry.get("media_type"):
+                    snapshot["media_type"] = entry["media_type"]
                 result.append(snapshot)
         if stale:
             with self._lock:
@@ -260,8 +273,11 @@ class LoadingTasksTracker:
             self._tasks.clear()
 
 
-#: Application-wide loading tasks tracker.
+#: Application-wide loading tasks tracker (for datasets).
 loading_tasks = LoadingTasksTracker()
+
+#: Application-wide loading tasks tracker (for models/detectors).
+model_loading_tasks = LoadingTasksTracker()
 
 
 # ---------------------------------------------------------------------------

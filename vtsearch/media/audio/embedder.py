@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress
+from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE
+from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -45,25 +45,21 @@ class AudioClapEmbedder(MediaEmbedder):
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return
-        import gc
 
         from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
-        from vtsearch.models.loader import ensure_torch_configured
-
-        ensure_torch_configured()
-        gc.collect()
-        cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading CLAP model weights…", 0, 0)
+        cache_dir = embedder_load_setup(self._on_progress, "Loading CLAP model weights…")
         with intercept_tqdm_progress(self._on_progress):
-            self._model = ClapModel.from_pretrained(
-                CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            self._model = load_pretrained_local_first(
+                ClapModel.from_pretrained, CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
         # Materialize any tensors left on the ``meta`` device.
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLAP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir, token=False)
+            self._processor = load_pretrained_local_first(
+                ClapProcessor.from_pretrained, CLAP_MODEL_ID, cache_dir=cache_dir, token=False
+            )
 
         # Warmup: import librosa (heavy — pulls in numba, scipy, etc.),
         # trigger the numba JIT for audio resampling, and run a single

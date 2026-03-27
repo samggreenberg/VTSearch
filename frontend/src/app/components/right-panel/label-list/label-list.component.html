@@ -1,5 +1,5 @@
 <div class="vote-section">
-  <h3 [class]="label">
+  <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + ids.length + ')' : 'Items you have marked as negative examples (' + ids.length + ')'">
     {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length }})
   </h3>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>

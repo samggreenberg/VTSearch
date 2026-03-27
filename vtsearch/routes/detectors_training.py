@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.routes.detectors_helpers import serialize_weights, train_and_threshold, validate_good_bad_split
-from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, validate_filepath_field
+from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, get_json_safe, validate_filepath_field
 from vtsearch.models import (
     build_model_from_weights,
     collect_media_origins,
@@ -309,14 +309,11 @@ def train_from_label_import(importer_name: str):
     saves it as an autorun detector.  Current votes are *not* modified.
     """
     from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtsearch.routes.helpers import get_plugin_or_404
 
-    importer = get_label_importer(importer_name)
-    if importer is None:
-        known = [imp.name for imp in list_label_importers()]
-        return (
-            jsonify({"error": f"Unknown label importer '{importer_name}'. Available: {known}"}),
-            404,
-        )
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
 
     snap = snapshot_medias()
     if not snap:
@@ -329,7 +326,7 @@ def train_from_label_import(importer_name: str):
     if has_file_fields:
         name = request.form.get("name", "").strip()
     else:
-        name = (request.get_json(force=True, silent=True) or {}).get("name", "").strip()
+        name = get_json_safe().get("name", "").strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400
@@ -473,7 +470,7 @@ def find_check_labels():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
     model_ids = body.get("model_ids", [])
 
@@ -584,7 +581,7 @@ def multi_find():
     from vtsearch.models.registry import get_model as reg_get_model
     from vtsearch.routes.trainable_models import _model_path, _read_model
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
     model_ids = body.get("model_ids", [])
 
@@ -635,7 +632,22 @@ def multi_find():
             step=1, total_steps=_FIND_STEPS,
         )
 
-        # Try autorun detector first (has weights)
+        # Try loaded DetectorContext first (cached MLP — skip resolve + train)
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(m["id"])
+        if det_ctx is not None and det_ctx.model is not None:
+            model_configs.append(
+                {
+                    "name": m["name"],
+                    "model_id": m["id"],
+                    "live_model": det_ctx.model,
+                    "threshold": det_ctx.threshold,
+                }
+            )
+            continue
+
+        # Try autorun detector next (has serialized weights)
         if det_name:
             det = get_autorun_detectors().get(det_name)
             has_weights = det and det.get("weights")
@@ -755,8 +767,29 @@ def multi_find():
                 step=3, total_steps=_FIND_STEPS,
             )
 
-            if "weights" in mc:
-                # Pre-trained detector with weights
+            if "live_model" in mc:
+                # Loaded detector with cached MLP — use directly, no resolve/train
+                try:
+                    model = mc["live_model"]
+                    with torch.no_grad():
+                        raw_logits = model(X_all)
+                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+                    threshold = mc.get("threshold", 0.5)
+
+                    for cid, score in zip(all_ids, scores):
+                        verdict = "Good" if score >= threshold else "Bad"
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": verdict,
+                            "score": round(score, 4),
+                        }
+                except Exception:
+                    for cid in all_ids:
+                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                            "verdict": "Error",
+                            "score": 0,
+                        }
+            elif "weights" in mc:
+                # Pre-trained detector with serialized weights
                 try:
                     model = build_model_from_weights(mc["weights"])
                     with torch.no_grad():

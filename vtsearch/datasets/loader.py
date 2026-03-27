@@ -10,7 +10,6 @@ to use these functions outside the Flask app.
 
 from __future__ import annotations
 
-import csv
 import gc
 import hashlib
 import io
@@ -23,64 +22,24 @@ from PIL import Image
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets.config import DEMO_DATASETS
+from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for consumers
+    load_audio_metadata_from_folders,
+    load_cifar10_batch,
+    load_esc50_metadata,
+    load_image_metadata_from_folders,
+    load_oxford_flowers_metadata,
+    load_paragraph_metadata_from_folders,
+    load_urbansound8k_metadata,
+    load_video_metadata_from_folders,
+)
+from vtsearch.datasets.pickle_security import (  # noqa: F401  — re-exported for consumers
+    RestrictedUnpickler,
+    _PICKLE_SAFE_CLASSES,
+    safe_pickle_load,
+)
 from vtsearch.utils.paths import rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
-
-
-# ---------------------------------------------------------------------------
-# Restricted unpickler – prevents arbitrary code execution from .pkl files
-# ---------------------------------------------------------------------------
-
-# Allowlist of (module, name) pairs that may be instantiated during unpickling.
-# VTSearch pickles only contain plain Python containers and numpy arrays.
-_PICKLE_SAFE_CLASSES: set[tuple[str, str]] = {
-    # builtins (needed for dict/list/set/bytes subclasses & booleans)
-    ("builtins", "set"),
-    ("builtins", "frozenset"),
-    ("builtins", "bytes"),
-    ("builtins", "bytearray"),
-    ("builtins", "complex"),
-    # collections
-    ("collections", "OrderedDict"),
-    # numpy – reconstruction helpers used by numpy's __reduce__
-    ("numpy", "ndarray"),
-    ("numpy", "dtype"),
-    ("numpy.core.multiarray", "_reconstruct"),
-    ("numpy.core.multiarray", "scalar"),
-    ("numpy", "_core.multiarray._reconstruct"),
-    ("numpy._core.multiarray", "_reconstruct"),
-    ("numpy._core.multiarray", "scalar"),
-    ("numpy.core.numeric", "_frombuffer"),
-    ("numpy._core.numeric", "_frombuffer"),
-}
-
-
-class RestrictedUnpickler(pickle.Unpickler):
-    """An ``Unpickler`` that refuses to instantiate classes outside an allowlist.
-
-    Plain Python primitives (int, float, str, None, bool, dict, list, tuple)
-    are handled by the pickle protocol directly and never trigger
-    ``find_class``.  This restricts only explicit class/callable references
-    in the pickle stream.
-    """
-
-    def find_class(self, module: str, name: str) -> Any:
-        if (module, name) in _PICKLE_SAFE_CLASSES:
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(
-            f"Forbidden pickle class: {module}.{name}. Only plain Python types and numpy arrays are allowed."
-        )
-
-
-def safe_pickle_load(f: io.BufferedIOBase, **kwargs: Any) -> Any:
-    """Deserialise a pickle stream using the restricted unpickler.
-
-    Drop-in replacement for ``pickle.load(f)`` that blocks arbitrary code
-    execution.  Any extra keyword arguments (e.g. ``encoding``) are
-    forwarded to the underlying ``Unpickler``.
-    """
-    return RestrictedUnpickler(f, **kwargs).load()
 
 
 def _default_progress() -> ProgressCallback:
@@ -99,329 +58,26 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def load_esc50_metadata(esc50_dir: Path) -> dict[str, dict[str, Any]]:
-    """Load media metadata from the ESC-50 ``esc50.csv`` metadata file.
+def _pop_md5_key(d: dict[str, Any]) -> str:
+    """Pop and return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
 
-    Reads ``<esc50_dir>/meta/esc50.csv`` and builds a mapping from audio
-    filename to its associated metadata fields.
-
-    Args:
-        esc50_dir: Path to the root ESC-50 dataset directory (the directory that
-            contains the ``meta/`` and ``audio/`` subdirectories).
-
-    Returns:
-        A dict mapping audio filename (e.g. ``"1-100032-A-0.wav"``) to a dict
-        with the keys:
-
-        - ``"category"`` (``str``): Human-readable sound category label.
-        - ``"esc10"`` (``bool``): Whether the media belongs to the ESC-10 subset.
-        - ``"target"`` (``int``): Integer class index.
-        - ``"fold"`` (``int``): Cross-validation fold number (1–5).
+    Returns the value (or ``""`` if neither key is present) and removes the
+    matched key from *d* so it doesn't leak into downstream metadata.
     """
-    meta_file = esc50_dir / "meta" / "esc50.csv"
-
-    metadata = {}
-    with open(meta_file, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            filename = row["filename"]
-            metadata[filename] = {
-                "category": row["category"],
-                "esc10": row["esc10"] == "True",
-                "target": int(row["target"]),
-                "fold": int(row["fold"]),
-            }
-    return metadata
+    for key in ("md5", "MD5"):
+        val = d.get(key)
+        if val:
+            del d[key]
+            return val
+    return ""
 
 
-def load_audio_metadata_from_folders(audio_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
-    """Scan category subdirectories and collect audio file metadata.
+def _get_md5_value(d: dict[str, Any]) -> str:
+    """Return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
 
-    Iterates over immediate subdirectories of ``audio_dir``, keeping only those
-    whose name appears in ``categories``, and collects paths for all audio files
-    with common extensions (``wav``, ``mp3``, ``flac``, ``ogg``, ``m4a``, ``au``).
-
-    Args:
-        audio_dir: Root directory whose immediate subdirectories represent
-            category folders.
-        categories: List of category folder names to include. Subdirectories
-            not in this list are skipped.
-
-    Returns:
-        A dict mapping ``category/filename`` to a dict with the keys:
-
-        - ``"category"`` (``str``): Name of the category folder.
-        - ``"path"`` (``Path``): Full path to the audio file.
+    Unlike :func:`_pop_md5_key` this does **not** mutate *d*.
     """
-    metadata: dict[str, dict[str, Any]] = {}
-
-    for category_folder in audio_dir.iterdir():
-        if not category_folder.is_dir():
-            continue
-
-        category_name = category_folder.name
-        if category_name not in categories:
-            continue
-
-        for ext in ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a", "*.au"]:
-            for audio_path in category_folder.glob(ext):
-                metadata[f"{category_name}/{audio_path.name}"] = {
-                    "category": category_name,
-                    "path": audio_path,
-                }
-
-    return metadata
-
-
-def load_urbansound8k_metadata(us8k_dir: Path) -> dict[str, dict[str, Any]]:
-    """Load metadata from the UrbanSound8K CSV file.
-
-    Reads ``<us8k_dir>/metadata/UrbanSound8K.csv`` and builds a mapping from
-    audio filename to its associated metadata fields.
-
-    Args:
-        us8k_dir: Path to the root UrbanSound8K directory (the directory that
-            contains the ``metadata/`` and ``audio/`` subdirectories).
-
-    Returns:
-        A dict mapping audio filename (e.g. ``"100032-3-0-0.wav"``) to a dict
-        with the keys:
-
-        - ``"category"`` (``str``): Human-readable class label.
-        - ``"fold"`` (``int``): Fold number (1–10).
-        - ``"class_id"`` (``int``): Integer class index.
-        - ``"path"`` (``Path``): Full path to the audio file.
-    """
-    meta_file = us8k_dir / "metadata" / "UrbanSound8K.csv"
-    metadata: dict[str, dict[str, Any]] = {}
-
-    with open(meta_file, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            filename = row["slice_file_name"]
-            fold = int(row["fold"])
-            audio_path = us8k_dir / "audio" / f"fold{fold}" / filename
-            metadata[filename] = {
-                "category": row["class"],
-                "fold": fold,
-                "class_id": int(row["classID"]),
-                "path": audio_path,
-            }
-
-    return metadata
-
-
-def load_oxford_flowers_metadata(flowers_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
-    """Load metadata for the Oxford Flowers 102 dataset.
-
-    Reads the ``imagelabels.mat`` file and maps numeric labels (1–102) to
-    category names using the provided ``categories`` list.  Images are
-    stored in a flat ``jpg/`` directory with filenames ``image_NNNNN.jpg``.
-
-    Args:
-        flowers_dir: Path to the root Oxford Flowers directory (contains
-            ``jpg/`` and ``imagelabels.mat``).
-        categories: Ordered list of 102 flower species names (index 0
-            corresponds to label 1 in the MAT file).
-
-    Returns:
-        A dict mapping image filename to a dict with the keys:
-
-        - ``"category"`` (``str``): Flower species name from *categories*.
-        - ``"path"`` (``Path``): Full path to the image file.
-    """
-    import scipy.io  # noqa: PLC0415
-
-    mat_path = flowers_dir / "imagelabels.mat"
-    mat = scipy.io.loadmat(str(mat_path))
-    labels = mat["labels"][0]  # 1-indexed array of length 8189
-
-    jpg_dir = flowers_dir / "jpg"
-    metadata: dict[str, dict[str, Any]] = {}
-
-    for i, label in enumerate(labels):
-        # Labels are 1-indexed; categories list is 0-indexed.
-        cat_idx = int(label) - 1
-        if cat_idx < 0 or cat_idx >= len(categories):
-            continue
-        cat_name = categories[cat_idx]
-        # Oxford Flowers images are named image_00001.jpg .. image_08189.jpg
-        fname = f"image_{i + 1:05d}.jpg"
-        img_path = jpg_dir / fname
-        metadata[fname] = {
-            "category": cat_name,
-            "path": img_path,
-        }
-
-    return metadata
-
-
-def load_cifar10_batch(file_path: Path) -> tuple[np.ndarray, list[int], list[str]]:
-    """Load a CIFAR-10 pickle batch file and return images, labels, and label names.
-
-    Args:
-        file_path: Path to a CIFAR-10 batch file (e.g. ``data_batch_1``) in the
-            unpickled binary format used by the original dataset.
-
-    Returns:
-        A 3-tuple ``(images, labels, label_names)`` where:
-
-        - ``images`` is a ``numpy.ndarray`` of shape ``(N, 32, 32, 3)`` with
-          ``uint8`` pixel values in RGB order.
-        - ``labels`` is a list of integer class indices (one per image), each in
-          the range ``[0, 9]``.
-        - ``label_names`` is a fixed list of 10 human-readable class name strings
-          (e.g. ``"airplane"``, ``"automobile"``, …, ``"truck"``), ordered so that
-          ``label_names[i]`` corresponds to label value ``i``.
-    """
-    with open(file_path, "rb") as f:
-        batch = safe_pickle_load(f, encoding="bytes")
-
-    # CIFAR-10 label names
-    label_names = [
-        "airplane",
-        "automobile",
-        "bird",
-        "cat",
-        "deer",
-        "dog",
-        "frog",
-        "horse",
-        "ship",
-        "truck",
-    ]
-
-    images = batch[b"data"]
-    labels = batch[b"labels"]
-
-    # Reshape images from (10000, 3072) to (10000, 32, 32, 3)
-    images = images.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
-
-    return images, labels, label_names
-
-
-def load_video_metadata_from_folders(video_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
-    """Scan category subdirectories and collect video file metadata.
-
-    Iterates over immediate subdirectories of ``video_dir``, keeping only those
-    whose name appears in ``categories``, and collects paths for all video files
-    with common extensions (``mp4``, ``avi``, ``mov``, ``webm``, ``mkv``).
-
-    Args:
-        video_dir: Root directory whose immediate subdirectories represent
-            category folders.
-        categories: List of category folder names to include. Subdirectories
-            not in this list are skipped.
-
-    Returns:
-        A dict mapping video filename (basename only) to a dict with the keys:
-
-        - ``"category"`` (``str``): Name of the category folder.
-        - ``"path"`` (``Path``): Full path to the video file.
-    """
-    metadata = {}
-
-    for category_folder in video_dir.iterdir():
-        if not category_folder.is_dir():
-            continue
-
-        category_name = category_folder.name
-        if category_name not in categories:
-            continue
-
-        # Find all video files in this category
-        # Use category/filename as key to avoid collisions across categories.
-        for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
-            for video_path in category_folder.glob(ext):
-                metadata[f"{category_name}/{video_path.name}"] = {
-                    "category": category_name,
-                    "path": video_path,
-                }
-
-    return metadata
-
-
-def load_image_metadata_from_folders(image_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
-    """Scan category subdirectories and collect image file metadata.
-
-    Iterates over immediate subdirectories of ``image_dir``, keeping only those
-    whose name appears in ``categories``, and collects paths for all image files
-    with common extensions (``png``, ``jpg``, ``jpeg``, ``gif``, ``bmp``, ``webp``).
-
-    Args:
-        image_dir: Root directory whose immediate subdirectories represent
-            category folders.
-        categories: List of category folder names to include. Subdirectories
-            not in this list are skipped.
-
-    Returns:
-        A dict mapping ``category/filename`` to a dict with the keys:
-
-        - ``"category"`` (``str``): Name of the category folder.
-        - ``"path"`` (``Path``): Full path to the image file.
-    """
-    metadata = {}
-
-    for category_folder in image_dir.iterdir():
-        if not category_folder.is_dir():
-            continue
-
-        category_name = category_folder.name
-        if category_name not in categories:
-            continue
-
-        # Find all image files in this category
-        # Use category/filename as key to avoid collisions across categories
-        # (e.g. Caltech-101 uses image_XXXX.jpg in every category folder).
-        for ext in ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp"]:
-            for image_path in category_folder.glob(ext):
-                metadata[f"{category_name}/{image_path.name}"] = {
-                    "category": category_name,
-                    "path": image_path,
-                }
-
-    return metadata
-
-
-def load_paragraph_metadata_from_folders(text_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
-    """Scan category subdirectories and collect text file metadata.
-
-    Iterates over immediate subdirectories of ``text_dir``, keeping only those
-    whose name appears in ``categories``, and collects paths for all plain-text
-    files with extensions ``txt`` or ``md``.
-
-    Args:
-        text_dir: Root directory whose immediate subdirectories represent
-            category folders.
-        categories: List of category folder names to include. Subdirectories
-            not in this list are skipped.
-
-    Returns:
-        A dict mapping text filename (basename only) to a dict with the keys:
-
-        - ``"category"`` (``str``): Name of the category folder.
-        - ``"path"`` (``Path``): Full path to the text file.
-    """
-    metadata = {}
-
-    for category_folder in text_dir.iterdir():
-        if not category_folder.is_dir():
-            continue
-
-        category_name = category_folder.name
-        if category_name not in categories:
-            continue
-
-        # Find all text files in this category
-        # Use category/filename as key to avoid collisions across categories.
-        for ext in ["*.txt", "*.md"]:
-            for text_path in category_folder.glob(ext):
-                metadata[f"{category_name}/{text_path.name}"] = {
-                    "category": category_name,
-                    "path": text_path,
-                }
-
-    return metadata
+    return d.get("md5") or d.get("MD5") or ""
 
 
 def _streaming_md5(file_path: Path) -> str:
@@ -597,7 +253,7 @@ def load_dataset_from_folder(
                     file_cm = custom_metadata_map[file_path.name]
 
             # Resolve MD5: custom_metadata > content_md5s > computed
-            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+            cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
             if thin:
                 # Thin mode: store file path reference, skip loading bytes.
@@ -681,10 +337,10 @@ def load_dataset_from_folder(
 def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
     """Use MD5 hashes from custom_metadata when available.
 
-    If a media item's ``custom_metadata`` contains a non-empty ``"md5"`` key,
-    that value is used as the item's ``"md5"`` instead of whatever was
-    calculated during loading.  This lets importers supply authoritative hashes
-    from their data source without recalculation.
+    If a media item's ``custom_metadata`` contains a non-empty ``"md5"`` (or
+    ``"MD5"``) key, that value is used as the item's ``"md5"`` instead of
+    whatever was calculated during loading.  This lets importers supply
+    authoritative hashes from their data source without recalculation.
 
     Args:
         media_dict: The mutable medias dict.  Modified in place.
@@ -697,10 +353,9 @@ def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
         cm = media.get("custom_metadata")
         if not cm:
             continue
-        cm_md5 = cm.get("md5")
+        cm_md5 = _pop_md5_key(cm)
         if cm_md5:
             media["md5"] = cm_md5
-            del cm["md5"]
             count += 1
     return count
 
@@ -838,7 +493,7 @@ def load_dataset_from_folder_chunked(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+            cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
             if thin:
                 if cm_md5:
@@ -916,18 +571,14 @@ def load_dataset_from_pickle(
 ) -> dict[str, Any] | None:
     """Load a dataset from a pickle file into the medias dict in-place.
 
-    Supports two pickle formats:
-
-    - **New format**: A dict with a ``"medias"`` key mapping to media data dicts.
-      May also include ``"audio_dir"``, ``"video_dir"``, ``"image_dir"``, or
-      ``"text_dir"`` keys pointing to directories containing the raw media files
-      when the bytes are not stored inline.
-    - **Old format**: A plain dict mapping media ID to media data dict (no wrapping
-      ``"medias"`` key).
+    The pickle must contain a dict with a ``"medias"`` key mapping media IDs
+    to media data dicts.  It may also include ``"audio_dir"``, ``"video_dir"``,
+    ``"image_dir"``, or ``"text_dir"`` keys pointing to directories containing
+    raw media files when the bytes are not stored inline.
 
     If media bytes are not stored inline in the pickle, the function attempts to
-    load them from the companion directory entry in the pickle. Clips for which
-    no media bytes can be resolved are silently skipped (a warning is printed to
+    load them from the companion directory entry in the pickle. Medias for which
+    no bytes can be resolved are silently skipped (a warning is printed to
     stdout after loading).
 
     The ``medias`` dict is cleared before loading begins.
@@ -943,8 +594,7 @@ def load_dataset_from_pickle(
             workflows that only need embeddings for scoring.
 
     Returns:
-        ``None``.  (Formerly returned ``creation_info``; that field has been
-        removed.)
+        ``None``.
     """
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
@@ -960,33 +610,17 @@ def load_dataset_from_pickle(
 
     medias.clear()
 
-    # Handle both old format (just medias dict) and new format (with metadata).
-    # Also support legacy "clips" key from pickles saved before the rename.
-    if isinstance(data, dict) and ("medias" in data or "clips" in data):
-        medias_data = data["medias"] if "medias" in data else data["clips"]
-        # Old pickles may contain creation_info; extract a fallback origin
-        # for medias that predate per-element origin tracking.
-        creation_info = data.get("creation_info")
-    else:
-        medias_data = data
-        creation_info = None
-
-    fallback_origin = None
-    if creation_info:
-        fallback_origin = {
-            "importer": creation_info.get("importer", "unknown"),
-            "params": creation_info.get("field_values", {}),
-        }
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    medias_data = data["medias"]
 
     # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types, normalize_type_id
+    from vtsearch.media import all_types
 
     _dir_keys: dict[str, str] = {}
-    _legacy_bytes: dict[str, list[str]] = {}
     _extra_fields: dict[str, list[str]] = {}
     for mt in all_types():
         _dir_keys[mt.type_id] = mt.dir_key
-        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
         _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     # Convert to the app's media format
@@ -999,8 +633,7 @@ def load_dataset_from_pickle(
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
-            # Determine media type (normalize legacy IDs like "paragraph" → "text")
-            media_type = normalize_type_id(media_info.get("type", "audio"))
+            media_type = media_info.get("type", "audio")
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
@@ -1033,7 +666,7 @@ def load_dataset_from_pickle(
                     "media_path": media_path,
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -1050,32 +683,14 @@ def load_dataset_from_pickle(
                     )
                 continue
 
-            # ── Full mode (original behaviour) ──
+            # ── Full mode ──
             # Load the actual media content.
-            # Support both new key names (media_bytes/media_string) and legacy
-            # key names (clip_bytes/clip_string, wav_bytes/video_bytes/image_bytes/
-            # text_content) for backward compatibility with old pickles.
             media_bytes = None
             media_string = None
             media_path = None
 
-            # Try media_bytes first (binary media), then legacy keys via registry
-            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
-            if bytes_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, bytes):
-                        bytes_val = val
-                        break
-
-            # Try media_string (text media), then legacy keys
-            string_val = media_info.get("media_string") or media_info.get("clip_string")
-            if string_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, str):
-                        string_val = val
-                        break
+            bytes_val = media_info.get("media_bytes")
+            string_val = media_info.get("media_string")
 
             if bytes_val is not None:
                 media_bytes = bytes_val
@@ -1114,7 +729,7 @@ def load_dataset_from_pickle(
                     "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -1174,30 +789,17 @@ def load_dataset_from_pickle_chunked(
     with open(file_path, "rb") as f:
         data = safe_pickle_load(f)
 
-    if isinstance(data, dict) and ("medias" in data or "clips" in data):
-        medias_data = data["medias"] if "medias" in data else data["clips"]
-        creation_info = data.get("creation_info")
-    else:
-        medias_data = data
-        creation_info = None
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    medias_data = data["medias"]
 
-    fallback_origin = None
-    if creation_info:
-        fallback_origin = {
-            "importer": creation_info.get("importer", "unknown"),
-            "params": creation_info.get("field_values", {}),
-        }
-
-    # Build lookup tables dynamically from the media type registry,
-    # matching the approach used by load_dataset_from_pickle.
-    from vtsearch.media import all_types, normalize_type_id
+    # Build lookup tables dynamically from the media type registry.
+    from vtsearch.media import all_types
 
     _dir_keys: dict[str, str] = {}
-    _legacy_bytes: dict[str, list[str]] = {}
     _extra_fields: dict[str, list[str]] = {}
     for mt in all_types():
         _dir_keys[mt.type_id] = mt.dir_key
-        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
         _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     all_media_ids = sorted(medias_data.keys())
@@ -1209,7 +811,7 @@ def load_dataset_from_pickle_chunked(
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = normalize_type_id(media_info.get("type", "audio"))
+            media_type = media_info.get("type", "audio")
 
             if thin:
                 media_path: str | None = media_info.get("media_path")
@@ -1236,7 +838,7 @@ def load_dataset_from_pickle_chunked(
                     "media_path": media_path,
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -1254,23 +856,8 @@ def load_dataset_from_pickle_chunked(
             media_string = None
             media_path = None
 
-            # Try media_bytes first (binary media), then legacy keys via registry
-            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
-            if bytes_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, bytes):
-                        bytes_val = val
-                        break
-
-            # Try media_string (text media), then legacy keys
-            string_val = media_info.get("media_string") or media_info.get("clip_string")
-            if string_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, str):
-                        string_val = val
-                        break
+            bytes_val = media_info.get("media_bytes")
+            string_val = media_info.get("media_string")
 
             if bytes_val is not None:
                 media_bytes = bytes_val
@@ -1306,7 +893,7 @@ def load_dataset_from_pickle_chunked(
                     "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -1369,11 +956,7 @@ def _write_clipper_sidecar(pkl_path: Path, clipper_name: str) -> None:
 
 
 def read_pkl_clipper(pkl_path: Path) -> str | None:
-    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown.
-
-    Checks the lightweight ``.clipper`` sidecar.  Returns ``None`` if the
-    sidecar does not exist (legacy pickles created before clipper tracking).
-    """
+    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown."""
     sidecar = pkl_path.with_suffix(".clipper")
     if sidecar.exists():
         return sidecar.read_text(encoding="utf-8").strip()
@@ -1381,31 +964,10 @@ def read_pkl_clipper(pkl_path: Path) -> str | None:
 
 
 def read_pkl_embedder(pkl_path: Path) -> str | None:
-    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown.
-
-    Checks the lightweight ``.embedder`` sidecar first.  Falls back to loading
-    the pickle and inspecting the first media entry's ``"embedder"`` field,
-    then writes the sidecar for future fast lookups.
-    """
+    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown."""
     sidecar = pkl_path.with_suffix(".embedder")
     if sidecar.exists():
         return sidecar.read_text(encoding="utf-8").strip()
-
-    # Fallback: peek into the pkl itself.
-    if not pkl_path.exists():
-        return None
-    try:
-        with open(pkl_path, "rb") as f:
-            data = safe_pickle_load(f)
-        medias_dict = data.get("medias", {}) if isinstance(data, dict) else {}
-        for media in medias_dict.values():
-            name = media.get("embedder", "")
-            if name:
-                # Cache it for next time.
-                _write_embedder_sidecar(pkl_path, name)
-                return name
-    except Exception:
-        pass
     return None
 
 
@@ -1417,8 +979,6 @@ def _stamp_demo_origin(
     """Stamp the demo origin on all medias (fresh dict per media).
 
     Ensures every media has ``origin = {"importer": "demo", "params": {"name": ...}}``.
-    Called both for freshly-embedded medias and for pickle-cached loads so
-    that old pickles (created before origin stamping was added) get corrected.
     """
     demo_origin_params: dict[str, str] = {"name": dataset_name}
     if converter_name:
@@ -1430,7 +990,6 @@ def _stamp_demo_origin(
 def load_demo_dataset(
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    e5_model: Any = None,
     on_progress: Optional[ProgressCallback] = None,
     embedder_name: str = "",
     converter_name: str = "",
@@ -1459,9 +1018,6 @@ def load_demo_dataset(
             to load.  Raises ``ValueError`` if the key is not found.
         medias: Dict to populate in-place. Existing entries are removed before
             loading. Keys are integer media IDs; values are media data dicts.
-        e5_model: Deprecated — kept for backward compatibility but no longer
-            used.  The text embedding model is obtained from the media type
-            registry.
         embedder_name: Optional name of a registered embedder to use.
             When empty, the first registered embedder for the media type
             is used.
@@ -1591,127 +1147,8 @@ def load_demo_dataset(
     on_progress("idle", f"Loaded {dataset_name} dataset")
 
 
-def _apply_converter_to_demo(
-    converter_name: str,
-    dataset_name: str,
-    medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",
-    on_progress: Optional[ProgressCallback] = None,
-) -> None:
-    """Convert all medias in-place using the named converter.
-
-    After conversion, *medias* contains the converted outputs (target type)
-    instead of the original source-type medias.  Each converted media's
-    origin records the demo dataset and the converter used.
-    """
-    from vtsearch.converters import get_converter
-    from vtsearch.converters.runner import _compute_md5, _embed_converted_output
-    from vtsearch.media import embedders_for_type, get_embedder
-
-    converter = get_converter(converter_name)
-    if converter is None:
-        raise ValueError(f"Unknown converter: {converter_name}")
-
-    if on_progress is None:
-        on_progress = _default_progress()
-
-    # Resolve embedder for the *target* type.
-    target_emb = None
-    if embedder_name:
-        try:
-            target_emb = get_embedder(embedder_name)
-        except KeyError:
-            pass
-    if target_emb is None:
-        avail = embedders_for_type(converter.target_type)
-        if avail:
-            target_emb = avail[0]
-    if target_emb is not None and getattr(target_emb, "_model", None) is None:
-        target_emb.load_models()
-
-    # Convert each original media and collect the outputs.
-    source_items = list(medias.items())
-    converted: dict[int, dict[str, Any]] = {}
-    new_id = 1
-
-    on_progress(
-        "converting",
-        f"Converting {len(source_items)} items via {converter.display_name or converter.name}...",
-        0,
-        len(source_items),
-    )
-
-    for idx, (_, src) in enumerate(source_items):
-        on_progress(
-            "converting",
-            f"Converting {src.get('filename', '')} via {converter.display_name or converter.name}...",
-            idx + 1,
-            len(source_items),
-        )
-
-        try:
-            outputs = converter.convert(src)
-        except Exception:
-            continue
-        if not outputs:
-            continue
-
-        origin = {
-            "importer": "converter",
-            "params": {
-                "converter": converter_name,
-                "source_file": src.get("filename", ""),
-                "parent_importer": "demo",
-                "parent_demo": dataset_name,
-            },
-        }
-
-        for output in outputs:
-            output_filename = output.get("filename", f"converted_{new_id}")
-            source_name = src.get("filename", str(src.get("id", "")))
-            origin_name = f"{source_name}\u2192{output_filename}"
-
-            embedding = _embed_converted_output(target_emb, output)
-            if embedding is None:
-                continue
-
-            md5 = _compute_md5(output)
-
-            media_data: dict[str, Any] = {
-                "id": new_id,
-                "type": converter.target_type,
-                "embedder": target_emb.name if target_emb else "",
-                "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
-                "md5": md5,
-                "embedding": embedding,
-                "filename": origin_name,
-                "category": src.get("category", "custom"),
-                "origin": origin,
-                "origin_name": origin_name,
-                "media_bytes": None,
-                "media_string": None,
-                "media_path": src.get("media_path", ""),
-                "duration": output.get("duration", 0),
-            }
-
-            if "media_bytes" in output:
-                media_data["media_bytes"] = output["media_bytes"]
-            if "media_string" in output:
-                media_data["media_string"] = output["media_string"]
-            if "width" in output:
-                media_data["width"] = output["width"]
-            if "height" in output:
-                media_data["height"] = output["height"]
-            if "word_count" in output:
-                media_data["word_count"] = output["word_count"]
-            if "character_count" in output:
-                media_data["character_count"] = output["character_count"]
-
-            converted[new_id] = media_data
-            new_id += 1
-
-    medias.clear()
-    medias.update(converted)
+# Backward-compat alias — canonical location is vtsearch.converters.runner
+from vtsearch.converters.runner import apply_converter_to_demo as _apply_converter_to_demo  # noqa: F401, E402
 
 
 def export_dataset_to_file(

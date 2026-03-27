@@ -147,6 +147,32 @@ class TestApplyCustomMetadataMD5:
         assert count == 0
         assert media_dict[1]["md5"] == "calculated_hash"
 
+    def test_replaces_md5_from_uppercase_key(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"MD5": "upper_hash", "title": "foo"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 1
+        assert media_dict[1]["md5"] == "upper_hash"
+        assert "MD5" not in media_dict[1]["custom_metadata"]
+        assert media_dict[1]["custom_metadata"]["title"] == "foo"
+
+    def test_lowercase_md5_takes_priority_over_uppercase(self):
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "calculated_hash", "custom_metadata": {"md5": "lower_hash", "MD5": "upper_hash"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 1
+        # lowercase "md5" should win
+        assert media_dict[1]["md5"] == "lower_hash"
+        assert "md5" not in media_dict[1]["custom_metadata"]
+        # uppercase key remains since lowercase was used
+        assert media_dict[1]["custom_metadata"]["MD5"] == "upper_hash"
+
 
 class TestCustomMetadataMapInLoader:
     """Tests that custom_metadata_map in load_dataset_from_folder skips MD5 calculation."""
@@ -236,6 +262,27 @@ class TestCustomMetadataMapInLoader:
         media = next(iter(medias_dict.values()))
         assert media["md5"] == custom_md5
 
+    def test_uppercase_md5_key_in_custom_metadata_map(self, tmp_path):
+        """When custom_metadata_map provides MD5 (uppercase), the loader uses it."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.audio.generator import generate_wav
+
+        wav_path = tmp_path / "test.wav"
+        wav_path.write_bytes(generate_wav(440, 0.5))
+
+        medias_dict: dict = {}
+        custom_md5 = "uppercase_provided_md5"
+        cm_map = {"test.wav": {"MD5": custom_md5, "source": "external_db"}}
+
+        load_dataset_from_folder(
+            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+        )
+
+        assert len(medias_dict) == 1
+        media = next(iter(medias_dict.values()))
+        assert media["md5"] == custom_md5
+        assert media["custom_metadata"]["source"] == "external_db"
+
 
 class TestListMedias:
     def test_returns_all_medias(self, client):
@@ -269,6 +316,47 @@ class TestListMedias:
         data = resp.get_json()
         for media in data:
             assert "embedding" not in media
+
+
+class TestBatchMedias:
+    def test_returns_requested_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1, 2]})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data) == 2
+        returned_ids = {m["id"] for m in data}
+        assert returned_ids == {1, 2}
+
+    def test_same_fields_as_list_medias(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1]})
+        data = resp.get_json()
+        assert len(data) == 1
+        media = data[0]
+        assert "id" in media
+        assert "md5" in media
+        assert "filename" in media
+        assert "custom_metadata" in media
+        assert "media_bytes" not in media
+        assert "embedding" not in media
+
+    def test_unknown_ids_omitted(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [1, 99999]})
+        data = resp.get_json()
+        assert len(data) == 1
+        assert data[0]["id"] == 1
+
+    def test_empty_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": []})
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
+    def test_missing_ids_field(self, client):
+        resp = client.post("/api/medias/batch", json={"foo": "bar"})
+        assert resp.status_code == 400
+
+    def test_non_list_ids(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": "not a list"})
+        assert resp.status_code == 400
 
 
 class TestMediaAudio:

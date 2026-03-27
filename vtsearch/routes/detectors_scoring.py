@@ -8,12 +8,11 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.models import build_model_from_weights
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import get_json_or_400, get_json_safe
 from vtsearch.utils import (
     get_autodetect_detectors_by_media,
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
-    set_active_dataset_id,
     snapshot_medias,
 )
 from vtsearch.utils.progress import update_find_progress
@@ -119,20 +118,22 @@ def find_label():
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
 
-    body = request.get_json(force=True, silent=True) or {}
+    body = get_json_safe()
     model_id = body.get("model_id")
     if not model_id:
         update_find_progress("idle", "")
         return jsonify({"error": "model_id is required"}), 400
 
-    # Activate the explicitly selected dataset so scoring runs against the
-    # correct context instead of whichever dataset happens to be active.
+    # If the request body specifies a dataset_id, override the request-scoped
+    # context so scoring runs against the correct dataset.
     dataset_id = body.get("dataset_id")
     if dataset_id:
+        from flask import g
         from vtsearch.utils import get_context
 
-        if get_context(dataset_id) is not None:
-            set_active_dataset_id(dataset_id)
+        ctx = get_context(dataset_id)
+        if ctx is not None:
+            g._dataset_context = ctx
 
     update_find_progress(
         "running", "Resolving model…",
@@ -166,11 +167,25 @@ def find_label():
             weights = tm_data["weights"]
             threshold = tm_data.get("threshold", 0.5)
 
+    # Check the in-memory DetectorContext for a cached trained model.
+    # learned_sort() caches the MLP here after each sort, so if the user
+    # trained on Dataset A and then switched to Dataset B, the model is
+    # still available without expensive label-origin resolution.
+    if weights is None:
+        from vtsearch.routes.detectors_helpers import serialize_weights as _ser_weights
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None and det_ctx.model is not None:
+            weights = _ser_weights(det_ctx.model)
+            threshold = det_ctx.threshold
+
     # If still no weights, try training on-the-fly from the trainable model's
     # labelset.  This handles the cross-dataset scenario: user trains on
     # Dataset A (labels saved), loads Dataset B, runs Find.  The labelset's
     # origin info lets us resolve the original files, embed them, and train.
     _resolution_diagnostic: dict | None = None
+    snap_for_train: dict | None = None
     if weights is None and tm_data:
         label_entries = tm_data.get("labelset", {}).get("labels", [])
         if label_entries:
@@ -327,7 +342,7 @@ def find_label():
             resp["warning"] = f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
         return jsonify(resp), 400
 
-    snap = snapshot_medias()
+    snap = snap_for_train if snap_for_train else snapshot_medias()
     if not snap:
         update_find_progress("idle", "")
         return jsonify({"error": "No medias loaded"}), 400

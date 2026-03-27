@@ -45,7 +45,7 @@
         @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
           <div class="demo-embedder-row">
             @if (demoEmbedders.length > 1) {
-              <label class="form-label" for="demo-embedder">Embedder:</label>
+              <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder:</label>
               <select
                 id="demo-embedder"
                 class="form-select form-select--inline"
@@ -58,7 +58,7 @@
               </select>
             }
             @if (demoClippers.length > 1) {
-              <label class="form-label" for="demo-clipper">Clipper:</label>
+              <label class="form-label" for="demo-clipper" title="Pre-processing clipper that segments or trims media before embedding (e.g. audio chunking)">Clipper:</label>
               <select
                 id="demo-clipper"
                 class="form-select form-select--inline"
@@ -74,14 +74,14 @@
         }
 
         <div class="demo-content-area">
-          <table class="demo-table">
+          <table class="demo-table" [class.demo-table-fixed]="demoTableFixed" [style.width]="demoTableFixed ? (demoTableWidth + 'px') : '100%'">
             <thead>
               <tr>
-                <th (click)="sortDemoBy('label')" class="sortable col-name">Name{{ demoSortIndicator('label') }}</th>
-                <th (click)="sortDemoBy('num_files')" class="sortable col-num"># Media{{ demoSortIndicator('num_files') }}</th>
-                <th (click)="sortDemoBy('num_categories')" class="sortable col-num"># Cat.{{ demoSortIndicator('num_categories') }}</th>
-                <th (click)="sortDemoBy('description')" class="sortable col-desc">Description{{ demoSortIndicator('description') }}</th>
-                <th (click)="sortDemoBy('status')" class="sortable col-status">Readiness{{ demoSortIndicator('status') }}</th>
+                <th (click)="sortDemoBy('label')" class="sortable" title="Demo dataset name (click to sort)" data-col="label" [style.width.px]="demoTableFixed ? demoColWidths['label'] : null">Name<span class="sort-indicator" [class.active]="demoSortKey === 'label'">{{ demoSortIndicator('label') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'label')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('num_files')" class="sortable col-num" title="Number of media files in the demo dataset (click to sort)" data-col="num_files" [style.width.px]="demoTableFixed ? demoColWidths['num_files'] : null"># Media<span class="sort-indicator" [class.active]="demoSortKey === 'num_files'">{{ demoSortIndicator('num_files') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'num_files')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('num_categories')" class="sortable col-num" title="Number of distinct categories or classes in the dataset (click to sort)" data-col="num_categories" [style.width.px]="demoTableFixed ? demoColWidths['num_categories'] : null"># Cat.<span class="sort-indicator" [class.active]="demoSortKey === 'num_categories'">{{ demoSortIndicator('num_categories') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'num_categories')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('description')" class="sortable" title="Short description of the demo dataset contents (click to sort)" data-col="description" [style.width.px]="demoTableFixed ? demoColWidths['description'] : null">Description<span class="sort-indicator" [class.active]="demoSortKey === 'description'">{{ demoSortIndicator('description') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'description')" (click)="$event.stopPropagation()"></div></th>
+                <th (click)="sortDemoBy('status')" class="sortable" title="Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)" data-col="status" [style.width.px]="demoTableFixed ? demoColWidths['status'] : null">Readiness<span class="sort-indicator" [class.active]="demoSortKey === 'status'">{{ demoSortIndicator('status') }}</span><div class="col-resize-handle" (mousedown)="startDemoResize($event, 'status')" (click)="$event.stopPropagation()"></div></th>
               </tr>
             </thead>
             <tbody>
@@ -97,8 +97,8 @@
                   (keydown.space)="$event.preventDefault(); selectDemo(demo)"
                 >
                   <td class="col-name">{{ demo.label }}</td>
-                  <td class="col-num">{{ demo.num_files }}</td>
-                  <td class="col-num">{{ demo.num_categories }}</td>
+                  <td class="col-num">{{ demo.num_files | number }}</td>
+                  <td class="col-num">{{ demo.num_categories | number }}</td>
                   <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
                   <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
                 </tr>
@@ -178,7 +178,7 @@
 
       @if (availableEmbedders.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="field-embedder">Embedder</label>
+          <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
           <select
             id="field-embedder"
             class="form-select"
@@ -193,7 +193,7 @@
 
       @if (availableClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="field-clipper">Clipper</label>
+          <label class="form-label" for="field-clipper" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
           <select
             id="field-clipper"
             class="form-select"
@@ -260,7 +260,7 @@
       <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
 
       <div class="form-group">
-        <label class="form-label" for="sf-media-type">Media Type</label>
+        <label class="form-label" for="sf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
         <select
           id="sf-media-type"
           class="form-select"
@@ -316,7 +316,7 @@
 
       @if (sfEmbedders.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="sf-embedder">Embedder</label>
+          <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
           <select
             id="sf-embedder"
             class="form-select"
@@ -331,7 +331,7 @@
 
       @if (sfClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="sf-clipper">Clipper</label>
+          <label class="form-label" for="sf-clipper" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
           <select
             id="sf-clipper"
             class="form-select"

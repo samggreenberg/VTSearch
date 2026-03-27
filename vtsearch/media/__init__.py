@@ -1,21 +1,29 @@
-"""Media type and embedder registries.
+"""Media type, embedder, and clipper registries.
 
-All built-in media types and embedders are registered at the bottom of this
-module.  Third-party or project-specific types can be added by calling
-:func:`register` / :func:`register_embedder` after importing this module::
+Built-in media types, embedders, and clippers are **auto-discovered** at
+import time by scanning sub-packages of ``vtsearch.media`` for sentinel
+attributes:
+
+- ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
+- ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances (may be empty).
+- ``CLIPPERS``  — a list of :class:`MediaClipper` instances (may be empty).
+
+To add a new media type (or embedder / clipper), create a sub-package under
+``vtsearch/media/`` with an ``__init__.py`` that exposes the relevant
+sentinels.  Symlinked directories are supported.
+
+Third-party or project-specific types can still be registered manually::
 
     from vtsearch.media import register, register_embedder
-    from mypackage.media_type import SourceCodeMediaType
-    from mypackage.embedder import SourceCodeEmbedder
-
-    register(SourceCodeMediaType())
-    register_embedder(SourceCodeEmbedder())
-
-The new type/embedder will then be picked up automatically by model
-initialisation, dataset loading, HTTP routing, and the demo-dataset listing.
+    register(MyCustomMediaType())
+    register_embedder(MyCustomEmbedder())
 """
 
 from __future__ import annotations
+
+import importlib
+import warnings
+from pathlib import Path
 
 from vtsearch.media.base import (
     DemoDataset,
@@ -36,16 +44,12 @@ from vtsearch.media.base import (
 
 _registry: dict[str, "MediaType"] = {}
 
-# Legacy type_id aliases for backward compatibility (e.g. pickles, settings,
-# API parameters that still use the old name).
-_LEGACY_TYPE_IDS: dict[str, str] = {
-    "paragraph": "text",
-}
-
-
 def normalize_type_id(type_id: str) -> str:
-    """Map legacy type IDs to their current canonical names."""
-    return _LEGACY_TYPE_IDS.get(type_id, type_id)
+    """Validate that *type_id* is a known canonical type name.
+
+    Returns *type_id* unchanged (legacy aliases have been removed).
+    """
+    return type_id
 
 
 def register(media_type: "MediaType") -> None:
@@ -56,7 +60,6 @@ def register(media_type: "MediaType") -> None:
 def get(type_id: str) -> "MediaType":
     """Return the :class:`MediaType` registered under *type_id*.
 
-    Accepts legacy type IDs (e.g. ``"paragraph"`` → ``"text"``).
     Raises :class:`KeyError` if *type_id* is not registered.
     """
     type_id = normalize_type_id(type_id)
@@ -228,61 +231,48 @@ def all_embedders_dict() -> list[dict]:
 
 
 # ------------------------------------------------------------------
-# Register all built-in media types
+# Auto-discover media types, embedders, and clippers
 # ------------------------------------------------------------------
 
-from vtsearch.media.audio.media_type import AudioMediaType  # noqa: E402
-from vtsearch.media.document.media_type import DocumentMediaType  # noqa: E402
-from vtsearch.media.image.media_type import ImageMediaType  # noqa: E402
-from vtsearch.media.text.media_type import TextMediaType  # noqa: E402
-from vtsearch.media.video.media_type import VideoMediaType  # noqa: E402
 
-register(AudioMediaType())
-register(VideoMediaType())
-register(ImageMediaType())
-register(TextMediaType())
-register(DocumentMediaType())
+def _discover_media_plugins() -> None:
+    """Scan sub-packages of ``vtsearch.media`` for sentinel attributes.
 
-# ------------------------------------------------------------------
-# Register all built-in embedders
-# ------------------------------------------------------------------
+    Each sub-package (directory with ``__init__.py``) may expose:
 
-from vtsearch.media.audio.embedder import AudioClapEmbedder  # noqa: E402
-from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder  # noqa: E402
-from vtsearch.media.image.embedder import ImageClipEmbedder  # noqa: E402
-from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder  # noqa: E402
-from vtsearch.media.text.embedder import TextE5Embedder  # noqa: E402
-from vtsearch.media.text.embedder_bge import TextBGEEmbedder  # noqa: E402
-from vtsearch.media.video.embedder import VideoXClipEmbedder  # noqa: E402
+    - ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
+    - ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances.
+    - ``CLIPPERS``  — a list of :class:`MediaClipper` instances.
 
-register_embedder(AudioClapEmbedder())
-register_embedder(AudioClapMusicEmbedder())
-register_embedder(ImageClipEmbedder())
-register_embedder(ImageSiglipEmbedder())
-register_embedder(TextE5Embedder())
-register_embedder(TextBGEEmbedder())
-register_embedder(VideoXClipEmbedder())
+    Symlinked directories are followed (``entry.is_dir()`` resolves
+    symlinks), so an external media-type package can be symlinked into
+    this directory and will be discovered automatically.
+    """
+    package_dir = Path(__file__).parent
+    for entry in sorted(package_dir.iterdir()):
+        if entry.name.startswith((".", "_")):
+            continue
+        if not entry.is_dir() or not (entry / "__init__.py").exists():
+            continue
+        try:
+            mod = importlib.import_module(f"vtsearch.media.{entry.name}")
+        except Exception as exc:  # pragma: no cover
+            warnings.warn(
+                f"Failed to load media sub-package '{entry.name}': {exc}",
+                stacklevel=2,
+            )
+            continue
 
-# ------------------------------------------------------------------
-# Register all built-in clippers
-# ------------------------------------------------------------------
+        mt = getattr(mod, "MEDIA_TYPE", None)
+        if mt is not None:
+            register(mt)
+        for emb in getattr(mod, "EMBEDDERS", []):
+            register_embedder(emb)
+        for clip in getattr(mod, "CLIPPERS", []):
+            register_clipper(clip)
 
-from vtsearch.media.audio.clipper import SoundDefaultClipper, SoundTilingClipper  # noqa: E402
-from vtsearch.media.document.clipper import DocumentDefaultClipper  # noqa: E402
-from vtsearch.media.image.clipper import ImageDefaultClipper, ImageTilingClipper  # noqa: E402
-from vtsearch.media.text.clipper import TextDefaultClipper, TextSentenceClipper  # noqa: E402
-from vtsearch.media.video.clipper import VideoDefaultClipper, VideoSceneClipper, VideoTilingClipper  # noqa: E402
 
-register_clipper(SoundDefaultClipper())
-register_clipper(SoundTilingClipper(2.0))
-register_clipper(ImageDefaultClipper())
-register_clipper(ImageTilingClipper())
-register_clipper(TextDefaultClipper())
-register_clipper(TextSentenceClipper())
-register_clipper(VideoDefaultClipper())
-register_clipper(VideoTilingClipper(2.0))
-register_clipper(VideoSceneClipper())
-register_clipper(DocumentDefaultClipper())
+_discover_media_plugins()
 
 
 def set_progress_callback(callback: "ProgressCallback") -> None:

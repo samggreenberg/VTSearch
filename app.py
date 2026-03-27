@@ -43,7 +43,10 @@ from vtsearch.medias import init_medias  # noqa: E402, F401 — used by tests vi
 from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     auth_bp,
+    eval_bp,
     file_browser_bp,
+    labels_bp,
+    media_server_bp,
     medias_bp,
     datasets_bp,
     detectors_bp,
@@ -84,12 +87,49 @@ def _set_user_context():
     g.user = provider.get_user(request)
 
 
+@app.before_request
+def _set_request_context():
+    """Resolve per-request dataset/model context from HTTP headers.
+
+    If the frontend sends ``X-Dataset-Id`` or ``X-Model-Id``, the
+    corresponding context is stashed on ``g`` so that proxy objects
+    (``medias``, ``good_votes``, etc.) resolve to it for the duration
+    of this request — without mutating global "active" state.
+
+    When the headers are absent the proxies fall back to the global
+    active pointers, preserving backward compatibility.
+    """
+    from flask import request
+    from vtsearch.utils.state_core import (
+        get_context,
+        get_detector_context,
+    )
+
+    # Headers (Angular HttpClient interceptor) take priority, with query
+    # params as fallback for browser-native requests (<img src>, <audio src>,
+    # <video src>, etc.) that bypass Angular's interceptor.
+    ds_id = request.headers.get("X-Dataset-Id") or request.args.get("dataset_id")
+    if ds_id:
+        ctx = get_context(ds_id)
+        if ctx is not None:
+            g._dataset_context = ctx
+
+    model_id = request.headers.get("X-Model-Id") or request.args.get("model_id")
+    if model_id:
+        det_ctx = get_detector_context(model_id)
+        if det_ctx is not None:
+            g._detector_context = det_ctx
+
+
 # ---------------------------------------------------------------------------
 # Register Blueprints
 # ---------------------------------------------------------------------------
 
 app.register_blueprint(auth_bp)
+app.register_blueprint(eval_bp)
 app.register_blueprint(file_browser_bp)
+app.register_blueprint(labels_bp)
+app.register_blueprint(media_server_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, Response, current_app, redirect, send_from_directory
+from flask import Blueprint, Response, current_app, send_from_directory
 
 main_bp = Blueprint("main", __name__)
 
@@ -62,13 +62,6 @@ def favicon_variant(variant: str) -> tuple[str, int] | Response:
         return "", 204
     return send_from_directory(str(static), filename, mimetype="image/x-icon")
 
-
-@main_bp.route("/ng/")
-@main_bp.route("/ng/<path:path>")
-def serve_angular_redirect(path: str = "") -> Response:
-    """Redirect legacy /ng/ URLs to /."""
-    target = "/" + path if path else "/"
-    return redirect(target, code=301)
 
 
 @main_bp.route("/logo.svg")

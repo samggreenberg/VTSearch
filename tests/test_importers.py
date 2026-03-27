@@ -1083,8 +1083,6 @@ class TestHttpArchiveExtractDirIsolation:
         imp = HttpArchiveDatasetImporter()
         dirs_used = []
 
-        real_load = None
-
         def capture_load(extract_dir, *args, **kwargs):
             dirs_used.append(str(extract_dir))
 

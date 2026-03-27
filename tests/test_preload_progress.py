@@ -7,6 +7,9 @@ happening during the (potentially long) startup phase.
 Also tests ``intercept_weight_loading_progress`` which tracks tensor-level
 progress during model weight loading via ``set_module_tensor_to_device``
 and ``load_state_dict``.
+
+Also tests ``load_pretrained_local_first`` which avoids network hangs by
+preferring locally cached model files.
 """
 
 from unittest.mock import MagicMock, patch
@@ -14,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from vtsearch.media.base import intercept_weight_loading_progress
+from vtsearch.media.base import intercept_weight_loading_progress, load_pretrained_local_first
 from vtsearch.models.loader import _make_console_progress, preload_autoload_media_types
 
 
@@ -111,18 +114,15 @@ class TestMakeConsoleProgress:
 class TestPreloadConsoleOutput:
     """Integration-style tests for console output during preload_autoload_media_types."""
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_prints_preloading_banner_and_progress(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, mock_emb_favs, capsys):
         """preload_autoload_media_types should print the banner and forward progress to console."""
         mock_emb = MagicMock()
         mock_emb.name = "clap"
-        mock_emb.media_type_id = "audio"
         mock_emb._on_progress = lambda *a, **kw: None
 
         def fake_load_models():
-            # Simulate what a real load_models does
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_emb._on_progress("loading", "model.safetensors", 50, 100)
             mock_emb._on_progress("loading", "model.safetensors", 100, 100)
@@ -132,7 +132,7 @@ class TestPreloadConsoleOutput:
             mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 4, 4)
 
         mock_emb.load_models = fake_load_models
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         result = preload_autoload_media_types()
 
@@ -143,44 +143,42 @@ class TestPreloadConsoleOutput:
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_restores_original_callback_after_load(self, mock_embedders_for_type, mock_favs, mock_emb_favs):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_restores_original_callback_after_load(self, mock_get_embedder, mock_emb_favs):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = original_cb
         mock_emb.load_models = MagicMock()
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         preload_autoload_media_types()
 
         assert mock_emb._on_progress is original_cb
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=["audio"])
-    @patch("vtsearch.media.embedders_for_type")
-    def test_restores_callback_on_exception(self, mock_embedders_for_type, mock_favs, mock_emb_favs, capsys):
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.media.get_embedder")
+    def test_restores_callback_on_exception(self, mock_get_embedder, mock_emb_favs, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = original_cb
         mock_emb.load_models.side_effect = RuntimeError("boom")
-        mock_embedders_for_type.return_value = [mock_emb]
+        mock_get_embedder.return_value = mock_emb
 
         result = preload_autoload_media_types()
 
         assert mock_emb._on_progress is original_cb
-        assert result == []  # failed, so not in preloaded list
+        assert result == []
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_types", return_value=[])
-    def test_no_autoload_types_produces_no_output(self, mock_favs, capsys):
-        """When there are no autoload media types, nothing should be printed."""
+    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
+    def test_no_autoload_embedders_produces_no_output(self, mock_emb_favs, capsys):
+        """When there are no autoload embedders, nothing should be printed."""
         result = preload_autoload_media_types()
 
         assert result == []
@@ -370,3 +368,87 @@ class TestInterceptWeightLoadingProgress:
         assert len(weight_calls) == 5
         assert weight_calls[-1][2] == 5
         assert weight_calls[-1][3] == 5
+
+
+class TestLoadPretrainedLocalFirst:
+    """Unit tests for load_pretrained_local_first."""
+
+    def test_returns_result_from_local_only_when_available(self):
+        """When local_files_only=True succeeds, the result is returned directly."""
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            assert kwargs.get("local_files_only") is True
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id", cache_dir="/tmp")
+        assert result is sentinel
+
+    def test_falls_back_to_network_on_oserror(self):
+        """When local_files_only=True raises OSError, retry without it."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise OSError("model not cached")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id", cache_dir="/tmp")
+        assert result is sentinel
+        assert call_count[0] == 2
+
+    def test_falls_back_on_file_not_found_error(self):
+        """FileNotFoundError (subclass of OSError) should also trigger fallback."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise FileNotFoundError("No cached files")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert call_count[0] == 2
+
+    def test_passes_through_all_args_and_kwargs(self):
+        """Positional and keyword arguments should be forwarded to load_fn."""
+        captured = {}
+
+        def fake_load(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = {k: v for k, v in kwargs.items() if k != "local_files_only"}
+            return "ok"
+
+        load_pretrained_local_first(fake_load, "model-id", low_cpu_mem_usage=True, token=False)
+        assert captured["args"] == ("model-id",)
+        assert captured["kwargs"] == {"low_cpu_mem_usage": True, "token": False}
+
+    def test_non_oserror_exceptions_propagate(self):
+        """Non-OSError exceptions (e.g. ImportError) should not be caught."""
+
+        def fake_load(*args, **kwargs):
+            raise ImportError("missing transformers")
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised ImportError"
+        except ImportError:
+            pass
+
+    def test_network_fallback_error_propagates(self):
+        """If both local and network attempts fail, the network error propagates."""
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            raise ConnectionError("network down")
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised ConnectionError"
+        except ConnectionError:
+            pass

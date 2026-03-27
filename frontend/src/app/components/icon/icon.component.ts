@@ -11,6 +11,7 @@ const KNOWN_TYPES = new Set([
   'folder', 'folder-open', 'upload',
   'graduation', 'arrow-up', 'shuffle', 'elephant', 'cloud',
   'check', 'warning', 'x-circle', 'info', 'file', 'lightbulb',
+  'list', 'grid', 'cursor-click', 'cursor-hover',
 ]);
 
 function emojiToType(icon: string): string {
@@ -127,6 +128,18 @@ function emojiToType(icon: string): string {
       }
       @case ('file') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      }
+      @case ('list') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      }
+      @case ('grid') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      }
+      @case ('cursor-click') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l6.5 16 2.5-6.5L19.5 11z"/><line x1="13" y1="13" x2="20" y2="20"/><line x1="16" y1="21" x2="21" y2="16"/><line x1="17.5" y1="17.5" x2="19.5" y2="19.5"/></svg>
+      }
+      @case ('cursor-hover') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l6.5 16 2.5-6.5L19.5 11z"/></svg>
       }
     } }
   `,

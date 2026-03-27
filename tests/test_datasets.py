@@ -9,6 +9,11 @@ import app as app_module
 
 class TestIndex:
     def test_serves_index_html(self, client):
+        from pathlib import Path
+
+        static_index = Path(app_module.app.static_folder) / "index.html"
+        if not static_index.exists():
+            pytest.skip("Angular build not present (run 'npm run build:prod' in frontend/)")
         resp = client.get("/")
         assert resp.status_code == 200
         assert b"VTSearch" in resp.data
@@ -492,8 +497,8 @@ class TestDemoDatasetEmbedderStatus:
         for ds in data["datasets"]:
             assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
 
-    def test_fallback_reads_embedder_from_pkl_medias(self, client):
-        """When no sidecar file exists, embedder is read from the pkl medias and cached."""
+    def test_no_sidecar_returns_empty_embedder(self, client):
+        """When no sidecar file exists, pkl_embedder is empty string."""
         import pickle
 
         from vtsearch.config import EMBEDDINGS_DIR
@@ -525,11 +530,10 @@ class TestDemoDatasetEmbedderStatus:
             data = resp.get_json()
             ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
             assert ds is not None
-            assert ds["pkl_embedder"] == "FallbackEmb"
+            # Without a sidecar, embedder is unknown (empty string)
+            assert ds["pkl_embedder"] == ""
+            # The pkl exists but we can't verify the embedder matches, so status stays ready
             assert ds["status"] == "ready"
-            # Sidecar should have been created as a cache
-            assert sidecar.exists(), "Sidecar should be written as cache after fallback read"
-            assert sidecar.read_text(encoding="utf-8").strip() == "FallbackEmb"
         finally:
             pkl_file.unlink(missing_ok=True)
             sidecar.unlink(missing_ok=True)
@@ -1001,38 +1005,6 @@ class TestLoadProgressRaceCondition:
 
             unregister_dataset(dataset_id)
 
-    def test_stepped_progress_filters_idle(self):
-        """_stepped_progress must drop 'idle' so cached-pkl loads can't leak it.
-
-        When a demo dataset is already cached, load_demo_dataset() emits
-        ``on_progress("idle", ...)`` before the outer finalization wrapper
-        has finished.  If this leaks through to the global progress tracker,
-        a frontend poll can see 'idle' and stop polling — leaving the UI
-        stuck on the progress overlay.
-        """
-        from vtsearch.routes.datasets_loading import _stepped_progress
-        from vtsearch.utils.progress import get_progress, update_progress
-
-        # Set progress to a known non-idle state
-        update_progress("loading", "In progress…", step=2, total_steps=4)
-
-        # Simulate the inner load function signalling idle (e.g. cached pkl)
-        _stepped_progress("idle", "Loaded dataset")
-
-        # Progress must NOT have changed to idle
-        progress = get_progress()
-        assert progress["status"] == "loading", (
-            "_stepped_progress must filter out 'idle' to prevent premature completion signals from cached dataset loads"
-        )
-        assert progress["message"] == "In progress…"
-
-        # Non-idle statuses must still pass through
-        _stepped_progress("downloading", "Fetching files…", 50, 100)
-        progress = get_progress()
-        assert progress["status"] == "downloading"
-        assert progress["message"] == "Fetching files…"
-        assert progress["step"] == 1  # downloading maps to step 1
-
     def test_origin_load_clears_stale_error(self):
         """_run_origin_load_in_background must clear old error on new load."""
         from unittest.mock import patch
@@ -1160,25 +1132,6 @@ class TestCancelIngest:
             dataset_progress.reset_cancel()
             app_module.medias.clear()
             app_module.medias.update(saved)
-
-    def test_stepped_progress_raises_on_cancel(self):
-        """_stepped_progress should raise CancelledError when cancelled."""
-        from vtsearch.routes.datasets_loading import _stepped_progress
-        from vtsearch.utils.progress import CancelledError, dataset_progress
-
-        dataset_progress.reset_cancel()
-
-        # Should work normally when not cancelled
-        _stepped_progress("loading", "Test", 0, 0)
-
-        # Set cancel flag
-        dataset_progress.cancel()
-
-        # Should raise CancelledError
-        with pytest.raises(CancelledError):
-            _stepped_progress("loading", "Test", 0, 0)
-
-        dataset_progress.reset_cancel()
 
     def test_new_load_resets_cancel_flag(self, client):
         """Starting a new load should clear any previous cancellation."""

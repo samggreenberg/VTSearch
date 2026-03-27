@@ -8,6 +8,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-image-viewer',
@@ -22,6 +23,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   @ViewChild('imageEl') imageRef!: ElementRef<HTMLImageElement>;
 
   imageSrc = '';
+
+  constructor(private activeContext: ActiveContextService) {}
   imageReady = false;
   zoom = 1;
   rotation = 0;
@@ -44,7 +47,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
       this.imageReady = false;
-      this.imageSrc = `/api/medias/${this.media.id}/image`;
+      this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
       this.resetView();
     }
   }

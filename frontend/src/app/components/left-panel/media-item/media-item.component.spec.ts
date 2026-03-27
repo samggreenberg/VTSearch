@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MediaItemComponent } from './media-item.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('MediaItemComponent', () => {
@@ -17,6 +18,7 @@ describe('MediaItemComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaItemComponent],
+      providers: [ActiveContextService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaItemComponent);

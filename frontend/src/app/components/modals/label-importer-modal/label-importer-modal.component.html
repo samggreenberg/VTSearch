@@ -17,6 +17,7 @@
       }
     </div>
 
+    @if (!targetModelName) {
     <div class="add-media-section">
       <p class="add-media-heading">Add media directly</p>
       <div class="add-media-buttons">
@@ -50,6 +51,7 @@
         </button>
       </div>
     </div>
+    }
 
     @if (error) {
       <p class="error-text">{{ error }}</p>

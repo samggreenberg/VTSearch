@@ -4,20 +4,20 @@ multiple datasets without re-resolving media or re-embedding vectors."""
 import hashlib
 
 import numpy as np
-import pytest
+
+from tests import load_model_and_wait as _load_model_and_wait
 
 from vtsearch.utils.state_core import (
     DatasetContext,
+    DetectorContext,
     _ProxyDict,
-    _ProxyList,
-    _empty_context,
-    clear_all_contexts,
-    get_active_context,
-    get_active_dataset_id,
     get_context,
+    get_thread_dataset_context,
     list_loaded_dataset_ids,
     register_context,
-    set_active_dataset_id,
+    register_detector_context,
+    set_thread_dataset_context,
+    set_thread_detector_context,
     unregister_context,
 )
 
@@ -34,16 +34,7 @@ class TestDatasetContext:
         ctx = DatasetContext("ds1")
         assert ctx.dataset_id == "ds1"
         assert ctx.medias == {}
-        assert ctx.good_votes == {}
-        assert ctx.bad_votes == {}
-        assert ctx.label_history == []
-        assert ctx.vote_click_times == {}
-        assert ctx.click_counter == 0
-        assert ctx.last_learned_scores == {}
-        assert ctx.textsort_suggestions == []
         assert ctx.diversity_tree is None
-        assert ctx.find_initial_labels == {}
-        assert ctx.inclusion is None
         assert ctx.dataset_display_name is None
 
     def test_contexts_are_independent(self):
@@ -53,6 +44,34 @@ class TestDatasetContext:
         ctx_b.medias[2] = {"id": 2, "type": "image"}
         assert 1 in ctx_a.medias and 2 not in ctx_a.medias
         assert 2 in ctx_b.medias and 1 not in ctx_b.medias
+
+
+class TestDetectorContext:
+    """DetectorContext creation and field defaults."""
+
+    def test_fresh_context_has_empty_containers(self):
+        ctx = DetectorContext("det1")
+        assert ctx.detector_id == "det1"
+        assert ctx.good_votes == {}
+        assert ctx.bad_votes == {}
+        assert ctx.label_history == []
+        assert ctx.vote_click_times == {}
+        assert ctx.click_counter == 0
+        assert ctx.last_learned_scores == {}
+        assert ctx.textsort_suggestions == []
+        assert ctx.find_initial_labels == {}
+        assert ctx.inclusion is None
+        assert ctx.training_medias == {}
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_contexts_are_independent(self):
+        ctx_a = DetectorContext("da")
+        ctx_b = DetectorContext("db")
+        ctx_a.good_votes[1] = None
+        ctx_b.good_votes[2] = None
+        assert 1 in ctx_a.good_votes and 2 not in ctx_a.good_votes
+        assert 2 in ctx_b.good_votes and 1 not in ctx_b.good_votes
 
 
 class TestContextStore:
@@ -82,9 +101,9 @@ class TestContextStore:
     def test_unregister_clears_active_if_match(self):
         ctx = DatasetContext("ds_active_unreg")
         register_context(ctx)
-        set_active_dataset_id("ds_active_unreg")
+        set_thread_dataset_context(ctx)
         unregister_context("ds_active_unreg")
-        assert get_active_dataset_id() is None
+        assert get_thread_dataset_context() is None
 
 
 class TestProxyDict:
@@ -98,14 +117,14 @@ class TestProxyDict:
         ctx2 = DatasetContext("proxy_test")
         ctx2.medias[999] = {"id": 999, "type": "test"}
         register_context(ctx2)
-        set_active_dataset_id("proxy_test")
+        set_thread_dataset_context(ctx2)
 
         assert 999 in medias
         assert len(medias) == 1
         assert list(medias.keys()) == [999]
 
         # Switch back
-        set_active_dataset_id("_test_default")
+        set_thread_dataset_context(get_context("_test_default"))
         assert 999 not in medias
         assert len(medias) > 0  # test medias
 
@@ -203,7 +222,7 @@ class TestProxyList:
 
 
 class TestMultiDatasetSwitching:
-    """Verify that switching active datasets preserves votes, scores, etc."""
+    """Verify that switching active datasets preserves medias."""
 
     def _make_test_media(self, media_id: int, media_type: str = "audio") -> dict:
         rng = np.random.default_rng(media_id)
@@ -222,65 +241,82 @@ class TestMultiDatasetSwitching:
             "origin_name": f"media_{media_id}.wav",
         }
 
-    def test_switch_preserves_votes(self):
+    def test_switch_preserves_medias(self):
         from vtsearch.utils import (
-            good_votes,
-            bad_votes,
             medias,
             register_context,
-            set_active_dataset_id,
+            set_thread_dataset_context,
         )
 
-        # Setup context A with medias and votes
+        # Setup context A with medias
         ctx_a = DatasetContext("switch_a")
         register_context(ctx_a)
-        set_active_dataset_id("switch_a")
+        set_thread_dataset_context(ctx_a)
         medias[1] = self._make_test_media(1)
-        good_votes[1] = None
 
-        # Setup context B with different medias and votes
+        # Setup context B with different medias
         ctx_b = DatasetContext("switch_b")
         register_context(ctx_b)
-        set_active_dataset_id("switch_b")
+        set_thread_dataset_context(ctx_b)
         medias[2] = self._make_test_media(2)
-        bad_votes[2] = None
 
         # Verify B state
         assert 2 in medias
         assert 1 not in medias
+
+        # Switch back to A — medias preserved
+        set_thread_dataset_context(ctx_a)
+        assert 1 in medias
+        assert 2 not in medias
+
+    def test_switch_detectors_preserves_votes(self):
+        """Votes are per-detector: switching detectors preserves each one's votes."""
+        from vtsearch.utils import (
+            good_votes,
+            bad_votes,
+            register_detector_context,
+            set_thread_detector_context,
+        )
+
+        det_a = DetectorContext("det_a")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
+        good_votes[1] = None
+
+        det_b = DetectorContext("det_b")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
+        bad_votes[2] = None
+
+        # Verify B state
         assert 2 in bad_votes
         assert len(good_votes) == 0
 
-        # Switch back to A — state is preserved
-        set_active_dataset_id("switch_a")
-        assert 1 in medias
-        assert 2 not in medias
+        # Switch back to A — votes preserved
+        set_thread_detector_context(det_a)
         assert 1 in good_votes
         assert len(bad_votes) == 0
 
         # Switch to B again — still intact
-        set_active_dataset_id("switch_b")
+        set_thread_detector_context(det_b)
         assert 2 in bad_votes
 
-    def test_switch_preserves_label_history(self):
+    def test_switch_detectors_preserves_label_history(self):
         from vtsearch.utils import (
             label_history,
-            medias,
-            register_context,
-            set_active_dataset_id,
+            register_detector_context,
+            set_thread_detector_context,
             toggle_vote,
         )
 
-        ctx_a = DatasetContext("hist_a")
-        register_context(ctx_a)
-        set_active_dataset_id("hist_a")
-        medias[1] = self._make_test_media(1)
+        det_a = DetectorContext("hist_det_a")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
         toggle_vote(1, "good")
 
-        ctx_b = DatasetContext("hist_b")
-        register_context(ctx_b)
-        set_active_dataset_id("hist_b")
-        medias[2] = self._make_test_media(2)
+        det_b = DetectorContext("hist_det_b")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
         toggle_vote(2, "bad")
 
         # B's history
@@ -288,50 +324,50 @@ class TestMultiDatasetSwitching:
         assert label_history[0][0] == 2
 
         # Switch to A — A's history
-        set_active_dataset_id("hist_a")
+        set_thread_detector_context(det_a)
         assert len(label_history) == 1
         assert label_history[0][0] == 1
 
-    def test_switch_preserves_learned_scores(self):
+    def test_switch_detectors_preserves_learned_scores(self):
         from vtsearch.utils import (
             get_learned_scores,
-            register_context,
-            set_active_dataset_id,
+            register_detector_context,
+            set_thread_detector_context,
             update_learned_scores,
         )
 
-        ctx_a = DatasetContext("scores_a")
-        register_context(ctx_a)
-        set_active_dataset_id("scores_a")
+        det_a = DetectorContext("scores_det_a")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
         update_learned_scores({1: 0.9, 2: 0.1})
 
-        ctx_b = DatasetContext("scores_b")
-        register_context(ctx_b)
-        set_active_dataset_id("scores_b")
+        det_b = DetectorContext("scores_det_b")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
         update_learned_scores({3: 0.5})
 
         assert get_learned_scores() == {3: 0.5}
 
-        set_active_dataset_id("scores_a")
+        set_thread_detector_context(det_a)
         assert get_learned_scores() == {1: 0.9, 2: 0.1}
 
     def test_unload_frees_context(self):
         from vtsearch.utils import (
             medias,
             register_context,
-            set_active_dataset_id,
+            set_thread_dataset_context,
             unregister_context,
         )
 
         ctx = DatasetContext("unload_me")
         ctx.medias[100] = self._make_test_media(100)
         register_context(ctx)
-        set_active_dataset_id("unload_me")
+        set_thread_dataset_context(ctx)
         assert 100 in medias
 
         unregister_context("unload_me")
         assert get_context("unload_me") is None
-        assert get_active_dataset_id() is None
+        assert get_thread_dataset_context() is None
         # After unload, medias delegates to empty fallback
         assert len(medias) == 0
 
@@ -361,76 +397,35 @@ class TestMultiDatasetAPI:
             "origin_name": f"api_media_{media_id}.wav",
         }
 
-    def test_registry_shows_loaded_and_active(self, client):
-        """Verify the registry endpoint distinguishes loaded vs active."""
-        from vtsearch.datasets.registry import register_dataset, set_loaded_id, add_loaded_id
+    def test_registry_shows_loaded(self, client):
+        """Verify the registry endpoint shows loaded flag."""
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id
 
         # Register two datasets in the registry.
         e1 = register_dataset(name="DS1", media_type="audio", num_items=5, pkl_path="/tmp/fake1.pkl")
         e2 = register_dataset(name="DS2", media_type="audio", num_items=3, pkl_path="/tmp/fake2.pkl")
 
-        # Mark both as loaded, but only e1 as active.
+        # Mark both as loaded.
         add_loaded_id(e1["id"])
         add_loaded_id(e2["id"])
-        set_loaded_id(e1["id"])
 
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         datasets = {d["id"]: d for d in data["datasets"]}
 
         assert datasets[e1["id"]]["loaded"] is True
-        assert datasets[e1["id"]]["active"] is True
         assert datasets[e2["id"]]["loaded"] is True
-        assert datasets[e2["id"]]["active"] is False
-
-    def test_activate_endpoint(self, client):
-        """POST /api/datasets/registry/<id>/activate switches the active dataset."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id
-
-        e1 = register_dataset(name="Act1", media_type="audio", num_items=5, pkl_path="/tmp/fake_act1.pkl")
-        e2 = register_dataset(name="Act2", media_type="audio", num_items=3, pkl_path="/tmp/fake_act2.pkl")
-
-        # Create contexts for both.
-        ctx1 = DatasetContext(e1["id"])
-        ctx1.medias[1] = self._make_test_media(1)
-        register_context(ctx1)
-        add_loaded_id(e1["id"])
-
-        ctx2 = DatasetContext(e2["id"])
-        ctx2.medias[2] = self._make_test_media(2)
-        register_context(ctx2)
-        add_loaded_id(e2["id"])
-
-        set_active_dataset_id(e1["id"])
-        set_loaded_id(e1["id"])
-
-        # Activate e2 via API.
-        resp = client.post(f"/api/datasets/registry/{e2['id']}/activate")
-        assert resp.status_code == 200
-        assert resp.get_json()["ok"] is True
-
-        # Verify active dataset changed.
-        assert get_active_dataset_id() == e2["id"]
-
-    def test_activate_unloaded_returns_400(self, client):
-        """Cannot activate a dataset that's not loaded."""
-        from vtsearch.datasets.registry import register_dataset
-
-        e = register_dataset(name="NotLoaded", media_type="audio", num_items=1, pkl_path="/tmp/fake_notloaded.pkl")
-        resp = client.post(f"/api/datasets/registry/{e['id']}/activate")
-        assert resp.status_code == 400
 
     def test_unload_removes_from_loaded(self, client):
         """POST /api/datasets/registry/<id>/unload removes the context."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id, is_loaded
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e = register_dataset(name="Unload", media_type="audio", num_items=2, pkl_path="/tmp/fake_unload.pkl")
         ctx = DatasetContext(e["id"])
         ctx.medias[1] = self._make_test_media(1)
         register_context(ctx)
         add_loaded_id(e["id"])
-        set_loaded_id(e["id"])
-        set_active_dataset_id(e["id"])
+        set_thread_dataset_context(ctx)
 
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
         assert resp.status_code == 200
@@ -445,8 +440,8 @@ class TestMultiDatasetAPI:
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
         assert resp.status_code == 400
 
-    def test_load_already_loaded_activates_instantly(self, client):
-        """Loading an already-loaded dataset just activates it."""
+    def test_load_already_loaded_returns_instantly(self, client):
+        """Loading an already-loaded dataset returns immediately."""
         from vtsearch.datasets.registry import register_dataset, add_loaded_id
 
         e = register_dataset(name="Already", media_type="audio", num_items=2, pkl_path="/tmp/fake_already.pkl")
@@ -459,7 +454,6 @@ class TestMultiDatasetAPI:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "already loaded" in data["message"].lower()
-        assert get_active_dataset_id() == e["id"]
 
     def test_dataset_status_reflects_active(self, client):
         """GET /api/dataset/status shows the active dataset's medias."""
@@ -473,7 +467,7 @@ class TestMultiDatasetAPI:
 
     def test_clear_only_clears_active(self, client):
         """POST /api/dataset/clear removes only the active dataset."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, set_loaded_id, is_loaded
+        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e1 = register_dataset(name="Keep", media_type="audio", num_items=2, pkl_path="/tmp/fake_keep.pkl")
         e2 = register_dataset(name="Clear", media_type="audio", num_items=2, pkl_path="/tmp/fake_clear.pkl")
@@ -488,8 +482,7 @@ class TestMultiDatasetAPI:
         register_context(ctx2)
         add_loaded_id(e2["id"])
 
-        set_active_dataset_id(e2["id"])
-        set_loaded_id(e2["id"])
+        set_thread_dataset_context(ctx2)
 
         resp = client.post("/api/dataset/clear")
         assert resp.status_code == 200
@@ -507,41 +500,43 @@ class TestMultiDatasetAPI:
 
 
 class TestScalarContextState:
-    """Per-dataset scalar fields (click_counter, inclusion, etc.) switch correctly."""
+    """Per-context scalar fields switch correctly."""
 
-    def test_click_counter_per_dataset(self):
+    def test_click_counter_per_detector(self):
+        """click_counter is per-detector (vote state)."""
         from vtsearch.utils.state_core import _get_click_counter, _set_click_counter
 
-        ctx_a = DatasetContext("cc_a")
-        register_context(ctx_a)
-        set_active_dataset_id("cc_a")
+        det_a = DetectorContext("cc_det_a")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
         _set_click_counter(10)
         assert _get_click_counter() == 10
 
-        ctx_b = DatasetContext("cc_b")
-        register_context(ctx_b)
-        set_active_dataset_id("cc_b")
+        det_b = DetectorContext("cc_det_b")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
         assert _get_click_counter() == 0  # fresh context
         _set_click_counter(20)
 
-        set_active_dataset_id("cc_a")
+        set_thread_detector_context(det_a)
         assert _get_click_counter() == 10  # preserved
 
-    def test_inclusion_per_dataset(self):
+    def test_inclusion_per_detector(self):
+        """inclusion is per-detector (training parameter)."""
         from vtsearch.utils.state_core import _get_inclusion, _set_inclusion
 
-        ctx_a = DatasetContext("inc_a")
-        register_context(ctx_a)
-        set_active_dataset_id("inc_a")
+        det_a = DetectorContext("inc_det_a")
+        register_detector_context(det_a)
+        set_thread_detector_context(det_a)
         _set_inclusion(5)
 
-        ctx_b = DatasetContext("inc_b")
-        register_context(ctx_b)
-        set_active_dataset_id("inc_b")
+        det_b = DetectorContext("inc_det_b")
+        register_detector_context(det_b)
+        set_thread_detector_context(det_b)
         _set_inclusion(-3)
 
         assert _get_inclusion() == -3
-        set_active_dataset_id("inc_a")
+        set_thread_detector_context(det_a)
         assert _get_inclusion() == 5
 
     def test_display_name_per_dataset(self):
@@ -549,16 +544,16 @@ class TestScalarContextState:
 
         ctx_a = DatasetContext("dn_a")
         register_context(ctx_a)
-        set_active_dataset_id("dn_a")
+        set_thread_dataset_context(ctx_a)
         _set_dataset_display_name("Dataset A")
 
         ctx_b = DatasetContext("dn_b")
         register_context(ctx_b)
-        set_active_dataset_id("dn_b")
+        set_thread_dataset_context(ctx_b)
         _set_dataset_display_name("Dataset B")
 
         assert _get_dataset_display_name() == "Dataset B"
-        set_active_dataset_id("dn_a")
+        set_thread_dataset_context(ctx_a)
         assert _get_dataset_display_name() == "Dataset A"
 
 
@@ -570,17 +565,17 @@ class TestScalarContextState:
 class TestEmptyContextFallback:
     """When no context is active, proxies behave as empty containers."""
 
-    def test_empty_medias_when_no_context(self):
+    def test_empty_medias_when_no_dataset(self):
         from vtsearch.utils.state_core import medias
 
-        set_active_dataset_id(None)
+        set_thread_dataset_context(None)
         assert len(medias) == 0
         assert list(medias.keys()) == []
 
-    def test_empty_votes_when_no_context(self):
+    def test_empty_votes_when_no_detector(self):
         from vtsearch.utils.state_core import good_votes, bad_votes
 
-        set_active_dataset_id(None)
+        set_thread_detector_context(None)
         assert len(good_votes) == 0
         assert len(bad_votes) == 0
 
@@ -599,10 +594,11 @@ class TestSyncLabelsAcrossDatasets:
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -638,14 +634,17 @@ class TestSyncLabelsAcrossDatasets:
                 trainable_model_name=tm_name,
             )
             model_id = entry["id"]
-            set_loaded_id(model_id)
+            add_loaded_model_id(model_id)
+            det_ctx = DetectorContext(model_id)
+            register_detector_context(det_ctx)
+            set_thread_detector_context(det_ctx)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()
             bad_votes.clear()
 
             # Phase 3: re-load the same model via the API endpoint
-            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            resp = _load_model_and_wait(client, model_id)
             assert resp.status_code == 200
 
             saved = _read_model(tm_path)
@@ -663,10 +662,11 @@ class TestSyncLabelsAcrossDatasets:
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import register_model, reset_for_tests, set_loaded_id
+        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
         from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
+        from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -702,14 +702,17 @@ class TestSyncLabelsAcrossDatasets:
                 trainable_model_name=tm_name,
             )
             model_id = entry["id"]
-            set_loaded_id(model_id)
+            add_loaded_model_id(model_id)
+            det_ctx = DetectorContext(model_id)
+            register_detector_context(det_ctx)
+            set_thread_detector_context(det_ctx)
 
             # Phase 2: simulate switching to Dataset B (clear votes)
             good_votes.clear()
             bad_votes.clear()
 
             # Phase 3: re-load the same model (as the dashboard would)
-            resp = client.post("/api/models/registry/load", json={"model_id": model_id})
+            resp = _load_model_and_wait(client, model_id)
             assert resp.status_code == 200
 
             # The model file must still have the original labels

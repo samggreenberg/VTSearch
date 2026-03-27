@@ -830,7 +830,7 @@ Each media type has one default embedder in `embedder.py`. To add an
 |------|----------|-----------|
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image |
-| `text/embedder_bge.py` | `TextBGEEmbedder` | paragraph |
+| `text/embedder_bge.py` | `TextBGEEmbedder` | text |
 
 ### What to implement
 
@@ -961,8 +961,8 @@ register_embedder(CodeBertEmbedder())
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
 | `ImageClipEmbedder` | `clip` | `image` | OpenAI CLIP (openai/clip-vit-base-patch32) | 768 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
-| `TextE5Embedder` | `e5` | `paragraph` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
-| `TextBGEEmbedder` | `bge` | `paragraph` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
+| `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
+| `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
 
 ---
@@ -981,8 +981,8 @@ clippers return **new media dicts** that can replace the original.
 | `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Tiles into 2s segments |
 | `ImageDefaultClipper` | `image_default` | `image` | Returns image unchanged |
 | `ImageTilingClipper` | `image_tiling` | `image` | Tiles tall images into squares |
-| `TextDefaultClipper` | `text_default` | `paragraph` | Returns text unchanged |
-| `TextSentenceClipper` | `text_sentence` | `paragraph` | Splits into individual sentences |
+| `TextDefaultClipper` | `text_default` | `text` | Returns text unchanged |
+| `TextSentenceClipper` | `text_sentence` | `text` | Splits into individual sentences |
 | `VideoDefaultClipper` | `video_default` | `video` | Returns video unchanged |
 | `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Tiles into 2s segments |
 | `DocumentDefaultClipper` | `document_default` | `document` | Returns document unchanged |
@@ -1117,7 +1117,7 @@ class Audio2TextMediaConverter(MediaConverter):
     @property
     def target_type(self) -> str:
         """The type_id of the output media type."""
-        return "paragraph"
+        return "text"
 
     def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert one media dict into one or more target-type media dicts.

@@ -1,5 +1,7 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -13,7 +15,7 @@ import { ExporterInfo } from '../../../models/api.models';
   templateUrl: './detector-export-modal.component.html',
   styleUrl: './detector-export-modal.component.scss',
 })
-export class DetectorExportModalComponent implements OnInit {
+export class DetectorExportModalComponent implements OnInit, OnDestroy {
   @Input() detectorName = '';
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
@@ -21,6 +23,8 @@ export class DetectorExportModalComponent implements OnInit {
   labelExporters: ExporterInfo[] = [];
   error = '';
   status = '';
+
+  private destroy$ = new Subject<void>();
 
   constructor(
     private detectorsApi: DetectorsApiService,
@@ -33,11 +37,16 @@ export class DetectorExportModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.exportersApi.getExporters().subscribe({
+    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
         this.labelExporters = list;
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   exportBrowser(): void {

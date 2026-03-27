@@ -360,45 +360,22 @@ def import_detector_pkl():
             else:
                 media_type = "audio"
 
-        good_origins = detector_data.get("good_origins")
-        bad_origins = detector_data.get("bad_origins")
-        legacy_weights = detector_data.get("weights")
+        from vtsearch.models.weights_compat import normalize_detector_weights
 
-        weights = None
-        file_threshold = detector_data.get("threshold", 0.5)
-        threshold = file_threshold
-        det_inclusion = detector_data.get("inclusion", 0)
-
-        if good_origins and bad_origins:
-            # Origin-based format: re-derive weights from origins
-            from vtsearch.models import train_detector_from_origins
-
-            weights, threshold = train_detector_from_origins(
-                good_origins,
-                bad_origins,
-                det_inclusion,
-                media_type,
-            )
-
-        if weights is None and legacy_weights:
-            # Fallback to serialised weights (legacy or unresolvable origins)
-            weights = legacy_weights
-            threshold = file_threshold
-            good_origins = None
-            bad_origins = None
-
-        if weights is None:
+        try:
+            nw = normalize_detector_weights(detector_data, media_type=media_type)
+        except ValueError:
             return jsonify({"error": "Invalid detector file format"}), 400
 
         add_autorun_detector(
             name,
             media_type,
-            weights,
-            threshold,
+            nw.weights,
+            nw.threshold,
             created_by=get_current_user(),
-            good_origins=good_origins,
-            bad_origins=bad_origins,
-            inclusion=det_inclusion,
+            good_origins=nw.good_origins,
+            bad_origins=nw.bad_origins,
+            inclusion=nw.inclusion,
         )
 
         return jsonify({"success": True, "name": name, "media_type": media_type})

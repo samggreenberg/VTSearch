@@ -5,9 +5,8 @@ dataset the user has loaded.  Each entry stores enough metadata to display the
 dataset in the dashboard grid and to re-load it from its saved ``.pkl`` file.
 
 Multiple datasets may be *loaded* into memory simultaneously (each in its own
-``DatasetContext``), but only one is *active* at a time.  The registry tracks
-which datasets are loaded via ``_loaded_ids``, and which is active via
-``_active_loaded_id``.
+``DatasetContext``).  The registry tracks which datasets are loaded via
+``_loaded_ids``.
 """
 
 from __future__ import annotations
@@ -43,10 +42,6 @@ _entries: list[dict[str, Any]] | None = None
 
 # The set of dataset IDs that are currently loaded in memory.
 _loaded_ids: set[str] = set()
-
-# The ``id`` of the currently *active* (UI-facing) loaded dataset, or ``None``.
-# This is a subset of ``_loaded_ids`` — the one the user is interacting with.
-_loaded_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +113,8 @@ def register_dataset(
     embedder: str = "",
     created_by: str = "default",
     readers: list[str] | None = None,
+    file_type_counts: dict[str, int] | None = None,
+    ingest_started_at: float | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -126,11 +123,14 @@ def register_dataset(
         readers: List of usernames granted read access.  An empty list
             (the default) means only the creator can see the dataset.
             Include ``"*"`` to make it visible to all users.
+        file_type_counts: Mapping of file extension to count.
+        ingest_started_at: Unix timestamp when ingest began.
 
     Returns the newly created entry (with a generated ``id``).
     """
     import uuid
 
+    now = time.time()
     entry: dict[str, Any] = {
         "id": uuid.uuid4().hex,
         "name": name,
@@ -143,8 +143,11 @@ def register_dataset(
         "clipper": clipper,
         "embedder": embedder,
         "created_by": created_by,
-        "created_at": time.time(),
+        "created_at": now,
         "readers": readers or [],
+        "file_type_counts": file_type_counts or {},
+        "ingest_started_at": ingest_started_at,
+        "ingest_finished_at": now,
     }
     with _lock:
         entries = _ensure_loaded()
@@ -158,7 +161,6 @@ def unregister_dataset(dataset_id: str) -> bool:
 
     Returns ``True`` if the dataset was found and removed.
     """
-    global _loaded_id
     with _lock:
         entries = _ensure_loaded()
         for i, entry in enumerate(entries):
@@ -168,8 +170,6 @@ def unregister_dataset(dataset_id: str) -> bool:
                     pkl.unlink(missing_ok=True)
                 entries.pop(i)
                 _loaded_ids.discard(dataset_id)
-                if _loaded_id == dataset_id:
-                    _loaded_id = None
                 _save(entries)
                 return True
     return False
@@ -199,24 +199,6 @@ def update_dataset(dataset_id: str, **fields: Any) -> bool:
     return False
 
 
-def get_loaded_id() -> str | None:
-    """Return the ID of the currently *active* loaded dataset, or ``None``."""
-    with _lock:
-        return _loaded_id
-
-
-def set_loaded_id(dataset_id: str | None) -> None:
-    """Mark *dataset_id* as the currently active loaded dataset (or ``None``).
-
-    Also adds *dataset_id* to the set of loaded IDs if non-None.
-    """
-    global _loaded_id
-    with _lock:
-        _loaded_id = dataset_id
-        if dataset_id is not None:
-            _loaded_ids.add(dataset_id)
-
-
 def get_loaded_ids() -> set[str]:
     """Return the set of all currently loaded (in-memory) dataset IDs."""
     with _lock:
@@ -230,15 +212,9 @@ def add_loaded_id(dataset_id: str) -> None:
 
 
 def remove_loaded_id(dataset_id: str) -> None:
-    """Remove *dataset_id* from the set of loaded datasets.
-
-    If it was also the active dataset, clears the active pointer.
-    """
-    global _loaded_id
+    """Remove *dataset_id* from the set of loaded datasets."""
     with _lock:
         _loaded_ids.discard(dataset_id)
-        if _loaded_id == dataset_id:
-            _loaded_id = None
 
 
 def is_loaded(dataset_id: str) -> bool:
@@ -319,8 +295,7 @@ def set_readers(dataset_id: str, readers: list[str], requesting_user: str) -> tu
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries, _loaded_id
+    global _entries
     with _lock:
         _entries = None
-        _loaded_id = None
         _loaded_ids.clear()

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -82,12 +83,14 @@ def sync_labels_to_loaded_model() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the model's original training labels.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, is_find_mode, update_model
+    from vtsearch.models.registry import get_model, is_find_mode, update_model
+    from vtsearch.utils import get_active_detector_context
 
     if is_find_mode():
         return
 
-    loaded_id = get_loaded_id()
+    det_ctx = get_active_detector_context()
+    loaded_id = det_ctx.detector_id if det_ctx.detector_id else None
     if not loaded_id:
         return
 
@@ -113,213 +116,14 @@ def sync_labels_to_loaded_model() -> None:
     update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
-def _seed_good_votes_from_examples(examples: list[dict]) -> int:
-    """Seed good votes from a model's media examples.
-
-    For each ``type: "media"`` example, reads the file from
-    ``data/example_media/`` and adds it to ``good_votes``:
-
-    * **Match by MD5** — if a loaded media has the same content hash,
-      that media is voted good (keeping its original dataset origin).
-    * **No match** — the example file is embedded using the dataset's
-      embedder, inserted into the ``medias`` dict as a new item with
-      an ``example_media`` origin, and voted good.  This makes it
-      available for training (its embedding is in the medias snapshot)
-      and for label export (LabelSet picks it up from medias + votes).
-
-    Returns the number of example entries successfully seeded.
-    """
-    import hashlib
-
-    from vtsearch.config import DATA_DIR
-    from vtsearch.utils import (
-        _state_lock,
-        apply_label,
-        build_media_lookup,
-        medias,
-        next_media_id,
-        snapshot_medias,
-    )
-
-    media_examples = [
-        ex
-        for ex in examples
-        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
-    ]
-    if not media_examples:
-        return 0
-
-    snap = snapshot_medias()
-    if not snap:
-        return 0
-
-    _, md5_lookup, _ = build_media_lookup(snap)
-    server_media_dir = DATA_DIR / "example_media"
-
-    # Determine the embedder and media type from the loaded dataset so we
-    # can embed example files that aren't already in the dataset.
-    first_media = next(iter(snap.values()))
-    dataset_media_type = first_media.get("type", "audio")
-    dataset_embedder_name = first_media.get("embedder", "")
-    embedder = None  # lazily loaded only when needed
-
-    seeded = 0
-    for ex in media_examples:
-        filename = ex["value"].strip()
-        file_path = server_media_dir / filename
-        # Prevent directory traversal
-        try:
-            file_path.resolve().relative_to(server_media_dir.resolve())
-        except ValueError:
-            continue
-        if not file_path.is_file():
-            continue
-
-        file_bytes = file_path.read_bytes()
-        file_md5 = hashlib.md5(file_bytes).hexdigest()
-        cids = md5_lookup.get(file_md5, [])
-
-        if cids:
-            # Example matches existing dataset media — just vote good.
-            for cid in cids:
-                apply_label(cid, "good")
-            seeded += 1
-        else:
-            # Example is NOT in the dataset — embed and insert as new media.
-            if embedder is None:
-                from vtsearch.media import embedders_for_type, get_embedder
-
-                if dataset_embedder_name:
-                    try:
-                        embedder = get_embedder(dataset_embedder_name)
-                    except KeyError:
-                        pass
-                if embedder is None:
-                    avail = embedders_for_type(dataset_media_type)
-                    embedder = avail[0] if avail else None
-                if embedder is None:
-                    # No embedder available; skip remaining examples.
-                    continue
-
-            embedding = embedder.embed_media(file_path)
-            if embedding is None:
-                continue
-
-            with _state_lock:
-                new_id = next_media_id(medias)
-                medias[new_id] = {
-                    "id": new_id,
-                    "type": dataset_media_type,
-                    "embedder": dataset_embedder_name,
-                    "md5": file_md5,
-                    "embedding": embedding,
-                    "media_bytes": file_bytes,
-                    "filename": filename,
-                    "file_size": len(file_bytes),
-                    "category": "",
-                    "origin": {
-                        "importer": "example_media",
-                        "params": {"filename": filename},
-                    },
-                    "origin_name": filename,
-                }
-
-            apply_label(new_id, "good")
-            seeded += 1
-
-    return seeded
+# Canonical location: vtsearch.models.media_seeding
+from vtsearch.models.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 
 
-def _restore_labels_from_trainable_model(tm_data: dict) -> int:
-    """Restore saved labels from a trainable model's labelset into votes.
-
-    Matches labelset entries to loaded medias by origin+origin_name, MD5, and
-    origin_name fallback.  For entries that still don't match (cross-dataset
-    scenario), resolves the original file from its origin trail, computes its
-    MD5, and checks for a match in the loaded dataset.
-
-    Returns the number of labels successfully restored.
-    """
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import (
-        apply_label,
-        build_media_lookup,
-        resolve_media_ids,
-        snapshot_medias,
-    )
-
-    labelset_dict = tm_data.get("labelset")
-    if not labelset_dict:
-        return 0
-
-    labelset = LabelSet.from_dict(labelset_dict)
-    if not labelset.elements:
-        return 0
-
-    snap = snapshot_medias()
-    if not snap:
-        return 0
-
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
-
-    restored = 0
-    unresolved: list[tuple] = []  # (elem, label) pairs needing origin resolution
-    for elem in labelset.elements:
-        if elem.label not in ("good", "bad"):
-            continue
-        cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
-        if cids:
-            for cid in cids:
-                apply_label(cid, elem.label)
-            restored += 1
-        else:
-            unresolved.append(elem)
-
-    # Second pass: resolve unmatched labels from their origin files.
-    # When a detector was trained on Dataset A and we're now on Dataset B,
-    # the origin+name keys won't match.  But if the same underlying file
-    # exists in both datasets, resolving the origin file and computing its
-    # MD5 lets us match by content hash.
-    if unresolved:
-        import hashlib
-        import logging
-
-        from vtsearch.models.resolver import resolve_file_from_origin
-
-        _log = logging.getLogger(__name__)
-
-        for elem in unresolved:
-            entry = elem.to_dict()
-            origin = entry.get("origin")
-            origin_name = entry.get("origin_name", "")
-            filename = entry.get("filename", "")
-            resolved_path = resolve_file_from_origin(origin, origin_name, filename)
-            if resolved_path is None:
-                continue
-
-            # Compute MD5 of the resolved file and check against loaded medias
-            try:
-                h = hashlib.md5()
-                with open(resolved_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        h.update(chunk)
-                resolved_md5 = h.hexdigest()
-            except OSError:
-                _log.debug("restore-labels: could not read resolved file %s", resolved_path)
-                continue
-
-            cids = md5_lookup.get(resolved_md5, [])
-            if cids:
-                for cid in cids:
-                    apply_label(cid, elem.label)
-                restored += 1
-            else:
-                _log.debug(
-                    "restore-labels: resolved %s but MD5 %s not in loaded dataset",
-                    resolved_path, resolved_md5,
-                )
-
-    return restored
+# Canonical location: vtsearch.models.label_restoration
+from vtsearch.models.label_restoration import (  # noqa: E402
+    restore_labels_from_trainable_model as _restore_labels_from_trainable_model,
+)
 
 
 def _list_all() -> list[dict]:
@@ -565,6 +369,132 @@ def save_trainable_model_labels(name: str):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/trainable-models/<name>/import-labels/<importer_name>
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route(
+    "/api/trainable-models/<name>/import-labels/<importer_name>",
+    methods=["POST"],
+)
+def import_labels_into_model(name: str, importer_name: str):
+    """Run a label importer and merge results into this model's labelset.
+
+    Unlike the regular ``/api/label-importers/import/`` route, this does
+    **not** require a dataset to be loaded.  The imported label entries are
+    merged directly into the trainable model's persisted labelset, and the
+    model-registry entry is updated so the dashboard reflects the new count.
+
+    When the model's detector context **is** loaded, the new labels are also
+    resolved against the loaded dataset's medias, applied to the detector's
+    votes, and a fresh MLP is trained with a cross-validated threshold — all
+    inside the loaded detector context.
+
+    Returns JSON with ``applied``, ``skipped``, ``num_labels``, and
+    ``message`` keys.
+    """
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+
+    from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtsearch.routes.helpers import extract_plugin_fields, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
+
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
+
+    field_values = extract_plugin_fields(importer)
+    err = validate_required_fields(importer, field_values)
+    if err:
+        return err
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
+
+    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
+    if not isinstance(label_entries, list):
+        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+
+    # ------------------------------------------------------------------
+    # 1) Merge into the persisted labelset (always, whether loaded or not)
+    # ------------------------------------------------------------------
+    from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+    existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+
+    # Build a set of existing (md5, label) pairs for dedup
+    existing_keys: set[tuple[str, str]] = set()
+    for el in existing_ls.elements:
+        if el.md5:
+            existing_keys.add((el.md5, el.label))
+
+    applied = 0
+    skipped = 0
+    new_entries: list[dict] = []
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+        md5 = entry.get("md5", "")
+        if md5 and (md5, label) in existing_keys:
+            skipped += 1
+            continue
+        elem = LabeledElement.from_dict(entry)
+        existing_ls.elements.append(elem)
+        new_entries.append(entry)
+        if md5:
+            existing_keys.add((md5, label))
+        applied += 1
+
+    data["labelset"] = existing_ls.to_dict()
+    _write_model(path, data)
+
+    # Update the model registry entry
+    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        update_model(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
+
+    # ------------------------------------------------------------------
+    # 2) If the detector is loaded, resolve + apply + retrain in context
+    # ------------------------------------------------------------------
+    resolved = 0
+    trained = False
+    if applied > 0 and reg_entry:
+        from vtsearch.utils.state_core import get_detector_context
+
+        det_ctx = get_detector_context(reg_entry["id"])
+        if det_ctx is not None:
+            resolved, trained = _apply_and_retrain(
+                reg_entry["id"], det_ctx, new_entries, name,
+            )
+
+    msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
+    if resolved > 0:
+        msg += f" Resolved {resolved} into the loaded detector."
+    if trained:
+        msg += " Retrained MLP."
+    return jsonify({
+        "applied": applied,
+        "skipped": skipped,
+        "resolved": resolved,
+        "trained": trained,
+        "num_labels": len(existing_ls),
+        "message": msg,
+    })
+
+
+# Canonical location: vtsearch.models.training_workflow
+from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
 # Model registry endpoints
 # ---------------------------------------------------------------------------
 
@@ -572,16 +502,17 @@ def save_trainable_model_labels(name: str):
 @trainable_models_bp.route("/api/models/registry")
 def list_registered_models():
     """Return all registered models with their loaded state and autodetect flag."""
-    from vtsearch.models.registry import get_loaded_id, list_models
+    from vtsearch.models.registry import get_loaded_model_ids, list_models
     from vtsearch.settings import get_autorun_detector_names
     from vtsearch.utils import get_autorun_detectors
 
     entries = list_models()
-    loaded_id = get_loaded_id()
+    loaded_ids = get_loaded_model_ids()
     detectors = get_autorun_detectors()
     autorun_names = set(get_autorun_detector_names())
     for entry in entries:
-        entry["loaded"] = entry["id"] == loaded_id
+        mid = entry["id"]
+        entry["loaded"] = mid in loaded_ids
         det_name = entry.get("detector_name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
@@ -590,13 +521,14 @@ def list_registered_models():
             # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
-        # detector_loaded: True when the model's inference data is cached in RAM.
-        # For detector-backed models: weights are present in autorun_detectors.
-        # For trainable models: the model is currently loaded (labels in votes).
-        if det_name and det:
+        # detector_loaded: True when the model has inference data in RAM.
+        # Either via a DetectorContext (multi-loaded) or via autorun_detectors weights.
+        if mid in loaded_ids:
+            entry["detector_loaded"] = True
+        elif det_name and det:
             entry["detector_loaded"] = det.get("weights") is not None
         else:
-            entry["detector_loaded"] = entry["loaded"]
+            entry["detector_loaded"] = False
     return jsonify({"models": entries})
 
 
@@ -665,23 +597,33 @@ def register_model_route():
 
 @trainable_models_bp.route("/api/models/registry/load", methods=["POST"])
 def load_model_route():
-    """Set the currently loaded model by ID.
+    """Load a model into memory and make it active.
 
     Expects JSON::
 
         {"model_id": "abc123"}
 
-    Pass ``model_id: null`` to unload.
+    Pass ``model_id: null`` to deactivate (no model active).
 
     When loading a trainable model:
 
     1. The current model's labels are saved (auto-sync).
-    2. All votes are cleared so labels from the previous session don't leak.
-    3. The new model's saved labelset is restored into votes.
+    2. A new DetectorContext is created for the model (or an existing one
+       is reused if already loaded).
+    3. The model's saved labelset is restored into the DetectorContext.
     4. Media examples are seeded as good votes.
     """
-    from vtsearch.models.registry import get_loaded_id, get_model, set_loaded_id
-    from vtsearch.utils import clear_votes
+    from vtsearch.models.registry import (
+        get_model,
+        is_model_loaded,
+    )
+    from vtsearch.utils import (
+        DetectorContext,
+        bad_votes,
+        get_active_detector_context,
+        good_votes,
+        register_detector_context,
+    )
 
     data = request.get_json(force=True, silent=True) or {}
     model_id = data.get("model_id")
@@ -692,38 +634,142 @@ def load_model_route():
             return jsonify({"error": "Model not found"}), 404
 
     # Save current model's labels before switching — but only if there
-    # are votes in the active context.  When the user has switched to a
-    # different dataset the active context may have no votes at all;
-    # syncing in that situation would overwrite the model's saved
-    # training labels with an empty labelset.
-    from vtsearch.utils import bad_votes, good_votes
-
+    # are votes in the active detector context.
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
-    # Clear votes so labels from the previous session don't carry over.
-    clear_votes()
+    if model_id is None:
+        # No model requested — unload the current model (if any) and clear find mode.
+        from vtsearch.models.registry import remove_loaded_model_id, set_find_mode
 
-    set_loaded_id(model_id)
+        det_ctx = get_active_detector_context()
+        prev_id = det_ctx.detector_id if det_ctx.detector_id else None
+        if prev_id:
+            from vtsearch.utils import unregister_detector_context
+            unregister_detector_context(prev_id)
+            remove_loaded_model_id(prev_id)
+        set_find_mode(False)
+        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
-    # Restore saved labels and seed examples from the newly loaded model.
-    labels_restored = 0
-    examples_seeded = 0
-    if model_id is not None and entry is not None:
-        tm_name = entry.get("trainable_model_name", "")
-        if tm_name:
-            tm_data = _read_model(_model_path(tm_name))
-            if tm_data:
-                labels_restored = _restore_labels_from_trainable_model(tm_data)
-                examples_seeded = _seed_good_votes_from_examples(
-                    tm_data.get("examples", [])
+    if is_model_loaded(model_id):
+        # Already loaded — nothing more to do.
+        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
+
+    # New load: create a DetectorContext, register it, then load labels
+    # asynchronously so the frontend can show a progress bar.
+    from vtsearch.utils.progress import CancelledError, model_loading_tasks
+
+    det_ctx = DetectorContext(
+        model_id,
+        name=entry.get("name", ""),
+        media_type=entry.get("media_type", ""),
+    )
+    register_detector_context(det_ctx)
+
+    _LOAD_STEPS = 2  # restore labels, seed examples
+    task_id = f"_modload_{model_id[:8]}"
+    tracker = model_loading_tasks.create_task(
+        task_id, entry.get("name", model_id), model_id=model_id,
+        media_type=entry.get("media_type", ""),
+    )
+    tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+
+    # Capture values needed by the background thread.
+    tm_name = entry.get("trainable_model_name", "")
+    # Capture the dataset context so the thread can resolve medias.
+    from vtsearch.utils import get_active_context
+    _thread_ds_ctx = get_active_context()
+
+    def load_task():
+        from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
+        from vtsearch.utils.state_core import set_thread_dataset_context, set_thread_detector_context
+
+        # Set thread-local contexts so proxy objects (medias, good_votes, etc.)
+        # resolve correctly in this background thread.
+        set_thread_dataset_context(_thread_ds_ctx)
+        set_thread_detector_context(det_ctx)
+
+        try:
+            if tm_name:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Restoring labels…", 0, 0,
+                    step=1, total_steps=_LOAD_STEPS,
                 )
+                tm_data = _read_model(_model_path(tm_name))
+                if tm_data:
+                    _restore_labels_from_trainable_model(tm_data)
 
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading", "Seeding examples…", 0, 0,
+                        step=2, total_steps=_LOAD_STEPS,
+                    )
+                    _seed_good_votes_from_examples(
+                        tm_data.get("examples", [])
+                    )
+
+            # Mark as fully loaded so the registry shows detector_loaded=True.
+            add_loaded_model_id(model_id)
+            tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+        except CancelledError:
+            from vtsearch.utils import unregister_detector_context as _unreg
+
+            _unreg(model_id)
+            remove_loaded_model_id(model_id)
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
+            from vtsearch.utils import unregister_detector_context as _unreg
+
+            _unreg(model_id)
+            remove_loaded_model_id(model_id)
+            error_msg = str(e) or repr(e) or "Unknown error during model loading"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        finally:
+            model_loading_tasks.mark_finished(task_id)
+
+    thread = threading.Thread(target=load_task, daemon=True)
+    thread.start()
     return jsonify({
         "ok": True,
-        "labels_restored": labels_restored,
-        "examples_seeded": examples_seeded,
+        "message": "Loading started",
+        "task_id": str(task_id),
     })
+
+
+@trainable_models_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])
+def unload_model_route(model_id: str):
+    """Unload a model from memory (frees its DetectorContext).
+
+    Saves labels before unloading if the model is active.
+    """
+    from vtsearch.models.registry import get_model, is_model_loaded, remove_loaded_model_id
+    from vtsearch.utils import (
+        bad_votes,
+        get_active_detector_context,
+        good_votes,
+        unregister_detector_context,
+    )
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+    if not is_model_loaded(model_id):
+        return jsonify({"error": "Model is not loaded"}), 400
+
+    # Save labels if this model is currently resolved by the context
+    det_ctx = get_active_detector_context()
+    if det_ctx.detector_id == model_id and (good_votes or bad_votes):
+        sync_labels_to_loaded_model()
+
+    # Remove from memory
+    unregister_detector_context(model_id)
+    remove_loaded_model_id(model_id)
+
+    return jsonify({"ok": True, "message": "Model unloaded"})
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])
@@ -749,7 +795,34 @@ def delete_registered_model(model_id: str):
 
         remove_autorun_detector(det_name)
 
+    # Clean up the DetectorContext if loaded
+    from vtsearch.models.registry import is_model_loaded, remove_loaded_model_id
+    from vtsearch.utils import unregister_detector_context
+
+    if is_model_loaded(model_id):
+        unregister_detector_context(model_id)
+        remove_loaded_model_id(model_id)
+
     unregister_model(model_id)
+    return jsonify({"ok": True})
+
+
+@trainable_models_bp.route("/api/models/loading-tasks")
+def model_loading_tasks_endpoint():
+    """Return all active model loading tasks with their progress."""
+    from vtsearch.utils.progress import model_loading_tasks
+
+    return jsonify({"tasks": model_loading_tasks.list_tasks()})
+
+
+@trainable_models_bp.route("/api/models/cancel/<task_id>", methods=["POST"])
+def cancel_model_loading_task(task_id: str):
+    """Cancel a specific model loading task."""
+    from vtsearch.utils.progress import model_loading_tasks
+
+    ok = model_loading_tasks.cancel_task(task_id)
+    if not ok:
+        return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True})
 
 

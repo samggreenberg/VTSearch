@@ -65,6 +65,21 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
         exit 1
     fi
     rm -f "$_fe_log"
+
+    echo "Checking frontend dependencies for vulnerabilities..."
+    _audit_log=$(mktemp)
+    if (cd frontend && npm audit 2>&1) > "$_audit_log"; then
+        echo "Frontend audit OK (0 vulnerabilities)"
+    else
+        echo ""
+        echo "======================================================================"
+        echo "FRONTEND AUDIT FAILED — npm dependencies have known vulnerabilities"
+        echo "======================================================================"
+        cat "$_audit_log"
+        rm -f "$_audit_log"
+        exit 1
+    fi
+    rm -f "$_audit_log"
 elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
     echo "Skipping frontend build check (node_modules not installed; run: cd frontend && npm install)"
 fi

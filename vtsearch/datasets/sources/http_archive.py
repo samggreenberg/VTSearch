@@ -127,3 +127,17 @@ class HttpArchiveSource(MediaSource):
                 shutil.rmtree(self._extract_dir, ignore_errors=True)
         self._extract_dir = None
         self._inner = None
+
+
+class _HttpArchiveSourceFactory:
+    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`."""
+
+    name = "http_archive"
+
+    def create_from_origin(self, origin: dict) -> HttpArchiveSource | None:
+        params = origin.get("params", {})
+        url = params.get("url", "")
+        return HttpArchiveSource(url) if url else None
+
+
+SOURCE = _HttpArchiveSourceFactory()

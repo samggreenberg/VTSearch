@@ -7,32 +7,19 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-from vtsearch.media.base import MediaEmbedder, intercept_tqdm_progress, intercept_weight_loading_progress
+from vtsearch.config import CLIP_MODEL_ID
+from vtsearch.media.base import (
+    MediaEmbedder,
+    embedder_load_setup,
+    extract_tensor as _extract_tensor,
+    intercept_tqdm_progress,
+    intercept_weight_loading_progress,
+    load_pretrained_local_first,
+)
 
 if TYPE_CHECKING:
-    import torch
     from PIL import Image
     from transformers import CLIPModel, CLIPProcessor
-
-
-def _extract_tensor(output: object) -> torch.Tensor:
-    """Extract a plain tensor from model output.
-
-    Depending on the transformers version, get_image_features() / get_text_features()
-    may return either a raw tensor or a BaseModelOutputWithPooling dataclass.
-    This helper handles both cases.
-    """
-    import torch  # noqa: PLC0415
-
-    if isinstance(output, torch.Tensor):
-        return output
-    for attr in ("image_embeds", "text_embeds", "pooler_output"):
-        val = getattr(output, attr, None)
-        if isinstance(val, torch.Tensor):
-            return val
-    # Final fallback: treat as tuple-like and return first element
-    return output[0]  # type: ignore[index]
 
 
 class ImageClipEmbedder(MediaEmbedder):
@@ -68,28 +55,22 @@ class ImageClipEmbedder(MediaEmbedder):
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return
-        import gc
 
         from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
 
-        from vtsearch.models.loader import ensure_torch_configured
-
-        ensure_torch_configured()
-        gc.collect()
-        cache_dir = str(MODELS_CACHE_DIR)
-        self._on_progress("loading", "Loading CLIP model weights…", 0, 0)
+        cache_dir = embedder_load_setup(self._on_progress, "Loading CLIP model weights…")
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
             self._on_progress, "Loading CLIP model weights…"
         ):
-            self._model = CLIPModel.from_pretrained(
-                CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+            self._model = load_pretrained_local_first(
+                CLIPModel.from_pretrained, CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = CLIPProcessor.from_pretrained(
-                CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False
+            self._processor = load_pretrained_local_first(
+                CLIPProcessor.from_pretrained, CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False
             )
 
     # ------------------------------------------------------------------

@@ -66,10 +66,6 @@ class VideoMediaType(MediaType):
     def dir_key(self) -> str:
         return "video_dir"
 
-    @property
-    def legacy_bytes_keys(self) -> list[str]:
-        return ["video_bytes"]
-
     # ------------------------------------------------------------------
     # Display metadata
     # ------------------------------------------------------------------
@@ -178,7 +174,7 @@ class VideoMediaType(MediaType):
             finally:
                 embedder._on_progress = original_cb
 
-        clip_id = 1
+        clip_id = max(clips.keys(), default=0) + 1
         total = len(video_files)
         on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}

@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VideoPlayerComponent } from './video-player.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('VideoPlayerComponent', () => {
@@ -17,6 +18,7 @@ describe('VideoPlayerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [VideoPlayerComponent],
+      providers: [ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(VideoPlayerComponent);
     component = fixture.componentInstance;

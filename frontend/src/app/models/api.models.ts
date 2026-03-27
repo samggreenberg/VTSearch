@@ -164,6 +164,8 @@ export interface LoadingTask {
   error?: string;
   created_at: number;
   dataset_id?: string;
+  model_id?: string;
+  media_type?: string;
 }
 
 export interface LoadingTasksResponse {
@@ -231,9 +233,16 @@ export interface DatasetRegistryEntry {
   name: string;
   media_type: string;
   loaded?: boolean;
-  active?: boolean;
   readers?: string[];
   [key: string]: unknown;
+}
+
+export interface DatasetStatsResponse {
+  num_items: number;
+  num_dupes: number;
+  file_type_counts: Record<string, number>;
+  ingest_started_at: number | null;
+  ingest_finished_at: number | null;
 }
 
 export interface DatasetRegistryResponse {
@@ -348,6 +357,7 @@ export interface ModelRegistryEntry {
   text_query?: string;
   media_example?: string;
   detector_name?: string;
+  loaded?: boolean;
   detector_loaded?: boolean;
   [key: string]: unknown;
 }

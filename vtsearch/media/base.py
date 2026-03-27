@@ -42,13 +42,80 @@ __all__ = [
     "MediaType",
     "Processor",
     "ProgressCallback",
+    "embedder_load_setup",
+    "extract_tensor",
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
+    "load_pretrained_local_first",
 ]
 
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
+
+
+# ---------------------------------------------------------------------------
+# Shared embedder helpers
+# ---------------------------------------------------------------------------
+
+
+def extract_tensor(output: object):
+    """Extract a plain tensor from a model output.
+
+    Depending on the ``transformers`` version, methods like
+    ``get_image_features()`` / ``get_text_features()`` /
+    ``get_video_features()`` may return either a raw :class:`torch.Tensor`
+    or a ``BaseModelOutputWithPooling`` dataclass.  This helper handles
+    both cases transparently.
+    """
+    import torch  # noqa: PLC0415
+
+    if isinstance(output, torch.Tensor):
+        return output
+    for attr in ("image_embeds", "text_embeds", "video_embeds", "pooler_output"):
+        val = getattr(output, attr, None)
+        if isinstance(val, torch.Tensor):
+            return val
+    # Final fallback: treat as tuple-like and return first element
+    return output[0]  # type: ignore[index]
+
+
+def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
+    """Common setup ceremony shared by all embedder ``_load_models_impl()`` methods.
+
+    1. Calls :func:`ensure_torch_configured`.
+    2. Runs ``gc.collect()`` to free memory before loading a large model.
+    3. Reports initial progress via *on_progress*.
+    4. Returns the model cache directory as a string.
+    """
+    import gc  # noqa: PLC0415
+
+    from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
+    from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
+
+    ensure_torch_configured()
+    gc.collect()
+    on_progress("loading", message, 0, 0)
+    return str(MODELS_CACHE_DIR)
+
+
+def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Call *load_fn* preferring cached model files, falling back to download.
+
+    HuggingFace ``from_pretrained`` (and ``SentenceTransformer()``) contact the
+    Hub to check for updates **even when model files are already cached**.  If
+    the network is unreachable or slow this HTTP request hangs indefinitely,
+    making the UI appear frozen on "Loading … model weights".
+
+    This helper tries ``local_files_only=True`` first.  If that raises
+    ``OSError`` (model not yet cached), it retries without the flag so the
+    model can be downloaded normally.
+    """
+    try:
+        return load_fn(*args, local_files_only=True, **kwargs)
+    except OSError:
+        # Model not in local cache — allow network download.
+        return load_fn(*args, **kwargs)
 
 
 @contextlib.contextmanager
@@ -94,38 +161,40 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
     # Redirect intercepted bars' output to devnull so they don't print
     # to the console.  The callback receives all progress updates instead.
     _devnull = open(os.devnull, "w")  # noqa: SIM115
+    try:
 
-    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        # Force file=devnull so tqdm never writes to the console.
-        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
-        # so we must override unconditionally (not just when absent).
-        kwargs["file"] = _devnull
-        _orig_init(self, *args, **kwargs)
-        total = getattr(self, "total", None)
-        if total and total > 0 and not getattr(self, "disable", False):
-            _bars.append(self)
+        def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+            # Force file=devnull so tqdm never writes to the console.
+            # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
+            # so we must override unconditionally (not just when absent).
+            kwargs["file"] = _devnull
+            _orig_init(self, *args, **kwargs)
+            total = getattr(self, "total", None)
+            if total and total > 0 and not getattr(self, "disable", False):
+                _bars.append(self)
+                if _primary_bar() is self:
+                    _report(self)
+
+        def _patched_update(self: Any, n: int = 1) -> None:
+            _orig_update(self, n)
             if _primary_bar() is self:
                 _report(self)
 
-    def _patched_update(self: Any, n: int = 1) -> None:
-        _orig_update(self, n)
-        if _primary_bar() is self:
-            _report(self)
+        def _patched_close(self: Any) -> None:
+            _orig_close(self)
+            if self in _bars:
+                _bars.remove(self)
 
-    def _patched_close(self: Any) -> None:
-        _orig_close(self)
-        if self in _bars:
-            _bars.remove(self)
-
-    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
-    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
-    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
-    try:
-        yield
+        tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
+        tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
+        tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
+            tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
+            tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
     finally:
-        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
-        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
-        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
         _devnull.close()
 
 
@@ -536,19 +605,6 @@ class MediaType(ABC):
         (e.g. ``"text_dir"`` for the paragraph type).
         """
         return self.type_id + "_dir"
-
-    @property
-    def legacy_bytes_keys(self) -> list[str]:
-        """Legacy key names for inline bytes in old pickle files.
-
-        Old pickle formats stored media bytes under type-specific keys
-        (e.g. ``"wav_bytes"``, ``"video_bytes"``).  New pickles use the
-        generic ``"media_bytes"`` / ``"media_string"`` keys.  When loading
-        old pickles, these keys are tried in order as fallbacks.
-
-        Defaults to an empty list (no legacy keys).
-        """
-        return []
 
     @property
     def pickle_extra_fields(self) -> list[str]:

@@ -5,8 +5,9 @@ as reference implementations for developers building new IO plugins.  They are
 **not loaded, tested, or supported** — treat them as code samples.
 
 > **Warning:** These code samples may be outdated. In particular, the current
-> codebase uses the media type ID `"text"` (not `"paragraph"`). Review and
-> test thoroughly before reusing any of this code.
+> codebase uses the media type ID `"text"` (not `"paragraph"`). Several code
+> examples below still use `"paragraph"` — substitute `"text"` if reusing
+> any of this code. Review and test thoroughly.
 
 See [EXTENDING.md](EXTENDING.md) for the current plugin interfaces and the
 S3 importer skeleton.

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { formatProgressFraction } from '../../../utils/format-progress';
 
 @Component({
   selector: 'vt-dataset-card',
@@ -29,6 +30,7 @@ export class DatasetCardComponent {
     this.rowClick.emit(event);
   }
   @Output() rename = new EventEmitter<string>();
+  @Output() stats = new EventEmitter<void>();
   @Output() delete = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
   @Output() security = new EventEmitter<void>();
@@ -71,6 +73,11 @@ export class DatasetCardComponent {
     }
   }
 
+  onStats(event: MouseEvent): void {
+    event.stopPropagation();
+    this.stats.emit();
+  }
+
   onSecurity(event: MouseEvent): void {
     event.stopPropagation();
     this.security.emit();
@@ -105,7 +112,7 @@ export class DatasetCardComponent {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const fraction = `(${task.current}/${task.total})`;
+      const fraction = `(${formatProgressFraction(task.current, task.total)})`;
       const stepEnd = msg.indexOf('] ');
       if (stepEnd !== -1) {
         msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);

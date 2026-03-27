@@ -523,16 +523,6 @@ class TestSettingsModule:
         result = settings_mod.get_panel_pct_left()
         assert result["audio"] == 500
 
-    def test_panel_pct_legacy_percentage_replaced_with_default(self, isolated_settings):
-        """Legacy percentage values (< 2.0) are replaced with defaults on read."""
-        settings_mod.set_panel_pct_left({"audio": 300})
-        raw = json.loads(isolated_settings.read_text())
-        raw["panel_pct_left"]["audio"] = 0.25  # legacy percentage
-        isolated_settings.write_text(json.dumps(raw))
-        settings_mod.reset()
-        result = settings_mod.get_panel_pct_left()
-        assert result["audio"] == 260  # default for left
-
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
@@ -565,7 +555,6 @@ class TestSettingsModule:
         assert isinstance(defaults["panel_pct_right"], dict)
         for v in defaults["panel_pct_right"].values():
             assert v == 300
-        assert defaults["autoload_media_types"] == []
         assert defaults["autopilot_enabled"] is True
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
@@ -575,50 +564,6 @@ class TestSettingsModule:
         assert "saved_datasets_dir" not in defaults
         assert "detectors_dir" not in defaults
         assert "trainable_models_dir" not in defaults
-
-    def test_get_set_autoload_media_types(self, isolated_settings):
-        settings_mod.set_autoload_media_types(["audio", "video"])
-        assert settings_mod.get_autoload_media_types() == ["audio", "video"]
-
-        raw = json.loads(isolated_settings.read_text())
-        assert raw["autoload_media_types"] == ["audio", "video"]
-
-    def test_autoload_media_types_default(self):
-        assert settings_mod.get_autoload_media_types() == []
-
-    def test_autoload_media_types_invalid(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_autoload_media_types(["invalid_type"])
-
-    def test_autoload_media_types_clear(self):
-        settings_mod.set_autoload_media_types(["video"])
-        settings_mod.set_autoload_media_types([])
-        assert settings_mod.get_autoload_media_types() == []
-
-    def test_autoload_media_types_persists_across_reset(self, isolated_settings):
-        settings_mod.set_autoload_media_types(["image", "audio"])
-        settings_mod.reset()
-        assert settings_mod.get_autoload_media_types() == ["image", "audio"]
-
-    def test_autoload_media_types_all_valid_types(self):
-        settings_mod.set_autoload_media_types(["audio", "image", "text", "video"])
-        assert settings_mod.get_autoload_media_types() == ["audio", "image", "text", "video"]
-
-    def test_toggle_autoload_media_type(self):
-        result = settings_mod.toggle_autoload_media_type("audio")
-        assert result == ["audio"]
-        result = settings_mod.toggle_autoload_media_type("video")
-        assert result == ["audio", "video"]
-        result = settings_mod.toggle_autoload_media_type("audio")
-        assert result == ["video"]
-
-    def test_toggle_autoload_media_type_invalid(self):
-        with pytest.raises(ValueError):
-            settings_mod.toggle_autoload_media_type("invalid")
-
-    def test_autoload_media_types_deduplicates(self):
-        settings_mod.set_autoload_media_types(["audio", "audio", "video"])
-        assert settings_mod.get_autoload_media_types() == ["audio", "video"]
 
     def test_get_set_autopilot_top_greens(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(20)
@@ -948,7 +893,6 @@ class TestSettingsAPI:
         assert isinstance(data["focus_mode_right"], dict)
         for v in data["focus_mode_right"].values():
             assert v == "click"
-        assert data["autoload_media_types"] == []
         assert "autorun_processors" not in data
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
@@ -1188,39 +1132,6 @@ class TestSettingsAPI:
         assert isinstance(data["panel_pct_left"], dict)
         assert "panel_pct_right" in data
         assert isinstance(data["panel_pct_right"], dict)
-
-    def test_update_autoload_media_types(self, client):
-        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "video"]})
-        assert res.status_code == 200
-        assert res.get_json()["autoload_media_types"] == ["audio", "video"]
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["autoload_media_types"] == ["audio", "video"]
-
-    def test_update_autoload_media_types_all_types(self, client):
-        res = client.put("/api/settings", json={"autoload_media_types": ["audio", "image", "text", "video"]})
-        assert res.status_code == 200
-        assert res.get_json()["autoload_media_types"] == ["audio", "image", "text", "video"]
-
-    def test_update_autoload_media_types_clear(self, client):
-        client.put("/api/settings", json={"autoload_media_types": ["video"]})
-        res = client.put("/api/settings", json={"autoload_media_types": []})
-        assert res.status_code == 200
-        assert res.get_json()["autoload_media_types"] == []
-
-    def test_update_autoload_media_types_invalid(self, client):
-        res = client.put("/api/settings", json={"autoload_media_types": ["invalid"]})
-        assert res.status_code == 400
-
-    def test_update_autoload_media_types_not_list(self, client):
-        res = client.put("/api/settings", json={"autoload_media_types": "audio"})
-        assert res.status_code == 400
-
-    def test_get_settings_includes_autoload_media_types(self, client):
-        res = client.get("/api/settings")
-        assert res.status_code == 200
-        assert "autoload_media_types" in res.get_json()
 
     def test_update_autopilot_top_greens(self, client):
         res = client.put("/api/settings", json={"autopilot_top_greens": 20})

@@ -1,0 +1,56 @@
+<vt-modal [open]="true" [title]="'Stats: ' + datasetName" (closed)="close()">
+  @if (loading) {
+    <p class="loading-text">Loading stats...</p>
+  } @else if (error) {
+    <p class="error-text">{{ error }}</p>
+  } @else if (stats) {
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
+          <td class="stat-value">{{ stats.num_items }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Number of duplicate items that were detected and collapsed">Duplicate groups</td>
+          <td class="stat-value">{{ stats.num_dupes }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
+          <td class="stat-value">{{ formatTimestamp(stats.ingest_started_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Timestamp when the dataset import process completed">Ingest finished</td>
+          <td class="stat-value">{{ formatTimestamp(stats.ingest_finished_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Total time taken to import the dataset">Duration</td>
+          <td class="stat-value">{{ duration }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    @if (fileTypes.length > 0) {
+      <h3 class="section-title">File Types</h3>
+      <table class="stats-table">
+        <thead>
+          <tr>
+            <th title="File extension of media items">Extension</th>
+            <th title="Number of items with this file extension">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (ft of fileTypes; track ft.ext) {
+            <tr>
+              <td>.{{ ft.ext }}</td>
+              <td>{{ ft.count }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Close</button>
+  </div>
+</vt-modal>

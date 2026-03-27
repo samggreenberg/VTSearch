@@ -77,3 +77,17 @@ class LocalFolderSource(MediaSource):
                 if result is not None:
                     return result
         return None
+
+
+class _LocalFolderSourceFactory:
+    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`."""
+
+    name = "folder"
+
+    def create_from_origin(self, origin: dict) -> LocalFolderSource | None:
+        params = origin.get("params", {})
+        path = params.get("path", "")
+        return LocalFolderSource(path) if path else None
+
+
+SOURCE = _LocalFolderSourceFactory()

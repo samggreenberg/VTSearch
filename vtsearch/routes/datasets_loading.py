@@ -15,20 +15,14 @@ from vtsearch.datasets.loader import apply_custom_metadata_md5
 from vtsearch.datasets.registry import (
     get_saved_datasets_dir,
     register_dataset as _reg_register,
-    set_loaded_id as _reg_set_loaded,
+    add_loaded_id as _reg_add_loaded,
 )
 from vtsearch.utils import (
     DatasetContext,
-    build_diversity_tree,
     build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
-    get_active_dataset_id,
-    get_dataset_display_name,
-    get_dupe_count,
-    medias,
     register_context,
-    set_active_dataset_id,
     snapshot_medias,
     update_progress,
 )
@@ -79,15 +73,6 @@ def _make_stepped_progress(tracker: ProgressTracker):
 
     return _stepped_progress
 
-
-# Keep the old module-level _stepped_progress for backward compat (staging uses it)
-def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Legacy stepped progress that updates the global dataset_progress."""
-    dataset_progress.check_cancelled()
-    if status == "idle":
-        return
-    step = _STATUS_TO_STEP.get(status)
-    update_progress(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
 
 def clear_dataset():
@@ -164,17 +149,8 @@ def _load_embedder_with_progress(
 
 
 def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
-    """Legacy wrapper: load embedder using the global progress tracker."""
+    """Load embedder using the global progress tracker."""
     _load_embedder_with_progress(None, update_progress, step=step, total_steps=total_steps)
-
-
-def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
-    """Set origin and origin_name on medias that don't already have them."""
-    for media in clips_dict.values():
-        if media.get("origin") is None:
-            media["origin"] = origin
-        if not media.get("origin_name"):
-            media["origin_name"] = media.get("filename", "")
 
 
 def _origin_to_str(origin: dict | None) -> str:
@@ -196,6 +172,22 @@ def _origin_to_str(origin: dict | None) -> str:
         first_val = next(iter(params.values()))
         return f"{importer_name}:{first_val}"
     return importer_name
+
+
+def _normalize_media_type(value: str) -> str:
+    """Normalize a media type string (folder_import_name or type_id) to a canonical type_id."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    try:
+        from vtsearch.media import get_by_folder_name, normalize_type_id  # noqa: PLC0415
+
+        try:
+            return get_by_folder_name(value).type_id
+        except KeyError:
+            return normalize_type_id(value)
+    except Exception:
+        return value
 
 
 def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
@@ -240,6 +232,7 @@ def _auto_register_dataset(
     embedder: str = "",
     created_by: str = "",
     display_name: str | None = None,
+    ingest_started_at: float | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -269,6 +262,18 @@ def _auto_register_dataset(
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
+    # Count file types by extension
+    from collections import Counter
+
+    ext_counter: Counter[str] = Counter()
+    for m in media_dict.values():
+        fn = m.get("filename", "")
+        if fn and "." in fn:
+            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
+        else:
+            ext_counter["(no extension)"] += 1
+    file_type_counts = dict(ext_counter.most_common())
+
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
@@ -291,20 +296,21 @@ def _auto_register_dataset(
         clipper=clipper,
         embedder=embedder,
         created_by=created_by,
+        file_type_counts=file_type_counts,
+        ingest_started_at=ingest_started_at,
     )
-    _reg_set_loaded(entry["id"])
+    _reg_add_loaded(entry["id"])
     return entry
 
 
 def _activate_new_context(dataset_id: str) -> DatasetContext:
-    """Create a fresh DatasetContext, register it, and make it active.
+    """Create a fresh DatasetContext and register it.
 
-    The previous active context (if any) is *preserved* in the context
-    store — it is not cleared.  This enables the multi-dataset model.
+    The previous contexts (if any) are *preserved* in the context
+    store — nothing is cleared.  This enables the multi-dataset model.
     """
     ctx = DatasetContext(dataset_id)
     register_context(ctx)
-    set_active_dataset_id(dataset_id)
     return ctx
 
 
@@ -322,6 +328,7 @@ def _run_origin_load_in_background(
     clipper_params: dict | None = None,
     embedder: str = "",
     created_by: str = "",
+    media_type: str = "",
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -344,14 +351,18 @@ def _run_origin_load_in_background(
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
 
+    import time as _time
+
     task_id = f"_loading_{uuid4().hex[:8]}"
-    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin))
+    ingest_started_at = _time.time()
+    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type)
 
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     def task():
         ctx = DatasetContext(task_id)
+        context_id = task_id  # tracks the current context key (may change after migration)
         stepped = _make_stepped_progress(tracker)
         try:
             tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
@@ -377,7 +388,12 @@ def _run_origin_load_in_background(
             tracker.update(
                 "loading", "Removing duplicates…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
             )
-            _set_clip_origins(ctx.medias, origin)
+            # Tag medias that don't already have an origin.
+            for media in ctx.medias.values():
+                if media.get("origin") is None:
+                    media["origin"] = origin
+                if not media.get("origin_name"):
+                    media["origin_name"] = media.get("filename", "")
             if clipper:
                 _apply_clipper(ctx.medias, clipper, clipper_params)
             collapse_duplicates(ctx.medias)
@@ -409,15 +425,14 @@ def _run_origin_load_in_background(
                 embedder=embedder,
                 created_by=created_by,
                 display_name=name,
+                ingest_started_at=ingest_started_at,
             )
 
             # Migrate the context from the temp task_id to the real registry ID.
             if entry is not None:
                 _migrate_context_id(task_id, entry["id"])
+                context_id = entry["id"]
                 ctx.dataset_display_name = entry.get("name", name)
-                # Activate this dataset if nothing else is currently active.
-                if get_active_dataset_id() is None:
-                    set_active_dataset_id(entry["id"])
 
             # Warm up the embedder.  Use a progress wrapper that updates the
             # task tracker, not the global singleton.
@@ -428,14 +443,14 @@ def _run_origin_load_in_background(
         except CancelledError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except ImportError as e:
             traceback.print_exc()
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update(
                 "idle",
@@ -452,7 +467,7 @@ def _run_origin_load_in_background(
         except MemoryError:
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
             gc.collect()
             tracker.update(
                 "idle",
@@ -467,7 +482,8 @@ def _run_origin_load_in_background(
             traceback.print_exc()
             from vtsearch.utils.state_core import unregister_context
 
-            unregister_context(task_id)
+            unregister_context(context_id)
+            gc.collect()
             error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
             tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
@@ -480,19 +496,13 @@ def _run_origin_load_in_background(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtsearch.utils.state_core import (
-        _contexts,
-        _active_dataset_id,
-        set_active_dataset_id,
-    )
+    from vtsearch.utils.state_core import _contexts
 
     ctx = _contexts.pop(old_id, None)
     if ctx is None:
         return
     ctx.dataset_id = new_id
     _contexts[new_id] = ctx
-    if _active_dataset_id == old_id:
-        set_active_dataset_id(new_id)
 
 
 def _run_importer_in_background(importer, field_values: dict) -> str:
@@ -509,6 +519,10 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
+    # Extract media_type from field_values so in-progress tasks can expose it
+    # to the frontend (used for guessing the type in subsequent add dialogs).
+    media_type_hint = _normalize_media_type(field_values.get("media_type", ""))
+
     def _load(target_medias):
         importer.run(field_values, target_medias)
 
@@ -520,6 +534,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         clipper_params=clipper_params,
         embedder=embedder_name,
         created_by=created_by,
+        media_type=media_type_hint,
     )
 
 
@@ -546,7 +561,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             apply_custom_metadata_md5(temp_medias)
 
             if not temp_medias:
-                update_progress("idle", "", 0, 0, "Import produced no medias.")
+                update_progress("idle", "", 0, 0, error="Import produced no medias.")
                 return
 
             first = next(iter(temp_medias.values()))
@@ -579,7 +594,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 "",
                 0,
                 0,
-                f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
+                error=f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
             )
         except MemoryError:
             gc.collect()
@@ -588,12 +603,12 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 "",
                 0,
                 0,
-                "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                error="Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
             )
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e) or repr(e) or "Unknown error during staging"
-            update_progress("idle", "", 0, 0, error_msg)
+            update_progress("idle", "", 0, 0, error=error_msg)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()

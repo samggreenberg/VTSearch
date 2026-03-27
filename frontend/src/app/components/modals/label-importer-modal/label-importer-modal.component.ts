@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, OnInit, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -29,6 +29,10 @@ type ModalView = 'picker' | 'form';
   styleUrl: './label-importer-modal.component.scss',
 })
 export class LabelImporterModalComponent implements OnInit {
+  /** When set, labels are imported directly into this trainable model
+   *  instead of into the active dataset's vote state. */
+  @Input() targetModelName: string | null = null;
+
   @Output() closed = new EventEmitter<void>();
   @Output() imported = new EventEmitter<void>();
 
@@ -47,10 +51,6 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
-  /** @deprecated No longer used — auto-resolve happens server-side. */
-  missingEntries: unknown[] = [];
-  /** @deprecated No longer used — auto-resolve happens server-side. */
-  ingesting = false;
 
   constructor(
     private labelImportersApi: LabelImportersApiService,
@@ -62,7 +62,7 @@ export class LabelImporterModalComponent implements OnInit {
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
-    return 'Import Labels';
+    return this.targetModelName ? 'Add Labels to Model' : 'Import Labels';
   }
 
   ngOnInit(): void {
@@ -115,12 +115,22 @@ export class LabelImporterModalComponent implements OnInit {
     this.error = '';
     this.successMessage = '';
 
-    this.labelImportersApi.runImport(
-      this.selectedImporter.name,
-      this.formValues,
-      this.selectedFile ?? undefined,
-      this.selectedFileFieldKey ?? undefined,
-    ).subscribe({
+    const request$ = this.targetModelName
+      ? this.labelImportersApi.runModelImport(
+          this.targetModelName,
+          this.selectedImporter.name,
+          this.formValues,
+          this.selectedFile ?? undefined,
+          this.selectedFileFieldKey ?? undefined,
+        )
+      : this.labelImportersApi.runImport(
+          this.selectedImporter.name,
+          this.formValues,
+          this.selectedFile ?? undefined,
+          this.selectedFileFieldKey ?? undefined,
+        );
+
+    request$.subscribe({
       next: (res: any) => {
         this.submitting = false;
         this.successMessage = res.message || `Applied ${res.applied ?? 0} labels`;

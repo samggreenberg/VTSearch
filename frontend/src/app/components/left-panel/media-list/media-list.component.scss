@@ -22,6 +22,11 @@
   }
 }
 
+.virtual-scroll-viewport {
+  flex: 1;
+  overflow-x: hidden;
+}
+
 .media-threshold-line {
   display: flex;
   align-items: center;

@@ -9,6 +9,12 @@ autorun detectors.  Also validates the ``_settings_lock`` in
 
 import threading
 
+from vtsearch.utils.state_core import (
+    get_thread_dataset_context,
+    get_thread_detector_context,
+    set_thread_dataset_context,
+    set_thread_detector_context,
+)
 from vtsearch.utils import (
     apply_label,
     apply_label_with_click_time,
@@ -182,8 +188,12 @@ class TestConcurrentVoteToggle:
         """Concurrent votes on different media IDs should all succeed."""
         num_threads = 20
         errors = []
+        ds_ctx = get_thread_dataset_context()
+        det_ctx = get_thread_detector_context()
 
         def worker(media_id):
+            set_thread_dataset_context(ds_ctx)
+            set_thread_detector_context(det_ctx)
             try:
                 toggle_vote(media_id, "good")
             except Exception as e:
@@ -229,8 +239,12 @@ class TestConcurrentApplyLabel:
         """Simulate concurrent label imports on different media."""
         num_threads = 20
         errors = []
+        ds_ctx = get_thread_dataset_context()
+        det_ctx = get_thread_detector_context()
 
         def worker(media_id, label):
+            set_thread_dataset_context(ds_ctx)
+            set_thread_detector_context(det_ctx)
             try:
                 apply_label(media_id, label)
             except Exception as e:

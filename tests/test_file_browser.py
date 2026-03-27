@@ -15,10 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from vtsearch.auth import (
-    DefaultLoginProvider,
     LoginProvider,
     get_login_provider,
     set_login_provider,

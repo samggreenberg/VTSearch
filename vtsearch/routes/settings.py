@@ -34,9 +34,12 @@ settings_bp = Blueprint("settings", __name__)
 def get_settings():
     """Return all settings."""
     data = settings.get_all()
-    # Include settings JSON snippets for each autorun processor
-    for proc in data.get("autorun_processors", []):
+    # Include settings JSON snippets for each autorun processor.
+    # Copy each proc dict to avoid mutating the live in-memory settings.
+    procs = [dict(p) for p in data.get("autorun_processors", [])]
+    for proc in procs:
         proc["settings_json"] = settings.to_settings_json(proc)
+    data["autorun_processors"] = procs
     return jsonify(data)
 
 
@@ -195,15 +198,6 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
 
-    if "autoload_media_types" in body:
-        val = body["autoload_media_types"]
-        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
-            return jsonify({"error": "autoload_media_types must be a list of strings"}), 400
-        try:
-            settings.set_autoload_media_types(val)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
     if "autoload_media_embedders" in body:
         val = body["autoload_media_embedders"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
@@ -246,7 +240,7 @@ def get_defaults():
 @settings_bp.route("/api/settings/autorun-processors", methods=["GET"])
 def get_autorun_processors():
     """List all autorun processor recipes."""
-    procs = settings.get_autorun_processors()
+    procs = [dict(p) for p in settings.get_autorun_processors()]
     for proc in procs:
         proc["settings_json"] = settings.to_settings_json(proc)
     return jsonify({"autorun_processors": procs})
@@ -262,6 +256,8 @@ def add_autorun_processor():
     processor_name = (body.get("processor_name") or "").strip()
     processor_importer = (body.get("processor_importer") or "").strip()
     field_values = body.get("field_values", {})
+    if not isinstance(field_values, dict):
+        return jsonify({"error": "field_values must be an object"}), 400
 
     if not processor_name:
         return jsonify({"error": "processor_name is required"}), 400

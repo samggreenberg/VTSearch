@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 import {
   DatasetStatus,
   DatasetProgress,
+  DatasetStatsResponse,
   ImportersResponse,
   DemoListResponse,
   LoadingTask,
@@ -188,10 +189,6 @@ export class DatasetsApiService {
     return this.http.post(`/api/datasets/registry/${datasetId}/unload`, {});
   }
 
-  activateRegistered(datasetId: string): Observable<unknown> {
-    return this.http.post(`/api/datasets/registry/${datasetId}/activate`, {});
-  }
-
   deleteRegistered(datasetId: string): Observable<unknown> {
     return this.http.delete(`/api/datasets/registry/${datasetId}`);
   }
@@ -206,5 +203,9 @@ export class DatasetsApiService {
 
   loadSource(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/dataset/load-source', params);
+  }
+
+  getDatasetStats(datasetId: string): Observable<DatasetStatsResponse> {
+    return this.http.get<DatasetStatsResponse>(`/api/datasets/registry/${datasetId}/stats`);
   }
 }

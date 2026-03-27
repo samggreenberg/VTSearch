@@ -137,7 +137,7 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash install-gpu.sh          # defaults to CUDA 11.8
+bash install-gpu.sh          # defaults to CUDA 11.8 (cu118)
 bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
@@ -282,7 +282,7 @@ dependencies automatically and supports grouped test subsets:
 ```
 
 Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `models`,
-`downloads`, `integration`, `cli`, `converters`. See `CLAUDE.md` for the
+`downloads`, `integration`, `cli`, `converters`. See [`CLAUDE.md`](../CLAUDE.md) for the
 full group-to-file mapping.
 
 You can also run pytest directly:
@@ -310,6 +310,18 @@ python -m pytest tests/test_gpu.py -v -m gpu
 ```bash
 python -m pytest tests/ -v -m ''
 ```
+
+## Environment variables
+
+VTSearch reads several optional environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
+| `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration.
 
 ## Next steps
 

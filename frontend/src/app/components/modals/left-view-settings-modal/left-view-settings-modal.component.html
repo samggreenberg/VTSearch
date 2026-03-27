@@ -18,34 +18,30 @@
       }
       <div class="view-tab-content">
         <div class="form-group">
-          <label class="form-label">View Mode:</label>
-          <div class="radio-group">
-            <label class="radio-row">
-              <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode(activeViewTab) === 'list'" (change)="onViewModeChange(activeViewTab, 'list')" />
-              List
-            </label>
-            <label class="radio-row">
-              <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="grid" [checked]="getViewMode(activeViewTab) === 'grid'" (change)="onViewModeChange(activeViewTab, 'grid')" />
-              Grid
-            </label>
+          <label class="form-label" title="Display media as a vertical list or a thumbnail grid">View Mode:</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" [class.toggle-btn--active]="getViewMode(activeViewTab) === 'list'" (click)="onViewModeChange(activeViewTab, 'list')" title="Show items as a single-column list with names">
+              <vt-icon type="list" [size]="13"></vt-icon> List
+            </button>
+            <button class="toggle-btn" [class.toggle-btn--active]="getViewMode(activeViewTab) === 'grid'" (click)="onViewModeChange(activeViewTab, 'grid')" title="Show items as a thumbnail grid">
+              <vt-icon type="grid" [size]="13"></vt-icon> Grid
+            </button>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Focus Mode:</label>
-          <div class="radio-group">
-            <label class="radio-row">
-              <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode(activeViewTab) === 'click'" (change)="onFocusModeChange(activeViewTab, 'click')" />
-              Click
-            </label>
-            <label class="radio-row">
-              <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="hover" [checked]="getFocusMode(activeViewTab) === 'hover'" (change)="onFocusModeChange(activeViewTab, 'hover')" />
-              Hover
-            </label>
+          <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
+          <div class="toggle-group">
+            <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode(activeViewTab) === 'click'" (click)="onFocusModeChange(activeViewTab, 'click')" title="Click an item to preview it in the center panel">
+              <vt-icon type="cursor-click" [size]="13"></vt-icon> Click
+            </button>
+            <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode(activeViewTab) === 'hover'" (click)="onFocusModeChange(activeViewTab, 'hover')" title="Hover over an item to immediately preview it">
+              <vt-icon type="cursor-hover" [size]="13"></vt-icon> Hover
+            </button>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Grid Icon Size:</label>
-          <select class="form-select" [ngModel]="getGridIconSize(activeViewTab)" (ngModelChange)="onGridIconSizeChange(activeViewTab, $event)">
+          <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
+          <select class="form-select" [ngModel]="getGridIconSize(activeViewTab)" (ngModelChange)="onGridIconSizeChange(activeViewTab, $event)" title="Choose thumbnail size for the grid view">
             <option value="XS">XS</option>
             <option value="S">S</option>
             <option value="M">M</option>

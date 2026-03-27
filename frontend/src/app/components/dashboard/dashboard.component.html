@@ -72,6 +72,7 @@
                 [loadingTask]="getInlineTask(dataset.id)"
                 (rowClick)="toggleDatasetSelection(dataset.id, $event)"
                 (rename)="renameDataset(dataset, $event)"
+                (stats)="showDatasetStats(dataset)"
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
@@ -117,12 +118,17 @@
               <vt-model-card
                 [model]="model"
                 [selected]="isModelSelected(model.id)"
+                [loadingTask]="getInlineModelTask(model.id)"
                 (rowClick)="toggleModelSelection(model.id, $event)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
                 (load)="loadModel(model)"
+                (unload)="unloadModel(model)"
                 (export)="openExportModal(model)"
+                (addLabels)="openAddLabelsModal(model)"
                 (autorunToggle)="toggleAutorun(model, $event)"
+                (cancelTask)="cancelModelLoadingTask($event)"
+                (dismissTask)="dismissModelLoadingTask($event)"
               />
             }
           </tbody>
@@ -148,7 +154,7 @@
       <button
         class="btn btn--primary"
         [disabled]="!labelEnabled"
-        [title]="labelHint"
+        [title]="labelHint || 'Open the labeling view to vote on items and train the selected model on the selected dataset'"
         (click)="onLabel()"
       >
         Train
@@ -159,7 +165,7 @@
       <button
         class="btn btn--primary"
         [disabled]="!findEnabled"
-        [title]="findHint"
+        [title]="findHint || 'Score every item in the selected dataset using the selected model and show ranked results'"
         (click)="onFind()"
       >
         Find
@@ -194,9 +200,25 @@
   />
 }
 
+@if (addLabelsModalOpen) {
+  <vt-label-importer-modal
+    [targetModelName]="addLabelsModelName"
+    (closed)="closeAddLabelsModal()"
+    (imported)="onAddLabelsImported()"
+  />
+}
+
 @if (findResultsOpen) {
   <vt-autodetect-results-modal
     [data]="findResultsData"
     (closed)="closeFindResults()"
+  />
+}
+
+@if (statsModalOpen) {
+  <vt-dataset-stats-modal
+    [datasetId]="statsDatasetId"
+    [datasetName]="statsDatasetName"
+    (closed)="closeStatsModal()"
   />
 }

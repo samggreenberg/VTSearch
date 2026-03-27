@@ -7,7 +7,7 @@
 
   @if (mode !== 'find') {
     <div class="import-row">
-      <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()">Import Labels</button>
+      <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()" title="Import good/bad labels from a file or add media directly to the good or bad pile">Import Labels</button>
     </div>
   }
 
@@ -17,7 +17,7 @@
       (modeChange)="onSortModeChange($event)"
     />
     <div class="view-btn-wrapper">
-      <button class="view-btn" (click)="onViewSettings()">View</button>
+      <button class="view-btn" (click)="onViewSettings()" title="Change display layout for labeled items: list vs. grid, focus mode, and icon size">View</button>
       @if (showViewSettings) {
         <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
       }
@@ -55,7 +55,7 @@
   />
 
   <div class="export-row">
-    <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()">Export</button>
+    <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">Export</button>
   </div>
 </aside>
 
