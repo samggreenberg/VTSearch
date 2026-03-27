@@ -64,7 +64,7 @@ def get_json_or_400():
         data = request.get_json(force=True)
     except Exception:
         return jsonify({"error": "Invalid request body"}), 400
-    if data is None:
+    if data is None or not isinstance(data, dict):
         return jsonify({"error": "Invalid request body"}), 400
     return data
 
