@@ -10,7 +10,7 @@
           {{ mediaTypeName }}s ({{ medias.length }})
         </h3>
         <div class="view-btn-wrapper">
-          <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+          <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>
           @if (showLeftViewSettings) {
             <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
           }
@@ -63,6 +63,7 @@
           [class.active]="activeTab === 'manual'"
           [attr.aria-selected]="activeTab === 'manual'"
           (click)="setTab('manual')"
+          title="Browse and label items manually with full control over sort mode, selection strategy, and inclusion."
         >Manual</button>
         <button
           class="left-tab"
@@ -117,7 +118,7 @@
             {{ mediaTypeName }}s ({{ medias.length }})
           </h3>
           <div class="view-btn-wrapper">
-            <button class="view-btn" (click)="showLeftViewSettings = true">View</button>
+            <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>
             @if (showLeftViewSettings) {
               <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
             }

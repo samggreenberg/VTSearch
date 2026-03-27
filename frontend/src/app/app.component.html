@@ -27,6 +27,7 @@
         role="menuitem"
         tabindex="-1"
         (click)="onDashboard()"
+        title="Return to the Dashboard to manage datasets and models"
       ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="1" y="1" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
           <rect x="3.5" y="3" width="9" height="3" rx="0.5" stroke="currentColor" stroke-width="1.0"/>
@@ -39,6 +40,7 @@
         role="menuitem"
         tabindex="-1"
         (click)="onSettings()"
+        title="Open the Settings panel to configure appearance, sorting, autopilot, and autoload"
       ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
@@ -53,9 +55,10 @@
     [class.disabled]="!isOnLabelView"
     [disabled]="!isOnLabelView"
     (click)="onDashboard()"
+    title="Return to the Dashboard to manage datasets and models"
   >Dashboard</button>
-  <span class="top-bar-field"><strong>Data:</strong> <span class="top-bar-value">{{ datasetDisplayName }}</span></span>
-  <span class="top-bar-field"><strong>Model:</strong> <span class="top-bar-value">{{ modelDisplayName }}</span></span>
+  <span class="top-bar-field" title="The currently active dataset being browsed and labeled"><strong>Data:</strong> <span class="top-bar-value">{{ datasetDisplayName }}</span></span>
+  <span class="top-bar-field" title="The currently active model used for scoring and sorting"><strong>Model:</strong> <span class="top-bar-value">{{ modelDisplayName }}</span></span>
   <span class="top-bar-spacer"></span>
   <button
     class="settings-btn"

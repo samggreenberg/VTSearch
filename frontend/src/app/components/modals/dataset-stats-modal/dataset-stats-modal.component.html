@@ -7,23 +7,23 @@
     <table class="stats-table">
       <tbody>
         <tr>
-          <td class="stat-label">Media items</td>
+          <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
           <td class="stat-value">{{ stats.num_items }}</td>
         </tr>
         <tr>
-          <td class="stat-label">Duplicate groups</td>
+          <td class="stat-label" title="Number of duplicate items that were detected and collapsed">Duplicate groups</td>
           <td class="stat-value">{{ stats.num_dupes }}</td>
         </tr>
         <tr>
-          <td class="stat-label">Ingest started</td>
+          <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
           <td class="stat-value">{{ formatTimestamp(stats.ingest_started_at) }}</td>
         </tr>
         <tr>
-          <td class="stat-label">Ingest finished</td>
+          <td class="stat-label" title="Timestamp when the dataset import process completed">Ingest finished</td>
           <td class="stat-value">{{ formatTimestamp(stats.ingest_finished_at) }}</td>
         </tr>
         <tr>
-          <td class="stat-label">Duration</td>
+          <td class="stat-label" title="Total time taken to import the dataset">Duration</td>
           <td class="stat-value">{{ duration }}</td>
         </tr>
       </tbody>
@@ -34,8 +34,8 @@
       <table class="stats-table">
         <thead>
           <tr>
-            <th>Extension</th>
-            <th>Count</th>
+            <th title="File extension of media items">Extension</th>
+            <th title="Number of items with this file extension">Count</th>
           </tr>
         </thead>
         <tbody>

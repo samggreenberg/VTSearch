@@ -1,21 +1,21 @@
 <vt-modal title="Export" [open]="true" (closed)="close()">
   <!-- Category Filter -->
   <div class="export-section">
-    <h3>Categories</h3>
+    <h3 title="Filter which labeled items to include in the export">Categories</h3>
     <div class="delimiter-row">
-      <label class="delimiter-option">
+      <label class="delimiter-option" title="Include both good and bad labeled items">
         <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         All
       </label>
-      <label class="delimiter-option">
+      <label class="delimiter-option" title="Include only items labeled as good (positive examples)">
         <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Good
       </label>
-      <label class="delimiter-option">
+      <label class="delimiter-option" title="Include only items labeled as bad (negative examples)">
         <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Bad
       </label>
-      <label class="delimiter-option" [class.disabled]="!hasCorrections" [title]="hasCorrections ? '' : 'No corrections to export.'">
+      <label class="delimiter-option" [class.disabled]="!hasCorrections" [title]="hasCorrections ? 'Include only items whose label was changed (corrected) after initial import' : 'No corrections to export.'">
         <input type="radio" name="labelFilter" value="corrections" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" [disabled]="!hasCorrections" />
         Corrections
       </label>
@@ -24,7 +24,7 @@
 
   <!-- Column Selection -->
   <div class="export-section">
-    <h3>Columns</h3>
+    <h3 title="Choose which data fields to include in the exported output">Columns</h3>
     <div class="column-checkboxes">
       @for (col of columns; track col.key) {
         <label class="column-toggle">
@@ -83,7 +83,7 @@
 
   <!-- Delimiter -->
   <div class="export-section">
-    <h3>Delimiter</h3>
+    <h3 title="Character used to separate columns in the exported text (comma, tab, or pipe)">Delimiter</h3>
     <div class="delimiter-row">
       @for (opt of delimiterOptions; track opt.value) {
         <label class="delimiter-option">
@@ -102,6 +102,7 @@
         class="export-tab"
         [class.active]="activeTab === 'clipboard'"
         (click)="activeTab = 'clipboard'"
+        title="Copy the exported data to your clipboard as delimited text"
       >
         <svg class="tab-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Clipboard
       </button>
@@ -234,10 +235,10 @@
   <!-- Detector Export (Labeling mode only) -->
   @if (showDetectorSection) {
     <div class="export-section">
-      <h3>Export Detector Weights</h3>
+      <h3 title="Save the trained neural network weights so the model can be reloaded later">Export Detector Weights</h3>
       <div class="export-buttons">
-        <button class="btn btn--primary" (click)="exportDetectorBrowser()">Browser Download</button>
-        <button class="btn btn--secondary" (click)="exportDetectorServer()">Save to Server</button>
+        <button class="btn btn--primary" (click)="exportDetectorBrowser()" title="Download the detector weights file to your local machine via the browser">Browser Download</button>
+        <button class="btn btn--secondary" (click)="exportDetectorServer()" title="Save the detector weights file to the server's detectors directory">Save to Server</button>
       </div>
     </div>
   }
