@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { MediaItem } from '../../../models/api.models';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-document-viewer',
@@ -12,9 +13,11 @@ export class DocumentViewerComponent implements OnChanges {
 
   mediaSrc = '';
 
+  constructor(private activeContext: ActiveContextService) {}
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
-      this.mediaSrc = `/api/medias/${this.media.id}/media`;
+      this.mediaSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/media`);
     }
   }
 }

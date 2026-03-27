@@ -37,4 +37,20 @@ export class ActiveContextService {
     this.datasetIdSubject.next('');
     this.modelIdSubject.next('');
   }
+
+  /**
+   * Build a media URL with context query params so browser-native requests
+   * (`<img src>`, `<audio src>`, `<video src>`) resolve the correct dataset.
+   *
+   * Angular HttpClient requests use the interceptor to send headers, but
+   * native element `src` attributes bypass it entirely.
+   */
+  mediaUrl(path: string): string {
+    const params: string[] = [];
+    const ds = this.datasetIdSubject.value;
+    if (ds) params.push(`dataset_id=${encodeURIComponent(ds)}`);
+    const model = this.modelIdSubject.value;
+    if (model) params.push(`model_id=${encodeURIComponent(model)}`);
+    return params.length ? `${path}?${params.join('&')}` : path;
+  }
 }

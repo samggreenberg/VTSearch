@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LabelListComponent, LabelEntry } from './label-list.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('LabelListComponent', () => {
@@ -15,6 +16,7 @@ describe('LabelListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LabelListComponent],
+      providers: [ActiveContextService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelListComponent);

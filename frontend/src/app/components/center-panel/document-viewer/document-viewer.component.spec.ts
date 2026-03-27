@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DocumentViewerComponent } from './document-viewer.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('DocumentViewerComponent', () => {
@@ -17,6 +18,7 @@ describe('DocumentViewerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DocumentViewerComponent],
+      providers: [ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(DocumentViewerComponent);
     component = fixture.componentInstance;

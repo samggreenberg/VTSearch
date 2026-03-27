@@ -43,7 +43,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
-      this.audioSrc = `/api/medias/${this.media.id}/audio`;
+      this.audioSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/audio`);
       if (this.viewReady) {
         this.loadAudio();
       }
@@ -139,10 +139,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     ctx.fillRect(0, 0, width, height);
 
     try {
-      const headers: Record<string, string> = {};
-      if (this.activeContext.datasetId) headers['X-Dataset-Id'] = this.activeContext.datasetId;
-      if (this.activeContext.modelId) headers['X-Model-Id'] = this.activeContext.modelId;
-      const response = await fetch(`/api/medias/${mediaId}/audio`, { headers });
+      const response = await fetch(this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`));
       const arrayBuffer = await response.arrayBuffer();
 
       if (!this.audioCtx || this.audioCtx.state === 'closed') {

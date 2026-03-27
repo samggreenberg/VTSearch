@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 
 export interface LabelEntry {
   id: number;
@@ -37,6 +38,8 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   private pendingScrollPct: number | null = null;
   /** Pre-built Map for O(1) media lookups by id (rebuilt when medias input changes). */
   private mediaMap = new Map<number, MediaItem>();
+
+  constructor(private activeContext: ActiveContextService) {}
 
   ngOnInit(): void {
     this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
@@ -128,8 +131,8 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   thumbnailUrl(id: number): string {
     const media = this.mediaMap.get(id);
     if (!media) return '';
-    if (media.type === 'video') return `/api/medias/${id}/video`;
-    return `/api/medias/${id}/image`;
+    if (media.type === 'video') return this.activeContext.mediaUrl(`/api/medias/${id}/video`);
+    return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
   }
 
   placeholderIcon(id: number): string | null {
