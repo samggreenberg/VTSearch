@@ -18,8 +18,10 @@ the registry.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,6 +101,37 @@ def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
     return str(MODELS_CACHE_DIR)
 
 
+_log = logging.getLogger(__name__)
+
+# Retry settings for transient HuggingFace Hub HTTP errors.
+_HF_RETRY_COUNT = 3
+_HF_RETRY_BACKOFF_BASE = 2  # seconds; delays will be 2, 4, 8, …
+
+
+def _is_transient_hf_error(exc: Exception) -> bool:
+    """Return True if *exc* looks like a retryable HuggingFace Hub HTTP error.
+
+    We check for ``HfHubHTTPError`` by class name (rather than importing it)
+    so this module stays importable even when ``huggingface_hub`` is not
+    installed.  The heuristic matches 5xx status codes and common transient
+    failure messages (timeouts, connection resets).
+    """
+    cls_names = {type(exc).__name__} | {c.__name__ for c in type(exc).__mro__}
+    if "HfHubHTTPError" in cls_names or "HTTPStatusError" in cls_names:
+        msg = str(exc)
+        # 5xx server errors are always transient.
+        if any(f"{code}" in msg for code in range(500, 600)):
+            return True
+        # Catch generic timeout / connection phrasing.
+        lower = msg.lower()
+        if any(kw in lower for kw in ("timeout", "timed out", "connection reset", "connection aborted")):
+            return True
+    # Also catch lower-level connection errors that bubble up.
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    return False
+
+
 def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Call *load_fn* preferring cached model files, falling back to download.
 
@@ -109,13 +142,31 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
 
     This helper tries ``local_files_only=True`` first.  If that raises
     ``OSError`` (model not yet cached), it retries without the flag so the
-    model can be downloaded normally.
+    model can be downloaded normally.  Transient HTTP errors from the
+    HuggingFace Hub (5xx, timeouts) are retried up to ``_HF_RETRY_COUNT``
+    times with exponential backoff.
     """
     try:
         return load_fn(*args, local_files_only=True, **kwargs)
     except OSError:
-        # Model not in local cache — allow network download.
-        return load_fn(*args, **kwargs)
+        # Model not in local cache — allow network download (with retries).
+        last_exc: Exception | None = None
+        for attempt in range(_HF_RETRY_COUNT):
+            try:
+                return load_fn(*args, **kwargs)
+            except Exception as exc:
+                if not _is_transient_hf_error(exc):
+                    raise
+                last_exc = exc
+                delay = _HF_RETRY_BACKOFF_BASE * (2 ** attempt)
+                _log.warning(
+                    "Transient HuggingFace Hub error (attempt %d/%d), "
+                    "retrying in %ds: %s",
+                    attempt + 1, _HF_RETRY_COUNT, delay, exc,
+                )
+                time.sleep(delay)
+        # All retries exhausted — re-raise the last transient error.
+        raise last_exc  # type: ignore[misc]
 
 
 @contextlib.contextmanager
