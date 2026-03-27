@@ -98,6 +98,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private knownModelIds = new Set<string>();
   private completedTaskIds = new Set<string>();
   private completedModelTaskIds = new Set<string>();
+  private datasetPollingActive = false;
+  private modelPollingActive = false;
 
   currentUser = '';
   isDefaultLogin = true;
@@ -169,6 +171,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.pushTopBarLabels();
       });
     this.refresh();
+    this.resumeActivePolling();
+  }
+
+  /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
+  private resumeActivePolling(): void {
+    this.datasetsApi.getLoadingTasks().subscribe((tasks) => {
+      if (tasks.some((t) => t.status !== 'idle')) {
+        this.startProgressPolling();
+      }
+    });
+    this.modelsApi.getModelLoadingTasks().subscribe((resp) => {
+      if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
+        this.startModelProgressPolling();
+      }
+    });
   }
 
   // --- Column resize ---
@@ -680,7 +697,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   startProgressPolling(onComplete?: () => void): void {
     this.datasetState.setErrorMessage('');
-    this.polling$.next(); // cancel previous polling
+
+    // If polling is already active, don't restart — the existing loop
+    // already covers all tasks.  This avoids clearing completedTaskIds
+    // and losing track of tasks that just finished.
+    if (this.datasetPollingActive) {
+      return;
+    }
+    this.datasetPollingActive = true;
     this.completedTaskIds.clear();
 
     timer(0, 1000)
@@ -725,6 +749,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (active.length === 0) {
             // No more active tasks — stop polling
             this.polling$.next();
+            this.datasetPollingActive = false;
             // Refresh unless we just did (justFinished already triggered it)
             if (justFinished.length === 0) {
               this.datasetState.refresh();
@@ -738,7 +763,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   startModelProgressPolling(onComplete?: () => void): void {
-    this.modelPolling$.next(); // cancel previous polling
+    if (this.modelPollingActive) {
+      return;
+    }
+    this.modelPollingActive = true;
     this.completedModelTaskIds.clear();
 
     timer(0, 1000)
@@ -775,6 +803,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
           if (active.length === 0) {
             this.modelPolling$.next();
+            this.modelPollingActive = false;
             if (justFinished.length === 0) {
               this.datasetState.refresh();
             }
