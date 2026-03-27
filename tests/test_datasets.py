@@ -492,8 +492,8 @@ class TestDemoDatasetEmbedderStatus:
         for ds in data["datasets"]:
             assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
 
-    def test_no_sidecar_returns_none_embedder(self, client):
-        """When no sidecar file exists, pkl_embedder is None."""
+    def test_no_sidecar_returns_empty_embedder(self, client):
+        """When no sidecar file exists, pkl_embedder is empty string."""
         import pickle
 
         from vtsearch.config import EMBEDDINGS_DIR
@@ -525,8 +525,10 @@ class TestDemoDatasetEmbedderStatus:
             data = resp.get_json()
             ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
             assert ds is not None
-            # Without a sidecar, embedder is unknown
-            assert ds["pkl_embedder"] is None
+            # Without a sidecar, embedder is unknown (empty string)
+            assert ds["pkl_embedder"] == ""
+            # The pkl exists but we can't verify the embedder matches, so status stays ready
+            assert ds["status"] == "ready"
         finally:
             pkl_file.unlink(missing_ok=True)
             sidecar.unlink(missing_ok=True)
