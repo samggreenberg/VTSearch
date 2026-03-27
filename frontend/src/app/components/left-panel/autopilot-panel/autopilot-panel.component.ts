@@ -6,6 +6,7 @@ import {
   AutopilotPhase,
   AutopilotState,
 } from '../../../services/autopilot-state.service';
+import { VtDialogService } from '../../../services/dialog.service';
 
 export type { AutopilotPhase, AutopilotState };
 
@@ -43,7 +44,12 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Output() toggleCollapse = new EventEmitter<void>();
   @Output() refocus = new EventEmitter<void>();
 
-  constructor(public autopilotState: AutopilotStateService) {}
+  private completionAlerted = false;
+
+  constructor(
+    public autopilotState: AutopilotStateService,
+    private dialogService: VtDialogService,
+  ) {}
 
   get state(): AutopilotState {
     return this.autopilotState.state;
@@ -88,12 +94,21 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     }
 
     if (changes['goodVotes'] || changes['badVotes'] || changes['labelingStatus']) {
+      const prevPhase = this.autopilotState.state.phase;
       this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
+      if (prevPhase !== 'done' && this.autopilotState.state.phase === 'done' && !this.completionAlerted) {
+        this.completionAlerted = true;
+        this.dialogService.alert(
+          'Autopilot is complete! All quality indicators are green. You can continue labeling or export your results.',
+          'success',
+        );
+      }
     }
   }
 
   activate(): void {
     if (this.running) return;
+    this.completionAlerted = false;
     this.autopilotState.activate();
     // Immediately check whether existing votes already satisfy early phases
     // (e.g. user labeled 23 goods in Manual mode before switching to Autopilot).
