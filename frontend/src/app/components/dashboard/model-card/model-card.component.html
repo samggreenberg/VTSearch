@@ -23,7 +23,7 @@
         }
         {{ loadingTask.message }}
         @if (loadingTask.current && loadingTask.total) {
-          ({{ loadingTask.current }}/{{ loadingTask.total }})
+          ({{ formatFraction(loadingTask.current, loadingTask.total) }})
         }
       </span>
       <vt-progress-bar

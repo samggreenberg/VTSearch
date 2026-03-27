@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { formatProgressFraction } from '../../../utils/format-progress';
 
 @Component({
   selector: 'vt-dataset-card',
@@ -111,7 +112,7 @@ export class DatasetCardComponent {
       msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
     }
     if (task.current != null && task.total != null && task.total > 0) {
-      const fraction = `(${task.current}/${task.total})`;
+      const fraction = `(${formatProgressFraction(task.current, task.total)})`;
       const stepEnd = msg.indexOf('] ');
       if (stepEnd !== -1) {
         msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
