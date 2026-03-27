@@ -58,6 +58,28 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
+def _pop_md5_key(d: dict[str, Any]) -> str:
+    """Pop and return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
+
+    Returns the value (or ``""`` if neither key is present) and removes the
+    matched key from *d* so it doesn't leak into downstream metadata.
+    """
+    for key in ("md5", "MD5"):
+        val = d.get(key)
+        if val:
+            del d[key]
+            return val
+    return ""
+
+
+def _get_md5_value(d: dict[str, Any]) -> str:
+    """Return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
+
+    Unlike :func:`_pop_md5_key` this does **not** mutate *d*.
+    """
+    return d.get("md5") or d.get("MD5") or ""
+
+
 def _streaming_md5(file_path: Path) -> str:
     """Compute MD5 hash of a file using constant memory."""
     h = hashlib.md5()
@@ -231,7 +253,7 @@ def load_dataset_from_folder(
                     file_cm = custom_metadata_map[file_path.name]
 
             # Resolve MD5: custom_metadata > content_md5s > computed
-            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+            cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
             if thin:
                 # Thin mode: store file path reference, skip loading bytes.
@@ -315,10 +337,10 @@ def load_dataset_from_folder(
 def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
     """Use MD5 hashes from custom_metadata when available.
 
-    If a media item's ``custom_metadata`` contains a non-empty ``"md5"`` key,
-    that value is used as the item's ``"md5"`` instead of whatever was
-    calculated during loading.  This lets importers supply authoritative hashes
-    from their data source without recalculation.
+    If a media item's ``custom_metadata`` contains a non-empty ``"md5"`` (or
+    ``"MD5"``) key, that value is used as the item's ``"md5"`` instead of
+    whatever was calculated during loading.  This lets importers supply
+    authoritative hashes from their data source without recalculation.
 
     Args:
         media_dict: The mutable medias dict.  Modified in place.
@@ -331,10 +353,9 @@ def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
         cm = media.get("custom_metadata")
         if not cm:
             continue
-        cm_md5 = cm.get("md5")
+        cm_md5 = _pop_md5_key(cm)
         if cm_md5:
             media["md5"] = cm_md5
-            del cm["md5"]
             count += 1
     return count
 
@@ -472,7 +493,7 @@ def load_dataset_from_folder_chunked(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            cm_md5 = (file_cm.get("md5") or "") if file_cm else ""
+            cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
             if thin:
                 if cm_md5:
