@@ -9,6 +9,10 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
 - If your feature branch was forked from `master`/`main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
 
+## Backwards Compatibility
+
+Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
+
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also checks frontend TypeScript build)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; `core` includes frontend build check)
