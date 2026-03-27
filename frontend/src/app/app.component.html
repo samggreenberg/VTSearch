@@ -54,8 +54,8 @@
     [disabled]="!isOnLabelView"
     (click)="onDashboard()"
   >Dashboard</button>
-  <span class="top-bar-field">Data: {{ datasetDisplayName }}</span>
-  <span class="top-bar-field">Model: {{ modelDisplayName }}</span>
+  <span class="top-bar-field"><strong>Data:</strong> <span class="top-bar-value">{{ datasetDisplayName }}</span></span>
+  <span class="top-bar-field"><strong>Model:</strong> <span class="top-bar-value">{{ modelDisplayName }}</span></span>
   <span class="top-bar-spacer"></span>
   <button
     class="settings-btn"
