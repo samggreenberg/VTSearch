@@ -278,7 +278,7 @@ class AudioMediaType(MediaType):
             finally:
                 embedder._on_progress = original_cb
 
-        clip_id = 1
+        clip_id = max(clips.keys(), default=0) + 1
         total = len(audio_files)
         on_progress("embedding", f"Starting embedding for {total} audio files...", 0, total)
         demo_origin: dict = {"importer": "demo", "params": {}}

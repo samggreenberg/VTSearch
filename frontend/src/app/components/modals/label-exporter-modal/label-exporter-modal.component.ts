@@ -1,5 +1,7 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -12,7 +14,7 @@ import { ExporterInfo } from '../../../models/api.models';
   templateUrl: './label-exporter-modal.component.html',
   styleUrl: './label-exporter-modal.component.scss',
 })
-export class LabelExporterModalComponent implements OnInit {
+export class LabelExporterModalComponent implements OnInit, OnDestroy {
   @Input() goodsOnly = false;
   @Output() closed = new EventEmitter<void>();
   @Output() exportComplete = new EventEmitter<void>();
@@ -20,6 +22,8 @@ export class LabelExporterModalComponent implements OnInit {
   exporters: ExporterInfo[] = [];
   loading = true;
   error = '';
+
+  private destroy$ = new Subject<void>();
 
   constructor(
     private exportersApi: ExportersApiService,
@@ -31,7 +35,7 @@ export class LabelExporterModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.exportersApi.getExporters().subscribe({
+    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
         this.exporters = list;
         this.loading = false;
@@ -41,6 +45,11 @@ export class LabelExporterModalComponent implements OnInit {
         this.error = 'Failed to load exporters';
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   selectExporter(exporter: ExporterInfo): void {

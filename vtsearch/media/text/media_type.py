@@ -114,19 +114,19 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="20newsgroups_s", label="20 Newsgroups (S)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=0, slice_end=25, download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_m", label="20 Newsgroups (M)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=25, slice_end=75, download_size_mb=15,
             ),
             DemoDataset(
                 id="20newsgroups_l", label="20 Newsgroups (L)",
                 description="Usenet posts from the early 1990s across technical, recreational, and political topics.",
-                categories=cats, source="ag_news_sample",
+                categories=cats, source="20newsgroups",
                 slice_start=75, slice_end=200, download_size_mb=15,
             ),
             DemoDataset(
@@ -172,7 +172,7 @@ class TextMediaType(MediaType):
         selected_texts = []
         selected_categories = []
 
-        if source == "ag_news_sample":
+        if source == "20newsgroups":
             from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
 
             texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
@@ -230,7 +230,7 @@ class TextMediaType(MediaType):
             finally:
                 embedder._on_progress = original_cb
 
-        clip_id = 1
+        clip_id = max(clips.keys(), default=0) + 1
         total = len(selected_texts)
         on_progress("embedding", f"Starting embedding for {total} paragraphs...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}

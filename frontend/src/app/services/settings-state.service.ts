@@ -8,6 +8,7 @@ import { SettingsApiService } from './settings-api.service';
 export class SettingsStateService implements OnDestroy {
   private readonly settingsSubject = new BehaviorSubject<AppSettings | null>(null);
   private readonly destroy$ = new Subject<void>();
+  private loading = false;
 
   readonly settings$ = this.settingsSubject.asObservable();
 
@@ -23,10 +24,20 @@ export class SettingsStateService implements OnDestroy {
   }
 
   load(): void {
+    if (this.loading) return;
+    this.loading = true;
     this.settingsApi
       .getSettings()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => this.settingsSubject.next(settings));
+      .subscribe({
+        next: (settings) => {
+          this.settingsSubject.next(settings);
+          this.loading = false;
+        },
+        error: () => {
+          this.loading = false;
+        },
+      });
   }
 
   update(changes: Partial<AppSettings>): Observable<AppSettings> {

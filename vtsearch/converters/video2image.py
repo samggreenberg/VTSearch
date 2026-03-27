@@ -67,10 +67,9 @@ class Video2ImageMediaConverter(MediaConverter):
         results: list[dict[str, Any]] = []
         try:
             cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                return []
-
             try:
+                if not cap.isOpened():
+                    return []
                 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 if frame_count <= 0:
                     return []

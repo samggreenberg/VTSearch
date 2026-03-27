@@ -86,6 +86,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.voteState.stopPolling();
     this.destroy$.next();
     this.destroy$.complete();
   }
