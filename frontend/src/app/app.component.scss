@@ -9,8 +9,8 @@ header {
   align-items: center;
   gap: 12px;
   padding: 3px 8px;
-  background: #2a5cba;
-  border-bottom: 1px solid #1f4a9a;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
 
   .header-logo {
     height: 36px;
@@ -27,7 +27,7 @@ header {
   width: 32px;
   height: 32px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--header-btn-border);
   border-radius: 4px;
   cursor: pointer;
   display: flex;
@@ -39,20 +39,20 @@ header {
   transition: all 0.2s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.6);
+    background: var(--header-btn-hover-bg);
+    border-color: var(--header-btn-hover-border);
   }
 
   span {
     display: block;
     width: 18px;
     height: 2px;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--header-text-dim);
     transition: all 0.2s;
   }
 
   &:hover span {
-    background: #ffffff;
+    background: var(--header-text);
   }
 }
 
@@ -113,10 +113,10 @@ header {
 }
 
 .top-bar-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--header-btn-bg);
+  border: 1px solid var(--header-btn-border);
   border-radius: 4px;
-  color: #ffffff;
+  color: var(--header-text);
   font-size: 0.8rem;
   padding: 4px 10px;
   cursor: pointer;
@@ -124,8 +124,8 @@ header {
   white-space: nowrap;
 
   &:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.6);
+    background: var(--header-btn-hover-bg);
+    border-color: var(--header-btn-hover-border);
   }
 
   &:disabled,
@@ -136,7 +136,7 @@ header {
 }
 
 .top-bar-field {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--header-text-dim);
   font-size: 0.8rem;
   white-space: nowrap;
   width: 160px;
@@ -161,7 +161,7 @@ header {
 
 .settings-btn {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--header-btn-border);
   border-radius: 4px;
   cursor: pointer;
   padding: 4px;
@@ -174,15 +174,15 @@ header {
   svg {
     width: 20px;
     height: 20px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--header-text-dim);
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.6);
+    background: var(--header-btn-hover-bg);
+    border-color: var(--header-btn-hover-border);
 
     svg {
-      color: #ffffff;
+      color: var(--header-text);
     }
   }
 }
