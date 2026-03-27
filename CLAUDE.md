@@ -30,7 +30,7 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
 - **Install deps (GPU)**: `bash install-gpu.sh` (or `bash install-gpu.sh cu121` for CUDA 12.1)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
-- **Frontend tests**: `cd frontend && ng test --watch=false` (requires Chrome/Chromium; see Environment Notes below)
+- **Frontend audit**: `cd frontend && npm audit` (checks for known vulnerabilities in dependencies)
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 
@@ -263,7 +263,7 @@ def slow_load():
 ```
 
 ## Environment Notes (Claude Code on the web)
-- **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed, and they cannot be installed (`chromium` is snap-only on 24.04, snap is unavailable in containers, and Google's download servers are unreachable). Frontend Karma tests (`ng test`) will fail. Do NOT spend time trying to install Chrome/Chromium — it won't work. The Python backend tests (`./run-tests.sh`) work fine without a browser.
+- **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed. Karma has been removed from frontend devDependencies. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
 ## Key Details
 - **Multi-dataset support**: Multiple datasets can be loaded in memory simultaneously. Per-dataset state is bundled in `DatasetContext` objects (`vtsearch/utils/state_core.py`). The module-level names `medias`, `good_votes`, `bad_votes`, etc. are **proxy objects** (`_ProxyDict`/`_ProxyList`) that delegate to the context resolved per-request. The frontend sends `X-Dataset-Id` and `X-Model-Id` HTTP headers to specify which loaded dataset/model each request operates on (see `ActiveContextService` and `activeContextInterceptor` in the Angular frontend). The `before_request` handler in `app.py` stashes the resolved contexts on Flask's `g`, and the proxy objects check `g` first. Outside a request context (background threads, tests), proxies fall back to a **thread-local** context set via `set_thread_dataset_context()` / `set_thread_detector_context()`. There is no global "active" pointer. Key functions: `register_context()`, `unregister_context()`, `get_context()`, `list_loaded_dataset_ids()`. Global (non-per-dataset) state: `autorun_detectors`, `autorun_extractors`, `autorun_localizers`. API: `POST /api/datasets/registry/<id>/load` (load from pkl), `POST /api/datasets/registry/<id>/unload` (free RAM). Registry tracks `_loaded_ids` (set of in-memory dataset IDs).
