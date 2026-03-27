@@ -68,28 +68,24 @@
                 <h4>Left Side</h4>
                 <div class="form-group">
                   <label class="form-label">View Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_left', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'list')" />
-                      List
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_left_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_left', activeViewTab, 'grid')" />
-                      Grid
-                    </label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'list')">
+                      <vt-icon type="list" [size]="14"></vt-icon> List
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'grid')">
+                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Focus Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" />
-                      Click
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_left_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')" />
-                      Hover
-                    </label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')">
+                      <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')">
+                      <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
@@ -107,28 +103,24 @@
                 <h4>Right Side</h4>
                 <div class="form-group">
                   <label class="form-label">View Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="list" [checked]="getViewMode('view_mode_right', activeViewTab) === 'list'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'list')" />
-                      List
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="view_mode_right_{{ activeViewTab }}" value="grid" [checked]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (change)="onViewModeChange('view_mode_right', activeViewTab, 'grid')" />
-                      Grid
-                    </label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'list')">
+                      <vt-icon type="list" [size]="14"></vt-icon> List
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'grid')">
+                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Focus Mode:</label>
-                  <div class="radio-group">
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="click" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" />
-                      Click
-                    </label>
-                    <label class="radio-row">
-                      <input type="radio" name="focus_mode_right_{{ activeViewTab }}" value="hover" [checked]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (change)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')" />
-                      Hover
-                    </label>
+                  <div class="toggle-group">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')">
+                      <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
+                    </button>
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')">
+                      <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
+                    </button>
                   </div>
                 </div>
                 <div class="form-group">
