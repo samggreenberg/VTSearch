@@ -62,7 +62,6 @@ from vtsearch.routes.datasets_loading import (  # noqa: F401
     _origin_to_str,
     _run_importer_in_background,
     _run_origin_load_in_background,
-    _set_clip_origins,
     _stage_importer_in_background,
     clear_dataset,
 )
@@ -81,7 +80,7 @@ def _normalize_media_type_param(value: str) -> str:
     try:
         return get_by_folder_name(value).type_id
     except KeyError:
-        return normalize_type_id(value)  # normalize legacy IDs like "paragraph" → "text"
+        return normalize_type_id(value)
 
 
 # Register the UI sub-blueprint.

@@ -74,15 +74,6 @@ def _make_stepped_progress(tracker: ProgressTracker):
     return _stepped_progress
 
 
-# Keep the old module-level _stepped_progress for backward compat (staging uses it)
-def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Legacy stepped progress that updates the global dataset_progress."""
-    dataset_progress.check_cancelled()
-    if status == "idle":
-        return
-    step = _STATUS_TO_STEP.get(status)
-    update_progress(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
-
 
 def clear_dataset():
     """Clear the current dataset, votes, and all related state."""
@@ -158,17 +149,8 @@ def _load_embedder_with_progress(
 
 
 def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
-    """Legacy wrapper: load embedder using the global progress tracker."""
+    """Load embedder using the global progress tracker."""
     _load_embedder_with_progress(None, update_progress, step=step, total_steps=total_steps)
-
-
-def _set_clip_origins(clips_dict: dict, origin: dict) -> None:
-    """Set origin and origin_name on medias that don't already have them."""
-    for media in clips_dict.values():
-        if media.get("origin") is None:
-            media["origin"] = origin
-        if not media.get("origin_name"):
-            media["origin_name"] = media.get("filename", "")
 
 
 def _origin_to_str(origin: dict | None) -> str:
@@ -387,7 +369,12 @@ def _run_origin_load_in_background(
             tracker.update(
                 "loading", "Removing duplicates…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
             )
-            _set_clip_origins(ctx.medias, origin)
+            # Tag medias that don't already have an origin.
+            for media in ctx.medias.values():
+                if media.get("origin") is None:
+                    media["origin"] = origin
+                if not media.get("origin_name"):
+                    media["origin_name"] = media.get("filename", "")
             if clipper:
                 _apply_clipper(ctx.medias, clipper, clipper_params)
             collapse_duplicates(ctx.medias)

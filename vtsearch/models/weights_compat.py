@@ -1,14 +1,16 @@
-"""Legacy detector weight format normalisation.
+"""Detector weight normalisation.
 
-Detector JSON files may use two formats:
+Detector JSON files may contain two weight sources:
 
 - **Origin-based** (``good_origins`` / ``bad_origins``): re-derives weights
-  by resolving the original media, embedding, and training.
-- **Legacy** (``weights`` / ``threshold``): pre-computed weight matrices used
-  directly.
+  by resolving the original media files, embedding, and training.
+- **Pre-computed** (``weights`` / ``threshold``): serialised weight matrices
+  used when the original media files are not available on disk.
 
-The :func:`normalize_detector_weights` helper encapsulates the shared
-fallback logic that appears in ``detectors_crud.py``, ``cli.py``, and
+The :func:`normalize_detector_weights` helper tries origin-based training
+first, falling back to pre-computed weights.
+
+Shared by ``detectors_crud.py``, ``cli.py``, and the
 ``server_detector_file`` importer.
 """
 
@@ -40,7 +42,7 @@ def normalize_detector_weights(
 
     1. If ``good_origins`` and ``bad_origins`` are present, attempt to
        re-derive weights via :func:`train_detector_from_origins`.
-    2. Fall back to the ``weights`` key (legacy format).
+    2. Fall back to the ``weights`` key if origin resolution fails.
     3. Raise :class:`ValueError` if neither source provides weights.
 
     Args:
@@ -54,10 +56,9 @@ def normalize_detector_weights(
     """
     good_origins = detector_data.get("good_origins")
     bad_origins = detector_data.get("bad_origins")
-    legacy_weights = detector_data.get("weights")
+    precomputed_weights = detector_data.get("weights")
     file_threshold = detector_data.get("threshold", 0.5)
     inclusion = detector_data.get("inclusion", 0)
-    # Some callers pass media_type explicitly; others rely on the file.
     media_type = detector_data.get("media_type", "") or media_type
 
     weights = None
@@ -76,9 +77,9 @@ def normalize_detector_weights(
         if weights is not None:
             origin_derived = True
 
-    if weights is None and legacy_weights:
-        # Fallback to serialised weights (legacy or unresolvable origins)
-        weights = legacy_weights
+    if weights is None and precomputed_weights:
+        # Fall back to pre-computed weights (origin files not on disk)
+        weights = precomputed_weights
         threshold = file_threshold
         good_origins = None
         bad_origins = None

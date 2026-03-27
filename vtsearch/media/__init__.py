@@ -36,16 +36,12 @@ from vtsearch.media.base import (
 
 _registry: dict[str, "MediaType"] = {}
 
-# Legacy type_id aliases for backward compatibility (e.g. pickles, settings,
-# API parameters that still use the old name).
-_LEGACY_TYPE_IDS: dict[str, str] = {
-    "paragraph": "text",
-}
-
-
 def normalize_type_id(type_id: str) -> str:
-    """Map legacy type IDs to their current canonical names."""
-    return _LEGACY_TYPE_IDS.get(type_id, type_id)
+    """Validate that *type_id* is a known canonical type name.
+
+    Returns *type_id* unchanged (legacy aliases have been removed).
+    """
+    return type_id
 
 
 def register(media_type: "MediaType") -> None:
@@ -56,7 +52,6 @@ def register(media_type: "MediaType") -> None:
 def get(type_id: str) -> "MediaType":
     """Return the :class:`MediaType` registered under *type_id*.
 
-    Accepts legacy type IDs (e.g. ``"paragraph"`` → ``"text"``).
     Raises :class:`KeyError` if *type_id* is not registered.
     """
     type_id = normalize_type_id(type_id)

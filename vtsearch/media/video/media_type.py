@@ -66,10 +66,6 @@ class VideoMediaType(MediaType):
     def dir_key(self) -> str:
         return "video_dir"
 
-    @property
-    def legacy_bytes_keys(self) -> list[str]:
-        return ["video_bytes"]
-
     # ------------------------------------------------------------------
     # Display metadata
     # ------------------------------------------------------------------

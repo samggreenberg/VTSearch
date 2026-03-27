@@ -1,4 +1,4 @@
-"""Tests for dataset importer CLI args and pickle round-trip."""
+"""Tests for dataset pickle round-trip and status endpoint."""
 
 import pickle
 
@@ -113,8 +113,8 @@ class TestPickleRoundTrip:
         assert result is None
         assert len(loaded_clips) == 1
 
-    def test_old_format_pickle_loads(self, tmp_path):
-        """Old-style pickles (no wrapping 'medias' key) still load."""
+    def test_rejects_old_format_pickle(self, tmp_path):
+        """Old-style pickles (no wrapping 'medias' key) are rejected."""
         old_data = {
             1: {
                 "id": 1,
@@ -131,43 +131,10 @@ class TestPickleRoundTrip:
         pkl_path = tmp_path / "old.pkl"
         pkl_path.write_bytes(pickle.dumps(old_data))
         loaded_clips: dict = {}
-        result = load_dataset_from_pickle(pkl_path, loaded_clips)
-        assert result is None
-        assert len(loaded_clips) == 1
-        # Old wav_bytes key should be migrated to media_bytes
-        assert loaded_clips[1]["media_bytes"] == b"\x00" * 100
+        import pytest
 
-    def test_old_format_with_creation_info_uses_fallback_origin(self, tmp_path):
-        """Old pickles with creation_info use it as fallback origin for medias without one."""
-        old_data = {
-            "medias": {
-                1: {
-                    "id": 1,
-                    "type": "audio",
-                    "duration": 1.0,
-                    "file_size": 100,
-                    "md5": "abc123",
-                    "embedding": [0.0] * 10,
-                    "filename": "clip_1.wav",
-                    "category": "test",
-                    "wav_bytes": b"\x00" * 100,
-                }
-            },
-            "creation_info": {
-                "importer": "folder",
-                "display_name": "Generate from Folder",
-                "field_values": {"path": "/data"},
-                "cli_args": "--importer folder --path /data",
-            },
-        }
-        pkl_path = tmp_path / "old_with_ci.pkl"
-        pkl_path.write_bytes(pickle.dumps(old_data))
-        loaded_clips: dict = {}
-        load_dataset_from_pickle(pkl_path, loaded_clips)
-        assert len(loaded_clips) == 1
-        # Fallback origin should be derived from creation_info
-        assert loaded_clips[1]["origin"]["importer"] == "folder"
-        assert loaded_clips[1]["origin"]["params"]["path"] == "/data"
+        with pytest.raises(ValueError, match="Invalid pickle format"):
+            load_dataset_from_pickle(pkl_path, loaded_clips)
 
 
 # ---------------------------------------------------------------------------

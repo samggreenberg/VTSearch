@@ -22,7 +22,7 @@ from PIL import Image
 
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets.config import DEMO_DATASETS
-from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for backward compat
+from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for consumers
     load_audio_metadata_from_folders,
     load_cifar10_batch,
     load_esc50_metadata,
@@ -32,7 +32,7 @@ from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for back
     load_urbansound8k_metadata,
     load_video_metadata_from_folders,
 )
-from vtsearch.datasets.pickle_security import (  # noqa: F401  — re-exported for backward compat
+from vtsearch.datasets.pickle_security import (  # noqa: F401  — re-exported for consumers
     RestrictedUnpickler,
     _PICKLE_SAFE_CLASSES,
     safe_pickle_load,
@@ -550,18 +550,14 @@ def load_dataset_from_pickle(
 ) -> dict[str, Any] | None:
     """Load a dataset from a pickle file into the medias dict in-place.
 
-    Supports two pickle formats:
-
-    - **New format**: A dict with a ``"medias"`` key mapping to media data dicts.
-      May also include ``"audio_dir"``, ``"video_dir"``, ``"image_dir"``, or
-      ``"text_dir"`` keys pointing to directories containing the raw media files
-      when the bytes are not stored inline.
-    - **Old format**: A plain dict mapping media ID to media data dict (no wrapping
-      ``"medias"`` key).
+    The pickle must contain a dict with a ``"medias"`` key mapping media IDs
+    to media data dicts.  It may also include ``"audio_dir"``, ``"video_dir"``,
+    ``"image_dir"``, or ``"text_dir"`` keys pointing to directories containing
+    raw media files when the bytes are not stored inline.
 
     If media bytes are not stored inline in the pickle, the function attempts to
-    load them from the companion directory entry in the pickle. Clips for which
-    no media bytes can be resolved are silently skipped (a warning is printed to
+    load them from the companion directory entry in the pickle. Medias for which
+    no bytes can be resolved are silently skipped (a warning is printed to
     stdout after loading).
 
     The ``medias`` dict is cleared before loading begins.
@@ -577,8 +573,7 @@ def load_dataset_from_pickle(
             workflows that only need embeddings for scoring.
 
     Returns:
-        ``None``.  (Formerly returned ``creation_info``; that field has been
-        removed.)
+        ``None``.
     """
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
@@ -594,33 +589,17 @@ def load_dataset_from_pickle(
 
     medias.clear()
 
-    # Handle both old format (just medias dict) and new format (with metadata).
-    # Also support legacy "clips" key from pickles saved before the rename.
-    if isinstance(data, dict) and ("medias" in data or "clips" in data):
-        medias_data = data["medias"] if "medias" in data else data["clips"]
-        # Old pickles may contain creation_info; extract a fallback origin
-        # for medias that predate per-element origin tracking.
-        creation_info = data.get("creation_info")
-    else:
-        medias_data = data
-        creation_info = None
-
-    fallback_origin = None
-    if creation_info:
-        fallback_origin = {
-            "importer": creation_info.get("importer", "unknown"),
-            "params": creation_info.get("field_values", {}),
-        }
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    medias_data = data["medias"]
 
     # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types, normalize_type_id
+    from vtsearch.media import all_types
 
     _dir_keys: dict[str, str] = {}
-    _legacy_bytes: dict[str, list[str]] = {}
     _extra_fields: dict[str, list[str]] = {}
     for mt in all_types():
         _dir_keys[mt.type_id] = mt.dir_key
-        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
         _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     # Convert to the app's media format
@@ -633,8 +612,7 @@ def load_dataset_from_pickle(
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
     try:
         for media_id, media_info in medias_data.items():
-            # Determine media type (normalize legacy IDs like "paragraph" → "text")
-            media_type = normalize_type_id(media_info.get("type", "audio"))
+            media_type = media_info.get("type", "audio")
 
             if thin:
                 # ── Thin mode: skip bytes, store media_path if available ──
@@ -667,7 +645,7 @@ def load_dataset_from_pickle(
                     "media_path": media_path,
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -684,32 +662,14 @@ def load_dataset_from_pickle(
                     )
                 continue
 
-            # ── Full mode (original behaviour) ──
+            # ── Full mode ──
             # Load the actual media content.
-            # Support both new key names (media_bytes/media_string) and legacy
-            # key names (clip_bytes/clip_string, wav_bytes/video_bytes/image_bytes/
-            # text_content) for backward compatibility with old pickles.
             media_bytes = None
             media_string = None
             media_path = None
 
-            # Try media_bytes first (binary media), then legacy keys via registry
-            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
-            if bytes_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, bytes):
-                        bytes_val = val
-                        break
-
-            # Try media_string (text media), then legacy keys
-            string_val = media_info.get("media_string") or media_info.get("clip_string")
-            if string_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, str):
-                        string_val = val
-                        break
+            bytes_val = media_info.get("media_bytes")
+            string_val = media_info.get("media_string")
 
             if bytes_val is not None:
                 media_bytes = bytes_val
@@ -748,7 +708,7 @@ def load_dataset_from_pickle(
                     "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -808,30 +768,17 @@ def load_dataset_from_pickle_chunked(
     with open(file_path, "rb") as f:
         data = safe_pickle_load(f)
 
-    if isinstance(data, dict) and ("medias" in data or "clips" in data):
-        medias_data = data["medias"] if "medias" in data else data["clips"]
-        creation_info = data.get("creation_info")
-    else:
-        medias_data = data
-        creation_info = None
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    medias_data = data["medias"]
 
-    fallback_origin = None
-    if creation_info:
-        fallback_origin = {
-            "importer": creation_info.get("importer", "unknown"),
-            "params": creation_info.get("field_values", {}),
-        }
-
-    # Build lookup tables dynamically from the media type registry,
-    # matching the approach used by load_dataset_from_pickle.
-    from vtsearch.media import all_types, normalize_type_id
+    # Build lookup tables dynamically from the media type registry.
+    from vtsearch.media import all_types
 
     _dir_keys: dict[str, str] = {}
-    _legacy_bytes: dict[str, list[str]] = {}
     _extra_fields: dict[str, list[str]] = {}
     for mt in all_types():
         _dir_keys[mt.type_id] = mt.dir_key
-        _legacy_bytes[mt.type_id] = mt.legacy_bytes_keys
         _extra_fields[mt.type_id] = mt.pickle_extra_fields
 
     all_media_ids = sorted(medias_data.keys())
@@ -843,7 +790,7 @@ def load_dataset_from_pickle_chunked(
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = normalize_type_id(media_info.get("type", "audio"))
+            media_type = media_info.get("type", "audio")
 
             if thin:
                 media_path: str | None = media_info.get("media_path")
@@ -870,7 +817,7 @@ def load_dataset_from_pickle_chunked(
                     "media_path": media_path,
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -888,23 +835,8 @@ def load_dataset_from_pickle_chunked(
             media_string = None
             media_path = None
 
-            # Try media_bytes first (binary media), then legacy keys via registry
-            bytes_val = media_info.get("media_bytes") or media_info.get("clip_bytes")
-            if bytes_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, bytes):
-                        bytes_val = val
-                        break
-
-            # Try media_string (text media), then legacy keys
-            string_val = media_info.get("media_string") or media_info.get("clip_string")
-            if string_val is None:
-                for legacy_key in _legacy_bytes.get(media_type, []):
-                    val = media_info.get(legacy_key)
-                    if isinstance(val, str):
-                        string_val = val
-                        break
+            bytes_val = media_info.get("media_bytes")
+            string_val = media_info.get("media_string")
 
             if bytes_val is not None:
                 media_bytes = bytes_val
@@ -940,7 +872,7 @@ def load_dataset_from_pickle_chunked(
                     "media_path": media_path or media_info.get("media_path"),
                     "filename": fname,
                     "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin", fallback_origin),
+                    "origin": media_info.get("origin"),
                     "origin_name": media_info.get("origin_name", fname),
                 }
                 for field in _extra_fields.get(media_type, []):
@@ -1003,11 +935,7 @@ def _write_clipper_sidecar(pkl_path: Path, clipper_name: str) -> None:
 
 
 def read_pkl_clipper(pkl_path: Path) -> str | None:
-    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown.
-
-    Checks the lightweight ``.clipper`` sidecar.  Returns ``None`` if the
-    sidecar does not exist (legacy pickles created before clipper tracking).
-    """
+    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown."""
     sidecar = pkl_path.with_suffix(".clipper")
     if sidecar.exists():
         return sidecar.read_text(encoding="utf-8").strip()
@@ -1015,31 +943,10 @@ def read_pkl_clipper(pkl_path: Path) -> str | None:
 
 
 def read_pkl_embedder(pkl_path: Path) -> str | None:
-    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown.
-
-    Checks the lightweight ``.embedder`` sidecar first.  Falls back to loading
-    the pickle and inspecting the first media entry's ``"embedder"`` field,
-    then writes the sidecar for future fast lookups.
-    """
+    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown."""
     sidecar = pkl_path.with_suffix(".embedder")
     if sidecar.exists():
         return sidecar.read_text(encoding="utf-8").strip()
-
-    # Fallback: peek into the pkl itself.
-    if not pkl_path.exists():
-        return None
-    try:
-        with open(pkl_path, "rb") as f:
-            data = safe_pickle_load(f)
-        medias_dict = data.get("medias", {}) if isinstance(data, dict) else {}
-        for media in medias_dict.values():
-            name = media.get("embedder", "")
-            if name:
-                # Cache it for next time.
-                _write_embedder_sidecar(pkl_path, name)
-                return name
-    except Exception:
-        pass
     return None
 
 
@@ -1051,8 +958,6 @@ def _stamp_demo_origin(
     """Stamp the demo origin on all medias (fresh dict per media).
 
     Ensures every media has ``origin = {"importer": "demo", "params": {"name": ...}}``.
-    Called both for freshly-embedded medias and for pickle-cached loads so
-    that old pickles (created before origin stamping was added) get corrected.
     """
     demo_origin_params: dict[str, str] = {"name": dataset_name}
     if converter_name:
@@ -1064,7 +969,6 @@ def _stamp_demo_origin(
 def load_demo_dataset(
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    e5_model: Any = None,
     on_progress: Optional[ProgressCallback] = None,
     embedder_name: str = "",
     converter_name: str = "",
@@ -1093,9 +997,6 @@ def load_demo_dataset(
             to load.  Raises ``ValueError`` if the key is not found.
         medias: Dict to populate in-place. Existing entries are removed before
             loading. Keys are integer media IDs; values are media data dicts.
-        e5_model: Deprecated — kept for backward compatibility but no longer
-            used.  The text embedding model is obtained from the media type
-            registry.
         embedder_name: Optional name of a registered embedder to use.
             When empty, the first registered embedder for the media type
             is used.

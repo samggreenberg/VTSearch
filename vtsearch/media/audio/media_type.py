@@ -60,10 +60,6 @@ class AudioMediaType(MediaType):
     def dir_key(self) -> str:
         return "audio_dir"
 
-    @property
-    def legacy_bytes_keys(self) -> list[str]:
-        return ["wav_bytes"]
-
     # ------------------------------------------------------------------
     # Display metadata
     # ------------------------------------------------------------------

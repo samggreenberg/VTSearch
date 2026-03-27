@@ -682,7 +682,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.datasetState.setErrorMessage(t.error!);
           }
 
-          // Keep legacy loading flag for backward compat
           this.datasetState.setLoading(active.length > 0);
 
           if (active.length === 0) {
