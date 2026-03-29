@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -12,7 +12,7 @@ import { formatProgressFraction } from '../../../utils/format-progress';
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',
 })
-export class DatasetCardComponent {
+export class DatasetCardComponent implements OnChanges {
   @Input() dataset: any;
   @Input() currentUser = '';
   @Input() isDefaultLogin = true;
@@ -43,9 +43,14 @@ export class DatasetCardComponent {
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
+  @Input() statsOpen = false;
+  @Input() deleteConfirmOpen = false;
+
   editing = false;
   wasEditing = false;
   editName = '';
+  wasStatsOpen = false;
+  wasDeleteOpen = false;
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
@@ -67,9 +72,30 @@ export class DatasetCardComponent {
     this.editing = false;
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['statsOpen'] && !changes['statsOpen'].currentValue && changes['statsOpen'].previousValue) {
+      this.wasStatsOpen = true;
+    }
+    if (changes['deleteConfirmOpen'] && !changes['deleteConfirmOpen'].currentValue && changes['deleteConfirmOpen'].previousValue) {
+      this.wasDeleteOpen = true;
+    }
+  }
+
   onPencilAnimationEnd(): void {
     if (!this.editing) {
       this.wasEditing = false;
+    }
+  }
+
+  onPieAnimationEnd(): void {
+    if (!this.statsOpen) {
+      this.wasStatsOpen = false;
+    }
+  }
+
+  onTrashAnimationEnd(): void {
+    if (!this.deleteConfirmOpen) {
+      this.wasDeleteOpen = false;
     }
   }
 

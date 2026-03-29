@@ -69,6 +69,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   statsModalOpen = false;
   statsDatasetId = '';
   statsDatasetName = '';
+  deletingDatasetId = '';
+  deletingModelId = '';
+  addLabelsModelId = '';
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -483,7 +486,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
+    this.deletingDatasetId = dataset.id;
     const ok = await this.dialog.confirm(`Delete dataset "${dataset.name}"?`);
+    this.deletingDatasetId = '';
     if (!ok) return;
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
@@ -530,7 +535,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteModel(model: ModelRegistryEntry): Promise<void> {
+    this.deletingModelId = model.id;
     const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
+    this.deletingModelId = '';
     if (!ok) return;
     this.modelsApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
@@ -584,12 +591,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Add Labels modal ---
 
   openAddLabelsModal(model: ModelRegistryEntry): void {
+    this.addLabelsModelId = model.id;
     this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
     this.addLabelsModalOpen = true;
   }
 
   closeAddLabelsModal(): void {
     this.addLabelsModalOpen = false;
+    this.addLabelsModelId = '';
     this.addLabelsModelName = '';
   }
 
