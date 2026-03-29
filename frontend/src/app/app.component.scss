@@ -175,6 +175,14 @@ header {
     width: 20px;
     height: 20px;
     color: var(--header-text-dim);
+
+    &.gear-open {
+      animation: gear-spin-open 0.4s ease-in-out forwards;
+    }
+
+    &.gear-close {
+      animation: gear-spin-close 0.4s ease-in-out forwards;
+    }
   }
 
   &:hover {
@@ -218,4 +226,16 @@ header {
   text-align: center;
   margin-top: 40%;
   font-style: italic;
+}
+
+@keyframes gear-spin-open {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(15deg); }
+  100% { transform: rotate(30deg); }
+}
+
+@keyframes gear-spin-close {
+  0% { transform: rotate(30deg); }
+  50% { transform: rotate(15deg); }
+  100% { transform: rotate(0deg); }
 }
