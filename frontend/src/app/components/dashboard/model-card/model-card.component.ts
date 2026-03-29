@@ -41,11 +41,13 @@ export class ModelCardComponent {
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
   editing = false;
+  wasEditing = false;
   editName = '';
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
     this.editing = true;
+    this.wasEditing = true;
     this.editName = this.model.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
   }
@@ -60,6 +62,12 @@ export class ModelCardComponent {
 
   cancelRename(): void {
     this.editing = false;
+  }
+
+  onPencilAnimationEnd(): void {
+    if (!this.editing) {
+      this.wasEditing = false;
+    }
   }
 
   onRenameKeydown(event: KeyboardEvent): void {
