@@ -1,0 +1,125 @@
+import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ModalComponent } from '../../modal/modal.component';
+import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import { IconComponent } from '../../icon/icon.component';
+import { SettingsIoApiService, SettingsExportResponse } from '../../../services/settings-io-api.service';
+import { ImporterField } from '../../../models/api.models';
+
+interface SettingsExporterInfo {
+  name: string;
+  display_name?: string;
+  description?: string;
+  icon?: string;
+  fields?: ImporterField[];
+  ui_mode?: string;
+  hidden_from_picker?: boolean;
+}
+
+type ModalView = 'picker' | 'form';
+
+@Component({
+  selector: 'vt-settings-exporter-modal',
+  standalone: true,
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
+  templateUrl: './settings-exporter-modal.component.html',
+  styleUrl: './settings-exporter-modal.component.scss',
+})
+export class SettingsExporterModalComponent implements OnInit {
+  @Output() closed = new EventEmitter<void>();
+  @Output() exported = new EventEmitter<void>();
+
+  view: ModalView = 'picker';
+  exporters: SettingsExporterInfo[] = [];
+  loading = true;
+  selectedExporter: SettingsExporterInfo | null = null;
+  formValues: Record<string, string> = {};
+  submitting = false;
+  error = '';
+  successMessage = '';
+
+  constructor(private settingsIoApi: SettingsIoApiService) {}
+
+  get modalTitle(): string {
+    if (this.view === 'form' && this.selectedExporter) {
+      return this.selectedExporter.display_name || this.selectedExporter.name;
+    }
+    return 'Export Settings';
+  }
+
+  ngOnInit(): void {
+    this.settingsIoApi.listExporters().subscribe({
+      next: (list: SettingsExporterInfo[]) => {
+        this.exporters = list.filter((exp) => !exp.hidden_from_picker);
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+        this.error = 'Failed to load settings exporters';
+      },
+    });
+  }
+
+  selectExporter(exporter: SettingsExporterInfo): void {
+    this.selectedExporter = exporter;
+    this.formValues = {};
+    this.error = '';
+    this.successMessage = '';
+    if (exporter.fields) {
+      for (const field of exporter.fields) {
+        if (field.default) this.formValues[field.key] = field.default;
+      }
+    }
+    // If the exporter has no fields, submit immediately
+    if (!exporter.fields || exporter.fields.length === 0) {
+      this.view = 'form';
+      this.submit();
+    } else {
+      this.view = 'form';
+    }
+  }
+
+  back(): void {
+    this.view = 'picker';
+    this.selectedExporter = null;
+    this.error = '';
+    this.successMessage = '';
+  }
+
+  submit(): void {
+    if (!this.selectedExporter) return;
+    this.submitting = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.settingsIoApi.runExport(this.selectedExporter.name, this.formValues).subscribe({
+      next: (res: SettingsExportResponse) => {
+        this.submitting = false;
+
+        // Handle browser download response
+        if (res.download && res.data) {
+          const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = res.filename || 'settings.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+
+        this.successMessage = res.message || 'Settings exported successfully';
+        this.exported.emit();
+        setTimeout(() => this.close(), 1500);
+      },
+      error: (err) => {
+        this.submitting = false;
+        this.error = err.error?.error || 'Export failed';
+      },
+    });
+  }
+
+  close(): void {
+    this.closed.emit();
+  }
+}

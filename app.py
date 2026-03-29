@@ -55,6 +55,7 @@ from vtsearch.routes import (  # noqa: E402
     main_bp,
     processor_importers_bp,
     settings_bp,
+    settings_io_bp,
     sorting_bp,
     trainable_models_bp,
 )
@@ -139,6 +140,7 @@ app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
 app.register_blueprint(processor_importers_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(settings_io_bp)
 app.register_blueprint(trainable_models_bp)
 
 

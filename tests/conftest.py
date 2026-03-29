@@ -67,6 +67,7 @@ _TEST_GROUPS = {
         "test_processor_importers",
         "test_pdf_import",
         "test_corrections_export",
+        "test_settings_io",
     ],
     "models": [
         "test_detectors",

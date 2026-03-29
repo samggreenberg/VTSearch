@@ -41,11 +41,12 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_types, autoload_media_embedders, autorun_processors, autorun_detector_names, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir); auto-saves to `data/settings.json`
-- `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`, `detectors_helpers.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `trainable_models.py`; shared utilities in `helpers.py`
+- `vtsearch/routes/` — Flask blueprints: `auth.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`, `detectors_helpers.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `settings_io.py`, `trainable_models.py`; shared utilities in `helpers.py`
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree
 - `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets/demo); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name). `sources/` sub-package provides the `MediaSource` abstraction for resolving media files from origins
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
 - `vtsearch/exporters/` — Results exporters (server_json_file/server_csv_file/email_smtp/webhook/gui); auto-discovered via `EXPORTER` sentinel
+- `vtsearch/settings_io/` — Settings import/export plugins; `importers/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_IMPORTER` sentinel) and `exporters/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_EXPORTER` sentinel)
 - `vtsearch/labels/importers/` — Label importers (server_json_file/server_csv_file); auto-discovered via `LABEL_IMPORTER` sentinel
 - `vtsearch/processors/importers/` — Processor importers (server_detector_file); auto-discovered via `PROCESSOR_IMPORTER` sentinel
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
@@ -96,6 +97,7 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
   - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autorun processors, autorun_detector_names)
+  - `test_settings_io.py` — Settings import/export plugin system: SettingsImporter/SettingsExporter base classes, registries, local_json_file and server_json_file plugins, API endpoints
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
   - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
   - `test_integration.py` — End-to-end user workflow simulations: chained API calls, state interactions, response format consistency
@@ -138,7 +140,7 @@ Tests are auto-grouped by area. Run a focused subset instead of the full suite:
 | `api` | api_contracts, error_recovery, dashboard, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
 | `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
 | `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
-| `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import, corrections_export | Import/export |
+| `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import, corrections_export, settings_io | Import/export |
 | `models` | detectors, extractors, processors, trainable_models, clippers, eval*, resolver, new_embedders | ML models and evaluation |
 | `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract | Demo dataset downloads |
 | `integration` | integration, slow_integration, thread_safety | End-to-end workflows |
