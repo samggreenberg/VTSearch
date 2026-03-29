@@ -50,8 +50,9 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── datasets/                   # Dataset loading, downloading, importers
 │   ├── eval/                       # Evaluation framework (metrics, runner, visualisation)
 │   ├── exporters/                  # Results exporter plugins
-│   ├── labels/importers/           # Label importer plugins
+│   ├── labels/                     # Label importers & labelset sync sources
 │   ├── processors/importers/       # Processor importer plugins
+│   ├── settings_io/                # Settings importers, exporters & sync sources
 │   ├── audio/                      # Audio generation utility
 │   └── utils/                      # Global state (medias, votes) & progress helpers
 ├── static/                         # Angular build output (HTML, JS, CSS, assets)
@@ -104,11 +105,13 @@ This runs text-sort and learned-sort evaluations across all demo datasets, print
 
 ## Extending with plugins
 
-VTSearch has a plugin architecture for media types, data importers, results exporters, label importers, and processor importers. See [docs/EXTENDING.md](docs/EXTENDING.md) for full documentation, including:
+VTSearch has a plugin architecture for media types, data importers, results exporters, label importers, processor importers, and sync sources. See [docs/EXTENDING.md](docs/EXTENDING.md) for full documentation, including:
 
 - **[Adding a Data Importer](docs/EXTENDING.md#adding-a-data-importer)** — Auto-discovered plugins that load datasets from new sources (S3, databases, APIs, etc.). Subclass `DatasetImporter`, expose an `IMPORTER` instance, and the system wires up API routes and UI forms automatically.
 - **[Adding a Results Exporter](docs/EXTENDING.md#adding-a-results-exporter)** — Auto-discovered plugins that export autodetect results to new destinations (files, webhooks, email, etc.). Subclass `LabelsetExporter` and expose an `EXPORTER` instance.
 - **[Adding a Label Importer](docs/EXTENDING.md#adding-a-label-importer)** — Auto-discovered plugins that import pre-existing labels from external sources (JSON, CSV, databases). Subclass `LabelImporter` and expose a `LABEL_IMPORTER` instance.
 - **[Adding a Processor Importer](docs/EXTENDING.md#adding-a-processor-importer)** — Auto-discovered plugins that import processors (detectors/extractors) from external sources. Subclass `ProcessorImporter` and expose a `PROCESSOR_IMPORTER` instance.
+- **[Adding a Settings Source](docs/EXTENDING.md#adding-a-settings-source)** — Bidirectional sync plugins for settings. Subclass `SettingsSource` and expose a `SETTINGS_SOURCE` instance. Auto-exports on change, imports on sync.
+- **[Adding a Labelset Source](docs/EXTENDING.md#adding-a-labelset-source)** — Bidirectional sync plugins for detector labels. Subclass `LabelsetSource` and expose a `LABELSET_SOURCE` instance. Linked per-detector; auto-exports on vote/label change.
 - **[Adding a Media Type](docs/EXTENDING.md#adding-a-media-type)** — Support new content types (code, 3D models, etc.) by subclassing `MediaType` with embedding, serving, and clip-loading methods.
 - **[Dependency Management](docs/EXTENDING.md#dependency-management)** — How the layered requirements file structure works and where to add new dependencies.

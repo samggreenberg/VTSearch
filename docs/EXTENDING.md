@@ -619,6 +619,157 @@ python app.py --autodetect --dataset data.pkl --settings settings.json
 
 ---
 
+## Adding a Settings Source
+
+Settings sources provide **bidirectional sync** — pairing a load (import)
+and save (export) behind a single plugin. When a source is active,
+changing any setting auto-exports to the source, and syncing pulls from
+the source back into the app.
+
+### File structure
+
+```
+vtsearch/settings_io/sources/<your_source>/
+└── __init__.py       # Source class + SETTINGS_SOURCE instance (required)
+```
+
+### What to implement
+
+Subclass `SettingsSource` from `vtsearch.settings_io.sources.base`.
+
+```python
+# vtsearch/settings_io/sources/s3/__init__.py
+
+from vtsearch.settings_io.sources.base import SettingsSource, PluginField
+
+
+class S3SettingsSource(SettingsSource):
+    name = "s3"
+    display_name = "S3 Settings File"
+    description = "Sync settings with an S3 object."
+    icon = "☁️"
+    fields = [
+        PluginField("bucket", "S3 Bucket", "text"),
+        PluginField("key", "Object Key", "text"),
+    ]
+
+    def load(self, field_values: dict) -> dict:
+        """Read settings from S3. Return a settings dict."""
+        import boto3, json
+        s3 = boto3.client("s3")
+        obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
+        return json.loads(obj["Body"].read())
+
+    def save(self, settings_data: dict, field_values: dict) -> None:
+        """Write settings to S3."""
+        import boto3, json
+        s3 = boto3.client("s3")
+        s3.put_object(
+            Bucket=field_values["bucket"],
+            Key=field_values["key"],
+            Body=json.dumps(settings_data, indent=2),
+        )
+
+
+SETTINGS_SOURCE = S3SettingsSource()
+```
+
+The sentinel `SETTINGS_SOURCE` at module level is required for auto-discovery.
+
+### Template variables
+
+Field values support `{username}` — resolved at runtime from
+`get_current_user()`. This enables per-user settings files
+(e.g. `data/{username}.settings.json`).
+
+### How it gets invoked
+
+1. `GET /api/settings-sources` lists all discovered sources.
+2. `PUT /api/settings-sources/active` sets which source is active.
+3. When settings change, `settings._save()` auto-calls `source.save()`.
+4. `POST /api/settings-sources/sync` manually calls `source.load()`.
+
+---
+
+## Adding a Labelset Source
+
+Labelset sources provide **bidirectional sync** for detector labels —
+each detector can link to a source that auto-exports labels on change
+and imports them on sync.
+
+### File structure
+
+```
+vtsearch/labels/sources/<your_source>/
+└── __init__.py       # Source class + LABELSET_SOURCE instance (required)
+```
+
+### What to implement
+
+Subclass `LabelsetSource` from `vtsearch.labels.sources.base`.
+
+```python
+# vtsearch/labels/sources/database/__init__.py
+
+from vtsearch.labels.sources.base import LabelsetSource, PluginField
+from vtsearch.datasets.labelset import LabelSet
+
+
+class DatabaseLabelsetSource(LabelsetSource):
+    name = "database"
+    display_name = "Database Labels"
+    description = "Sync labels with a database table."
+    icon = "🗄️"
+    fields = [
+        PluginField("connection_string", "Connection String", "text"),
+        PluginField("table", "Table Name", "text", default="labels"),
+    ]
+
+    def load(self, field_values: dict) -> list[dict]:
+        """Read labels from database. Return list of label dicts."""
+        # Each dict should have: "name" (media name/hash), "label" ("Good"/"Bad")
+        ...
+
+    def save(self, labelset: LabelSet, field_values: dict) -> None:
+        """Write labelset to database."""
+        for elem in labelset.elements:
+            # Upsert each element...
+            ...
+
+
+LABELSET_SOURCE = DatabaseLabelsetSource()
+```
+
+The sentinel `LABELSET_SOURCE` at module level is required for auto-discovery.
+
+### Template variables
+
+Field values support `{detector_id}` and `{detector_name}` — resolved
+at runtime from the active `DetectorContext`.
+
+### How it gets invoked
+
+1. `GET /api/labelset-sources` lists all discovered sources.
+2. `PUT /api/detectors/<name>/labelset-source` links a source to a detector.
+3. When votes change or labels are imported, `sync_to_labelset_source()` auto-calls `source.save()`.
+4. `POST /api/detectors/<name>/labelset-source/sync` manually calls `source.load()`.
+
+### Circular trigger prevention
+
+When a source imports labels (via `sync_from_labelset_source()`), each
+applied label would normally trigger a re-export back. A thread-local
+`_syncing` guard in `vtsearch/labels/sync.py` suppresses this:
+
+```python
+with _sync_guard():
+    # apply_label() calls during import won't trigger source.save()
+    ...
+```
+
+The same pattern is used in `vtsearch/settings.py` for settings sources.
+
+---
+
 ## Media System
 
 Media types, embedders, and clippers use **explicit registration** in
@@ -1395,6 +1546,26 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
 - [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
 - [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
+
+### New Settings Source Checklist
+
+- [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
+- [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`
+- [ ] Implement `load(self, field_values)` — return a settings dict
+- [ ] Implement `save(self, settings_data, field_values)` — persist settings
+- [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Test: start the app and check `GET /api/settings-sources` includes your source
+
+### New Labelset Source Checklist
+
+- [ ] Create `vtsearch/labels/sources/<name>/__init__.py`
+- [ ] Subclass `LabelsetSource`, set `name`, `display_name`, `description`, `fields`
+- [ ] Implement `load(self, field_values)` — return a list of label dicts
+- [ ] Implement `save(self, labelset, field_values)` — persist a `LabelSet`
+- [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
+- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
 
 ### New Media Type Checklist
 

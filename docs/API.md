@@ -24,11 +24,13 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 17. [Label Importers](#label-importers)
 18. [Processor Importers](#processor-importers)
 19. [Settings](#settings)
-20. [Trainable Models](#trainable-models)
-21. [Model Registry](#model-registry)
-22. [Dashboard](#dashboard)
-23. [Media Lookup](#media-lookup)
-24. [Multi-dataset Find](#multi-dataset-find)
+20. [Settings Sources (Sync)](#settings-sources-sync)
+21. [Labelset Sources (Sync)](#labelset-sources-sync)
+22. [Trainable Models](#trainable-models)
+23. [Model Registry](#model-registry)
+24. [Dashboard](#dashboard)
+25. [Media Lookup](#media-lookup)
+26. [Multi-dataset Find](#multi-dataset-find)
 
 Endpoints for embedders, clippers, and converters are under
 [Datasets](#datasets). Indicator score history and evaluation endpoints
@@ -1413,6 +1415,141 @@ DELETE /api/settings/autorun-processors/{name}
 ```
 
 → `{"success": true}` or 404.
+
+---
+
+## Settings Sources (Sync)
+
+Settings sources provide **bidirectional sync** for settings — when a source
+is active, settings changes are automatically exported to the source, and
+`/sync` pulls from the source back into the app. Sources are plugins
+discovered via the `SETTINGS_SOURCE` sentinel.
+
+Field values support template variables: `{username}` resolves to the
+current user via `get_current_user()`.
+
+### List available settings sources
+
+```
+GET /api/settings-sources
+```
+
+→ ```json
+{
+  "sources": [
+    {
+      "name": "server_json_file",
+      "display_name": "Server JSON File",
+      "icon": "🔄",
+      "fields": [
+        {"key": "filepath", "label": "Server file path", "type": "server_path", ...}
+      ]
+    }
+  ]
+}
+```
+
+### Get active settings source
+
+```
+GET /api/settings-sources/active
+```
+
+→ `{"source": {"source_name": "server_json_file", "field_values": {"filepath": "data/{username}.settings.json"}}}` or `{"source": null}`.
+
+### Set or clear active settings source
+
+```
+PUT /api/settings-sources/active
+```
+
+**Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "data/shared.settings.json"}}`
+
+To clear: `{"source_name": null}`
+
+→ `{"ok": true}`
+
+400 if source_name is unknown.
+
+### Force sync from settings source
+
+```
+POST /api/settings-sources/sync
+```
+
+Imports settings from the active source into the app.
+
+→ `{"ok": true, "settings": {"volume": 80, "theme": "dark", ...}}`
+
+If no source is configured: `{"error": "No active settings source configured"}` (400).
+
+---
+
+## Labelset Sources (Sync)
+
+Labelset sources provide **bidirectional sync** for detector labels.
+Each detector can have its own linked source. When votes are cast or
+labels imported, the labelset is automatically exported to the source.
+
+Field values support template variables: `{detector_id}` and
+`{detector_name}` resolve from the active detector context.
+
+### List available labelset sources
+
+```
+GET /api/labelset-sources
+```
+
+→ ```json
+{
+  "sources": [
+    {
+      "name": "server_json_file",
+      "display_name": "Server JSON File",
+      "icon": "🔄",
+      "fields": [
+        {"key": "filepath", "label": "Server file path", "type": "server_path", ...}
+      ]
+    }
+  ]
+}
+```
+
+### Get detector's labelset source
+
+```
+GET /api/detectors/{name}/labelset-source
+```
+
+→ `{"source": {"source_name": "server_json_file", "field_values": {"filepath": "..."}}}` or `{"source": null}`.
+
+404 if detector not found.
+
+### Set or clear detector's labelset source
+
+```
+PUT /api/detectors/{name}/labelset-source
+```
+
+**Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "labels/{detector_id}.json"}}`
+
+To clear: `{"source_name": null}`
+
+→ `{"ok": true}`
+
+400 if source_name is unknown. 404 if detector not found.
+
+### Force sync from labelset source
+
+```
+POST /api/detectors/{name}/labelset-source/sync
+```
+
+Imports labels from the detector's linked source.
+
+→ `{"ok": true, "imported": 42}` (number of labels applied)
+
+400 if no source configured. 404 if detector not found.
 
 ---
 

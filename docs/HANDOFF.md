@@ -51,6 +51,7 @@ deployments. Runs locally or in Docker.
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
 | [plan-media-sources.md](plan-media-sources.md) | Future MediaSource abstraction design proposal |
+| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (bidirectional settings/labelset sync) |
 | [design/](design/) | Architecture design documents (CLI detector-converter pipeline) |
 
 ---
@@ -122,7 +123,7 @@ of **processors** and can be exported/imported as JSON files.
 
 ### Plugin systems
 
-Four auto-discovered plugin systems share the same architecture:
+Six auto-discovered plugin systems share the same architecture:
 
 - **Dataset importers** — load data from folders, pickles, HTTP archives,
   combined datasets, or demo catalogues.
@@ -130,6 +131,11 @@ Four auto-discovered plugin systems share the same architecture:
   email, webhooks, or the GUI.
 - **Label importers** — import labels from server-side JSON or CSV files.
 - **Processor importers** — import detectors from server-side JSON files.
+- **Settings sources** — bidirectional sync for settings (auto-export on
+  change, import on sync). Supports `{username}` template for per-user files.
+- **Labelset sources** — bidirectional sync for detector labels (auto-export
+  on vote/import, import on sync). Supports `{detector_id}`/`{detector_name}`
+  templates. Linked per-detector via `DetectorContext.labelset_source`.
 
 See [EXTENDING.md](EXTENDING.md) for how to add new plugins.
 
@@ -167,7 +173,7 @@ argument parsing. Key startup sequence:
 | Media converters | `vtsearch/converters/` |
 | Trainable model definitions | `vtsearch/routes/trainable_models.py` → `data/trainable_models/` |
 | Dataset loading and downloading | `vtsearch/datasets/` |
-| Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/` |
+| Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/`, `vtsearch/settings_io/sources/`, `vtsearch/labels/sources/` |
 | Constants and model IDs | `vtsearch/config.py` |
 | Frontend | `static/index.html`, `static/main.js`, `static/polyfills.js`, `static/styles.css` (Angular build output) |
 | Tests | `tests/` (see test list in CLAUDE.md) |

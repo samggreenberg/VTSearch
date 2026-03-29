@@ -189,22 +189,33 @@ For network-based sources, the `save()` method should be debounced (batch writes
 
 ## Implementation Order
 
-1. **SettingsSource base + server_json_file** — base class, plugin registry, concrete implementation
-2. **Settings sync hooks** — hook `_save()`, add `_syncing` guard, startup auto-import
-3. **Settings source API routes** — list, get/set active, manual sync
-4. **LabelsetSource base + server_json_file** — same pattern
-5. **Labelset sync hooks** — hook `toggle_vote()`/`apply_label()`, DetectorContext field
-6. **Labelset source API routes** — list, get/set per-detector, manual sync
-7. **Tests** — for both source types, sync behavior, circular prevention, template resolution
+1. ✅ **SettingsSource base + server_json_file** — base class, plugin registry, concrete implementation
+2. ✅ **Settings sync hooks** — hook `_save()`, add `_syncing` guard, auto-export on change
+3. ✅ **Settings source API routes** — list, get/set active, manual sync
+4. ✅ **LabelsetSource base + server_json_file** — same pattern
+5. ✅ **Labelset sync hooks** — hook routes that mutate votes/labels, DetectorContext field, `sync.py`
+6. ✅ **Labelset source API routes** — list, get/set per-detector, manual sync
+7. ✅ **Tests** — 56 tests covering both source types, sync behavior, circular prevention, template resolution
+
+### Not yet implemented
+
+- **Startup auto-import for settings**: When the app starts, auto-pull from the active settings source (currently requires manual `/api/settings-sources/sync`).
+- **Auto-import on detector load**: When a detector is loaded and has a linked labelset source, auto-pull labels from the source.
+- **Auto-attach on label import**: When a label import comes from a source-capable importer, auto-link the source to the detector.
+
+These are additive enhancements that don't affect the current implementation.
 
 ## Test Plan
 
-- Source plugin discovery and registry
-- `load()` / `save()` round-trip for server_json_file sources
-- Sync-on-change: changing a setting triggers source export
-- Sync-on-load: app startup imports from source
-- Circular guard: import doesn't trigger re-export
-- Template resolution (`{username}`, `{detector_id}`)
-- No source configured: no sync behavior (no errors)
-- Source file missing on load: graceful fallback
-- Standalone importers/exporters still work independently
+All test scenarios below are covered in `tests/test_sync_sources.py`:
+
+- ✅ Source plugin discovery and registry
+- ✅ `load()` / `save()` round-trip for server_json_file sources
+- ✅ Sync-on-change: changing a setting triggers source export
+- ✅ Circular guard: import doesn't trigger re-export
+- ✅ Template resolution (`{username}`, `{detector_id}`)
+- ✅ No source configured: no sync behavior (no errors)
+- ✅ Source file missing on load: graceful fallback
+- ✅ Standalone importers/exporters still work independently
+- ✅ API routes for both settings sources and labelset sources
+- ✅ DetectorContext.labelset_source field
