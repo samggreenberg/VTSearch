@@ -177,11 +177,11 @@ header {
     color: var(--header-text-dim);
 
     &.gear-open {
-      animation: gear-spin-open 0.4s ease-in-out forwards;
+      animation: gear-spin-open 0.3s ease-in-out forwards;
     }
 
     &.gear-close {
-      animation: gear-spin-close 0.4s ease-in-out forwards;
+      animation: gear-spin-close 0.3s ease-in-out forwards;
     }
   }
 
