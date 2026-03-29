@@ -220,11 +220,21 @@
 
   <div class="settings-actions" modal-footer>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
-    <label class="btn btn--secondary" title="Import settings from a previously exported JSON file">
-      Import
-      <input type="file" accept=".json" (change)="importSettings($event)" hidden />
-    </label>
-    <button class="btn btn--secondary" (click)="exportSettings()" title="Download current settings as a JSON file for backup or sharing">Export</button>
+    <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
+    <button class="btn btn--secondary" (click)="openExporter()" title="Export settings to a file">Export</button>
     <button class="btn btn--primary" (click)="close()" title="Close the settings panel">Close</button>
   </div>
 </vt-modal>
+
+@if (showImporterModal) {
+  <vt-settings-importer-modal
+    (closed)="showImporterModal = false"
+    (imported)="onImportComplete()"
+  />
+}
+
+@if (showExporterModal) {
+  <vt-settings-exporter-modal
+    (closed)="showExporterModal = false"
+  />
+}

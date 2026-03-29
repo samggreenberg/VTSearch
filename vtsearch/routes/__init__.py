@@ -13,6 +13,7 @@ from vtsearch.routes.label_importers import label_importers_bp
 from vtsearch.routes.main import main_bp
 from vtsearch.routes.processor_importers import processor_importers_bp
 from vtsearch.routes.settings import settings_bp
+from vtsearch.routes.settings_io import settings_io_bp
 from vtsearch.routes.sorting import sorting_bp
 from vtsearch.routes.trainable_models import trainable_models_bp
 
@@ -31,5 +32,6 @@ __all__ = [
     "label_importers_bp",
     "processor_importers_bp",
     "settings_bp",
+    "settings_io_bp",
     "trainable_models_bp",
 ]
