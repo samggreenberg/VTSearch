@@ -15,6 +15,7 @@ from vtsearch.routes.processor_importers import processor_importers_bp
 from vtsearch.routes.settings import settings_bp
 from vtsearch.routes.settings_io import settings_io_bp
 from vtsearch.routes.sorting import sorting_bp
+from vtsearch.routes.sync_sources import sync_sources_bp
 from vtsearch.routes.trainable_models import trainable_models_bp
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "main_bp",
     "medias_bp",
     "sorting_bp",
+    "sync_sources_bp",
     "detectors_bp",
     "datasets_bp",
     "exporters_bp",

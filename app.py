@@ -57,6 +57,7 @@ from vtsearch.routes import (  # noqa: E402
     settings_bp,
     settings_io_bp,
     sorting_bp,
+    sync_sources_bp,
     trainable_models_bp,
 )
 from vtsearch.media import set_progress_callback  # noqa: E402
@@ -141,6 +142,7 @@ app.register_blueprint(label_importers_bp)
 app.register_blueprint(processor_importers_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
+app.register_blueprint(sync_sources_bp)
 app.register_blueprint(trainable_models_bp)
 
 

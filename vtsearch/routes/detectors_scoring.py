@@ -406,6 +406,10 @@ def find_label():
 
     set_find_mode(True)
 
+    from vtsearch.labels.sync import sync_to_labelset_source
+
+    sync_to_labelset_source()
+
     update_find_progress(
         "idle", "Done",
         current=n_total, total=n_total,
