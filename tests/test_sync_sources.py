@@ -235,7 +235,7 @@ class TestServerFileSettingsSource:
     def test_username_template_resolution(self, tmp_path, monkeypatch):
         from vtsearch.settings_io.sources.server_json_file import _resolve_filepath
 
-        monkeypatch.setattr("vtsearch.settings_io.sources.server_json_file.get_current_user", lambda: "alice")
+        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
 
         result = _resolve_filepath({"filepath": str(tmp_path / "{username}.settings.json")})
         assert "alice.settings.json" in result
@@ -418,15 +418,17 @@ class TestSettingsSyncFromSource:
     def test_sync_from_source_imports_settings(self, tmp_path, isolated_settings):
         from vtsearch import settings
 
-        # Write a source file with specific settings
         source_file = tmp_path / "remote.json"
-        source_file.write_text(json.dumps({"volume": 0.77, "theme": "light"}))
 
         config = {
             "source_name": "server_json_file",
             "field_values": {"filepath": str(source_file)},
         }
         settings.set_settings_source_config(config)
+
+        # Write source file AFTER config is set (since setting config
+        # triggers an initial sync-to-source that creates the file).
+        source_file.write_text(json.dumps({"volume": 0.77, "theme": "light"}))
 
         result = settings.sync_from_settings_source()
         assert result is not None
@@ -444,11 +446,18 @@ class TestSettingsSyncFromSource:
     def test_sync_from_source_missing_file_returns_none(self, tmp_path, isolated_settings):
         from vtsearch import settings
 
+        # Use a path in a subdirectory that doesn't exist yet, so _sync_to_source
+        # from set_settings_source_config doesn't auto-create it.
         config = {
             "source_name": "server_json_file",
-            "field_values": {"filepath": str(tmp_path / "nonexistent.json")},
+            "field_values": {"filepath": str(tmp_path / "deep" / "nested" / "nonexistent.json")},
         }
         settings.set_settings_source_config(config)
+
+        # Delete the file that was auto-created by _sync_to_source
+        source_path = tmp_path / "deep" / "nested" / "nonexistent.json"
+        if source_path.exists():
+            source_path.unlink()
 
         result = settings.sync_from_settings_source()
         assert result is None
@@ -458,13 +467,15 @@ class TestSettingsSyncFromSource:
         from vtsearch import settings
 
         source_file = tmp_path / "remote.json"
-        source_file.write_text(json.dumps({"volume": 0.33}))
 
         config = {
             "source_name": "server_json_file",
             "field_values": {"filepath": str(source_file)},
         }
         settings.set_settings_source_config(config)
+
+        # Overwrite with specific settings AFTER config is set
+        source_file.write_text(json.dumps({"volume": 0.33}))
 
         # Record mtime before sync
         mtime_before = source_file.stat().st_mtime_ns
@@ -667,15 +678,16 @@ class TestSettingsSourcesAPI:
         assert data["ok"] is False
 
     def test_sync_from_source(self, client, tmp_path, isolated_settings):
-        # Create source file
         source_file = tmp_path / "remote.json"
-        source_file.write_text(json.dumps({"volume": 0.99}))
 
-        # Set active source
+        # Set active source (this auto-creates the file via sync-to-source)
         client.put(
             "/api/settings-sources/active",
             json={"source_name": "server_json_file", "field_values": {"filepath": str(source_file)}},
         )
+
+        # Overwrite with specific settings AFTER config is set
+        source_file.write_text(json.dumps({"volume": 0.99}))
 
         # Sync
         resp = client.post("/api/settings-sources/sync")
