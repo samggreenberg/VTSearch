@@ -44,11 +44,13 @@ export class DatasetCardComponent {
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
   editing = false;
+  wasEditing = false;
   editName = '';
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
     this.editing = true;
+    this.wasEditing = true;
     this.editName = this.dataset.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
   }
@@ -63,6 +65,12 @@ export class DatasetCardComponent {
 
   cancelRename(): void {
     this.editing = false;
+  }
+
+  onPencilAnimationEnd(): void {
+    if (!this.editing) {
+      this.wasEditing = false;
+    }
   }
 
   onRenameKeydown(event: KeyboardEvent): void {
