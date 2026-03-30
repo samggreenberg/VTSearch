@@ -200,7 +200,7 @@
     .col-resize-handle {
       position: absolute;
       top: 0;
-      right: -6px;
+      right: 0;
       bottom: 0;
       width: 12px;
       cursor: col-resize;
@@ -211,8 +211,7 @@
         position: absolute;
         top: 20%;
         bottom: 20%;
-        left: 50%;
-        transform: translateX(-50%);
+        right: 0;
         width: 2px;
         background: var(--accent, #5b8fff);
         opacity: 0.35;
