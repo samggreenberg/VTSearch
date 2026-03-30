@@ -69,6 +69,18 @@ td {
   100% { transform: rotate(0deg); }
 }
 
+@keyframes icon-rotate-open {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(45deg); }
+  100% { transform: rotate(90deg); }
+}
+
+@keyframes icon-rotate-close {
+  0% { transform: rotate(90deg); }
+  50% { transform: rotate(45deg); }
+  100% { transform: rotate(0deg); }
+}
+
 .inline-edit {
   width: 140px;
   padding: 2px 6px;
@@ -129,6 +141,14 @@ td {
     color: var(--text-primary);
     background: var(--bg-hover);
   }
+
+  .cap-active {
+    animation: icon-rotate-open 0.3s ease-in-out forwards;
+  }
+
+  .cap-inactive {
+    animation: icon-rotate-close 0.3s ease-in-out forwards;
+  }
 }
 
 .export-btn {
@@ -164,5 +184,13 @@ td {
   &:hover {
     color: var(--color-bad);
     background: var(--bad-bg);
+  }
+
+  .trash-active {
+    animation: icon-rotate-open 0.3s ease-in-out forwards;
+  }
+
+  .trash-inactive {
+    animation: icon-rotate-close 0.3s ease-in-out forwards;
   }
 }

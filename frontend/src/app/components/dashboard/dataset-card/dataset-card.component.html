@@ -90,7 +90,7 @@
       </svg>
     </button>
     <button class="stats-btn" (click)="onStats($event)" aria-label="Dataset stats" title="Stats">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg [class.pie-active]="statsOpen" [class.pie-inactive]="!statsOpen && wasStatsOpen" (animationend)="onPieAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 2a10 10 0 0 1 0 20"/>
         <line x1="12" y1="12" x2="12" y2="2"/>
@@ -99,7 +99,7 @@
       </svg>
     </button>
     <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete dataset" title="Delete">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg [class.trash-active]="deleteConfirmOpen" [class.trash-inactive]="!deleteConfirmOpen && wasDeleteOpen" (animationend)="onTrashAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
         <path d="M10 11v6"></path>
