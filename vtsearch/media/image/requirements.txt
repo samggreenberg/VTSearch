@@ -2,3 +2,4 @@
 # These packages are required to open and process image files.
 Pillow
 ultralytics
+sentencepiece
