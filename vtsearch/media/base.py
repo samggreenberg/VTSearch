@@ -375,6 +375,13 @@ class MediaEmbedder(ABC):
         immediately (the subclass ``_load_models_impl`` checks
         ``self._model is not None``).
         """
+        # Fast path: if the model was already loaded (e.g. by startup
+        # preloading), skip the lock entirely.  This avoids blocking on
+        # _model_load_lock when another thread has already completed the
+        # load, preventing the UI from appearing frozen on
+        # "Loading embedding model…" with no progress updates.
+        if getattr(self, "_model", None) is not None:
+            return
         with self._model_load_lock:
             try:
                 self._load_models_impl()
