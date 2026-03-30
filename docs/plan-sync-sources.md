@@ -199,7 +199,6 @@ For network-based sources, the `save()` method should be debounced (batch writes
 
 ### Not yet implemented
 
-- **Startup auto-import for settings**: When the app starts, auto-pull from the active settings source (currently requires manual `/api/settings-sources/sync`).
 - **Auto-import on detector load**: When a detector is loaded and has a linked labelset source, auto-pull labels from the source.
 - **Auto-attach on label import**: When a label import comes from a source-capable importer, auto-link the source to the detector.
 

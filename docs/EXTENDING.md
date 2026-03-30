@@ -686,8 +686,45 @@ Field values support `{username}` — resolved at runtime from
 
 1. `GET /api/settings-sources` lists all discovered sources.
 2. `PUT /api/settings-sources/active` sets which source is active.
-3. When settings change, `settings._save()` auto-calls `source.save()`.
-4. `POST /api/settings-sources/sync` manually calls `source.load()`.
+3. **At startup**, `sync_from_settings_source()` auto-imports settings
+   from the active source (so the source takes precedence over the local
+   `data/settings.json` file).
+4. When settings change, `settings._save()` auto-calls `source.save()`.
+5. `POST /api/settings-sources/sync` manually re-imports from the source.
+
+### Making your source the active auto-import
+
+To use a custom settings source for auto-import at startup, set it as
+the active source in `data/settings.json`:
+
+```json
+{
+  "settings_source": {
+    "source_name": "s3",
+    "field_values": {
+      "bucket": "my-settings-bucket",
+      "key": "vtsearch/{username}.json"
+    }
+  }
+}
+```
+
+Or set it via the API:
+
+```bash
+curl -X PUT http://localhost:5000/api/settings-sources/active \
+  -H 'Content-Type: application/json' \
+  -d '{"source_name": "s3", "field_values": {"bucket": "my-bucket", "key": "settings.json"}}'
+```
+
+On the next app startup, VTSearch will call `source.load()` and apply
+the returned settings before starting the server. The built-in
+`server_json_file` source does this with a local file path — your
+custom source can fetch from S3, a database, a remote API, etc.
+
+If the source is unavailable at startup (file missing, network error),
+the import is silently skipped and the local settings file is used as
+fallback.
 
 ---
 
