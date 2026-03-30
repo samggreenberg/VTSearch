@@ -114,8 +114,11 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
     """
     try:
         return load_fn(*args, local_files_only=True, **kwargs)
-    except OSError:
+    except (OSError, TypeError, ValueError):
         # Model not in local cache — allow network download.
+        # OSError: model files missing entirely.
+        # TypeError/ValueError: partial cache where a resolved path is None
+        # or invalid (e.g. sentencepiece receives None instead of a string).
         return load_fn(*args, **kwargs)
 
 
