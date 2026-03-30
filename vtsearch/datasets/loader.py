@@ -1119,7 +1119,7 @@ def load_demo_dataset(
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k != "media_bytes"}
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k not in ("media_bytes", "thumbnail_bytes")}
                 for cid, media in medias.items()
             },
             mt.dir_key: external_dir,
