@@ -136,10 +136,28 @@ VTSearch/
 │   │   ├── webhook/                HTTP POST webhook
 │   │   └── gui/                    In-browser / console display
 │   │
-│   ├── labels/importers/           Plugin system for label sources
-│   │   ├── base.py                 LabelImporter ABC + LabelImporterField
-│   │   ├── server_json_file/       JSON label file on server
-│   │   └── server_csv_file/        CSV label file on server
+│   ├── settings_io/                Settings import/export/sync plugins
+│   │   ├── importers/              One-shot settings importers
+│   │   │   ├── base.py             SettingsImporter ABC
+│   │   │   ├── local_json_file/    Browser file upload
+│   │   │   └── server_json_file/   Server filesystem JSON
+│   │   ├── exporters/              One-shot settings exporters
+│   │   │   ├── base.py             SettingsExporter ABC
+│   │   │   ├── local_json_file/    Browser file download
+│   │   │   └── server_json_file/   Server filesystem JSON
+│   │   └── sources/                Bidirectional settings sync sources
+│   │       ├── base.py             SettingsSource ABC
+│   │       └── server_json_file/   Sync with server JSON file ({username} template)
+│   │
+│   ├── labels/                     Label importers and sync sources
+│   │   ├── importers/              Plugin system for one-shot label import
+│   │   │   ├── base.py             LabelImporter ABC + LabelImporterField
+│   │   │   ├── server_json_file/   JSON label file on server
+│   │   │   └── server_csv_file/    CSV label file on server
+│   │   ├── sources/                Bidirectional label sync sources
+│   │   │   ├── base.py             LabelsetSource ABC + LabelsetSourceField
+│   │   │   └── server_json_file/   Sync labels with server JSON file
+│   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
 │   ├── processors/importers/       Plugin system for processor sources
 │   │   ├── base.py                 ProcessorImporter ABC + ProcessorImporterField
@@ -174,6 +192,8 @@ VTSearch/
 │   │   ├── label_importers.py      Label importer registry & execution
 │   │   ├── processor_importers.py  Processor importer registry & execution
 │   │   ├── settings.py             Settings persistence (volume, theme, etc.)
+│   │   ├── settings_io.py          Settings import/export plugin routes
+│   │   ├── sync_sources.py         Sync source management (settings + labelset sources)
 │   │   ├── file_browser.py         File browser API for directory navigation
 │   │   └── trainable_models.py     Persistent trainable model definitions (CRUD)
 │   │
@@ -244,6 +264,17 @@ modules on the right.
 │ (NO Flask, NO state,     │  │  pure data processing)   │  │  pure data processing)   │
 │  pure data in/out)       │  │                          │  │                          │
 └──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
+
+┌─────────────────────────────┐  ┌─────────────────────────────┐
+│ settings_io/sources/*       │  │ labels/sources/*             │
+│                             │  │ labels/sync.py               │
+│ base.py (SettingsSource ABC)│  │                              │
+│ server_json_file            │  │ base.py (LabelsetSource ABC) │
+│                             │  │ server_json_file             │
+│ (NO Flask; reads/writes     │  │                              │
+│  settings via file I/O)     │  │ (NO Flask; reads/writes      │
+│                             │  │  labelsets via file I/O)     │
+└─────────────────────────────┘  └─────────────────────────────┘
 ```
 
 ### Key observations
@@ -252,9 +283,11 @@ modules on the right.
   dataclass; the route layer converts it to a Flask response.
 - **models/ do NOT import Flask or global state.**  Functions accept
   `clips_dict`, `good_votes`, `bad_votes` etc. as parameters.
-- **exporters, label importers, and processor importers are fully
-  standalone.**  They receive a plain dict and return a plain dict/list.
-  Zero framework coupling.
+- **exporters, label importers, processor importers, and sync sources
+  are fully standalone.**  They receive a plain dict and return a plain
+  dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`,
+  `LabelsetSource`) pair an import and export behind a single abstraction
+  for bidirectional sync — but each source plugin is still pure I/O.
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -274,6 +307,9 @@ modules on the right.
 | `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
 | `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
 | `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
+| `settings_io/sources/base.py` + all sources | No | No | **Yes** — pure file I/O |
+| `labels/sources/base.py` + all sources | No | No | **Yes** — pure file I/O |
+| `labels/sync.py` | No | Yes (reads votes) | Partially — needs state for vote export |
 | `datasets/downloader/` | No | No (callback) | **Yes** — requests only |
 | `datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
 | `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** — each self-contained |
@@ -340,11 +376,12 @@ audio.load_models()
 
 ### The plugin systems
 
-**Pattern:** Each of the four plugin systems uses the same architecture:
+**Pattern:** Each of the six plugin systems uses the same architecture:
 1. An abstract base class with `fields` (form descriptors) and a
-   `run()`/`export()` method.
+   `run()`/`export()`/`load()`/`save()` method.
 2. Auto-discovery via `pkgutil.iter_modules` scanning for a sentinel
-   attribute (`EXPORTER`, `IMPORTER`, `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`).
+   attribute (`EXPORTER`, `IMPORTER`, `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`,
+   `SETTINGS_SOURCE`, `LABELSET_SOURCE`).
 3. CLI support auto-derived from field definitions.
 
 To use an exporter standalone:
@@ -387,19 +424,21 @@ application as-is.
 
 ### Auto-discovered plugins (importers / exporters)
 
-All four plugin systems (dataset importers, exporters, label importers,
-processor importers) share a common `PluginBase` / `PluginField` /
-`PluginRegistry` architecture in `vtsearch/utils/registry.py`:
+All six plugin systems (dataset importers, exporters, label importers,
+processor importers, settings sources, labelset sources) share a common
+`PluginBase` / `PluginField` / `PluginRegistry` architecture in
+`vtsearch/utils/registry.py`:
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
-   and an abstract `run()`/`export()` method.
+   and an abstract `run()`/`export()`/`load()`/`save()` method.
 2. **Field dataclass** (`PluginField`, aliased as `ImporterField`,
    `ExporterField`, `LabelImporterField`, `ProcessorImporterField`)
    describes each user-configurable input with type, label, default,
    validation, and placeholder.
 3. **Auto-discovery** via `PluginRegistry` scans sub-packages for a
    sentinel attribute (`IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`,
-   `PROCESSOR_IMPORTER`) and registers them lazily on first access.
+   `PROCESSOR_IMPORTER`, `SETTINGS_SOURCE`, `LABELSET_SOURCE`) and
+   registers them lazily on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
 5. **Graceful degradation** — if a plugin's optional dependency is
@@ -492,7 +531,7 @@ state in `DetectorContext` objects:
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias`, `diversity_tree`, `dataset_display_name` |
-| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `inclusion`, `training_medias`, `model`, `threshold` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `inclusion`, `training_medias`, `model`, `threshold`, `labelset_source` |
 
 The module-level names (`medias`, `good_votes`, etc.) are **proxy
 objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context

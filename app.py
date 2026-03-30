@@ -57,6 +57,7 @@ from vtsearch.routes import (  # noqa: E402
     settings_bp,
     settings_io_bp,
     sorting_bp,
+    sync_sources_bp,
     trainable_models_bp,
 )
 from vtsearch.media import set_progress_callback  # noqa: E402
@@ -141,6 +142,7 @@ app.register_blueprint(label_importers_bp)
 app.register_blueprint(processor_importers_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
+app.register_blueprint(sync_sources_bp)
 app.register_blueprint(trainable_models_bp)
 
 
@@ -279,23 +281,24 @@ if __name__ == "__main__":
             set_login_provider(TrivialLoginProvider())
             print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
 
+        # Common startup: models, autoload, settings source sync
+        mode_label = "LOCAL" if args.local else "PRODUCTION"
+        print(f"\U0001f680 Running in {mode_label} mode" + (" (accessible from other devices)" if args.local else ""), flush=True)
+        initialize_models()
+        preloaded = preload_autoload_media_types()
+        if preloaded:
+            print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+
+        # Auto-import from settings source (if configured)
+        from vtsearch.settings import sync_from_settings_source
+
+        imported = sync_from_settings_source()
+        if imported is not None:
+            print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
+
         if args.local:
-            # Local development mode
-            print("\U0001f680 Running in LOCAL mode (accessible from other devices)", flush=True)
-            initialize_models()
-            preloaded = preload_autoload_media_types()
-            if preloaded:
-                print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
             app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
         else:
-            # Production mode \u2014 models load lazily when the first dataset is loaded
-            print("\U0001f680 Running in PRODUCTION mode", flush=True)
-            initialize_models()
-            preloaded = preload_autoload_media_types()
-            if preloaded:
-                print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
-
             print("\u2705 VTSearch is ready!", flush=True)
             print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
-
             app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

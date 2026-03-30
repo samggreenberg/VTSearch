@@ -13,7 +13,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Detectors & Processors](api/detectors.md) | Detectors, extractors, localizers, pre-generated processors |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters |
 | [Import & Export](api/io.md) | Result exporters, label importers, processor importers |
-| [Settings](api/settings.md) | App settings, autorun processors |
+| [Settings](api/settings.md) | App settings, autorun processors, settings sources, labelset sources |
 | [Models](api/models.md) | Trainable models, model registry |
 | [Dashboard & Lookup](api/dashboard.md) | Dashboard info, media lookup, multi-dataset find |
 

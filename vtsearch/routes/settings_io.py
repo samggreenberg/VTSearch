@@ -148,30 +148,5 @@ def run_settings_export():
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Map of setting key → setter function (generated dynamically from settings module).
-_SETTER_MAP: dict[str, callable] | None = None
-
-
-def _get_setter_map() -> dict:
-    """Build a map of setting-key → setter-function from the settings module."""
-    global _SETTER_MAP
-    if _SETTER_MAP is not None:
-        return _SETTER_MAP
-    _SETTER_MAP = {}
-    for attr_name in dir(settings):
-        if attr_name.startswith("set_") and callable(getattr(settings, attr_name)):
-            key = attr_name[4:]  # strip "set_"
-            _SETTER_MAP[key] = getattr(settings, attr_name)
-    return _SETTER_MAP
-
-
-def _apply_settings(imported: dict) -> None:
-    """Apply a dict of settings via the settings module's setters."""
-    setter_map = _get_setter_map()
-    for key, value in imported.items():
-        setter = setter_map.get(key)
-        if setter is not None:
-            try:
-                setter(value)
-            except (TypeError, ValueError):
-                pass  # Skip invalid values silently
+# Re-export from settings module for backward compatibility and local use.
+from vtsearch.settings import _apply_settings  # noqa: F401

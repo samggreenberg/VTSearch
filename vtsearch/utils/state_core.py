@@ -123,6 +123,8 @@ class DetectorContext:
         "training_medias",  # voted media items with embeddings
         "model",            # nn.Sequential | None — current trained MLP
         "threshold",        # decision threshold
+        # Sync source
+        "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
 
     def __init__(self, detector_id: str = "", *, name: str = "",
@@ -146,6 +148,8 @@ class DetectorContext:
         self.training_medias: dict[int, dict[str, Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
+        # Sync source
+        self.labelset_source: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -267,6 +267,10 @@ def seed_votes_from_examples():
 
         sync_labels_to_loaded_model()
 
+        from vtsearch.labels.sync import sync_to_labelset_source
+
+        sync_to_labelset_source()
+
     return jsonify({"seeded": seeded, "skipped": skipped})
 
 

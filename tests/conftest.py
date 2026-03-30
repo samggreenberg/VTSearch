@@ -68,6 +68,7 @@ _TEST_GROUPS = {
         "test_pdf_import",
         "test_corrections_export",
         "test_settings_io",
+        "test_sync_sources",
     ],
     "models": [
         "test_detectors",
