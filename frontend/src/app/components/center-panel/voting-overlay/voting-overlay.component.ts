@@ -1,8 +1,10 @@
 import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
+import { IconComponent } from '../../icon/icon.component';
 
 @Component({
   selector: 'vt-voting-overlay',
   standalone: true,
+  imports: [IconComponent],
   templateUrl: './voting-overlay.component.html',
   styleUrl: './voting-overlay.component.scss',
 })
