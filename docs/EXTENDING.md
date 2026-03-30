@@ -281,8 +281,9 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-Add any extra packages to a `requirements.txt` inside the plugin directory.
-They will be auto-discovered and installed by `install-plugin-deps.sh`.
+Add any extra packages to a `requirements.txt` inside the plugin directory,
+then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
+The next `pip install -r requirements.txt` will pick them up.
 
 ---
 
@@ -413,8 +414,9 @@ endpoints:
 
 ### Wiring up dependencies
 
-Add any extra packages to a `requirements.txt` inside the plugin directory.
-They will be auto-discovered and installed by `install-plugin-deps.sh`.
+Add any extra packages to a `requirements.txt` inside the plugin directory,
+then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
+The next `pip install -r requirements.txt` will pick them up.
 
 ---
 
