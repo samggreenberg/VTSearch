@@ -3,3 +3,4 @@
 Pillow
 ultralytics
 sentencepiece
+protobuf
