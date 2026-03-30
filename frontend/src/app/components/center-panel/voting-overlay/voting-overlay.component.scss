@@ -47,6 +47,11 @@ button {
     background: var(--color-good);
     color: var(--header-text, #fff);
   }
+
+  &.voted:hover:not(:disabled),
+  &.vote-flash:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-good) 85%, black);
+  }
 }
 
 .btn-bad {
@@ -61,5 +66,10 @@ button {
   &.vote-flash {
     background: var(--color-bad);
     color: var(--header-text, #fff);
+  }
+
+  &.voted:hover:not(:disabled),
+  &.vote-flash:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-bad) 85%, black);
   }
 }
