@@ -14,6 +14,9 @@ When the app is running, click the hamburger menu in the top-left corner to open
 | **speech_commands_v2_m** | One-second keyword utterances across 35 Speech Commands v2 categories (medium) |
 | **speech_commands_v2_l** | One-second keyword utterances across 35 Speech Commands v2 categories (large) |
 | **speech_commands_v2_a** | One-second keyword utterances across 35 Google Speech Commands v2 categories (all) |
+| **urbansound8k_s** | Real urban field recordings across 10 UrbanSound8K categories (small) |
+| **urbansound8k_m** | Real urban field recordings across 10 UrbanSound8K categories (medium) |
+| **urbansound8k_l** | Real urban field recordings across 10 UrbanSound8K categories (large) |
 | **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories — air conditioner, car horn, children playing, dog bark, and more |
 
 ## Image
