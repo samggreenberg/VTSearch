@@ -1,5 +1,2 @@
-# Image media type dependencies
-# These packages are required to open and process image files.
+# Image media type — shared dependencies
 Pillow
-ultralytics
-sentencepiece

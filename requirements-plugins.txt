@@ -15,8 +15,11 @@
 -r vtsearch/exporters/webhook/requirements.txt
 -r vtsearch/labels/importers/server_csv_file/requirements.txt
 -r vtsearch/labels/importers/server_json_file/requirements.txt
+-r vtsearch/media/audio/requirements-clap.txt
 -r vtsearch/media/audio/requirements.txt
 -r vtsearch/media/document/requirements.txt
+-r vtsearch/media/image/requirements-extractor.txt
+-r vtsearch/media/image/requirements-siglip.txt
 -r vtsearch/media/image/requirements.txt
 -r vtsearch/media/text/requirements.txt
 -r vtsearch/media/video/requirements.txt
