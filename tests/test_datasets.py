@@ -644,6 +644,135 @@ class TestLoadEmbedderForClips:
         assert vec.shape[0] > 0
 
 
+class TestDemoCacheEmbedderMismatch:
+    """load_demo_dataset should invalidate the pickle cache when the requested
+    embedder differs from the one that produced the cached pickle."""
+
+    def test_stale_cache_is_discarded_on_embedder_mismatch(self, tmp_path):
+        """If the sidecar says 'clip' but we request 'siglip', the cache is
+        deleted and load_demo_source is called (i.e. re-embedding happens)."""
+        import pickle
+        from unittest.mock import MagicMock, patch
+
+        from vtsearch.datasets import DEMO_DATASETS
+        from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+
+        # Pick any demo dataset name
+        demo_name = next(iter(DEMO_DATASETS))
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+
+        # Write a fake cached pickle with a 'clip' sidecar
+        pkl_file = embeddings_dir / f"{demo_name}.pkl"
+        pkl_file.write_bytes(
+            pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
+        )
+        _write_embedder_sidecar(pkl_file, "clip")
+
+        # Create a fake embedder whose name is 'siglip'
+        fake_embedder = MagicMock()
+        fake_embedder.name = "siglip"
+
+        medias: dict = {}
+
+        mock_mt = MagicMock()
+        mock_mt.dir_key = "images_dir"
+        mock_mt.load_demo_source.return_value = "/fake/dir"
+
+        with (
+            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtsearch.media.get_embedder", return_value=fake_embedder) as mock_get,
+            patch("vtsearch.media.get", return_value=mock_mt),
+        ):
+            load_demo_dataset(demo_name, medias, embedder_name="siglip")
+
+            # The old pkl should have been deleted and load_demo_source called
+            mock_get.assert_called_once_with("siglip")
+            mock_mt.load_demo_source.assert_called_once()
+
+    def test_matching_embedder_uses_cache(self, tmp_path):
+        """When the sidecar matches the requested embedder, the cache is used
+        without re-embedding."""
+        import pickle
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from vtsearch.datasets import DEMO_DATASETS
+        from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+
+        demo_name = next(iter(DEMO_DATASETS))
+        demo_info = DEMO_DATASETS[demo_name]
+        media_type_id = demo_info.get("media_type", "audio")
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+
+        pkl_file = embeddings_dir / f"{demo_name}.pkl"
+        pkl_file.write_bytes(
+            pickle.dumps({
+                "name": demo_name,
+                "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
+            })
+        )
+        _write_embedder_sidecar(pkl_file, "clip")
+
+        medias: dict = {}
+
+        # Patch load_dataset_from_pickle to populate medias (simulating a valid load)
+        def fake_load(path, m):
+            m[1] = {"embedding": np.array([0.1, 0.2]), "file": "/fake/file.png"}
+
+        with (
+            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtsearch.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+        ):
+            load_demo_dataset(demo_name, medias, embedder_name="clip")
+
+        # Cache was used — media was loaded
+        assert 1 in medias
+
+    def test_no_sidecar_accepts_cache(self, tmp_path):
+        """When no sidecar exists (old pickle), accept the cache regardless of
+        the requested embedder to avoid unnecessary re-downloads."""
+        import pickle
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from vtsearch.datasets import DEMO_DATASETS
+        from vtsearch.datasets.loader import load_demo_dataset
+
+        demo_name = next(iter(DEMO_DATASETS))
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+
+        pkl_file = embeddings_dir / f"{demo_name}.pkl"
+        pkl_file.write_bytes(
+            pickle.dumps({
+                "name": demo_name,
+                "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
+            })
+        )
+        # No sidecar written — simulates a legacy pickle
+
+        medias: dict = {}
+
+        def fake_load(path, m):
+            m[1] = {"embedding": np.array([0.1]), "file": "/fake/file.png"}
+
+        with (
+            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtsearch.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+        ):
+            load_demo_dataset(demo_name, medias, embedder_name="siglip")
+
+        # Cache was used despite requesting a different embedder (no sidecar to verify)
+        assert 1 in medias
+
+
 class TestCaltech101Download:
     """Verify download_caltech101 handles the nested zip→tar.gz structure."""
 
