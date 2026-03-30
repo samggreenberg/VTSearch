@@ -30,7 +30,6 @@ static/prerendered-routes.json
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
-frontend/package-lock.json
 
 /venv/
 *symbolic_link
