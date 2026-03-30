@@ -114,12 +114,16 @@
   font-size: 1rem;
   min-width: 28px;
 
-  &.plus-open {
-    animation: plus-spin-open 0.3s ease-in-out forwards;
-  }
+  .plus-icon {
+    display: inline-block;
 
-  &.plus-close {
-    animation: plus-spin-close 0.3s ease-in-out forwards;
+    &.plus-open {
+      animation: plus-spin-open 0.3s ease-in-out forwards;
+    }
+
+    &.plus-close {
+      animation: plus-spin-close 0.3s ease-in-out forwards;
+    }
   }
 }
 

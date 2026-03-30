@@ -11,10 +11,10 @@
       }
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm"
-          [class.plus-open]="importerModalOpen"
-          [class.plus-close]="importerClosing"
-          (animationend)="onImporterAnimationEnd()"
-          (click)="openImporterModal()" title="Import a new dataset">+</button>
+          (click)="openImporterModal()" title="Import a new dataset"><span class="plus-icon"
+            [class.plus-open]="importerModalOpen"
+            [class.plus-close]="importerClosing"
+            (animationend)="onImporterAnimationEnd()">+</span></button>
       </div>
     </div>
 
@@ -98,10 +98,10 @@
       <span class="dashboard-section-title" title="Trained models for scoring and finding media"><vt-icon type="lightbulb" [size]="18"></vt-icon> Models</span>
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm"
-          [class.plus-open]="newModelModalOpen"
-          [class.plus-close]="newModelClosing"
-          (animationend)="onNewModelAnimationEnd()"
-          (click)="openNewModelModal()" title="Create a new model">+</button>
+          (click)="openNewModelModal()" title="Create a new model"><span class="plus-icon"
+            [class.plus-open]="newModelModalOpen"
+            [class.plus-close]="newModelClosing"
+            (animationend)="onNewModelAnimationEnd()">+</span></button>
       </div>
     </div>
 
