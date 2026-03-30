@@ -295,6 +295,13 @@
     justify-content: center;
     gap: 6px;
 
+    // Keep full opacity on the active loading button (waggling icon)
+    // even though it's disabled to block new clicks.
+    &.loading-active:disabled {
+      opacity: 1;
+      cursor: wait;
+    }
+
     svg {
       flex-shrink: 0;
 

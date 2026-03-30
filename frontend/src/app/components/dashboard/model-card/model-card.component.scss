@@ -10,6 +10,16 @@
   &.selected {
     background: var(--accent-highlight-bg);
   }
+
+  &.dimmed {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+
+    &:hover {
+      background: none;
+    }
+  }
 }
 
 td {
