@@ -107,6 +107,30 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
+  /** Desired picker order: folder, demo placeholder, then remaining importers. */
+  private static readonly PICKER_ORDER = ['folder', '_demo', 'combine_datasets'];
+
+  get orderedImporters(): ImporterInfo[] {
+    const demoPlaceholder = { name: '_demo' } as ImporterInfo;
+    const order = DatasetImporterModalComponent.PICKER_ORDER;
+    const result: ImporterInfo[] = [];
+    for (const name of order) {
+      if (name === '_demo') {
+        result.push(demoPlaceholder);
+      } else {
+        const imp = this.importers.find((i) => i.name === name);
+        if (imp) result.push(imp);
+      }
+    }
+    // Append any importers not in the explicit order
+    for (const imp of this.importers) {
+      if (!order.includes(imp.name)) {
+        result.push(imp);
+      }
+    }
+    return result;
+  }
+
   selectImporter(importer: ImporterInfo): void {
     this.selectedImporter = importer;
     this.formValues = {};

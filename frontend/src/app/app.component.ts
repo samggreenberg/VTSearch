@@ -20,6 +20,7 @@ export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
+  gearClosing = false;
   isOnLabelView = false;
   settingsViewTab = '';
   datasetDisplayName = '';
@@ -122,8 +123,18 @@ export class AppComponent {
 
   onSettings(): void {
     this.menuOpen = false;
+    this.gearClosing = false;
     this.settingsViewTab = this.inferMediaType();
     this.showSettings = true;
+  }
+
+  onSettingsClosed(): void {
+    this.showSettings = false;
+    this.gearClosing = true;
+  }
+
+  onGearAnimationEnd(): void {
+    this.gearClosing = false;
   }
 
   private inferMediaType(): string {

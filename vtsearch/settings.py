@@ -77,6 +77,12 @@ _EXCLUDE_FROM_DEFAULTS = {
     "saved_datasets_dir",
     "detectors_dir",
     "trainable_models_dir",
+    "settings_source",
+}
+
+#: Keys excluded from source sync export (to avoid circular config).
+_EXCLUDE_FROM_SOURCE_EXPORT = {
+    "settings_source",
 }
 
 # In-memory cache — loaded once, written on every mutation.
@@ -86,6 +92,10 @@ _settings: dict[str, Any] | None = None
 # some public functions (e.g. toggle_autoload_media_embedder) call other
 # public functions that also acquire the lock.
 _settings_lock = threading.RLock()
+
+# Thread-local guard to prevent re-exporting to the source during an
+# import-from-source pass.
+_syncing = threading.local()
 
 
 def _load() -> dict[str, Any]:
@@ -105,7 +115,9 @@ def _save(data: dict[str, Any]) -> None:
     """Write *data* to the settings file (creating parent dirs if needed).
 
     Uses atomic write (write to temp file, then rename) to prevent
-    data loss if the process crashes or is killed mid-write.
+    data loss if the process crashes or is killed mid-write.  When an
+    active settings source is configured and we are not already syncing,
+    the source is also updated.
     """
     import os
 
@@ -113,6 +125,10 @@ def _save(data: dict[str, Any]) -> None:
     tmp = SETTINGS_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, SETTINGS_PATH)
+
+    # Auto-export to active settings source (skip during import-from-source).
+    if not getattr(_syncing, "active", False):
+        _sync_to_source(data)
 
 
 def _ensure_loaded() -> dict[str, Any]:
@@ -686,3 +702,138 @@ def reset() -> None:
     global _settings
     with _settings_lock:
         _settings = None
+
+
+# -------------------------------------------------------------------
+# Settings source (bidirectional sync)
+# -------------------------------------------------------------------
+
+
+def get_settings_source_config() -> dict[str, Any] | None:
+    """Return the active settings source config, or ``None`` if unset.
+
+    Config shape::
+
+        {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": "data/{username}.settings.json"}
+        }
+    """
+    with _settings_lock:
+        cfg = _ensure_loaded().get("settings_source")
+    if isinstance(cfg, dict) and cfg.get("source_name"):
+        return cfg
+    return None
+
+
+def set_settings_source_config(config: dict[str, Any] | None) -> None:
+    """Set or clear the active settings source config."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        if config is None:
+            s.pop("settings_source", None)
+        else:
+            s["settings_source"] = config
+        _save(s)
+
+
+# Map of setting key → setter function (generated dynamically).
+_SETTER_MAP: dict[str, Any] | None = None
+
+
+def _get_setter_map() -> dict:
+    """Build a map of setting-key → setter-function by introspecting this module."""
+    global _SETTER_MAP
+    if _SETTER_MAP is not None:
+        return _SETTER_MAP
+    import vtsearch.settings as _self
+
+    _SETTER_MAP = {}
+    for attr_name in dir(_self):
+        if attr_name.startswith("set_") and callable(getattr(_self, attr_name)):
+            _SETTER_MAP[attr_name[4:]] = getattr(_self, attr_name)
+    return _SETTER_MAP
+
+
+def _apply_settings(imported: dict) -> None:
+    """Apply a dict of settings via this module's ``set_*`` functions.
+
+    Unknown keys or values that fail validation are silently skipped.
+    Used by :func:`sync_from_settings_source` and by the settings-import
+    route in ``routes/settings_io.py``.
+    """
+    setter_map = _get_setter_map()
+    for key, value in imported.items():
+        setter = setter_map.get(key)
+        if setter is not None:
+            try:
+                setter(value)
+            except (TypeError, ValueError):
+                pass  # Skip invalid values silently
+
+
+def sync_from_settings_source() -> dict[str, Any] | None:
+    """Pull settings from the active source and apply them.
+
+    Returns the imported settings dict, or ``None`` if no source is
+    configured or the source file doesn't exist yet.
+
+    This is called:
+    - At app startup (auto-import), so settings from the source take
+      precedence over the local settings file.
+    - Manually via ``POST /api/settings-sources/sync``.
+    """
+    cfg = get_settings_source_config()
+    if cfg is None:
+        return None
+
+    from vtsearch.settings_io.sources import get_settings_source
+
+    source = get_settings_source(cfg["source_name"])
+    if source is None:
+        logger.warning("Unknown settings source: %s", cfg["source_name"])
+        return None
+
+    field_values = cfg.get("field_values", {})
+    try:
+        imported = source.load(field_values)
+    except Exception as exc:
+        logger.warning("Failed to load from settings source: %s", exc)
+        return None
+
+    if not imported:
+        return None
+
+    # Apply under sync guard to prevent re-exporting back to source.
+    _syncing.active = True
+    try:
+        _apply_settings(imported)
+    finally:
+        _syncing.active = False
+
+    return imported
+
+
+def _sync_to_source(data: dict[str, Any]) -> None:
+    """Push current settings to the active source (if any).
+
+    Called from :func:`_save` after the local file is written.  Strips
+    the ``settings_source`` key itself to avoid circular config.
+    """
+    cfg = data.get("settings_source")
+    if not isinstance(cfg, dict) or not cfg.get("source_name"):
+        return
+
+    from vtsearch.settings_io.sources import get_settings_source
+
+    source = get_settings_source(cfg["source_name"])
+    if source is None:
+        return
+
+    field_values = cfg.get("field_values", {})
+    export_data = {k: v for k, v in data.items() if k not in _EXCLUDE_FROM_SOURCE_EXPORT}
+
+    try:
+        source.save(export_data, field_values)
+    except Exception as exc:
+        logger.warning("Failed to sync settings to source: %s", exc)

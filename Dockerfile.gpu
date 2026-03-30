@@ -29,8 +29,12 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------- dependency layer ----------
+COPY requirements-gpu.txt requirements-plugins.txt ./
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
+
+# Copy all plugin requirements.txt files so -r references resolve.
+COPY vtsearch/ vtsearch/
 
 # Pre-install numpy/scipy as binary-only wheels so the PyTorch extra-index
 # cannot pull in source tarballs that require g++.
@@ -39,7 +43,8 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu121 \
         --prefer-binary \
-        ".[gpu]"
+        -r requirements-gpu.txt && \
+    pip install --no-cache-dir --no-deps -e .
 
 # ---------- application layer ----------
 COPY . .

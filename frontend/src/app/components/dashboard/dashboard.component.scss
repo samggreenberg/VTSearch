@@ -113,6 +113,30 @@
   padding: 2px 10px;
   font-size: 1rem;
   min-width: 28px;
+
+  .plus-icon {
+    display: inline-block;
+
+    &.plus-open {
+      animation: plus-spin-open 0.3s ease-in-out forwards;
+    }
+
+    &.plus-close {
+      animation: plus-spin-close 0.3s ease-in-out forwards;
+    }
+  }
+}
+
+@keyframes plus-spin-open {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(22.5deg); }
+  100% { transform: rotate(45deg); }
+}
+
+@keyframes plus-spin-close {
+  0% { transform: rotate(45deg); }
+  50% { transform: rotate(22.5deg); }
+  100% { transform: rotate(0deg); }
 }
 
 .dashboard-grid {
@@ -153,7 +177,6 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     user-select: none;
-    overflow: hidden;
 
     &.sortable {
       cursor: pointer;
@@ -177,9 +200,9 @@
     .col-resize-handle {
       position: absolute;
       top: 0;
-      right: 0;
+      right: -6px;
       bottom: 0;
-      width: 5px;
+      width: 12px;
       cursor: col-resize;
       z-index: 2;
 
@@ -188,7 +211,8 @@
         position: absolute;
         top: 20%;
         bottom: 20%;
-        right: 0;
+        left: 50%;
+        transform: translateX(-50%);
         width: 2px;
         background: var(--accent, #5b8fff);
         opacity: 0.35;

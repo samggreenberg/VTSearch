@@ -57,7 +57,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   modelLoadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
+  importerClosing = false;
   newModelModalOpen = false;
+  newModelClosing = false;
   exportModalOpen = false;
   exportModelName = '';
   addLabelsModalOpen = false;
@@ -67,6 +69,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   statsModalOpen = false;
   statsDatasetId = '';
   statsDatasetName = '';
+  deletingDatasetId = '';
+  deletingModelId = '';
+  addLabelsModelId = '';
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -481,7 +486,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
+    this.deletingDatasetId = dataset.id;
     const ok = await this.dialog.confirm(`Delete dataset "${dataset.name}"?`);
+    this.deletingDatasetId = '';
     if (!ok) return;
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
@@ -528,7 +535,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteModel(model: ModelRegistryEntry): Promise<void> {
+    this.deletingModelId = model.id;
     const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
+    this.deletingModelId = '';
     if (!ok) return;
     this.modelsApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
@@ -582,12 +591,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Add Labels modal ---
 
   openAddLabelsModal(model: ModelRegistryEntry): void {
+    this.addLabelsModelId = model.id;
     this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
     this.addLabelsModalOpen = true;
   }
 
   closeAddLabelsModal(): void {
     this.addLabelsModalOpen = false;
+    this.addLabelsModelId = '';
     this.addLabelsModelName = '';
   }
 
@@ -613,20 +624,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
+    this.importerClosing = false;
     this.importerModalOpen = true;
   }
 
   closeImporterModal(): void {
     this.importerModalOpen = false;
+    this.importerClosing = true;
+  }
+
+  onImporterAnimationEnd(): void {
+    this.importerClosing = false;
   }
 
   onImportComplete(): void {
     this.importerModalOpen = false;
+    this.importerClosing = true;
     this.startProgressPolling();
   }
 
   onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
     this.importerModalOpen = false;
+    this.importerClosing = true;
     const params: Record<string, string> = {};
     if (demo.embedder) {
       params['embedder'] = demo.embedder;
@@ -660,15 +679,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openNewModelModal(): void {
+    this.newModelClosing = false;
     this.newModelModalOpen = true;
   }
 
   closeNewModelModal(): void {
     this.newModelModalOpen = false;
+    this.newModelClosing = true;
+  }
+
+  onNewModelAnimationEnd(): void {
+    this.newModelClosing = false;
   }
 
   onModelCreated(): void {
     this.newModelModalOpen = false;
+    this.newModelClosing = true;
     this.datasetState.refresh();
   }
 

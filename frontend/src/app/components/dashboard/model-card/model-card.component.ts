@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -12,7 +12,7 @@ import { formatProgressFraction } from '../../../utils/format-progress';
   templateUrl: './model-card.component.html',
   styleUrl: './model-card.component.scss',
 })
-export class ModelCardComponent {
+export class ModelCardComponent implements OnChanges {
   @Input() model: any;
   @Input() @HostBinding('class.selected') selected = false;
   @Input() loadingTask?: LoadingTask;
@@ -40,12 +40,19 @@ export class ModelCardComponent {
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
+  @Input() deleteConfirmOpen = false;
+  @Input() addLabelsOpen = false;
+
   editing = false;
+  wasEditing = false;
   editName = '';
+  wasDeleteOpen = false;
+  wasAddLabelsOpen = false;
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
     this.editing = true;
+    this.wasEditing = true;
     this.editName = this.model.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
   }
@@ -60,6 +67,33 @@ export class ModelCardComponent {
 
   cancelRename(): void {
     this.editing = false;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['deleteConfirmOpen'] && !changes['deleteConfirmOpen'].currentValue && changes['deleteConfirmOpen'].previousValue) {
+      this.wasDeleteOpen = true;
+    }
+    if (changes['addLabelsOpen'] && !changes['addLabelsOpen'].currentValue && changes['addLabelsOpen'].previousValue) {
+      this.wasAddLabelsOpen = true;
+    }
+  }
+
+  onPencilAnimationEnd(): void {
+    if (!this.editing) {
+      this.wasEditing = false;
+    }
+  }
+
+  onTrashAnimationEnd(): void {
+    if (!this.deleteConfirmOpen) {
+      this.wasDeleteOpen = false;
+    }
+  }
+
+  onCapAnimationEnd(): void {
+    if (!this.addLabelsOpen) {
+      this.wasAddLabelsOpen = false;
+    }
   }
 
   onRenameKeydown(event: KeyboardEvent): void {

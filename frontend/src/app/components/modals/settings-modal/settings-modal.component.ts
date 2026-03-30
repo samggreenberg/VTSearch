@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
+import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -13,7 +15,7 @@ import { Theme, ThemeService } from '../../../services/theme.service';
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })
@@ -28,6 +30,8 @@ export class SettingsModalComponent implements OnInit {
   activeViewTab = '';
   loading = true;
   error = '';
+  showImporterModal = false;
+  showExporterModal = false;
 
   constructor(
     private settingsApi: SettingsApiService,
@@ -158,40 +162,24 @@ export class SettingsModalComponent implements OnInit {
   }
 
 
-  exportSettings(): void {
-    const blob = new Blob([JSON.stringify(this.settings, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'settings.json';
-    a.click();
-    URL.revokeObjectURL(url);
+  openImporter(): void {
+    this.showImporterModal = true;
   }
 
-  importSettings(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    // Reject files larger than 1 MB to prevent browser memory issues.
-    const MAX_SETTINGS_SIZE = 1024 * 1024;
-    if (file.size > MAX_SETTINGS_SIZE) {
-      this.error = 'Settings file is too large (max 1 MB)';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const imported = JSON.parse(reader.result as string);
-        this.settings = imported;
-        if (imported.theme) {
-          this.themeService.setTheme(imported.theme);
+  onImportComplete(): void {
+    // Reload settings from the server after import
+    this.settingsApi.getSettings().subscribe({
+      next: (s) => {
+        this.settings = s;
+        if (s.theme) {
+          this.themeService.setTheme(s.theme as Theme);
         }
-        this.save();
-      } catch {
-        this.error = 'Invalid settings file';
-      }
-    };
-    reader.readAsText(file);
+      },
+    });
+  }
+
+  openExporter(): void {
+    this.showExporterModal = true;
   }
 
   private save(): void {

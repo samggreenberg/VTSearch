@@ -151,6 +151,10 @@ def import_labels():
 
     sync_labels_to_loaded_model()
 
+    from vtsearch.labels.sync import sync_to_labelset_source
+
+    sync_to_labelset_source()
+
     return jsonify({"applied": applied, "skipped": skipped})
 
 
@@ -262,6 +266,10 @@ def fill_labels_from_sort():
     from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
 
     sync_labels_to_loaded_model()
+
+    from vtsearch.labels.sync import sync_to_labelset_source
+
+    sync_to_labelset_source()
 
     return jsonify(
         {

@@ -17,6 +17,9 @@ fi
 
 echo "Installing project dependencies (first test run this session)..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$SCRIPT_DIR/../.."
+
 # Upgrade setuptools first — the system version (68.x) has a broken
 # install_layout attribute that prevents building wheels for some packages
 # (progressbar, wget) needed by laion_clap.
@@ -26,11 +29,16 @@ pip install --upgrade setuptools -q
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q
 
-# Install the project with CPU PyTorch and dev tools.
-pip install --extra-index-url https://download.pytorch.org/whl/cpu \
-  --prefer-binary \
-  -e ".[cpu,dev]" \
+# Regenerate requirements-plugins.txt from discovered plugin files.
+bash "$REPO_DIR/install-plugin-deps.sh" --dry-run
+
+# Install all dependencies (core + plugins) with CPU PyTorch.
+pip install --prefer-binary \
+  -r "$REPO_DIR/requirements.txt" \
   -q
+
+# Editable install so 'import vtsearch' works.
+pip install --no-deps -e "$REPO_DIR" -q
 
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,

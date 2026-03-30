@@ -22,7 +22,7 @@ This will:
 Install dependencies (if you haven't already):
 
 ```bash
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
 ```
 
 Matplotlib and pandas are required for plot generation and are included in the dev dependencies.

@@ -167,6 +167,10 @@ def run_label_import(importer_name: str):
 
         sync_labels_to_loaded_model()
 
+        from vtsearch.labels.sync import sync_to_labelset_source
+
+        sync_to_labelset_source()
+
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingested > 0:
         msg += f" Auto-resolved {ingested} missing element(s) from their sources."
@@ -226,6 +230,10 @@ def ingest_missing():
         from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
 
         sync_labels_to_loaded_model()
+
+        from vtsearch.labels.sync import sync_to_labelset_source
+
+        sync_to_labelset_source()
 
     return jsonify(
         {

@@ -354,7 +354,7 @@ Install commands:
 
 ```bash
 # CPU with all features + dev tools
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
 
 # GPU
 bash install-gpu.sh
@@ -425,5 +425,5 @@ via the folder or pickle importer instead.
 
 **Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
 ```

@@ -514,6 +514,10 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
 
     sync_labels_to_loaded_model()
 
+    from vtsearch.labels.sync import sync_to_labelset_source
+
+    sync_to_labelset_source()
+
     return jsonify({"ok": True})
 
 
