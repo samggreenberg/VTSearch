@@ -146,8 +146,6 @@ bash install-gpu.sh cu124    # for CUDA 12.4
 
 The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version and runs `install-plugin-deps.sh` automatically.
 
-**Adding new plugin dependencies:** If you're developing a new plugin (importer, exporter, media type, etc.), just add a `requirements.txt` in your plugin's directory, then run `bash install-plugin-deps.sh` to regenerate the tree. The next `pip install -r requirements.txt` picks it up automatically — no need to edit any central file.
-
 ## Building the frontend
 
 The Angular frontend must be built after checking out the code — the compiled files are not committed to Git. You'll need **Node.js 18+** and **npm**.
