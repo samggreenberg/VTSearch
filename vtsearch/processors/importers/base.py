@@ -48,11 +48,8 @@ Example -- a minimal S3 processor importer skeleton::
     PROCESSOR_IMPORTER = S3ProcessorImporter()
 
 Then create ``vtsearch/processors/importers/s3/requirements.txt`` containing
-``boto3`` and add::
-
-    -r vtsearch/processors/importers/s3/requirements.txt
-
-to ``requirements-processor-importers.txt``.
+``boto3``.  It will be auto-discovered and installed by
+``install-plugin-deps.sh``.
 """
 
 from __future__ import annotations

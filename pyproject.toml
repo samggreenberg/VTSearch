@@ -4,7 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 
-# Core dependencies — everything needed to run VTSearch with all media types.
+# Core dependencies — framework and shared libraries only.
+# Plugin-specific deps (media types, importers, exporters) live in each
+# plugin's own requirements.txt and are installed via install-plugin-deps.sh.
 dependencies = [
     "flask",
     "numpy",
@@ -13,16 +15,6 @@ dependencies = [
     "scikit-learn",
     "transformers",
     "pandas",
-    # Media types
-    "librosa",
-    "soundfile",
-    "opencv-python-headless<4.10",
-    "Pillow",
-    "ultralytics",
-    "sentence-transformers",
-    "PyMuPDF",
-    # Importers / exporters
-    "dnspython>=2.0.0",
     # Eval / visualization
     "matplotlib",
     "scipy",

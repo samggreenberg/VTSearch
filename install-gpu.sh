@@ -35,4 +35,8 @@ pip install --extra-index-url "$EXTRA_INDEX" \
   -e ".[gpu,dev]" \
   -q
 
+# Step 3: Install plugin-specific dependencies (media types, importers, etc.)
+echo "Installing plugin dependencies..."
+bash "$(dirname "$0")/install-plugin-deps.sh"
+
 echo "GPU dependencies installed successfully."

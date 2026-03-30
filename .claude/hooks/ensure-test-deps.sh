@@ -32,6 +32,10 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu \
   -e ".[cpu,dev]" \
   -q
 
+# Install plugin-specific dependencies (media types, importers, exporters).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/../../install-plugin-deps.sh"
+
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,
 # so added/removed packages are always in sync.

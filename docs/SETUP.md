@@ -126,12 +126,13 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document) are included in the base install — you just pick CPU or GPU for PyTorch.
+Core dependencies are declared in `pyproject.toml`. Plugin-specific dependencies (media types, importers, exporters) live in each plugin's own `requirements.txt` and are installed by `install-plugin-deps.sh`. You just pick CPU or GPU for PyTorch.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
 pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
@@ -142,7 +143,9 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version.
+The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version and runs `install-plugin-deps.sh` automatically.
+
+**Adding new plugin dependencies:** If you're developing a new plugin (importer, exporter, media type, etc.), just add a `requirements.txt` in your plugin's directory. The next `install-plugin-deps.sh` run will pick it up — no need to edit `pyproject.toml`.
 
 ## Building the frontend
 
