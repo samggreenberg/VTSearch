@@ -13,6 +13,7 @@
 }
 
 button {
+  min-width: 120px;
   padding: 8px 24px;
   border: 2px solid;
   border-radius: 6px;
@@ -20,22 +21,11 @@ button {
   font-weight: 500;
   cursor: pointer;
   background: transparent;
-  transition: background 0.15s, color 0.15s;
-
-  // Reserve space for bold text so buttons don't resize on hover.
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-
-  &::after {
-    content: attr(data-label);
-    font-weight: 700;
-    height: 0;
-    overflow: hidden;
-    visibility: hidden;
-    pointer-events: none;
-  }
+  gap: 6px;
 
   &:disabled {
     opacity: 0.5;
@@ -48,7 +38,7 @@ button {
   border-color: var(--color-good);
 
   &:hover:not(:disabled) {
-    font-weight: 700;
+    background: var(--good-bg);
   }
 
   &.voted,
@@ -63,7 +53,7 @@ button {
   border-color: var(--color-bad);
 
   &:hover:not(:disabled) {
-    font-weight: 700;
+    background: var(--bad-bg);
   }
 
   &.voted,

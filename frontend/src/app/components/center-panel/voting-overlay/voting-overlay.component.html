@@ -6,8 +6,8 @@
     [disabled]="disabled"
     (click)="onVoteBad()"
     title="Mark this media as a Bad example."
-    data-label="Bad"
   >
+    <vt-icon type="thumbs-down" [size]="18"></vt-icon>
     Bad
   </button>
   <button
@@ -17,8 +17,8 @@
     [disabled]="disabled"
     (click)="onVoteGood()"
     title="Mark this media as a Good example."
-    data-label="Good"
   >
+    <vt-icon type="thumbs-up" [size]="18"></vt-icon>
     Good
   </button>
 </div>

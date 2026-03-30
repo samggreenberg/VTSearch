@@ -13,6 +13,7 @@ const KNOWN_TYPES = new Set([
   'check', 'warning', 'x-circle', 'info', 'file', 'lightbulb',
   'list', 'grid', 'cursor-click', 'cursor-hover',
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
+  'thumbs-up', 'thumbs-down',
 ]);
 
 function emojiToType(icon: string): string {
@@ -153,6 +154,12 @@ function emojiToType(icon: string): string {
       }
       @case ('cloud-upload') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><polyline points="16 14 12 10 8 14"/><line x1="12" y1="10" x2="12" y2="20"/></svg>
+      }
+      @case ('thumbs-up') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+      }
+      @case ('thumbs-down') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
       }
     } }
   `,
