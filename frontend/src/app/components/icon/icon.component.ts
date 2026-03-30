@@ -143,7 +143,7 @@ function emojiToType(icon: string): string {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l6.5 16 2.5-6.5L19.5 11z"/></svg>
       }
       @case ('palette') {
-        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4c3 0 5.6-2.5 5.6-5.6C23 6.4 18 2 12 2z"/><circle cx="7.5" cy="11.5" r="1.5"/><circle cx="10" cy="7.5" r="1.5"/><circle cx="14.5" cy="7.5" r="1.5"/><circle cx="17.5" cy="11.5" r="1.5"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4c3 0 5.6-2.5 5.6-5.6C23 6.4 18 2 12 2z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/><circle cx="17.5" cy="11.5" r="1"/></svg>
       }
       @case ('sort-descending') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="4" x2="15" y2="4"/><line x1="3" y1="9" x2="13" y2="9"/><line x1="3" y1="14" x2="11" y2="14"/><line x1="3" y1="19" x2="9" y2="19"/><polyline points="19 10 19 20"/><polyline points="16 17 19 20 22 17"/></svg>
@@ -152,7 +152,7 @@ function emojiToType(icon: string): string {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><line x1="12" y1="4" x2="12" y2="1"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="4" y1="12" x2="1" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><line x1="6.34" y1="6.34" x2="4.22" y2="4.22"/><line x1="17.66" y1="6.34" x2="19.78" y2="4.22"/><line x1="6.34" y1="17.66" x2="4.22" y2="19.78"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/></svg>
       }
       @case ('cloud-upload') {
-        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><polyline points="16 14 12 10 8 14"/><line x1="12" y1="10" x2="12" y2="20"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
       }
     } }
   `,
