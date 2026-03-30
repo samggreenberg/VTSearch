@@ -26,6 +26,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  line-height: 1;
 
   &:disabled {
     opacity: 0.5;
