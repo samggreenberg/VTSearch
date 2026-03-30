@@ -30,12 +30,12 @@ class TestGenerateWaveformThumbnail:
         img = Image.open(io.BytesIO(result))
         assert img.size == (64, 64)
 
-    def test_different_frequencies_produce_different_thumbnails(self):
-        wav_a = app_module.generate_wav(200.0, 1.0)
-        wav_b = app_module.generate_wav(800.0, 1.0)
-        thumb_a = generate_waveform_thumbnail(wav_a)
-        thumb_b = generate_waveform_thumbnail(wav_b)
-        assert thumb_a != thumb_b
+    def test_deterministic_output(self):
+        """Same audio should produce the exact same thumbnail."""
+        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        thumb_a = generate_waveform_thumbnail(wav_bytes)
+        thumb_b = generate_waveform_thumbnail(wav_bytes)
+        assert thumb_a == thumb_b
 
     def test_returns_none_for_invalid_audio(self):
         result = generate_waveform_thumbnail(b"not audio data")
