@@ -13,7 +13,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-find-view',
@@ -221,6 +221,18 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
+    if (leftPanelEl) {
+      const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
+      if (snapped !== null) {
+        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+        const clamped = Math.max(this.LEFT_MIN, Math.min(leftMax, snapped));
+        this.ngZone.run(() => {
+          this.leftWidth = clamped;
+          this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
+        });
+      }
+    }
     this.savePanelPx('left');
   }
 
@@ -251,6 +263,19 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
+    const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
+    if (rightPanelEl) {
+      const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
+      if (snapped !== null) {
+        const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+        const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
+        this.ngZone.run(() => {
+          this.rightWidth = clamped;
+          this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
+        });
+      }
+    }
     this.savePanelPx('right');
   }
 
