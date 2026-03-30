@@ -2,6 +2,55 @@ import io
 import wave
 
 import app as app_module
+from vtsearch.media.audio.media_type import generate_waveform_thumbnail
+
+
+class TestGenerateWaveformThumbnail:
+    def test_returns_png_bytes(self):
+        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        result = generate_waveform_thumbnail(wav_bytes)
+        assert result is not None
+        assert isinstance(result, bytes)
+        # PNG magic number
+        assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_returns_square_image(self):
+        from PIL import Image
+
+        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        result = generate_waveform_thumbnail(wav_bytes)
+        img = Image.open(io.BytesIO(result))
+        assert img.size == (128, 128)
+
+    def test_custom_size(self):
+        from PIL import Image
+
+        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        result = generate_waveform_thumbnail(wav_bytes, size=64)
+        img = Image.open(io.BytesIO(result))
+        assert img.size == (64, 64)
+
+    def test_different_frequencies_produce_different_thumbnails(self):
+        wav_a = app_module.generate_wav(200.0, 1.0)
+        wav_b = app_module.generate_wav(800.0, 1.0)
+        thumb_a = generate_waveform_thumbnail(wav_a)
+        thumb_b = generate_waveform_thumbnail(wav_b)
+        assert thumb_a != thumb_b
+
+    def test_returns_none_for_invalid_audio(self):
+        result = generate_waveform_thumbnail(b"not audio data")
+        assert result is None
+
+    def test_returns_none_for_empty_bytes(self):
+        result = generate_waveform_thumbnail(b"")
+        assert result is None
+
+    def test_short_audio(self):
+        """Very short audio should still produce a thumbnail."""
+        wav_bytes = app_module.generate_wav(440.0, 0.01)
+        result = generate_waveform_thumbnail(wav_bytes)
+        assert result is not None
+        assert result[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 class TestGenerateWav:
