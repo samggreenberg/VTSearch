@@ -72,6 +72,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deletingDatasetId = '';
   deletingModelId = '';
   addLabelsModelId = '';
+  trainLoading = false;
+  findLoading = false;
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -984,6 +986,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();
+    this.trainLoading = true;
 
     // Set active context so the HTTP interceptor attaches headers
     this.activeContext.setDatasetId(dataset.id);
@@ -993,6 +996,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let pending = 2;
     const gate = (): void => {
       if (--pending === 0) {
+        this.trainLoading = false;
         this.datasetState.refresh();
         this.router.navigate(['/label']);
       }
@@ -1031,6 +1035,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.findSession.modelId = model.id;
     this.findSession.modelName = model.name;
     this.findSession.datasetId = dataset.id;
+    this.findLoading = true;
 
     // Set active context so the HTTP interceptor attaches headers
     this.activeContext.setDatasetId(dataset.id);
@@ -1040,6 +1045,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let pending = 2;
     const gate = (): void => {
       if (--pending === 0) {
+        this.findLoading = false;
         this.datasetState.refresh();
         this.router.navigate(['/find']);
       }
