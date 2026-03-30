@@ -43,6 +43,9 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeAnimation = true;
   showMetadata = true;
   swipeClass = '';
+  spinningVote: 'good' | 'bad' | null = null;
+
+  private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
   private subs: Subscription[] = [];
 
@@ -63,6 +66,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.stopPlayback();
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
+    if (this.spinTimer) clearTimeout(this.spinTimer);
   }
 
   /** Stop all media playback (used on navigation away). */
@@ -148,6 +152,9 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       next: () => {
         if (this.swipeAnimation && this.media) {
           this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
+          this.spinningVote = vote;
+          if (this.spinTimer) clearTimeout(this.spinTimer);
+          this.spinTimer = setTimeout(() => (this.spinningVote = null), 300);
           setTimeout(() => {
             this.mediaVoted.emit({ id: this.media!.id, vote });
             this.isVoting = false;
