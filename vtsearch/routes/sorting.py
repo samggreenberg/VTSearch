@@ -1,6 +1,7 @@
 """Blueprint for sorting and voting routes."""
 
 import json
+import logging
 import threading
 from pathlib import Path
 
@@ -142,21 +143,26 @@ def sort_clips():
     embedder_name = first.get("embedder", "")
     total_steps = 3  # load embedder, embed query, compute similarities
 
-    _load_embedder_with_progress(media_type, total_steps)
-    update_sort_progress("sorting", "Embedding text query…", 1, total_steps)
+    try:
+        _load_embedder_with_progress(media_type, total_steps)
+        update_sort_progress("sorting", "Embedding text query…", 1, total_steps)
 
-    from vtsearch import settings
+        from vtsearch import settings
 
-    enrich = settings.get_enrich_descriptions()
-    text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
-    if text_vec is None:
+        enrich = settings.get_enrich_descriptions()
+        text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
+        if text_vec is None:
+            update_sort_progress("idle")
+            return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
+
+        update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
+        results, threshold = _cosine_sort(text_vec)
         update_sort_progress("idle")
-        return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
-
-    update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
-    results, threshold = _cosine_sort(text_vec)
-    update_sort_progress("idle")
-    return jsonify({"results": results, "threshold": threshold})
+        return jsonify({"results": results, "threshold": threshold})
+    except Exception:
+        logging.getLogger(__name__).exception("text sort failed")
+        update_sort_progress("idle")
+        return jsonify({"error": "Text sort failed"}), 500
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -84,7 +85,7 @@ class TextE5Embedder(MediaEmbedder):
                 return None
             return self._model.encode(f"passage: {text_content}", normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding {file_path}: {e}")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_text_passage(self, text: str) -> Optional[np.ndarray]:
@@ -96,7 +97,7 @@ class TextE5Embedder(MediaEmbedder):
         try:
             return self._model.encode(f"passage: {text}", normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding passage: {e}")
+            logging.getLogger(__name__).exception("Error embedding passage")
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -107,7 +108,7 @@ class TextE5Embedder(MediaEmbedder):
         try:
             return self._model.encode(f"query: {text}", normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding text query for text: {e}")
+            logging.getLogger(__name__).exception("Error embedding text query for text")
             return None
 
     # Internal helper used by loader.py bridge
