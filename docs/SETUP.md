@@ -144,7 +144,9 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version and runs `install-plugin-deps.sh` automatically.
+`install-gpu.sh` is an all-in-one script — it runs `install-plugin-deps.sh` automatically, installs all dependencies with the correct CUDA PyTorch build, and does the editable install. No extra steps needed.
+
+The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
 
 ## Building the frontend
 
