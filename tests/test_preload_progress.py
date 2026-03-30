@@ -482,3 +482,108 @@ class TestLoadPretrainedLocalFirst:
             assert False, "Should have raised ConnectionError"
         except ConnectionError:
             pass
+
+    @patch("vtsearch.media.base.time.sleep")
+    def test_retries_on_transient_hf_hub_error(self, mock_sleep):
+        """Transient HfHubHTTPError (5xx) should be retried with backoff."""
+        network_calls = [0]
+        sentinel = object()
+
+        # Simulate HfHubHTTPError by creating a class with the right name.
+        class HfHubHTTPError(Exception):
+            pass
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
+                raise HfHubHTTPError("Server error '504 Gateway Time-out' for url '...'")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        # 2 failed network + 1 successful network = 3
+        assert network_calls[0] == 3
+        # Should have slept twice (2s, 4s backoff).
+        assert mock_sleep.call_count == 2
+        assert mock_sleep.call_args_list[0][0][0] == 2
+        assert mock_sleep.call_args_list[1][0][0] == 4
+
+    @patch("vtsearch.media.base.time.sleep")
+    def test_retries_exhausted_raises_last_error(self, mock_sleep):
+        """When all retries are exhausted, the last transient error is raised."""
+        errors = []
+
+        class HfHubHTTPError(Exception):
+            pass
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            exc = HfHubHTTPError(f"502 Bad Gateway (attempt {len(errors) + 1})")
+            errors.append(exc)
+            raise exc
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised HfHubHTTPError"
+        except Exception as exc:
+            # Should be the last error raised.
+            assert exc is errors[-1]
+            assert "attempt 3" in str(exc)
+
+    @patch("vtsearch.media.base.time.sleep")
+    def test_non_transient_error_not_retried(self, mock_sleep):
+        """Non-transient errors (e.g. 404) should not be retried."""
+
+        class HfHubHTTPError(Exception):
+            pass
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            raise HfHubHTTPError("404 Not Found for url '...'")
+
+        try:
+            load_pretrained_local_first(fake_load, "model-id")
+            assert False, "Should have raised HfHubHTTPError"
+        except Exception:
+            pass
+        mock_sleep.assert_not_called()
+
+    @patch("vtsearch.media.base.time.sleep")
+    def test_retries_on_connection_error(self, mock_sleep):
+        """ConnectionError should be retried as transient."""
+        network_calls = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
+                raise ConnectionError("connection reset by peer")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert mock_sleep.call_count == 2
+
+    @patch("vtsearch.media.base.time.sleep")
+    def test_retries_on_timeout_error(self, mock_sleep):
+        """TimeoutError should be retried as transient."""
+        network_calls = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            network_calls[0] += 1
+            if network_calls[0] <= 2:
+                raise TimeoutError("request timed out")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert mock_sleep.call_count == 2
