@@ -46,8 +46,10 @@ POST /api/find
 → ```json
 {
   "results": [...],
-  "datasets": [...],
-  "models": [...],
+  "negative_results": [...],
+  "datasets": ["ESC-50", "Speech Commands"],
+  "models": ["Dog Barks"],
+  "media_type": "audio",
   "multiple_datasets": true,
   "multiple_models": false,
   "total_hits": 42

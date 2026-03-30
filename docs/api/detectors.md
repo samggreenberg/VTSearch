@@ -14,7 +14,7 @@ POST /api/detector/export
 
 Trains an MLP on current votes and exports weights.
 
-→ `{"weights": {...}, "threshold": 0.5}`
+→ `{"weights": {...}, "threshold": 0.5, "good_origins": [...], "bad_origins": [...], "inclusion": 0}`
 
 ### Export detector to server file
 
@@ -24,7 +24,7 @@ POST /api/detector/export-server
 
 **Body:** `{"name": "my_detector", "overwrite": false}`
 
-→ `{"success": true, "name": "my_detector", "path": "/abs/path.json", "threshold": 0.5, "media_type": "audio"}`
+→ `{"success": true, "name": "my_detector", "media_type": "audio"}`
 
 409 if name exists and `overwrite` is `false`.
 
@@ -34,7 +34,7 @@ POST /api/detector/export-server
 GET /api/detector/server-files
 ```
 
-→ `{"files": [{"name": "my_detector", "path": "/abs/path.json", "size_bytes": 1234}]}`
+→ `{"files": [{"name": "my_detector", "filename": "my_detector.json", "size_bytes": 1234}]}`
 
 ### Get server detector file
 
@@ -107,7 +107,7 @@ POST /api/autorun-detectors/{name}/export-server
 
 **Body:** `{"filename": "detector.json", "overwrite": false}`
 
-→ `{"success": true, "name": "...", "path": "..."}`
+→ `{"success": true, "name": "..."}`
 
 ```
 GET /api/autorun-detectors/{name}/examples

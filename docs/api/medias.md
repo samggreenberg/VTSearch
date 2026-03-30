@@ -53,8 +53,8 @@ GET /api/medias/{media_id}/audio
 GET /api/medias/{media_id}/video
 ```
 
-→ Video binary stream (`video/mp4`, `video/webm`, `video/quicktime`, or
-`video/x-msvideo` based on filename extension).
+→ Video binary stream (`video/mp4`, `video/webm`, or `video/ogg` based on
+filename extension). Non-browser-playable formats are transcoded to MP4.
 400 if not a video. 404 if not found.
 
 ### Stream image
@@ -168,7 +168,51 @@ Same as example sort but uses a file already on the server in
 GET /api/server-media-files
 ```
 
-→ `{"files": [{"name": "example", "filename": "example.wav", "path": "/abs/path", "size_bytes": 160044}]}`
+→ `{"files": [{"name": "example", "filename": "example.wav", "size_bytes": 160044}]}`
+
+### Example sort (origin)
+
+```
+POST /api/example-sort-origin
+```
+
+**Body:** `{"origin": {"importer": "folder", "params": {"path": "/data/sounds"}}, "key": "subdir/audio123.wav"}`
+
+Sorts by similarity to a file resolved from an origin dict.
+
+→ `{"results": [...], "threshold": 0.5123}`
+
+### Upload server media file
+
+```
+POST /api/server-media-files/upload
+```
+
+**Form:** `file` — media file to upload.
+
+→ `{"filename": "abc123.wav", "original_name": "dog_bark.wav"}` (201)
+
+### Seed votes from examples
+
+```
+POST /api/votes/seed-from-examples
+```
+
+Seeds good votes from the active model's media examples.
+
+→ `{"ok": true, "seeded": 5}`
+
+### Batch media metadata
+
+```
+POST /api/medias/batch
+```
+
+**Body:** `{"ids": [0, 1, 2], "offset": 0, "limit": 50}`
+
+Paginated media metadata retrieval.
+
+→ `{"medias": [...], "total": 500}`
 
 ### Label-file sort
 

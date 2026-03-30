@@ -133,9 +133,34 @@ POST /api/models/registry/load
 
 **Body:** `{"model_id": "abc123"}` — pass `null` to unload.
 
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
+
+Loading is async — poll `GET /api/models/loading-tasks` for progress.
+404 if model not found.
+
+### Unload model
+
+```
+POST /api/models/registry/{model_id}/unload
+```
+
 → `{"ok": true}`
 
-404 if model not found.
+### Model loading tasks
+
+```
+GET /api/models/loading-tasks
+```
+
+→ `{"tasks": [{"id": "...", "name": "...", "status": "loading", "message": "...", "cur": 50, "total": 100}]}`
+
+### Cancel model loading
+
+```
+POST /api/models/cancel/{task_id}
+```
+
+→ `{"ok": true}`
 
 ### Delete registered model
 

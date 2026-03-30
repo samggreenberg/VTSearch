@@ -50,7 +50,7 @@ deployments. Runs locally or in Docker.
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
-| [plan-media-sources.md](plan-media-sources.md) | Future MediaSource abstraction design proposal |
+| [plan-media-sources.md](plan-media-sources.md) | MediaSource abstraction design document (implemented) |
 | [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (bidirectional settings/labelset sync) |
 | [design/](design/) | Architecture design documents (CLI detector-converter pipeline) |
 
@@ -63,7 +63,7 @@ deployments. Runs locally or in Docker.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
-python app.py --local        # lazy model loading, faster startup
+python app.py --local        # binds to 0.0.0.0 (network-accessible)
 ```
 
 ### Docker (recommended for deployment)
@@ -90,8 +90,10 @@ All clips live in a global dict keyed by integer ID.
 ### Votes
 
 Users vote clips as **good** or **bad**. Votes are stored as
-`dict[int, None]` (not sets) in `vtsearch/utils/state.py`. Votes drive
-both the learned-sort training and the label export.
+`dict[int, None]` (not sets) per-detector in `DetectorContext` objects
+(defined in `vtsearch/utils/state_core.py`, re-exported via
+`vtsearch/utils/state.py`). Votes drive both the learned-sort training
+and the label export.
 
 ### Media types
 
@@ -123,7 +125,8 @@ of **processors** and can be exported/imported as JSON files.
 
 ### Plugin systems
 
-Six auto-discovered plugin systems share the same architecture:
+Ten auto-discovered plugin systems share the same `PluginRegistry`
+architecture:
 
 - **Dataset importers** — load data from folders, pickles, HTTP archives,
   combined datasets, or demo catalogues.
@@ -166,10 +169,10 @@ argument parsing. Key startup sequence:
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
 | Authentication | `vtsearch/auth/` (LoginProvider ABC, DefaultLoginProvider) |
-| Global state (medias, votes) | `vtsearch/utils/state.py` |
+| Global state (medias, votes) | `vtsearch/utils/state_core.py` (re-exported via `state.py`) |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
 | ML training and inference | `vtsearch/models/training.py` |
-| Embedding models | `vtsearch/media/{audio,image,text,video,document}/media_type.py` |
+| Embedding models | `vtsearch/media/{audio,image,text,video}/embedder.py` |
 | Media converters | `vtsearch/converters/` |
 | Trainable model definitions | `vtsearch/routes/trainable_models.py` → `data/trainable_models/` |
 | Dataset loading and downloading | `vtsearch/datasets/` |
@@ -187,7 +190,8 @@ argument parsing. Key startup sequence:
   some modules import specific helpers (e.g. `update_progress`,
   `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory. Dependencies
-  are declared in `pyproject.toml` under `[project.optional-dependencies]`.
+  are declared in per-plugin `requirements.txt` files, auto-discovered
+  by `install-plugin-deps.sh`.
 
 ---
 
@@ -311,12 +315,12 @@ providers (e.g. PKI, OAuth, username/password) without changing route
 code. The `created_by` field on detectors, datasets, and models tracks
 ownership, and `get_user_data_dir()` supports per-user data directories.
 
-**Current limitation:** In-memory state (votes, medias, labels) and
-settings are still global. Full multi-user isolation of runtime state
-is not yet implemented — the auth infrastructure enables metadata
-tracking and per-user data directories, but votes and loaded datasets
-are shared. Running multiple simultaneous users against a single
-instance with DefaultLoginProvider will cause vote conflicts.
+**Current scope:** Per-dataset and per-detector runtime state is isolated
+via `DatasetContext` and `DetectorContext` proxy objects (see
+[ARCHITECTURE.md](ARCHITECTURE.md#multi-dataset-support)). Each user
+can work with different datasets/models simultaneously via
+`X-Dataset-Id`/`X-Model-Id` headers. Settings remain global (shared
+across all users).
 
 ### Memory usage
 

@@ -201,7 +201,7 @@ You should see output like:
  * Running on http://127.0.0.1:5000
 ```
 
-Open that URL in your browser. For faster startup during development, use `--local` mode (loads embedding models lazily instead of eagerly):
+Open that URL in your browser. Use `--local` mode to bind to `0.0.0.0:5000` (accessible from other devices on the network) instead of localhost only:
 
 ```bash
 python app.py --local
@@ -231,6 +231,11 @@ Or with plain Docker:
 docker build -t vtsearch .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 ```
+
+> **Note:** The Dockerfile does not include a Node.js build stage. You must
+> build the frontend locally (`cd frontend && npm install && npm run build:prod`)
+> before running `docker build`, so the `static/` directory contains the
+> compiled Angular app.
 
 ### GPU
 

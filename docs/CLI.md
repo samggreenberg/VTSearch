@@ -76,24 +76,22 @@ Items with origin information include the origin display string before the filen
 
 ## Web server modes
 
-**Default (production) mode** — loads all embedding models eagerly at startup,
-then starts the server.  The app is fully ready when the startup message
-appears:
+**Default (production) mode** — binds to `127.0.0.1:5000` (localhost only):
 
 ```bash
 python app.py
 ```
 
-**Development mode** (`--local`) — skips eager model loading; models load
-lazily the first time a dataset of that media type is opened.  Faster to
-start, but the first dataset load is slower:
+**Local mode** (`--local`) — binds to `0.0.0.0:5000` (accessible from other
+devices on the network):
 
 ```bash
 python app.py --local
 ```
 
-Production mode binds to `127.0.0.1:5000` (localhost only).  `--local` mode
-binds to `0.0.0.0:5000` (accessible from other devices on the network).
+Both modes run the same startup sequence (model initialization, autoload
+preloading, settings source sync). The only difference is the network bind
+address.
 
 **Authentication mode** (`--login`) — select the login provider:
 
