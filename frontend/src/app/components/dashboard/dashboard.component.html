@@ -198,6 +198,7 @@
 @if (importerModalOpen) {
   <vt-dataset-importer-modal
     [guessedMediaType]="guessedMediaType"
+    [guessedMediaEmbedder]="guessedMediaEmbedder"
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
     (demoSelected)="onDemoSelected($event)"
