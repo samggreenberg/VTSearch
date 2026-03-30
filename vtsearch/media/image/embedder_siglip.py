@@ -69,9 +69,15 @@ class ImageSiglipEmbedder(MediaEmbedder):
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading SigLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = load_pretrained_local_first(
-                SiglipProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+            from transformers import SiglipImageProcessor, SiglipTokenizer  # noqa: PLC0415
+
+            image_processor = load_pretrained_local_first(
+                SiglipImageProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
             )
+            tokenizer = load_pretrained_local_first(
+                SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+            )
+            self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # ------------------------------------------------------------------
     # Embedding
