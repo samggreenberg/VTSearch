@@ -30,6 +30,9 @@
   cursor: pointer;
   text-align: left;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
 
   &:hover {
     color: var(--text-primary);
@@ -234,6 +237,15 @@
 
 .embedder-media-type-icon {
   font-size: 1rem;
+}
+
+.settings-tab-icon {
+  transition: transform 0.3s ease;
+  transform: rotate(0deg);
+
+  &--active {
+    transform: rotate(90deg);
+  }
 }
 
 .settings-actions {
