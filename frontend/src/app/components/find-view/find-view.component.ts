@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, Subscription, timer } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { finalize, switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -153,16 +153,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const datasetId = this.findSession.datasetId;
     this.detectorsApi.findLabel({ model_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.stopProgressPolling();
+          this.sortState.setSortBusy(false);
+        }),
+      )
       .subscribe({
         next: (response: any) => {
-          this.stopProgressPolling();
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score }));
           const threshold = response.threshold;
           // Set sort results for stripe display
           this.sortState.setSortResults(sorted, threshold);
           this.sortState.setLoadSortLabel(this.findSession.modelName || 'Detector');
-          this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
           // Select the item just above the threshold (last item with score >= threshold)
@@ -183,8 +187,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.voteState.loadVotes();
         },
         error: (err: any) => {
-          this.stopProgressPolling();
-          this.sortState.setSortBusy(false);
           // Extract the server error message so the user sees why scoring failed
           const body = err?.error;
           const warning = body?.warning || body?.error || 'Scoring failed';
