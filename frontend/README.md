@@ -24,15 +24,9 @@ You must run `npm install` before the first build to install Angular CLI and oth
 
 ## Running unit tests
 
-```bash
-ng test --watch=false
-```
-
-Uses [Karma](https://karma-runner.github.io) as the test runner.
-
-> **Note:** Karma requires Chrome or Chromium. In cloud/container
-> environments where a browser is not available, frontend unit tests will
-> fail. The Python backend tests (`./run-tests.sh`) work without a browser.
+Karma has been removed from this project. There is currently no browser-based
+frontend test runner configured. The Python backend tests (`./run-tests.sh`)
+include a frontend TypeScript build check.
 
 ## Code scaffolding
 

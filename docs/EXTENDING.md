@@ -43,7 +43,7 @@ families use the same field type (aliased as `ImporterField`,
 |---------------|-------------|----------|---------------------------------------------------------|
 | `key`         | `str`       | —        | Field identifier (dict key in `field_values`)           |
 | `label`       | `str`       | —        | Display label in the UI                                 |
-| `field_type`  | `FieldType` | —        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, or `"select"` |
+| `field_type`  | `FieldType` | —        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, `"select"`, or `"server_path"` |
 | `description` | `str`       | `""`     | Helper text shown below the field                       |
 | `accept`      | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
 | `options`     | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
@@ -84,10 +84,11 @@ serialisation. All plugin base classes inherit from it.
 ### PluginRegistry (Auto-Discovery)
 
 All plugin families use `PluginRegistry` for auto-discovery. The
-registry uses `pkgutil.iter_modules` to scan for **sub-packages**
-(directories with `__init__.py`) under the plugin directory. For each
-sub-package, it imports the module and looks for a module-level sentinel
-attribute. If found, the plugin is registered by its `name`.
+registry uses direct filesystem scanning (`Path.iterdir()`) to find
+**sub-packages** (directories with `__init__.py`) under the plugin
+directory. For each sub-package, it imports the module and looks for a
+module-level sentinel attribute. If found, the plugin is registered by
+its `name`.
 
 | Plugin Family       | Package                            | Sentinel              | Base Class          |
 |---------------------|------------------------------------|-----------------------|---------------------|
@@ -99,6 +100,8 @@ attribute. If found, the plugin is registered by its `name`.
 | Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  |
 | Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    |
 | Labelset Sources    | `vtsearch.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    |
+| Media Converters    | `vtsearch.converters`              | `CONVERTER`           | `MediaConverter`    |
+| Media Sources       | `vtsearch.datasets.sources`        | `SOURCE`              | `MediaSource`       |
 
 Failed imports emit a warning but do not break the application — a missing
 optional dependency gracefully disables that plugin.
@@ -842,7 +845,7 @@ datasets are available, and how to load media-specific fields from files.
 
 ```
 vtsearch/media/<your_type>/
-├── __init__.py       # Can be empty
+├── __init__.py       # Must expose MEDIA_TYPE, EMBEDDERS, CLIPPERS sentinels
 └── media_type.py     # Your MediaType subclass (required)
 ```
 
@@ -877,7 +880,7 @@ class CodeMediaType(MediaType):
 
     @property
     def icon(self) -> str:
-        return "💻"
+        return "code"  # SVG icon type name for the UI
 
     # --- File import (required abstract property) ---
 
@@ -955,7 +958,7 @@ changes to `vtsearch/media/__init__.py` are needed.
 |-------------------|-------------|--------------------------------------|
 | `type_id`         | `str`       | `"audio"`, `"image"`, `"code"`       |
 | `name`            | `str`       | `"Audio"`, `"Source Code"`           |
-| `icon`            | `str`       | `"🔊"`, `"💻"`                       |
+| `icon`            | `str`       | `"audio"`, `"code"` (SVG icon type name) |
 | `file_extensions` | `list[str]` | `["*.wav", "*.mp3"]`                 |
 | `loops`           | `bool`      | `True` for audio/video, else `False` |
 | `demo_datasets`   | `list[DemoDataset]` | See example above              |
@@ -1297,9 +1300,9 @@ Each dict in the returned list must:
 ## Adding a Media Converter
 
 Media converters transform content from one media type to another (e.g.
-document pages to images, video to audio). Converters use **explicit
-registration** in `vtsearch/converters/__init__.py` — they are not
-auto-discovered.
+document pages to images, video to audio). Converters are
+**auto-discovered** via `PluginRegistry` with the `CONVERTER` sentinel,
+just like other plugin families.
 
 ### Built-in converters
 
@@ -1359,28 +1362,27 @@ class Audio2TextMediaConverter(MediaConverter):
 
 ### Register the converter
 
-Edit `vtsearch/converters/__init__.py`:
+Expose a `CONVERTER` sentinel at module level in your converter file:
 
-1. Add the import at the top:
-   ```python
-   from vtsearch.converters.audio2text import Audio2TextMediaConverter
-   ```
+```python
+# At the bottom of vtsearch/converters/audio2text.py
 
-2. Add to `_ALL_CONVERTERS`:
-   ```python
-   _ALL_CONVERTERS: list[MediaConverter] = [
-       # ... existing converters ...
-       Audio2TextMediaConverter(),
-   ]
-   ```
+CONVERTER = Audio2TextMediaConverter()
+```
 
-3. Add to `__all__`:
+The `PluginRegistry` auto-discovers `.py` files in `vtsearch/converters/`
+that expose a `CONVERTER` attribute. No manual registration in
+`__init__.py` is needed.
+
+<!--
+   Old explicit registration (no longer needed):
    ```python
    __all__ = [
        # ... existing entries ...
        "Audio2TextMediaConverter",
    ]
    ```
+-->
 
 ### MediaConverter abstract interface reference
 
@@ -1673,8 +1675,7 @@ missing dependencies degrade gracefully.
 
 - [ ] Create `vtsearch/converters/<source>2<target>.py`
 - [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
-- [ ] Add import and list entry in `vtsearch/converters/__init__.py`
-- [ ] Add to `__all__` in `vtsearch/converters/__init__.py`
+- [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid
 
 ### New Detector / Localizer / Extractor Checklist

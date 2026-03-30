@@ -6,50 +6,30 @@ Structural improvements identified March 2026. Each section is a self-contained 
 
 ## Phase 1: Split Oversized Files
 
-### 1.1 Split `datasets/loader.py` (1,766 lines)
+### 1.1 ~~Split `datasets/loader.py`~~ ✅ DONE
 
-**Problem:** Single file with 5+ responsibilities: pickle security, metadata extraction, dataset loading, converter integration, PDF rendering.
-
-**Steps:**
-1. Extract `RestrictedUnpickler` and `safe_pickle_load` into `datasets/pickle_security.py`
-2. Extract video/image/text/audio/document metadata extraction functions into `datasets/metadata.py`
-3. Move converter integration (`run_converters_on_dataset`, embedding of converter output) into `converters/runner.py`
-4. Keep core `load_dataset_from_folder` and pickle I/O in `loader.py`
-5. Update all imports across the codebase
-
-**Files affected:** `datasets/loader.py`, `routes/datasets.py`, `routes/datasets_loading.py`, `routes/datasets_ui.py`, `routes/detectors_training.py`, `cli.py`
+Completed. Pickle security moved to `datasets/pickle_security.py`, metadata
+extraction to `datasets/metadata.py`, converter integration to
+`converters/runner.py` (as `run_converters_on_folder`). `loader.py` is now
+~1,200 lines (down from 1,766).
 
 ---
 
-### 1.2 Split `routes/sorting.py` (1,138 lines) into focused blueprints
+### 1.2 ~~Split `routes/sorting.py`~~ ✅ DONE
 
-**Problem:** Contains sorting, label management, server media files, and evaluation endpoints in one file.
-
-**Steps:**
-1. Extract label endpoints into `routes/labels.py` blueprint:
-   - `export_labels()`, `import_labels()`, `fill_labels_from_sort()`
-2. Extract server media file endpoints into `routes/medias.py` (or new `routes/media_server.py`):
-   - `upload_server_media_file()`, `list_server_media_files()`, `example_sort_server()`
-3. Extract evaluation endpoints into `routes/eval.py` blueprint:
-   - `eval_train_and_score()`, `eval_voting_iterations()`, `labeling_progress()`
-4. Keep core sort endpoints in `sorting.py`: `sort()`, `learned_sort()`, `example_sort()`, voting
-5. Register new blueprints in `app.py`
-
-**Files affected:** `routes/sorting.py`, `app.py`, frontend API calls referencing these endpoints
+Completed. Label endpoints moved to `routes/labels.py`, server media files
+to `routes/media_server.py`, evaluation endpoints to `routes/eval.py`.
+`sorting.py` is now ~565 lines (down from 1,138).
 
 ---
 
-### 1.3 Extract business logic from `routes/trainable_models.py` (1,194 lines)
+### 1.3 ~~Extract business logic from `routes/trainable_models.py`~~ ✅ DONE
 
-**Problem:** Route handlers contain 100+ line private functions doing media embedding, MD5 matching, label restoration, and model retraining.
-
-**Steps:**
-1. Extract `_seed_good_votes_from_examples()` into `models/media_seeding.py`
-2. Extract `_restore_labels_from_trainable_model()` into `models/label_restoration.py`
-3. Extract `_apply_and_retrain()` into `models/training.py` (or new `models/training_workflow.py`)
-4. Route handlers become thin delegators (10-20 lines each)
-
-**Files affected:** `routes/trainable_models.py`, `models/`
+Completed. `_seed_good_votes_from_examples()` moved to
+`models/media_seeding.py`, `_restore_labels_from_trainable_model()` to
+`models/label_restoration.py`, `_apply_and_retrain()` to
+`models/training_workflow.py`. `trainable_models.py` is now ~859 lines
+(down from 1,194).
 
 ---
 
@@ -123,23 +103,15 @@ Structural improvements identified March 2026. Each section is a self-contained 
 
 ---
 
-### 3.2 Extend `PluginRegistry` to converters and sources
+### 3.2 ~~Extend `PluginRegistry` to converters and sources~~ ✅ DONE
 
-**Problem:** Converters use a static list in `__init__.py`. Sources use a hardcoded if/elif factory. Downloaders use hand-coded re-exports. Meanwhile exporters, importers, label importers, and processor importers all use the excellent `PluginRegistry` auto-discovery.
-
-**Steps:**
-1. Add `CONVERTER` sentinel to each converter module
-2. Create `PluginRegistry` instance in `converters/__init__.py`
-3. Add `SOURCE` sentinel to each source module
-4. Create `PluginRegistry` instance in `datasets/sources/__init__.py`
-5. Replace `get_source_for_origin()` hardcoded factory with registry lookup
-6. Consider doing the same for downloaders (lower priority since they're less dynamic)
-
-**Files affected:** `converters/__init__.py`, `converters/*.py`, `datasets/sources/__init__.py`, `datasets/sources/*.py`
+Completed. Converters now use `PluginRegistry` with `CONVERTER` sentinel.
+Media sources use `PluginRegistry` with `SOURCE` sentinel. Both are
+auto-discovered like all other plugin families.
 
 ---
 
-### 3.3 Reduce `settings.py` boilerplate (889 lines)
+### 3.3 Reduce `settings.py` boilerplate (~839 lines)
 
 **Problem:** ~70% of the file is copy-pasted accessor patterns for left/right per-media-type settings, each with legacy scalar coercion.
 
@@ -154,15 +126,14 @@ Structural improvements identified March 2026. Each section is a self-contained 
 
 ---
 
-### 3.4 Clean up `utils/state_core.py` dead code and proxy complexity
+### 3.4 Clean up `utils/state_core.py` proxy complexity
 
-**Problem:** Dead module-level variables (lines 507-512), 35+ manually overridden proxy methods, and hidden data dependencies.
+**Problem:** 35+ manually overridden proxy methods and hidden data dependencies.
 
 **Steps:**
-1. Remove dead code (`_click_counter`, `_dataset_display_name`, `_diversity_tree`, `inclusion` at module level)
-2. Document the proxy pattern with clear warnings about implicit context dependency
-3. Consider adding a `with_context(dataset_id)` context manager for explicit, scoped context switching
-4. Long-term: evaluate migrating to explicit context passing (breaking change, needs careful planning)
+1. Document the proxy pattern with clear warnings about implicit context dependency
+2. Consider adding a `with_context(dataset_id)` context manager for explicit, scoped context switching
+3. Long-term: evaluate migrating to explicit context passing (breaking change, needs careful planning)
 
 **Files affected:** `utils/state_core.py`, potentially all files that import from `utils/`
 
@@ -182,16 +153,16 @@ Structural improvements identified March 2026. Each section is a self-contained 
 
 ---
 
-### 4.2 Remove deprecated settings functions
+### 4.2 Review autoload media embedder settings functions
 
-**Problem:** 3 functions in `settings.py` marked `.. deprecated::`.
+**Problem:** `get_autoload_media_embedders`, `set_autoload_media_embedders`, `toggle_autoload_media_embedder` in `settings.py` may have limited usage.
 
 **Steps:**
-1. Grep for callers of `get_autoload_media_embedders`, `set_autoload_media_embedders`, `toggle_autoload_media_embedder`
-2. If no callers remain, delete the functions
-3. If callers exist, migrate them to the replacement API
+1. Grep for callers of these functions
+2. If no callers remain, delete them
+3. If callers exist, evaluate whether they should use a different API
 
-**Files affected:** `settings.py`, any remaining callers
+**Files affected:** `settings.py`, any callers
 
 ---
 

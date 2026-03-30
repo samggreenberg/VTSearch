@@ -126,19 +126,19 @@ Field values support `{username}` template (resolved via `get_current_user()`).
 GET /api/settings-sources
 ```
 
-→ ```json
-{
-  "sources": [
-    {
-      "name": "server_json_file",
-      "display_name": "Server JSON File",
-      "icon": "🔄",
-      "fields": [
-        {"key": "filepath", "label": "Server file path", "type": "server_path", ...}
-      ]
-    }
-  ]
-}
+→ JSON array of source plugin objects:
+
+```json
+[
+  {
+    "name": "server_json_file",
+    "display_name": "Server JSON File",
+    "icon": "🔄",
+    "fields": [
+      {"key": "filepath", "label": "Server file path", "type": "server_path"}
+    ]
+  }
+]
 ```
 
 ### Get active settings source
@@ -147,7 +147,7 @@ GET /api/settings-sources
 GET /api/settings-sources/active
 ```
 
-→ `{"source": {"source_name": "server_json_file", "field_values": {"filepath": "data/{username}.settings.json"}}}` or `{"source": null}`.
+→ `{"source_name": "server_json_file", "field_values": {"filepath": "data/{username}.settings.json"}}` or `null`.
 
 ### Set or clear active settings source
 
@@ -159,9 +159,9 @@ PUT /api/settings-sources/active
 
 To clear: `{"source_name": null}`
 
-→ `{"ok": true}`
+→ `{"ok": true, "message": "..."}`
 
-400 if source_name is unknown.
+404 if source_name is unknown.
 
 ### Force sync from settings source
 
@@ -171,9 +171,9 @@ POST /api/settings-sources/sync
 
 Imports settings from the active source into the app.
 
-→ `{"ok": true, "settings": {"volume": 80, "theme": "dark", ...}}`
+→ `{"ok": true, "message": "Imported 5 setting(s) from source.", "keys": ["volume", "theme", ...]}`
 
-If no source is configured: `{"error": "No active settings source configured"}` (400).
+If no source is configured: `{"ok": false, "message": "No settings source configured or source is empty."}`.
 
 ---
 
@@ -192,19 +192,19 @@ Field values support `{detector_id}` and `{detector_name}` templates
 GET /api/labelset-sources
 ```
 
-→ ```json
-{
-  "sources": [
-    {
-      "name": "server_json_file",
-      "display_name": "Server JSON File",
-      "icon": "🔄",
-      "fields": [
-        {"key": "filepath", "label": "Server file path", "type": "server_path", ...}
-      ]
-    }
-  ]
-}
+→ JSON array of source plugin objects:
+
+```json
+[
+  {
+    "name": "server_json_file",
+    "display_name": "Server JSON File",
+    "icon": "🔄",
+    "fields": [
+      {"key": "filepath", "label": "Server file path", "type": "server_path"}
+    ]
+  }
+]
 ```
 
 ### Get detector's labelset source
@@ -213,7 +213,7 @@ GET /api/labelset-sources
 GET /api/detectors/{name}/labelset-source
 ```
 
-→ `{"source": {"source_name": "server_json_file", "field_values": {"filepath": "..."}}}` or `{"source": null}`.
+→ `{"source_name": "server_json_file", "field_values": {"filepath": "..."}}` or `null`.
 
 404 if detector not found.
 
@@ -227,9 +227,9 @@ PUT /api/detectors/{name}/labelset-source
 
 To clear: `{"source_name": null}`
 
-→ `{"ok": true}`
+→ `{"ok": true, "message": "..."}`
 
-400 if source_name is unknown. 404 if detector not found.
+404 if source_name is unknown. 404 if detector not found.
 
 ### Force sync from labelset source
 
@@ -239,6 +239,6 @@ POST /api/detectors/{name}/labelset-source/sync
 
 Imports labels from the detector's linked source.
 
-→ `{"ok": true, "imported": 42}` (number of labels applied)
+→ `{"ok": true, "message": "Imported 42 label(s) from source."}`
 
-400 if no source configured. 404 if detector not found.
+If no source configured: `{"ok": false, "message": "..."}`. 404 if detector not found.

@@ -281,8 +281,10 @@ modules on the right.
 
 - **media types do NOT import Flask.**  They return a `MediaResponse`
   dataclass; the route layer converts it to a Flask response.
-- **models/ do NOT import Flask or global state.**  Functions accept
-  `clips_dict`, `good_votes`, `bad_votes` etc. as parameters.
+- **Most of models/ does NOT import Flask or global state** — core
+  functions in `training.py`, `progress.py`, `embeddings.py` accept
+  parameters only.  The exception is `training_workflow.py`, which
+  imports `flask.g` for request-scoped context resolution.
 - **exporters, label importers, processor importers, and sync sources
   are fully standalone.**  They receive a plain dict and return a plain
   dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`,
@@ -336,9 +338,11 @@ modules on the right.
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a 2-layer MLP classifier on
-embeddings + binary labels.  `find_optimal_threshold()` uses a GMM to
-pick a decision boundary with configurable FPR/FNR trade-off via an
-`inclusion` parameter.
+embeddings + binary labels.  `find_optimal_threshold()` iterates over
+candidate thresholds to minimize weighted FPR+FNR with configurable
+trade-off via an `inclusion` parameter.  A separate
+`calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
+thresholds.
 
 ```python
 from vtsearch.models.training import train_model, find_optimal_threshold
@@ -349,39 +353,42 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 ### Embedding models (CLAP, CLIP, E5, X-CLIP)
 
-**Files:** `vtsearch/media/{audio,image,text,video}/media_type.py`
+**Files:** `vtsearch/media/{audio,image,text,video}/embedder.py`
 
 **Dependencies:** `torch`, `transformers`, `librosa` (audio), `PIL`
 (image/video), `sentence-transformers` (text)
 
-Each media type is a self-contained class.  Instantiate it, call
-`load_models()`, then use `embed_media()` / `embed_text()`:
+Each embedder is a self-contained class (separate from the `MediaType`).
+Instantiate it, call `load_models()`, then use `embed_media()` /
+`embed_text()`:
 
 ```python
-from vtsearch.media.audio.media_type import AudioMediaType
+from vtsearch.media.audio.embedder import AudioClapEmbedder
 
-audio = AudioMediaType()
-audio.load_models()                    # loads CLAP (cached)
-embedding = audio.embed_media(Path("example.wav"))  # → numpy array
-text_vec  = audio.embed_text("birdsong")            # same space
+embedder = AudioClapEmbedder()
+embedder.load_models()                        # loads CLAP (cached)
+embedding = embedder.embed_media(Path("example.wav"))  # → numpy array
+text_vec  = embedder.embed_text("birdsong")            # same space
 ```
 
 No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
 
 ```python
-audio._on_progress = lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")
-audio.load_models()
+embedder._on_progress = lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")
+embedder.load_models()
 ```
 
 ### The plugin systems
 
-**Pattern:** Each of the six plugin systems uses the same architecture:
+**Pattern:** Each of the ten plugin systems uses the same architecture:
 1. An abstract base class with `fields` (form descriptors) and a
    `run()`/`export()`/`load()`/`save()` method.
-2. Auto-discovery via `pkgutil.iter_modules` scanning for a sentinel
-   attribute (`EXPORTER`, `IMPORTER`, `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`,
-   `SETTINGS_SOURCE`, `LABELSET_SOURCE`).
+2. Auto-discovery via `PluginRegistry` using direct filesystem scanning
+   (`Path.iterdir()`) for a sentinel attribute (`EXPORTER`, `IMPORTER`,
+   `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`, `SETTINGS_IMPORTER`,
+   `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`, `LABELSET_SOURCE`, `CONVERTER`,
+   `SOURCE`).
 3. CLI support auto-derived from field definitions.
 
 To use an exporter standalone:
@@ -424,8 +431,9 @@ application as-is.
 
 ### Auto-discovered plugins (importers / exporters)
 
-All six plugin systems (dataset importers, exporters, label importers,
-processor importers, settings sources, labelset sources) share a common
+All plugin systems (dataset importers, exporters, label importers,
+processor importers, settings importers/exporters/sources, labelset
+sources, media converters, and media sources) share a common
 `PluginBase` / `PluginField` / `PluginRegistry` architecture in
 `vtsearch/utils/registry.py`:
 
@@ -435,10 +443,12 @@ processor importers, settings sources, labelset sources) share a common
    `ExporterField`, `LabelImporterField`, `ProcessorImporterField`)
    describes each user-configurable input with type, label, default,
    validation, and placeholder.
-3. **Auto-discovery** via `PluginRegistry` scans sub-packages for a
-   sentinel attribute (`IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`,
-   `PROCESSOR_IMPORTER`, `SETTINGS_SOURCE`, `LABELSET_SOURCE`) and
-   registers them lazily on first access.
+3. **Auto-discovery** via `PluginRegistry` scans sub-packages using
+   direct filesystem scanning for a sentinel attribute (`IMPORTER`,
+   `EXPORTER`, `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`,
+   `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`,
+   `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`) and registers them lazily
+   on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
 5. **Graceful degradation** — if a plugin's optional dependency is
@@ -455,8 +465,9 @@ registries in `vtsearch/media/__init__.py`:
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
 
-Media converters use a hardcoded list in `vtsearch/converters/__init__.py`
-with `list_converters()`, `get_converter(name)`,
+Media converters use the same `PluginRegistry` auto-discovery pattern
+(sentinel: `CONVERTER`) in `vtsearch/converters/__init__.py`, with
+`list_converters()`, `get_converter(name)`,
 `list_converters_for_source()`, and `list_converters_for_target()`.
 
 To add a new extension, create the class, import it, and call the
@@ -596,11 +607,13 @@ Routes that create detectors, datasets, or trainable models record
 `GET /api/auth/status` returns the provider name, current user,
 authentication state, and login-required flag.
 
-### Current limitations
+### Current scope
 
-In-memory state (votes, medias, labels, settings) is still global — the
-auth infrastructure enables metadata tracking and per-user data
-directories, but runtime state isolation is not yet implemented.
+Per-dataset and per-detector runtime state is isolated via
+`DatasetContext` and `DetectorContext` proxy objects (see
+[Multi-dataset support](#multi-dataset-support)). The auth
+infrastructure provides per-user data directories and ownership
+tracking. Settings remain global (shared across all users/datasets).
 
 ---
 

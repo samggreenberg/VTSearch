@@ -1,10 +1,10 @@
 # MediaSource Abstraction — Implementation Plan
 
-> **Status: Proposal — not yet implemented.** This document describes a
-> planned design that has not been built. The current codebase uses
-> `resolve_file_from_origin()` in `vtsearch/models/resolver.py` for
-> individual file resolution. See [ARCHITECTURE.md](ARCHITECTURE.md) for
-> the current architecture.
+> **Status: Implemented.** The `MediaSource` abstraction described in this
+> document has been fully implemented. Sources live in
+> `vtsearch/datasets/sources/` and use `PluginRegistry` auto-discovery
+> (with the `SOURCE` sentinel) rather than the hardcoded factory proposed
+> below. See `tests/test_media_sources.py` for test coverage.
 
 ## Problem
 

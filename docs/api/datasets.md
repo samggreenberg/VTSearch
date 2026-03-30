@@ -71,7 +71,7 @@ GET /api/converters
 GET /api/dataset/status
 ```
 
-→ `{"loaded": true, "num_medias": 500, "has_votes": true, "media_type": "audio", "num_dupes": 3}`
+→ `{"loaded": true, "num_medias": 500, "has_votes": true, "media_type": "audio", "display_name": "ESC-50", "num_dupes": 3}`
 
 ### Dataset progress
 
@@ -325,17 +325,6 @@ POST /api/datasets/registry/{dataset_id}/load
 ```
 
 → `{"ok": true, "message": "Loading started"}`
-
-### Activate registered dataset
-
-```
-POST /api/datasets/registry/{dataset_id}/activate
-```
-
-Switches the active dataset context to the specified dataset (must already
-be loaded). This is an instant operation — no re-embedding.
-
-→ `{"ok": true}`
 
 ### Unload registered dataset
 

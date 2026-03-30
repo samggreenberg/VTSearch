@@ -62,7 +62,8 @@ POST /api/label-importers/import/{importer_name}
   "skipped": 2,
   "missing_count": 3,
   "missing": [...],
-  "message": "Applied 8 label(s), skipped 2. 3 element(s) not found in dataset."
+  "ingested": 1,
+  "message": "Applied 8 label(s), skipped 2. Auto-resolved 1 missing element(s) from their sources. 3 element(s) could not be resolved."
 }
 ```
 
@@ -104,3 +105,43 @@ POST /api/processor-importers/import/{importer_name}
 Runs the importer and saves the result as an autorun detector.
 
 → `{"success": true, "name": "...", "media_type": "audio"}`
+
+---
+
+## Settings Importers & Exporters
+
+### List settings importers
+
+```
+GET /api/settings-importers
+```
+
+→ JSON array of settings importer objects.
+
+### Run settings import
+
+```
+POST /api/settings-importers/import/{importer_name}
+```
+
+**Form or Body:** importer-specific fields.
+
+→ `{"ok": true, "message": "..."}`
+
+### List settings exporters
+
+```
+GET /api/settings-exporters
+```
+
+→ JSON array of settings exporter objects.
+
+### Run settings export
+
+```
+POST /api/settings-exporters/export
+```
+
+**Body:** `{"exporter_name": "...", "field_values": {...}}`
+
+→ `{"ok": true, "message": "..."}`
