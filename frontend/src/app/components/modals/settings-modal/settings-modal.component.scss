@@ -244,7 +244,19 @@
   transform: rotate(0deg);
 
   &--active {
-    transform: rotate(90deg);
+    animation: wheel-settle 0.4s ease forwards;
+  }
+}
+
+@keyframes wheel-settle {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(11.25deg);
+  }
+  100% {
+    transform: rotate(22.5deg);
   }
 }
 
