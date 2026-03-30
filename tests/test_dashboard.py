@@ -191,10 +191,14 @@ class TestGuessMediaEmbedder:
         assert "embedder" not in task
 
     def test_js_contains_embedder_guessing_logic(self, client):
-        """main.js should include the embedder guessing code."""
-        resp = client.get("/static/main.js")
-        text = resp.data.decode("utf-8")
-        assert "guessedMediaEmbedder" in text
+        """The Angular bundle should include the embedder guessing code."""
+        import glob as globmod
+
+        combined = ""
+        for path in globmod.glob("static/*.js"):
+            resp = client.get(f"/{path}")
+            combined += resp.data.decode("utf-8")
+        assert "guessedMediaEmbedder" in combined
 
 
 class TestGuessMediaType:
