@@ -37,9 +37,9 @@ Example – a minimal SFTP exporter skeleton::
 
     EXPORTER = SftpLabelsetExporter()
 
-If the exporter needs extra packages, add them to the ``[project.optional-dependencies]``
-section of ``pyproject.toml`` (or document them in a ``requirements.txt`` inside the
-exporter's directory for reference).
+If the exporter needs extra packages, add them to a ``requirements.txt`` inside
+the exporter's directory.  They will be auto-discovered and installed by
+``install-plugin-deps.sh``.
 """
 
 from __future__ import annotations

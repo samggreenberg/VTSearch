@@ -126,12 +126,14 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Dependencies are declared in `pyproject.toml`. All media types (audio, image, text, video, document) are included in the base install — you just pick CPU or GPU for PyTorch.
+All dependencies live in `requirements.txt` files. Core deps are in the top-level `requirements.txt`; each plugin (media type, importer, exporter) has its own `requirements.txt` in its directory. A script auto-discovers them all into a cascading tree.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh        # auto-discover plugin deps
+pip install -r requirements.txt    # install everything (core + plugins + CPU PyTorch)
+pip install --no-deps -e .         # editable install for 'import vtsearch'
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
@@ -142,7 +144,9 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-The `--extra-index-url` flag pulls the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version.
+The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version and runs `install-plugin-deps.sh` automatically.
+
+**Adding new plugin dependencies:** If you're developing a new plugin (importer, exporter, media type, etc.), just add a `requirements.txt` in your plugin's directory, then run `bash install-plugin-deps.sh` to regenerate the tree. The next `pip install -r requirements.txt` picks it up automatically — no need to edit any central file.
 
 ## Building the frontend
 
@@ -266,10 +270,10 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
 ## Running the tests
 
-Install dev dependencies (includes pytest):
+Install dependencies (pytest and ruff are included in `requirements.txt`):
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements.txt
 ```
 
 The recommended way to run tests uses the helper script, which installs

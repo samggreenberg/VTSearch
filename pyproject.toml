@@ -4,37 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 
-# Core dependencies — everything needed to run VTSearch with all media types.
-dependencies = [
-    "flask",
-    "numpy",
-    "requests",
-    "tqdm",
-    "scikit-learn",
-    "transformers",
-    "pandas",
-    # Media types
-    "librosa",
-    "soundfile",
-    "opencv-python-headless<4.10",
-    "Pillow",
-    "ultralytics",
-    "sentence-transformers",
-    "PyMuPDF",
-    # Importers / exporters
-    "dnspython>=2.0.0",
-    # Eval / visualization
-    "matplotlib",
-    "scipy",
-]
-
-[project.optional-dependencies]
-# ── PyTorch: pick ONE of cpu / gpu ────────────────────────────────────
-cpu = ["torch>=2.0.0"]
-gpu = ["torch>=2.0.0"]
-
-# ── Development ───────────────────────────────────────────────────────
-dev = ["pytest", "ruff"]
+# All runtime dependencies live in requirements.txt (core) and per-plugin
+# requirements.txt files (auto-discovered by install-plugin-deps.sh).
+# This file is kept for editable installs (`pip install -e .`) and tool config.
 
 [tool.setuptools.packages.find]
 include = ["vtsearch*"]

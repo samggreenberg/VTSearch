@@ -15,6 +15,7 @@ set -euo pipefail
 
 CUDA_TAG="${1:-cu118}"
 EXTRA_INDEX="https://download.pytorch.org/whl/${CUDA_TAG}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})..."
 
@@ -27,12 +28,17 @@ pip install --only-binary :all: \
   "scipy" \
   -q
 
-# Step 2: Install the project with GPU extras.  numpy/scipy are already
-# satisfied from step 1, so pip will skip them.
-echo "Installing remaining GPU dependencies..."
+# Step 2: Regenerate requirements-plugins.txt from discovered plugin files.
+bash "$SCRIPT_DIR/install-plugin-deps.sh" --dry-run
+
+# Step 3: Install all dependencies (core + plugins) with GPU PyTorch.
+echo "Installing all dependencies..."
 pip install --extra-index-url "$EXTRA_INDEX" \
   --prefer-binary \
-  -e ".[gpu,dev]" \
+  -r requirements-gpu.txt \
   -q
+
+# Step 4: Editable install so 'import vtsearch' works.
+pip install --no-deps -e . -q
 
 echo "GPU dependencies installed successfully."

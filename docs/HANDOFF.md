@@ -62,7 +62,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"
+bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
 python app.py --local        # lazy model loading, faster startup
 ```
 
@@ -194,7 +194,7 @@ argument parsing. Key startup sequence:
 ## Running the test suite
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements.txt
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ -v
@@ -236,7 +236,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[cpu,dev]"` (or build Docker image)
+- [ ] `bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`

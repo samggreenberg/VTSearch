@@ -47,11 +47,8 @@ Example – a minimal database label importer skeleton::
     LABEL_IMPORTER = PostgresLabelImporter()
 
 Then create ``vtsearch/labels/importers/postgres/requirements.txt`` containing
-``psycopg2-binary`` and add::
-
-    -r vtsearch/labels/importers/postgres/requirements.txt
-
-to ``requirements-label-importers.txt``.
+``psycopg2-binary``.  It will be auto-discovered and installed by
+``install-plugin-deps.sh``.
 """
 
 from __future__ import annotations

@@ -281,10 +281,9 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-Add any extra packages to `[project.optional-dependencies]` in
-`pyproject.toml` (either to an existing extra or a new one). You can also
-document them in a `requirements.txt` inside the plugin directory for
-reference.
+Add any extra packages to a `requirements.txt` inside the plugin directory,
+then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
+The next `pip install -r requirements.txt` will pick them up.
 
 ---
 
@@ -415,10 +414,9 @@ endpoints:
 
 ### Wiring up dependencies
 
-Add any extra packages to `[project.optional-dependencies]` in
-`pyproject.toml` (either to an existing extra or a new one). You can also
-document them in a `requirements.txt` inside the plugin directory for
-reference.
+Add any extra packages to a `requirements.txt` inside the plugin directory,
+then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
+The next `pip install -r requirements.txt` will pick them up.
 
 ---
 
