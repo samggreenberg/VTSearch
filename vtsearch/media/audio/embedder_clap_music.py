@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -126,7 +127,7 @@ class AudioClapMusicEmbedder(MediaEmbedder):
                 embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
             return embedding[0]
         except Exception as e:
-            print(f"Error embedding {file_path}: {e}")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -145,7 +146,7 @@ class AudioClapMusicEmbedder(MediaEmbedder):
                 text_vec = self._model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
-            print(f"Error embedding text query for audio (CLAP Music): {e}")
+            logging.getLogger(__name__).exception("Error embedding text query for audio (CLAP Music)")
             return None
 
     # Internal helper used by loader.py bridge
