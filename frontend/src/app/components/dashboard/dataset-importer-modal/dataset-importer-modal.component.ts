@@ -19,6 +19,8 @@ type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
 export class DatasetImporterModalComponent implements OnInit {
   /** Media type_id guessed from existing datasets/models (e.g. "image"). */
   @Input() guessedMediaType = '';
+  /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
+  @Input() guessedMediaEmbedder = '';
 
   @Output() closed = new EventEmitter<void>();
   @Output() importStarted = new EventEmitter<void>();
@@ -217,8 +219,11 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
-        // Default to the first embedder
-        this.selectedEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        // Prefer guessed embedder when it's available for this media type
+        const guessedMatch = this.guessedMediaEmbedder
+          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+          : null;
+        this.selectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
       },
     });
   }
@@ -287,7 +292,11 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.demoEmbedders = embedders;
-        this.selectedDemoEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        // Prefer guessed embedder when it's available for this media type
+        const guessedMatch = this.guessedMediaEmbedder
+          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+          : null;
+        this.selectedDemoEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
         this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
         // The initial demo fetch had no embedder/clipper context, so re-fetch
@@ -674,7 +683,11 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
-        this.sfSelectedEmbedder = embedders.length > 0 ? embedders[0].name : '';
+        // Prefer guessed embedder when it's available for this media type
+        const guessedMatch = this.guessedMediaEmbedder
+          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+          : null;
+        this.sfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
       },
     });
   }

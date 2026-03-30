@@ -131,6 +131,72 @@ class TestDashboardHtmlPresent:
         assert b"<app-root>" in resp.data
 
 
+class TestGuessMediaEmbedder:
+    """Frontend auto-populates the embedder dropdown when creating a new dataset.
+
+    The guessing logic lives in the Angular frontend (dashboard component):
+    collect embedder names from datasets in the registry and in-progress loading
+    tasks. If exactly one unique embedder exists, pre-select it.
+
+    These tests verify the underlying data contracts that the frontend logic relies on.
+    """
+
+    def test_single_dataset_embedder_in_registry(self, client):
+        """When the registry has one dataset with an embedder, the field is available."""
+        register_dataset(
+            name="test-siglip", media_type="image", num_items=10,
+            pkl_path="/tmp/siglip.pkl", embedder="siglip",
+        )
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        assert len(data["datasets"]) == 1
+        assert data["datasets"][0]["embedder"] == "siglip"
+
+    def test_multiple_same_embedder_datasets_in_registry(self, client):
+        """Multiple datasets with the same embedder yield a single unique embedder."""
+        register_dataset(name="ds1", media_type="image", num_items=5, pkl_path="/tmp/a.pkl", embedder="siglip")
+        register_dataset(name="ds2", media_type="image", num_items=3, pkl_path="/tmp/b.pkl", embedder="siglip")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        embedders = {d["embedder"] for d in data["datasets"]}
+        assert embedders == {"siglip"}
+
+    def test_mixed_embedder_datasets_no_single_guess(self, client):
+        """Multiple datasets with different embedders produce more than one unique embedder."""
+        register_dataset(name="ds1", media_type="image", num_items=5, pkl_path="/tmp/a.pkl", embedder="clip")
+        register_dataset(name="ds2", media_type="image", num_items=3, pkl_path="/tmp/b.pkl", embedder="siglip")
+        resp = client.get("/api/datasets/registry")
+        data = resp.get_json()
+        embedders = {d["embedder"] for d in data["datasets"]}
+        assert len(embedders) > 1
+
+    def test_loading_task_includes_embedder(self, client):
+        """Loading tasks expose the embedder field for in-progress guessing."""
+        from vtsearch.utils.progress import loading_tasks
+
+        tracker = loading_tasks.create_task("test_emb_task", "test-ds", media_type="image", embedder="siglip")
+        tracker.update("loading", "Embedding...", 0, 10)
+        tasks = loading_tasks.list_tasks()
+        task = next(t for t in tasks if t["task_id"] == "test_emb_task")
+        assert task["embedder"] == "siglip"
+
+    def test_loading_task_omits_empty_embedder(self, client):
+        """Loading tasks without an embedder do not include the field."""
+        from vtsearch.utils.progress import loading_tasks
+
+        tracker = loading_tasks.create_task("test_no_emb", "test-ds", media_type="image")
+        tracker.update("loading", "Loading...", 0, 10)
+        tasks = loading_tasks.list_tasks()
+        task = next(t for t in tasks if t["task_id"] == "test_no_emb")
+        assert "embedder" not in task
+
+    def test_js_contains_embedder_guessing_logic(self, client):
+        """main.js should include the embedder guessing code."""
+        resp = client.get("/static/main.js")
+        text = resp.data.decode("utf-8")
+        assert "guessedMediaEmbedder" in text
+
+
 class TestGuessMediaType:
     """Frontend auto-populates the media-type dropdown when creating a new model.
 

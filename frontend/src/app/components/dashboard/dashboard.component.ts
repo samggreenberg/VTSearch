@@ -625,6 +625,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return types.size === 1 ? [...types][0] : '';
   }
 
+  /** Guess the media embedder the user likely wants based on existing datasets and in-progress loads. */
+  get guessedMediaEmbedder(): string {
+    const embedders = new Set<string>();
+    for (const d of this.datasets) {
+      const emb = d['embedder'] as string;
+      if (emb) embedders.add(emb);
+    }
+    for (const t of this.loadingTasks) {
+      if (t.embedder && !t.error) embedders.add(t.embedder);
+    }
+    return embedders.size === 1 ? [...embedders][0] : '';
+  }
+
   openImporterModal(): void {
     this.importerClosing = false;
     this.importerModalOpen = true;
