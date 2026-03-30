@@ -1,4 +1,2 @@
-# Audio media type dependencies
-# These packages are required to load and embed audio files.
+# Audio media type — shared dependencies
 librosa
-soundfile
