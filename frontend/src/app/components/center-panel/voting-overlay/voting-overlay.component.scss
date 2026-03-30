@@ -33,6 +33,16 @@ button {
   }
 }
 
+@keyframes icon-spin-cw {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+vt-icon.icon-spinning {
+  animation: icon-spin-cw 0.3s ease-in-out;
+}
+
 .btn-good {
   color: var(--color-good);
   border-color: var(--color-good);

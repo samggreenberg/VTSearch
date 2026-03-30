@@ -7,7 +7,7 @@
     (click)="onVoteBad()"
     title="Mark this media as a Bad example."
   >
-    <vt-icon type="thumbs-down" [size]="18"></vt-icon>
+    <vt-icon type="thumbs-down" [size]="18" [class.icon-spinning]="spinningVote === 'bad'"></vt-icon>
     Bad
   </button>
   <button
@@ -18,7 +18,7 @@
     (click)="onVoteGood()"
     title="Mark this media as a Good example."
   >
-    <vt-icon type="thumbs-up" [size]="18"></vt-icon>
+    <vt-icon type="thumbs-up" [size]="18" [class.icon-spinning]="spinningVote === 'good'"></vt-icon>
     Good
   </button>
 </div>

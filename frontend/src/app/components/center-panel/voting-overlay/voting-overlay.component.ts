@@ -12,6 +12,7 @@ export class VotingOverlayComponent implements OnDestroy {
   @Input() isGood = false;
   @Input() isBad = false;
   @Input() disabled = false;
+  @Input() spinningVote: 'good' | 'bad' | null = null;
   @Output() voted = new EventEmitter<'good' | 'bad'>();
 
   goodFlash = false;
