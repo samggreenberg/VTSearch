@@ -28,6 +28,10 @@ button {
   gap: 6px;
   line-height: 1;
 
+  // Remove focus ring from mouse clicks; keep it for keyboard navigation.
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 @keyframes icon-spin-cw {
