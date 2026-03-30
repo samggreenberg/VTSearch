@@ -46,6 +46,7 @@ class TextE5Embedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing text libraries…", 0, 0)
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
         from transformers import BertModel  # noqa: PLC0415
 

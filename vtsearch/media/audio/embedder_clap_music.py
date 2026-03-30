@@ -50,6 +50,7 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing audio libraries…", 0, 0)
         from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLAP Music model weights…")

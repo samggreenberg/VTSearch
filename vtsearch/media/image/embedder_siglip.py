@@ -56,6 +56,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing image libraries…", 0, 0)
         from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading SigLIP model weights…")
