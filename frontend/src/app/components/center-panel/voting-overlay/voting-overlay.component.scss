@@ -28,10 +28,6 @@ button {
   gap: 6px;
   line-height: 1;
 
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 }
 
 @keyframes icon-spin-cw {
@@ -48,7 +44,7 @@ vt-icon.icon-spinning {
   color: var(--color-good);
   border-color: var(--color-good);
 
-  &:hover:not(:disabled) {
+  &:hover {
     background: var(--good-bg);
   }
 
@@ -58,8 +54,8 @@ vt-icon.icon-spinning {
     color: var(--header-text, #fff);
   }
 
-  &.voted:hover:not(:disabled),
-  &.vote-flash:hover:not(:disabled) {
+  &.voted:hover,
+  &.vote-flash:hover {
     background: color-mix(in srgb, var(--color-good) 85%, black);
   }
 }
@@ -68,7 +64,7 @@ vt-icon.icon-spinning {
   color: var(--color-bad);
   border-color: var(--color-bad);
 
-  &:hover:not(:disabled) {
+  &:hover {
     background: var(--bad-bg);
   }
 
@@ -78,8 +74,8 @@ vt-icon.icon-spinning {
     color: var(--header-text, #fff);
   }
 
-  &.voted:hover:not(:disabled),
-  &.vote-flash:hover:not(:disabled) {
+  &.voted:hover,
+  &.vote-flash:hover {
     background: color-mix(in srgb, var(--color-bad) 85%, black);
   }
 }
