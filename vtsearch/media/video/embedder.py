@@ -123,6 +123,10 @@ class VideoXClipEmbedder(MediaEmbedder):
                 print(f"Error: could not extract frames from {file_path}")
                 return None
 
+            # X-CLIP expects exactly 8 frames; pad by repeating if we have fewer
+            while len(frames) < 8:
+                frames.append(frames[-1])
+
             inputs = self._processor(images=[list(frames)], return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
