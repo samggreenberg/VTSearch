@@ -74,6 +74,7 @@
                 [currentUser]="currentUser"
                 [isDefaultLogin]="isDefaultLogin"
                 [selected]="isDatasetSelected(dataset.id)"
+                [dimmed]="isLoading && !isDatasetSelected(dataset.id)"
                 [loadingTask]="getInlineTask(dataset.id)"
                 [statsOpen]="statsModalOpen && statsDatasetId === dataset.id"
                 [deleteConfirmOpen]="deletingDatasetId === dataset.id"
@@ -130,6 +131,7 @@
               <vt-model-card
                 [model]="model"
                 [selected]="isModelSelected(model.id)"
+                [dimmed]="isLoading && !isModelSelected(model.id)"
                 [loadingTask]="getInlineModelTask(model.id)"
                 [deleteConfirmOpen]="deletingModelId === model.id"
                 [addLabelsOpen]="addLabelsModalOpen && addLabelsModelId === model.id"
@@ -167,7 +169,8 @@
     <div class="action-btn-group">
       <button
         class="btn btn--primary"
-        [disabled]="!labelEnabled || findLoading"
+        [class.loading-active]="trainLoading"
+        [disabled]="!labelEnabled || isLoading"
         [title]="labelHint || 'Open the labeling view to vote on items and train the selected model on the selected dataset'"
         (click)="onLabel()"
       >
@@ -179,7 +182,8 @@
     <div class="action-btn-group">
       <button
         class="btn btn--primary"
-        [disabled]="!findEnabled || trainLoading"
+        [class.loading-active]="findLoading"
+        [disabled]="!findEnabled || isLoading"
         [title]="findHint || 'Score every item in the selected dataset using the selected model and show ranked results'"
         (click)="onFind()"
       >

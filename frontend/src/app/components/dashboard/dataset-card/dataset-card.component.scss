@@ -14,6 +14,16 @@
   &.loading-error {
     background: var(--error-bg, rgba(220, 38, 38, 0.06));
   }
+
+  &.dimmed {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+
+    &:hover {
+      background: none;
+    }
+  }
 }
 
 td {
