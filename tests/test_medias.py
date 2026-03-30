@@ -359,6 +359,65 @@ class TestBatchMedias:
         assert resp.status_code == 400
 
 
+class TestMediaThumbnailBytes:
+    """Test medias have waveform thumbnail_bytes generated at init."""
+
+    def test_all_medias_have_thumbnail_bytes(self):
+        for media in app_module.medias.values():
+            assert "thumbnail_bytes" in media
+            assert isinstance(media["thumbnail_bytes"], bytes)
+            assert len(media["thumbnail_bytes"]) > 0
+
+    def test_thumbnail_bytes_is_valid_png(self):
+        media = app_module.medias[1]
+        thumb = media["thumbnail_bytes"]
+        # PNG magic number
+        assert thumb[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_thumbnail_bytes_not_exposed_in_api(self, client):
+        resp = client.get("/api/medias")
+        data = resp.get_json()
+        for media in data:
+            assert "thumbnail_bytes" not in media
+
+
+class TestMediaImage:
+    """Tests for GET /api/medias/<id>/image (audio waveform thumbnails)."""
+
+    def test_returns_png_for_audio_media(self, client):
+        resp = client.get("/api/medias/1/image")
+        assert resp.status_code == 200
+        assert resp.content_type == "image/png"
+
+    def test_png_is_valid(self, client):
+        resp = client.get("/api/medias/1/image")
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_returns_404_for_invalid_id(self, client):
+        resp = client.get("/api/medias/9999/image")
+        assert resp.status_code == 404
+
+    def test_consistent_responses(self, client):
+        """Same media should return the same thumbnail."""
+        resp1 = client.get("/api/medias/1/image")
+        resp2 = client.get("/api/medias/1/image")
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        assert resp1.data == resp2.data
+
+    def test_fallback_generates_thumbnail_on_the_fly(self, client):
+        """When thumbnail_bytes is missing, the endpoint generates it on the fly."""
+        media = app_module.medias[1]
+        saved_thumb = media.pop("thumbnail_bytes", None)
+        try:
+            resp = client.get("/api/medias/1/image")
+            assert resp.status_code == 200
+            assert resp.content_type == "image/png"
+        finally:
+            if saved_thumb is not None:
+                media["thumbnail_bytes"] = saved_thumb
+
+
 class TestMediaAudio:
     def test_returns_wav_for_valid_id(self, client):
         resp = client.get("/api/medias/1/audio")

@@ -29,7 +29,7 @@ export class MediaItemComponent {
 
   get thumbnailUrl(): string | null {
     if (!this.isGrid) return null;
-    if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document') {
+    if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document' || this.media.type === 'audio') {
       return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
     }
     return null;
