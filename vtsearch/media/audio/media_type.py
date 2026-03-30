@@ -183,6 +183,24 @@ class AudioMediaType(MediaType):
                 slice_start=0, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="urbansound8k_s", label="UrbanSound8K (S)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=0, slice_end=125, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="urbansound8k_m", label="UrbanSound8K (M)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=125, slice_end=374, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="urbansound8k_l", label="UrbanSound8K (L)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=374, slice_end=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="urbansound8k_a", label="UrbanSound8K (A)",
                 description="Real urban field recordings, pre-segmented into labeled sounds.",
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
