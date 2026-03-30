@@ -297,6 +297,10 @@
 
     svg {
       flex-shrink: 0;
+
+      &.icon-waggle {
+        animation: icon-waggle 2s ease-in-out infinite;
+      }
     }
   }
 }
@@ -322,4 +326,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+// Waggle animation for Train/Find button icons while loading.
+// 2s cycle: rotate to 90deg (0.3s), hold (0.7s), rotate back (0.3s), hold (0.7s).
+@keyframes icon-waggle {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(90deg); }
+  50%  { transform: rotate(90deg); }
+  65%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
 }
