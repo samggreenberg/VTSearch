@@ -15,6 +15,7 @@ import { formatProgressFraction } from '../../../utils/format-progress';
 export class ModelCardComponent implements OnChanges {
   @Input() model: any;
   @Input() @HostBinding('class.selected') selected = false;
+  @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
 
   @HostBinding('class.loading-error')

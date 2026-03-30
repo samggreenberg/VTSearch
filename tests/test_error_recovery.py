@@ -477,10 +477,11 @@ class TestMediaTypeMismatch:
         assert resp.status_code == 400
         assert "not a video" in resp.get_json()["error"]
 
-    def test_image_endpoint_on_audio_media(self):
+    def test_image_endpoint_on_audio_media_returns_waveform(self):
+        # Audio medias now return a waveform thumbnail PNG
         resp = self.client.get("/api/medias/1/image")
-        assert resp.status_code == 400
-        assert "not an image" in resp.get_json()["error"]
+        assert resp.status_code == 200
+        assert resp.content_type == "image/png"
 
     def test_paragraph_endpoint_on_audio_media(self):
         resp = self.client.get("/api/medias/1/paragraph")

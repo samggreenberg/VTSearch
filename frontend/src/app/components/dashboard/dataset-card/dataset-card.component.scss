@@ -14,6 +14,16 @@
   &.loading-error {
     background: var(--error-bg, rgba(220, 38, 38, 0.06));
   }
+
+  &.dimmed {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+
+    &:hover {
+      background: none;
+    }
+  }
 }
 
 td {
@@ -31,7 +41,6 @@ td {
 .actions-cell {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
 }
 
@@ -63,13 +72,13 @@ td {
 
 @keyframes pencil-rotate-open {
   0% { transform: rotate(0deg); }
-  50% { transform: rotate(15deg); }
-  100% { transform: rotate(30deg); }
+  50% { transform: rotate(22.5deg); }
+  100% { transform: rotate(45deg); }
 }
 
 @keyframes pencil-rotate-close {
-  0% { transform: rotate(30deg); }
-  50% { transform: rotate(15deg); }
+  0% { transform: rotate(45deg); }
+  50% { transform: rotate(22.5deg); }
   100% { transform: rotate(0deg); }
 }
 

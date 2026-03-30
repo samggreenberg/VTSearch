@@ -9,28 +9,32 @@
           [class.settings-tab--active]="activeSettingsTab === 'appearance'"
           (click)="activeSettingsTab = 'appearance'"
           title="Theme, animations, and view layout options">
+          <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'appearance'"></vt-icon>
           Appearance
-        </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'sorting'"
-          (click)="activeSettingsTab = 'sorting'"
-          title="Options that control how learned sorting and calibration behave">
-          Sorting
-        </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
-          (click)="activeSettingsTab = 'autopilot'"
-          title="Configure the guided autopilot labeling workflow">
-          Autopilot
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'autoload'"
           (click)="activeSettingsTab = 'autoload'"
           title="Choose which embedding models to load automatically when a dataset is opened">
+          <vt-icon type="cloud-upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autoload'"></vt-icon>
           Autoload
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
+          (click)="activeSettingsTab = 'autopilot'"
+          title="Configure the guided autopilot labeling workflow">
+          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autopilot'"></vt-icon>
+          Autopilot
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'sorting'"
+          (click)="activeSettingsTab = 'sorting'"
+          title="Options that control how learned sorting and calibration behave">
+          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'sorting'"></vt-icon>
+          Sorting
         </button>
       </nav>
 

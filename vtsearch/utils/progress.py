@@ -155,7 +155,7 @@ class LoadingTasksTracker:
 
     def create_task(
         self, task_id: str, name: str = "", dataset_id: str = "", media_type: str = "",
-        model_id: str = "",
+        model_id: str = "", embedder: str = "",
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
@@ -173,6 +173,7 @@ class LoadingTasksTracker:
                 "dataset_id": dataset_id,
                 "media_type": media_type,
                 "model_id": model_id,
+                "embedder": embedder,
             }
         return tracker
 
@@ -242,6 +243,8 @@ class LoadingTasksTracker:
                     snapshot["model_id"] = entry["model_id"]
                 if entry.get("media_type"):
                     snapshot["media_type"] = entry["media_type"]
+                if entry.get("embedder"):
+                    snapshot["embedder"] = entry["embedder"]
                 result.append(snapshot)
             else:
                 snapshot = entry["tracker"].get()
@@ -254,6 +257,8 @@ class LoadingTasksTracker:
                     snapshot["model_id"] = entry["model_id"]
                 if entry.get("media_type"):
                     snapshot["media_type"] = entry["media_type"]
+                if entry.get("embedder"):
+                    snapshot["embedder"] = entry["embedder"]
                 result.append(snapshot)
         if stale:
             with self._lock:

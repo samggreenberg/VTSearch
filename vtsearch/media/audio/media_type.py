@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 
@@ -13,6 +14,79 @@ from vtsearch.media.base import (
     ProgressCallback,
     _noop_progress,
 )
+
+# Thumbnail dimensions (square)
+_THUMB_SIZE = 128
+
+# Waveform colours (dark background, bright waveform)
+_BG_COLOR = (30, 30, 30)
+_WAVE_COLOR = (0, 180, 255)
+
+
+def generate_waveform_thumbnail(audio_bytes: bytes, *, size: int = _THUMB_SIZE) -> bytes | None:
+    """Render a waveform thumbnail as a PNG image from raw audio bytes.
+
+    Decodes the audio with librosa, computes the min/max amplitude envelope,
+    and draws it onto a square PIL image.  Returns PNG bytes, or ``None`` if
+    the audio cannot be decoded.
+    """
+    try:
+        import librosa  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+        from PIL import Image, ImageDraw  # noqa: PLC0415
+    except Exception:
+        return None
+
+    try:
+        audio_data, _sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
+    except Exception:
+        return None
+
+    if len(audio_data) == 0:
+        return None
+
+    # Compute min/max envelope across `size` columns
+    samples = len(audio_data)
+    step = max(1, samples // size)
+    cols = min(size, samples)
+
+    mins = np.empty(cols, dtype=np.float32)
+    maxs = np.empty(cols, dtype=np.float32)
+    for i in range(cols):
+        start = i * step
+        end = min(start + step, samples)
+        chunk = audio_data[start:end]
+        mins[i] = chunk.min()
+        maxs[i] = chunk.max()
+
+    # Normalise to pixel range
+    amp = size // 2
+    mid = size // 2
+
+    img = Image.new("RGB", (size, size), _BG_COLOR)
+    draw = ImageDraw.Draw(img)
+
+    for i in range(cols):
+        y_top = int(mid - maxs[i] * amp)
+        y_bot = int(mid - mins[i] * amp)
+        # Ensure at least 1px line
+        if y_top == y_bot:
+            y_bot += 1
+        draw.line([(i, y_top), (i, y_bot)], fill=_WAVE_COLOR)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def generate_waveform_thumbnail_from_file(file_path: Path, *, size: int = _THUMB_SIZE) -> bytes | None:
+    """Generate a waveform thumbnail from an audio file on disk."""
+    try:
+        with open(file_path, "rb") as f:
+            audio_bytes = f.read()
+        return generate_waveform_thumbnail(audio_bytes, size=size)
+    except Exception:
+        return None
 
 
 class AudioMediaType(MediaType):
@@ -183,6 +257,24 @@ class AudioMediaType(MediaType):
                 slice_start=0, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="urbansound8k_s", label="UrbanSound8K (S)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=0, slice_end=125, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="urbansound8k_m", label="UrbanSound8K (M)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=125, slice_end=374, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="urbansound8k_l", label="UrbanSound8K (L)",
+                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
+                slice_start=374, slice_end=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="urbansound8k_a", label="UrbanSound8K (A)",
                 description="Real urban field recordings, pre-segmented into labeled sounds.",
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
@@ -321,6 +413,7 @@ class AudioMediaType(MediaType):
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": wav_bytes,
+                "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,
                 "category": meta["category"],
                 "origin": demo_origin,
@@ -334,6 +427,10 @@ class AudioMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["thumbnail_bytes"]
+
     def load_media_data(self, file_path: Path) -> dict:
         import librosa  # noqa: PLC0415
 
@@ -344,11 +441,34 @@ class AudioMediaType(MediaType):
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0
-        return {"media_bytes": media_bytes, "duration": duration}
+        thumbnail = generate_waveform_thumbnail(media_bytes)
+        return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
 
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------
+
+    def image_response(self, media: dict) -> MediaResponse | None:
+        """Return the waveform thumbnail as a PNG image, or *None*."""
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return MediaResponse(
+                data=thumb,
+                mimetype="image/png",
+                download_name=f"media_{media['id']}_waveform.png",
+            )
+        # Fallback: generate on the fly from media bytes
+        raw = self._resolve_media_bytes(media)
+        if raw:
+            thumb = generate_waveform_thumbnail(raw)
+            if thumb:
+                media["thumbnail_bytes"] = thumb
+                return MediaResponse(
+                    data=thumb,
+                    mimetype="image/png",
+                    download_name=f"media_{media['id']}_waveform.png",
+                )
+        return None
 
     def media_response(self, media: dict) -> MediaResponse:
         data = self._resolve_media_bytes(media)

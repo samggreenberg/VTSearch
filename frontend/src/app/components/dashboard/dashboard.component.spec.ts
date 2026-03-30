@@ -369,7 +369,7 @@ describe('DashboardComponent', () => {
   });
 
   it('should rename a dataset', () => {
-    const datasets = [{ id: 'd1', name: 'Old' }];
+    const datasets = [{ id: 'd1', name: 'Old', media_type: 'audio' }];
     flushInitialRequests(datasets);
 
     component.renameDataset(datasets[0], 'New');
@@ -384,7 +384,7 @@ describe('DashboardComponent', () => {
   });
 
   it('should delete a dataset after confirmation', fakeAsync(() => {
-    const datasets = [{ id: 'd1', name: 'ToDelete' }];
+    const datasets = [{ id: 'd1', name: 'ToDelete', media_type: 'audio' }];
     flushInitialRequests(datasets);
     component.selectedDatasetIds.add('d1');
 

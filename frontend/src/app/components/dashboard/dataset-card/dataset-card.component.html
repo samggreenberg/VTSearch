@@ -76,7 +76,8 @@
       <span class="load-action" (click)="onLoad($event)" title="Click to load this dataset" aria-label="Load dataset">-</span>
     }
   </td>
-  <td class="actions-cell">
+  <td>
+    <div class="actions-cell">
     @if (!isDefaultLogin) {
       <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -86,7 +87,9 @@
     }
     <button class="edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
       <svg [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M17 3a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L17 3z"></path>
+        <path d="M16.5 2.5a2.828 2.828 0 0 1 4 4L7.5 19.5L3 20L3.5 15.5L16.5 2.5z"></path>
+        <line x1="7.5" y1="19.5" x2="3.5" y2="15.5"></line>
+        <line x1="14.5" y1="4.5" x2="18.5" y2="8.5"></line>
       </svg>
     </button>
     <button class="stats-btn" (click)="onStats($event)" aria-label="Dataset stats" title="Stats">
@@ -107,5 +110,6 @@
         <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
       </svg>
     </button>
+    </div>
   </td>
 }

@@ -196,7 +196,7 @@ describe('VoteStateService', () => {
     discardPeriodicTasks();
   }));
 
-  it('goodVotes$ should emit on load', (done) => {
+  it('goodVotes$ should emit on load', (done: DoneFn) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));
 

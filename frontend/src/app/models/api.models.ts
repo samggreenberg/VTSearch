@@ -166,6 +166,7 @@ export interface LoadingTask {
   dataset_id?: string;
   model_id?: string;
   media_type?: string;
+  embedder?: string;
 }
 
 export interface LoadingTasksResponse {

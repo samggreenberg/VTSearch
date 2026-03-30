@@ -21,7 +21,7 @@ from vtsearch.routes.detectors_crud import _build_extractor, _build_localizer
 detectors_scoring_bp = Blueprint("detectors_scoring", __name__)
 
 # Keys excluded from API responses (large binary/vector data).
-_HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string")
+_HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
 
 
 def _media_info_for_response(media: dict) -> dict:

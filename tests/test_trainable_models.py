@@ -408,6 +408,71 @@ class TestLabelVoteIsolation:
         assert ids[3] not in bad_votes, "Stale vote should be gone after clear+import"
 
 
+class TestDeleteRegisteredModel:
+    """Tests for DELETE /api/models/registry/<model_id>."""
+
+    def test_delete_registered_model(self, client):
+        """Deleting a registered model removes it from the registry."""
+        from vtsearch.models.registry import get_model
+
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "DelMe", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        assert res.status_code == 201
+        model_id = res.get_json()["model"]["id"]
+
+        res = client.delete(f"/api/models/registry/{model_id}")
+        assert res.status_code == 200
+        assert res.get_json()["ok"] is True
+        assert get_model(model_id) is None
+
+    def test_delete_nonexistent(self, client):
+        res = client.delete("/api/models/registry/nonexistent_id")
+        assert res.status_code == 404
+
+    def test_delete_loaded_model(self, client):
+        """Deleting a loaded model should also unload it."""
+        from vtsearch.models.registry import get_model, is_model_loaded
+
+        client.post(
+            "/api/trainable-models",
+            json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "LoadDel", "media_type": "audio", "trainable": True, "text_query": "test"},
+        )
+        model_id = res.get_json()["model"]["id"]
+        _load_model_and_wait(client, model_id)
+        assert is_model_loaded(model_id)
+
+        res = client.delete(f"/api/models/registry/{model_id}")
+        assert res.status_code == 200
+        assert get_model(model_id) is None
+        assert not is_model_loaded(model_id)
+
+    def test_delete_removes_autorun_detector(self, client):
+        """Deleting a model that has a detector_name cleans up autorun_detectors."""
+        from vtsearch.models.registry import get_model
+        from vtsearch.utils import autorun_detectors
+
+        # Register with a detector_name
+        res = client.post(
+            "/api/models/registry",
+            json={"name": "DetDel", "media_type": "audio", "trainable": False, "detector_name": "my_det"},
+        )
+        model_id = res.get_json()["model"]["id"]
+
+        # Simulate an autorun detector being present
+        autorun_detectors["my_det"] = lambda scores: scores
+
+        res = client.delete(f"/api/models/registry/{model_id}")
+        assert res.status_code == 200
+        assert "my_det" not in autorun_detectors
+        assert get_model(model_id) is None
+
+
 class TestLoadModelEndpoint:
     """Tests for POST /api/models/registry/load."""
 

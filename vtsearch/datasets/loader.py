@@ -1046,24 +1046,35 @@ def load_demo_dataset(
     # Check if already embedded
     pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
     if pkl_file.exists():
-        on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
-        load_dataset_from_pickle(pkl_file, medias)
-
-        # Check if any medias were actually loaded
-        if len(medias) == 0:
-            # Pickle file exists but media files are missing, delete and re-embed
-            on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
+        # If the caller explicitly requested an embedder, verify the cached
+        # pickle was produced by the same one.  When *embedder_name* is empty
+        # (meaning "use default"), accept whatever is cached.
+        cached_embedder = read_pkl_embedder(pkl_file)
+        if embedder_name and cached_embedder and embedder_name != cached_embedder:
+            # Embedder mismatch — discard stale cache and re-embed below.
+            on_progress("loading", f"Re-embedding {dataset_name} with {embedder_name}...", 0, 0)
             pkl_file.unlink()
             pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
             pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
         else:
-            # Stamp demo origin on cached medias so that cross-dataset
-            # resolution always has the dataset name in the origin params.
-            # Old pickles (created before origin stamping) may have empty
-            # params — this ensures they are corrected on load.
-            _stamp_demo_origin(medias, dataset_name, converter_name)
-            on_progress("idle", f"Loaded {dataset_name} dataset")
-            return
+            on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
+            load_dataset_from_pickle(pkl_file, medias)
+
+            # Check if any medias were actually loaded
+            if len(medias) == 0:
+                # Pickle file exists but media files are missing, delete and re-embed
+                on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
+                pkl_file.unlink()
+                pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
+                pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
+            else:
+                # Stamp demo origin on cached medias so that cross-dataset
+                # resolution always has the dataset name in the origin params.
+                # Old pickles (created before origin stamping) may have empty
+                # params — this ensures they are corrected on load.
+                _stamp_demo_origin(medias, dataset_name, converter_name)
+                on_progress("idle", f"Loaded {dataset_name} dataset")
+                return
 
     # Resolve the embedder
     from vtsearch.media import embedders_for_type, get as media_get, get_embedder
@@ -1119,7 +1130,7 @@ def load_demo_dataset(
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k != "media_bytes"}
+                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k not in ("media_bytes", "thumbnail_bytes")}
                 for cid, media in medias.items()
             },
             mt.dir_key: external_dir,

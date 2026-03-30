@@ -380,8 +380,26 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
     c = get_media(media_id)
     if not c:
         return jsonify({"error": "not found"}), 404
-    if c.get("type") != "image":
-        return jsonify({"error": "not an image"}), 400
+
+    media_type = c.get("type")
+
+    # For non-image types, delegate to the media type's image_response if available
+    if media_type and media_type != "image":
+        from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+        try:
+            mt = get_media_type(media_type)
+        except KeyError:
+            mt = None
+        if mt and hasattr(mt, "image_response"):
+            resp = mt.image_response(c)
+            if resp is not None:
+                return send_file(
+                    io.BytesIO(resp.data),
+                    mimetype=resp.mimetype,
+                    download_name=resp.download_name,
+                )
+        return jsonify({"error": "no image available"}), 400
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
@@ -604,9 +622,16 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
     if embedding is None:
         return jsonify({"error": "Failed to embed the uploaded file."}), 400
 
+    # Generate thumbnail for audio media
+    thumb = None
+    if dataset_media_type == "audio":
+        from vtsearch.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
+
+        thumb = generate_waveform_thumbnail(file_bytes)
+
     with _state_lock:
         new_id = next_media_id(medias)
-        medias[new_id] = {
+        new_media: dict[str, Any] = {
             "id": new_id,
             "type": dataset_media_type,
             "embedder": dataset_embedder_name,
@@ -622,6 +647,9 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
             },
             "origin_name": original_filename,
         }
+        if thumb is not None:
+            new_media["thumbnail_bytes"] = thumb
+        medias[new_id] = new_media
 
     apply_label(new_id, label)
 

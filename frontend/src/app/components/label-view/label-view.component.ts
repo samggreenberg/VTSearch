@@ -18,7 +18,7 @@ import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
-import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-label-view',
@@ -194,6 +194,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
+    if (leftPanelEl) {
+      const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
+      if (snapped !== null) {
+        const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+        const clamped = Math.max(minWidth, Math.min(leftMax, snapped));
+        this.ngZone.run(() => {
+          this.leftWidth = clamped;
+          this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
+        });
+      }
+    }
     this.savePanelPx('left');
   }
 
@@ -224,6 +237,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
+    const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
+    if (rightPanelEl) {
+      const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
+      if (snapped !== null) {
+        const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+        const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
+        this.ngZone.run(() => {
+          this.rightWidth = clamped;
+          this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
+        });
+      }
+    }
     this.savePanelPx('right');
   }
 

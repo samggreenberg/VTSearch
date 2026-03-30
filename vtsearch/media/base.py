@@ -19,6 +19,7 @@ the registry.
 from __future__ import annotations
 
 import contextlib
+import io
 import logging
 import os
 import threading
@@ -149,8 +150,11 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
     """
     try:
         return load_fn(*args, local_files_only=True, **kwargs)
-    except OSError:
+    except (OSError, TypeError, ValueError):
         # Model not in local cache — allow network download (with retries).
+        # OSError: model files missing entirely.
+        # TypeError/ValueError: partial cache where a resolved path is None
+        # or invalid (e.g. sentencepiece receives None instead of a string).
         last_exc: Exception | None = None
         for attempt in range(_HF_RETRY_COUNT):
             try:
@@ -210,44 +214,45 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
         desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
         callback("loading", desc, current, int(total))
 
-    # Redirect intercepted bars' output to devnull so they don't print
-    # to the console.  The callback receives all progress updates instead.
-    _devnull = open(os.devnull, "w")  # noqa: SIM115
-    try:
+    # Redirect intercepted bars' output to a StringIO sink so they don't
+    # print to the console.  The callback receives all progress updates
+    # instead.  We use StringIO rather than open(os.devnull) because tqdm
+    # bars can outlive this context (held by transformers/huggingface_hub
+    # internals).  A closed devnull file causes "I/O operation on closed
+    # file" when those zombie bars attempt writes later.
+    _sink = io.StringIO()
 
-        def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-            # Force file=devnull so tqdm never writes to the console.
-            # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
-            # so we must override unconditionally (not just when absent).
-            kwargs["file"] = _devnull
-            _orig_init(self, *args, **kwargs)
-            total = getattr(self, "total", None)
-            if total and total > 0 and not getattr(self, "disable", False):
-                _bars.append(self)
-                if _primary_bar() is self:
-                    _report(self)
-
-        def _patched_update(self: Any, n: int = 1) -> None:
-            _orig_update(self, n)
+    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Force file=_sink so tqdm never writes to the console.
+        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
+        # so we must override unconditionally (not just when absent).
+        kwargs["file"] = _sink
+        _orig_init(self, *args, **kwargs)
+        total = getattr(self, "total", None)
+        if total and total > 0 and not getattr(self, "disable", False):
+            _bars.append(self)
             if _primary_bar() is self:
                 _report(self)
 
-        def _patched_close(self: Any) -> None:
-            _orig_close(self)
-            if self in _bars:
-                _bars.remove(self)
+    def _patched_update(self: Any, n: int = 1) -> None:
+        _orig_update(self, n)
+        if _primary_bar() is self:
+            _report(self)
 
-        tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
-        tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
-        tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
-        try:
-            yield
-        finally:
-            tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
-            tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
-            tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
+    def _patched_close(self: Any) -> None:
+        _orig_close(self)
+        if self in _bars:
+            _bars.remove(self)
+
+    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
+    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
+    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+    try:
+        yield
     finally:
-        _devnull.close()
+        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
+        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
+        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
 
 
 @contextlib.contextmanager
@@ -426,6 +431,13 @@ class MediaEmbedder(ABC):
         immediately (the subclass ``_load_models_impl`` checks
         ``self._model is not None``).
         """
+        # Fast path: if the model was already loaded (e.g. by startup
+        # preloading), skip the lock entirely.  This avoids blocking on
+        # _model_load_lock when another thread has already completed the
+        # load, preventing the UI from appearing frozen on
+        # "Loading embedding model…" with no progress updates.
+        if getattr(self, "_model", None) is not None:
+            return
         with self._model_load_lock:
             try:
                 self._load_models_impl()

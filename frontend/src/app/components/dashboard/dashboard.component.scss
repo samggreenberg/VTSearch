@@ -162,7 +162,7 @@
   }
 
   td {
-    padding: 6px 12px;
+    padding: 6px 10px;
   }
 
   th {
@@ -200,7 +200,7 @@
     .col-resize-handle {
       position: absolute;
       top: 0;
-      right: -6px;
+      right: 0;
       bottom: 0;
       width: 12px;
       cursor: col-resize;
@@ -211,8 +211,7 @@
         position: absolute;
         top: 20%;
         bottom: 20%;
-        left: 50%;
-        transform: translateX(-50%);
+        right: 0;
         width: 2px;
         background: var(--accent, #5b8fff);
         opacity: 0.35;
@@ -290,6 +289,25 @@
     min-width: 120px;
     padding: 10px 24px;
     font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+
+    // Keep full opacity on the active loading button (waggling icon)
+    // even though it's disabled to block new clicks.
+    &.loading-active:disabled {
+      opacity: 1;
+      cursor: wait;
+    }
+
+    svg {
+      flex-shrink: 0;
+
+      &.icon-waggle {
+        animation: icon-waggle 2s ease-in-out infinite;
+      }
+    }
   }
 }
 
@@ -314,4 +332,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+// Waggle animation for Train/Find button icons while loading.
+// 2s cycle: rotate to 90deg (0.3s), hold (0.7s), rotate back (0.3s), hold (0.7s).
+@keyframes icon-waggle {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(90deg); }
+  50%  { transform: rotate(90deg); }
+  65%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
 }

@@ -28,7 +28,7 @@ fi
 REQ_FILES=()
 while IFS= read -r -d '' f; do
     REQ_FILES+=("$f")
-done < <(find "$SCRIPT_DIR/vtsearch" -name "requirements.txt" -print0 | sort -z)
+done < <(find "$SCRIPT_DIR/vtsearch" -name "requirements*.txt" -print0 | sort -z)
 
 # Write requirements-plugins.txt with -r references.
 {

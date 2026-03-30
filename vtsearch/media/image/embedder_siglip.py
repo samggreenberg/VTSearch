@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -56,6 +57,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing image libraries…", 0, 0)
         from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading SigLIP model weights…")
@@ -68,9 +70,15 @@ class ImageSiglipEmbedder(MediaEmbedder):
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading SigLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            self._processor = load_pretrained_local_first(
-                SiglipProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+            from transformers import SiglipImageProcessor, SiglipTokenizer  # noqa: PLC0415
+
+            image_processor = load_pretrained_local_first(
+                SiglipImageProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
             )
+            tokenizer = load_pretrained_local_first(
+                SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+            )
+            self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # ------------------------------------------------------------------
     # Embedding
@@ -97,7 +105,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
             image = Image.open(file_path).convert("RGB")
             return self.embed_pil_image(image)
         except Exception as e:
-            print(f"Error embedding {file_path}: {e}")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
@@ -118,7 +126,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
         except Exception as e:
-            print(f"Error embedding PIL image: {e}")
+            logging.getLogger(__name__).exception("Error embedding PIL image")
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -136,7 +144,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
-            print(f"Error embedding text query for image (SigLIP): {e}")
+            logging.getLogger(__name__).exception("Error embedding text query for image (SigLIP)")
             return None
 
     # Internal helper used by loader.py bridge

@@ -693,6 +693,7 @@ def load_registered_dataset(dataset_id: str):
     task_id = f"_regload_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
         task_id, entry.get("name", dataset_id), dataset_id=dataset_id, media_type=entry.get("media_type", ""),
+        embedder=entry.get("embedder", ""),
     )
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 

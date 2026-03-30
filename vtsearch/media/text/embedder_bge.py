@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -46,6 +47,7 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing text libraries…", 0, 0)
         from sentence_transformers import SentenceTransformer  # noqa: PLC0415
         from transformers import BertModel  # noqa: PLC0415
 
@@ -83,7 +85,7 @@ class TextBGEEmbedder(MediaEmbedder):
                 return None
             return self._model.encode(text_content, normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding {file_path}: {e}")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_text_passage(self, text: str) -> Optional[np.ndarray]:
@@ -95,7 +97,7 @@ class TextBGEEmbedder(MediaEmbedder):
         try:
             return self._model.encode(text, normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding passage (BGE): {e}")
+            logging.getLogger(__name__).exception("Error embedding passage (BGE)")
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -106,7 +108,7 @@ class TextBGEEmbedder(MediaEmbedder):
         try:
             return self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True)
         except Exception as e:
-            print(f"Error embedding text query for text (BGE): {e}")
+            logging.getLogger(__name__).exception("Error embedding text query for text (BGE)")
             return None
 
     # Internal helper used by loader.py bridge

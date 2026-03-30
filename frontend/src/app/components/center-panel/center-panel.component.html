@@ -80,6 +80,7 @@
       [isGood]="isGood"
       [isBad]="isBad"
       [disabled]="isVoting || disabled"
+      [spinningVote]="spinningVote"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
   }

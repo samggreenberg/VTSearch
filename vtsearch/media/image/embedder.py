@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -56,6 +57,7 @@ class ImageClipEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
+        self._on_progress("loading", "Importing image libraries…", 0, 0)
         from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLIP model weights…")
@@ -98,7 +100,7 @@ class ImageClipEmbedder(MediaEmbedder):
             image = Image.open(file_path).convert("RGB")
             return self.embed_pil_image(image)
         except Exception as e:
-            print(f"Error embedding {file_path}: {e}")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
@@ -119,7 +121,7 @@ class ImageClipEmbedder(MediaEmbedder):
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
         except Exception as e:
-            print(f"Error embedding PIL image: {e}")
+            logging.getLogger(__name__).exception("Error embedding PIL image")
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -137,7 +139,7 @@ class ImageClipEmbedder(MediaEmbedder):
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
         except Exception as e:
-            print(f"Error embedding text query for image: {e}")
+            logging.getLogger(__name__).exception("Error embedding text query for image")
             return None
 
     # Internal helper used by loader.py bridge

@@ -355,7 +355,7 @@ def _run_origin_load_in_background(
 
     task_id = f"_loading_{uuid4().hex[:8]}"
     ingest_started_at = _time.time()
-    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type)
+    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder)
 
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)

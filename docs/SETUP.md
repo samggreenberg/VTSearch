@@ -144,9 +144,9 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB). The `install-gpu.sh` script handles selecting the right CUDA version and runs `install-plugin-deps.sh` automatically.
+`install-gpu.sh` is an all-in-one script — it runs `install-plugin-deps.sh` automatically, installs all dependencies with the correct CUDA PyTorch build, and does the editable install. No extra steps needed.
 
-**Adding new plugin dependencies:** If you're developing a new plugin (importer, exporter, media type, etc.), just add a `requirements.txt` in your plugin's directory, then run `bash install-plugin-deps.sh` to regenerate the tree. The next `pip install -r requirements.txt` picks it up automatically — no need to edit any central file.
+The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
 
 ## Building the frontend
 
@@ -203,7 +203,7 @@ You should see output like:
  * Running on http://127.0.0.1:5000
 ```
 
-Open that URL in your browser. For faster startup during development, use `--local` mode (loads embedding models lazily instead of eagerly):
+Open that URL in your browser. Use `--local` mode to bind to `0.0.0.0:5000` (accessible from other devices on the network) instead of localhost only:
 
 ```bash
 python app.py --local
@@ -233,6 +233,11 @@ Or with plain Docker:
 docker build -t vtsearch .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 ```
+
+> **Note:** The Dockerfile does not include a Node.js build stage. You must
+> build the frontend locally (`cd frontend && npm install && npm run build:prod`)
+> before running `docker build`, so the `static/` directory contains the
+> compiled Angular app.
 
 ### GPU
 

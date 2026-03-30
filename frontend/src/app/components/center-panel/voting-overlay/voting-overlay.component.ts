@@ -1,8 +1,10 @@
 import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
+import { IconComponent } from '../../icon/icon.component';
 
 @Component({
   selector: 'vt-voting-overlay',
   standalone: true,
+  imports: [IconComponent],
   templateUrl: './voting-overlay.component.html',
   styleUrl: './voting-overlay.component.scss',
 })
@@ -10,6 +12,7 @@ export class VotingOverlayComponent implements OnDestroy {
   @Input() isGood = false;
   @Input() isBad = false;
   @Input() disabled = false;
+  @Input() spinningVote: 'good' | 'bad' | null = null;
   @Output() voted = new EventEmitter<'good' | 'bad'>();
 
   goodFlash = false;

@@ -28,6 +28,7 @@ POST /api/trainable-models/<name>/labels
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
@@ -37,6 +38,8 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
 
@@ -781,27 +784,36 @@ def delete_registered_model(model_id: str):
     if entry is None:
         return jsonify({"error": "Model not found"}), 404
 
-    # Also clean up the underlying trainable model file
-    tm_name = entry.get("trainable_model_name", "")
-    if tm_name:
-        tm_path = _model_path(tm_name)
-        if tm_path.exists():
-            tm_path.unlink(missing_ok=True)
+    # Clean up associated resources.  Failures here must not prevent the
+    # registry entry from being removed — otherwise the user sees a detector
+    # that cannot be deleted.
+    try:
+        tm_name = entry.get("trainable_model_name", "")
+        if tm_name:
+            tm_path = _model_path(tm_name)
+            if tm_path.exists():
+                tm_path.unlink(missing_ok=True)
+    except Exception:
+        logger.exception("Failed to delete trainable-model file for %s", model_id)
 
-    # Clean up the autorun detector if any
-    det_name = entry.get("detector_name", "")
-    if det_name:
-        from vtsearch.utils import remove_autorun_detector
+    try:
+        det_name = entry.get("detector_name", "")
+        if det_name:
+            from vtsearch.utils import remove_autorun_detector
 
-        remove_autorun_detector(det_name)
+            remove_autorun_detector(det_name)
+    except Exception:
+        logger.exception("Failed to remove autorun detector for %s", model_id)
 
-    # Clean up the DetectorContext if loaded
-    from vtsearch.models.registry import is_model_loaded, remove_loaded_model_id
-    from vtsearch.utils import unregister_detector_context
+    try:
+        from vtsearch.models.registry import is_model_loaded, remove_loaded_model_id
+        from vtsearch.utils import unregister_detector_context
 
-    if is_model_loaded(model_id):
-        unregister_detector_context(model_id)
-        remove_loaded_model_id(model_id)
+        if is_model_loaded(model_id):
+            unregister_detector_context(model_id)
+            remove_loaded_model_id(model_id)
+    except Exception:
+        logger.exception("Failed to unregister detector context for %s", model_id)
 
     unregister_model(model_id)
     return jsonify({"ok": True})

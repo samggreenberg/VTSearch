@@ -39,10 +39,11 @@ You can also load your own data from pickle files or folders via the same menu.
 ```
 ├── app.py                          # Flask entry point, registers blueprints, CLI arg parsing
 ├── vtsearch/                       # Main application package
-│   ├── config.py                   # Constants (SAMPLE_RATE, paths, model IDs)
+│   ├── config.py                   # Constants (CLAP_SAMPLE_RATE, paths, model IDs)
 │   ├── medias.py                   # Test media generation & embedding cache
 │   ├── cli.py                      # CLI utilities: autodetect workflow
 │   ├── settings.py                 # Persistent settings & autorun processors
+│   ├── auth/                       # Authentication (LoginProvider ABC, DefaultLoginProvider)
 │   ├── routes/                     # Flask blueprints
 │   ├── models/                     # ML models (embeddings, training, progress)
 │   ├── media/                      # Media type plugins (audio, image, text, video, document)
@@ -69,7 +70,9 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── SETUP.md                    # Setup instructions
 │   ├── demos.md                    # Demo dataset listing
 │   ├── old_io.md                   # Retired IO module reference implementations
-│   ├── plan-media-sources.md       # MediaSource abstraction design proposal
+│   ├── REFACTORING.md              # Refactoring plan and progress tracking
+│   ├── plan-media-sources.md       # MediaSource abstraction design document
+│   ├── plan-sync-sources.md        # Sync sources design document
 │   └── design/                     # Architecture design documents
 └── pyproject.toml                  # Project metadata and dependencies
 ```

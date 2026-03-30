@@ -13,6 +13,7 @@
 }
 
 button {
+  min-width: 120px;
   padding: 8px 24px;
   border: 2px solid;
   border-radius: 6px;
@@ -20,35 +21,35 @@ button {
   font-weight: 500;
   cursor: pointer;
   background: transparent;
-  transition: background 0.15s, color 0.15s;
-
-  // Reserve space for bold text so buttons don't resize on hover.
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  line-height: 1;
 
-  &::after {
-    content: attr(data-label);
-    font-weight: 700;
-    height: 0;
-    overflow: hidden;
-    visibility: hidden;
-    pointer-events: none;
+  // Remove focus ring from mouse clicks; keep it for keyboard navigation.
+  &:focus:not(:focus-visible) {
+    outline: none;
   }
+}
 
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+@keyframes icon-spin-cw {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+vt-icon.icon-spinning {
+  animation: icon-spin-cw 0.3s ease-in-out;
 }
 
 .btn-good {
   color: var(--color-good);
   border-color: var(--color-good);
 
-  &:hover:not(:disabled) {
-    font-weight: 700;
+  &:hover {
+    background: var(--good-bg);
   }
 
   &.voted,
@@ -56,19 +57,29 @@ button {
     background: var(--color-good);
     color: var(--header-text, #fff);
   }
+
+  &.voted:hover,
+  &.vote-flash:hover {
+    background: color-mix(in srgb, var(--color-good) 85%, black);
+  }
 }
 
 .btn-bad {
   color: var(--color-bad);
   border-color: var(--color-bad);
 
-  &:hover:not(:disabled) {
-    font-weight: 700;
+  &:hover {
+    background: var(--bad-bg);
   }
 
   &.voted,
   &.vote-flash {
     background: var(--color-bad);
     color: var(--header-text, #fff);
+  }
+
+  &.voted:hover,
+  &.vote-flash:hover {
+    background: color-mix(in srgb, var(--color-bad) 85%, black);
   }
 }

@@ -72,6 +72,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deletingDatasetId = '';
   deletingModelId = '';
   addLabelsModelId = '';
+  trainLoading = false;
+  findLoading = false;
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -544,6 +546,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedModelIds.delete(model.id);
         this.datasetState.refresh();
       },
+      error: () => {
+        this.dialog.alert('Failed to delete model. Please try again.', 'error');
+      },
     });
   }
 
@@ -621,6 +626,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (t.media_type && !t.error) types.add(t.media_type);
     }
     return types.size === 1 ? [...types][0] : '';
+  }
+
+  /** Guess the media embedder the user likely wants based on existing datasets and in-progress loads. */
+  get guessedMediaEmbedder(): string {
+    const embedders = new Set<string>();
+    for (const d of this.datasets) {
+      const emb = d['embedder'] as string;
+      if (emb) embedders.add(emb);
+    }
+    for (const t of this.loadingTasks) {
+      if (t.embedder && !t.error) embedders.add(t.embedder);
+    }
+    return embedders.size === 1 ? [...embedders][0] : '';
   }
 
   openImporterModal(): void {
@@ -904,6 +922,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Button state ---
 
+  get isLoading(): boolean {
+    return this.trainLoading || this.findLoading;
+  }
+
   get labelEnabled(): boolean {
     const selectedDatasets = this.resolvedSelectedDatasets;
     const selectedModels = this.resolvedSelectedModels;
@@ -984,6 +1006,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();
+    this.trainLoading = true;
 
     // Set active context so the HTTP interceptor attaches headers
     this.activeContext.setDatasetId(dataset.id);
@@ -993,6 +1016,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let pending = 2;
     const gate = (): void => {
       if (--pending === 0) {
+        this.trainLoading = false;
         this.datasetState.refresh();
         this.router.navigate(['/label']);
       }
@@ -1031,6 +1055,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.findSession.modelId = model.id;
     this.findSession.modelName = model.name;
     this.findSession.datasetId = dataset.id;
+    this.findLoading = true;
 
     // Set active context so the HTTP interceptor attaches headers
     this.activeContext.setDatasetId(dataset.id);
@@ -1040,6 +1065,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let pending = 2;
     const gate = (): void => {
       if (--pending === 0) {
+        this.findLoading = false;
         this.datasetState.refresh();
         this.router.navigate(['/find']);
       }

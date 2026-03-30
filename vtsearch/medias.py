@@ -6,6 +6,7 @@ import numpy as np
 
 from vtsearch.audio import generate_wav
 from vtsearch.config import DATA_DIR
+from vtsearch.media.audio.media_type import generate_waveform_thumbnail
 
 NUM_MEDIAS = 20
 from vtsearch.models import embed_audio_file
@@ -73,6 +74,7 @@ def init_medias():
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": embedding,
             "media_bytes": wav_bytes,
+            "thumbnail_bytes": generate_waveform_thumbnail(wav_bytes),
             "filename": fname,
             "category": "test",
             "origin": {"importer": "test", "params": {}},

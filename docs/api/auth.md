@@ -31,10 +31,12 @@ With `DefaultLoginProvider`, every request is authenticated as `"default"`.
 POST /api/auth/login
 ```
 
-**Body:** `{"username": "...", "password": "..."}`
+**Body:** `{"username": "..."}`
 
-→ Provider-specific response. With `DefaultLoginProvider`, returns 404.
-With `TrivialLoginProvider`, authenticates and returns `{"ok": true, "user": "..."}`.
+→ Provider-specific response. With `DefaultLoginProvider`, returns 400
+(`{"error": "Login not supported by the active provider"}`).
+With `TrivialLoginProvider`, authenticates and returns the auth status dict
+(same shape as `GET /api/auth/status`).
 
 ### Logout
 
@@ -42,7 +44,9 @@ With `TrivialLoginProvider`, authenticates and returns `{"ok": true, "user": "..
 POST /api/auth/logout
 ```
 
-→ Provider-specific response. With `DefaultLoginProvider`, returns 404.
+→ Provider-specific response. With `DefaultLoginProvider`, returns 400
+(`{"error": "Logout not supported by the active provider"}`).
+With `TrivialLoginProvider`, clears the session and returns the auth status dict.
 
 ---
 
