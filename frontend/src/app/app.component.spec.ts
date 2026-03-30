@@ -182,11 +182,11 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const datasetState = TestBed.inject(DatasetStateService);
     spyOnProperty(datasetState, 'datasets', 'get').and.returnValue([
-      { media_type: 'audio' },
-      { media_type: 'audio' },
+      { id: 'd1', name: 'DS1', media_type: 'audio' },
+      { id: 'd2', name: 'DS2', media_type: 'audio' },
     ]);
     spyOnProperty(datasetState, 'models', 'get').and.returnValue([
-      { media_type: 'audio' },
+      { id: 'm1', name: 'M1', media_type: 'audio' },
     ]);
     fixture.componentInstance.isOnLabelView = false;
     fixture.componentInstance.onSettings();
@@ -197,8 +197,8 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const datasetState = TestBed.inject(DatasetStateService);
     spyOnProperty(datasetState, 'datasets', 'get').and.returnValue([
-      { media_type: 'audio' },
-      { media_type: 'image' },
+      { id: 'd1', name: 'DS1', media_type: 'audio' },
+      { id: 'd2', name: 'DS2', media_type: 'image' },
     ]);
     spyOnProperty(datasetState, 'models', 'get').and.returnValue([]);
     fixture.componentInstance.isOnLabelView = false;

@@ -546,6 +546,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.selectedModelIds.delete(model.id);
         this.datasetState.refresh();
       },
+      error: () => {
+        this.dialog.alert('Failed to delete model. Please try again.', 'error');
+      },
     });
   }
 

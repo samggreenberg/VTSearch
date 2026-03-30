@@ -28,7 +28,7 @@ describe('MediaListComponent', () => {
   });
 
   it('should render media items in natural order when no sortOrder', () => {
-    const items = component.orderedItems;
+    const items = component.cachedOrderedItems;
     expect(items.length).toBe(3);
     expect(items[0].media.id).toBe(1);
     expect(items[1].media.id).toBe(2);
@@ -41,7 +41,8 @@ describe('MediaListComponent', () => {
       { id: 1, score: 0.5 },
       { id: 2, score: 0.2 },
     ];
-    const items = component.orderedItems;
+    fixture.detectChanges();
+    const items = component.cachedOrderedItems;
     expect(items[0].media.id).toBe(3);
     expect(items[1].media.id).toBe(1);
     expect(items[2].media.id).toBe(2);
@@ -54,7 +55,8 @@ describe('MediaListComponent', () => {
       { id: 2, score: 0.2 },
     ];
     component.threshold = 0.4;
-    const items = component.orderedItems;
+    fixture.detectChanges();
+    const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
     expect(items[0].showThreshold).toBeFalse();
     expect(items[1].showThreshold).toBeFalse();

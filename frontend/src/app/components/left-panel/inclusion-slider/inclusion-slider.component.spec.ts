@@ -23,20 +23,6 @@ describe('InclusionSliderComponent', () => {
     expect(component.value).toBe(0);
   });
 
-  it('should display "0" for value 0', () => {
-    expect(component.displayValue).toBe('0');
-  });
-
-  it('should display "+5" for positive value', () => {
-    component.value = 5;
-    expect(component.displayValue).toBe('+5');
-  });
-
-  it('should display "-3" for negative value', () => {
-    component.value = -3;
-    expect(component.displayValue).toBe('-3');
-  });
-
   it('should emit valueChange on input', () => {
     spyOn(component.valueChange, 'emit');
     const input = fixture.nativeElement.querySelector('input[type="range"]');

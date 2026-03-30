@@ -36,7 +36,7 @@ describe('LabelImportersApiService', () => {
   });
 
   it('ingestMissing should POST', () => {
-    service.ingestMissing().subscribe();
+    service.ingestMissing([]).subscribe();
     const req = httpMock.expectOne('/api/label-importers/ingest-missing');
     expect(req.request.method).toBe('POST');
     req.flush({});

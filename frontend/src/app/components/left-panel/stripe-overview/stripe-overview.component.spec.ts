@@ -37,8 +37,9 @@ describe('StripeOverviewComponent', () => {
       { id: 2, score: 0.5 },
     ];
     component.goodVotes = new Set([1]);
-    const dots = component.dots;
-    const goodDots = dots.filter((d) => d.type === 'good');
+    component.ngOnChanges();
+    const dots = component.cachedDots;
+    const goodDots = dots.filter((d: { top: number; type: string }) => d.type === 'good');
     expect(goodDots.length).toBe(1);
     expect(goodDots[0].top).toBe(0);
   });
@@ -49,8 +50,9 @@ describe('StripeOverviewComponent', () => {
       { id: 2, score: 0.5 },
     ];
     component.badVotes = new Set([2]);
-    const dots = component.dots;
-    const badDots = dots.filter((d) => d.type === 'bad');
+    component.ngOnChanges();
+    const dots = component.cachedDots;
+    const badDots = dots.filter((d: { top: number; type: string }) => d.type === 'bad');
     expect(badDots.length).toBe(1);
     expect(badDots[0].top).toBe(50);
   });
@@ -61,8 +63,9 @@ describe('StripeOverviewComponent', () => {
       { id: 2, score: 0.5 },
     ];
     component.selectedId = 2;
-    const dots = component.dots;
-    const selectedDots = dots.filter((d) => d.type === 'selected');
+    component.ngOnChanges();
+    const dots = component.cachedDots;
+    const selectedDots = dots.filter((d: { top: number; type: string }) => d.type === 'selected');
     expect(selectedDots.length).toBe(1);
   });
 
@@ -73,12 +76,14 @@ describe('StripeOverviewComponent', () => {
       { id: 3, score: 0.1 },
     ];
     component.threshold = 0.4;
-    expect(component.thresholdPosition).toBeCloseTo(66.67, 0);
+    component.ngOnChanges();
+    expect(component.cachedThresholdPosition).toBeCloseTo(66.67, 0);
   });
 
   it('should return null threshold position when no threshold', () => {
     component.sortOrder = [{ id: 1, score: 0.9 }];
     component.threshold = null;
-    expect(component.thresholdPosition).toBeNull();
+    component.ngOnChanges();
+    expect(component.cachedThresholdPosition).toBeNull();
   });
 });
