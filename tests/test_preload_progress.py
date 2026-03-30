@@ -427,6 +427,36 @@ class TestLoadPretrainedLocalFirst:
         assert captured["args"] == ("model-id",)
         assert captured["kwargs"] == {"low_cpu_mem_usage": True, "token": False}
 
+    def test_falls_back_on_type_error(self):
+        """TypeError (e.g. sentencepiece gets None vocab_file) should trigger fallback."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise TypeError("not a string")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert call_count[0] == 2
+
+    def test_falls_back_on_value_error(self):
+        """ValueError from partial cache should trigger fallback."""
+        call_count = [0]
+        sentinel = object()
+
+        def fake_load(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("local_files_only"):
+                raise ValueError("invalid vocab path")
+            return sentinel
+
+        result = load_pretrained_local_first(fake_load, "model-id")
+        assert result is sentinel
+        assert call_count[0] == 2
+
     def test_non_oserror_exceptions_propagate(self):
         """Non-OSError exceptions (e.g. ImportError) should not be caught."""
 
