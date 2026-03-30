@@ -737,11 +737,51 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
         _save(s)
 
 
+# Map of setting key → setter function (generated dynamically).
+_SETTER_MAP: dict[str, Any] | None = None
+
+
+def _get_setter_map() -> dict:
+    """Build a map of setting-key → setter-function by introspecting this module."""
+    global _SETTER_MAP
+    if _SETTER_MAP is not None:
+        return _SETTER_MAP
+    import vtsearch.settings as _self
+
+    _SETTER_MAP = {}
+    for attr_name in dir(_self):
+        if attr_name.startswith("set_") and callable(getattr(_self, attr_name)):
+            _SETTER_MAP[attr_name[4:]] = getattr(_self, attr_name)
+    return _SETTER_MAP
+
+
+def _apply_settings(imported: dict) -> None:
+    """Apply a dict of settings via this module's ``set_*`` functions.
+
+    Unknown keys or values that fail validation are silently skipped.
+    Used by :func:`sync_from_settings_source` and by the settings-import
+    route in ``routes/settings_io.py``.
+    """
+    setter_map = _get_setter_map()
+    for key, value in imported.items():
+        setter = setter_map.get(key)
+        if setter is not None:
+            try:
+                setter(value)
+            except (TypeError, ValueError):
+                pass  # Skip invalid values silently
+
+
 def sync_from_settings_source() -> dict[str, Any] | None:
     """Pull settings from the active source and apply them.
 
     Returns the imported settings dict, or ``None`` if no source is
     configured or the source file doesn't exist yet.
+
+    This is called:
+    - At app startup (auto-import), so settings from the source take
+      precedence over the local settings file.
+    - Manually via ``POST /api/settings-sources/sync``.
     """
     cfg = get_settings_source_config()
     if cfg is None:
@@ -767,8 +807,6 @@ def sync_from_settings_source() -> dict[str, Any] | None:
     # Apply under sync guard to prevent re-exporting back to source.
     _syncing.active = True
     try:
-        from vtsearch.routes.settings_io import _apply_settings
-
         _apply_settings(imported)
     finally:
         _syncing.active = False

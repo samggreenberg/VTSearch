@@ -488,6 +488,93 @@ class TestSettingsSyncFromSource:
 
 
 # ---------------------------------------------------------------------------
+# _apply_settings (module-level, no route dependency)
+# ---------------------------------------------------------------------------
+
+
+class TestApplySettings:
+    def test_apply_settings_updates_volume(self, isolated_settings):
+        from vtsearch import settings
+
+        settings._apply_settings({"volume": 0.42})
+        assert settings.get_volume() == 0.42
+
+    def test_apply_settings_skips_unknown_keys(self, isolated_settings):
+        from vtsearch import settings
+
+        # Should not raise — unknown keys are silently ignored
+        settings._apply_settings({"nonexistent_key_xyz": "hello"})
+
+    def test_apply_settings_skips_invalid_values(self, isolated_settings):
+        from vtsearch import settings
+
+        orig_theme = settings.get_theme()
+        # "neon" is not a valid theme — should be silently skipped
+        settings._apply_settings({"theme": "neon"})
+        assert settings.get_theme() == orig_theme
+
+    def test_apply_settings_available_from_routes(self):
+        """The routes module re-exports _apply_settings from settings."""
+        from vtsearch.routes.settings_io import _apply_settings
+        from vtsearch.settings import _apply_settings as canonical
+
+        assert _apply_settings is canonical
+
+
+# ---------------------------------------------------------------------------
+# Startup auto-import from settings source
+# ---------------------------------------------------------------------------
+
+
+class TestStartupAutoImport:
+    """sync_from_settings_source() is called at app startup to import
+    settings from the active source.  This simulates that flow."""
+
+    def test_startup_import_applies_source_settings(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        source_file = tmp_path / "startup.settings.json"
+
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+
+        # Overwrite the source file with the settings we want at startup
+        source_file.write_text(json.dumps({"volume": 0.33, "theme": "highviz"}))
+
+        # Simulate startup auto-import
+        result = settings.sync_from_settings_source()
+        assert result is not None
+        assert settings.get_volume() == 0.33
+        assert settings.get_theme() == "highviz"
+
+    def test_startup_import_noop_when_no_source(self, isolated_settings):
+        from vtsearch import settings
+
+        # No source configured — should return None and not error
+        assert settings.sync_from_settings_source() is None
+
+    def test_startup_import_noop_when_source_file_missing(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(tmp_path / "sub" / "missing.json")},
+        }
+        settings.set_settings_source_config(config)
+
+        # Remove the auto-created file
+        auto_created = tmp_path / "sub" / "missing.json"
+        if auto_created.exists():
+            auto_created.unlink()
+
+        # Should gracefully return None
+        assert settings.sync_from_settings_source() is None
+
+
+# ---------------------------------------------------------------------------
 # DetectorContext.labelset_source field
 # ---------------------------------------------------------------------------
 
