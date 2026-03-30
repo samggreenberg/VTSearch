@@ -906,6 +906,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Button state ---
 
+  get isLoading(): boolean {
+    return this.trainLoading || this.findLoading;
+  }
+
   get labelEnabled(): boolean {
     const selectedDatasets = this.resolvedSelectedDatasets;
     const selectedModels = this.resolvedSelectedModels;
