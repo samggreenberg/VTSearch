@@ -28,15 +28,16 @@ discovery/registration works, and includes a complete example.
 
 ## Shared Plugin Architecture
 
-The four plugin systems — data importers, results exporters, label
-importers, and processor importers — share the same architecture built on
-two base classes in `vtsearch/utils/registry.py`:
+Eight plugin systems — data importers, results exporters, label
+importers, processor importers, settings importers, settings exporters,
+settings sources, and labelset sources — share the same architecture
+built on two base classes in `vtsearch/utils/registry.py`:
 
 ### PluginField
 
-A dataclass describing a single user-configurable input. All four plugin
+A dataclass describing a single user-configurable input. All plugin
 families use the same field type (aliased as `ImporterField`,
-`ExporterField`, `LabelImporterField`, `ProcessorImporterField`).
+`ExporterField`, `LabelImporterField`, `ProcessorImporterField`, etc.).
 
 | Parameter     | Type        | Default  | Description                                             |
 |---------------|-------------|----------|---------------------------------------------------------|
@@ -53,7 +54,7 @@ families use the same field type (aliased as `ImporterField`,
 ### PluginBase
 
 Shared base class providing CLI-argument derivation, validation, and
-serialisation. All four plugin base classes inherit from it.
+serialisation. All plugin base classes inherit from it.
 
 **Required class attributes (set on your subclass):**
 
@@ -82,18 +83,22 @@ serialisation. All four plugin base classes inherit from it.
 
 ### PluginRegistry (Auto-Discovery)
 
-All four plugin families use `PluginRegistry` for auto-discovery. The
+All plugin families use `PluginRegistry` for auto-discovery. The
 registry uses `pkgutil.iter_modules` to scan for **sub-packages**
 (directories with `__init__.py`) under the plugin directory. For each
 sub-package, it imports the module and looks for a module-level sentinel
 attribute. If found, the plugin is registered by its `name`.
 
-| Plugin Family      | Package                            | Sentinel             | Base Class          |
-|--------------------|------------------------------------|----------------------|---------------------|
-| Data Importers     | `vtsearch.datasets.importers`      | `IMPORTER`           | `DatasetImporter`   |
-| Results Exporters  | `vtsearch.exporters`               | `EXPORTER`           | `LabelsetExporter`  |
-| Label Importers    | `vtsearch.labels.importers`        | `LABEL_IMPORTER`     | `LabelImporter`     |
-| Processor Importers| `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER` | `ProcessorImporter` |
+| Plugin Family       | Package                            | Sentinel              | Base Class          |
+|---------------------|------------------------------------|-----------------------|---------------------|
+| Data Importers      | `vtsearch.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   |
+| Results Exporters   | `vtsearch.exporters`               | `EXPORTER`            | `LabelsetExporter`  |
+| Label Importers     | `vtsearch.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     |
+| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` |
+| Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  |
+| Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  |
+| Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    |
+| Labelset Sources    | `vtsearch.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    |
 
 Failed imports emit a warning but do not break the application — a missing
 optional dependency gracefully disables that plugin.
@@ -807,18 +812,23 @@ The same pattern is used in `vtsearch/settings.py` for settings sources.
 
 ## Media System
 
-Media types, embedders, and clippers use **explicit registration** in
-`vtsearch/media/__init__.py`. Unlike the plugin systems above, they are
-not auto-discovered — you import your class and call the appropriate
-`register*()` function.
+Media types, embedders, and clippers are **auto-discovered** at import
+time. The `_discover_media_plugins()` function in
+`vtsearch/media/__init__.py` scans sub-packages of `vtsearch/media/` for
+module-level sentinel attributes:
 
-The three registries:
+| Sentinel     | Type                  | Description                          |
+|--------------|-----------------------|--------------------------------------|
+| `MEDIA_TYPE` | `MediaType`           | A single media type instance         |
+| `EMBEDDERS`  | `list[MediaEmbedder]` | Embedder instances (may be empty)    |
+| `CLIPPERS`   | `list[MediaClipper]`  | Clipper instances (may be empty)     |
 
-| Registry | Function | Keyed by |
-|----------|----------|----------|
-| Media types | `register(media_type)` | `MediaType.type_id` |
-| Embedders | `register_embedder(embedder)` | `MediaEmbedder.name` |
-| Clippers | `register_clipper(clipper)` | `MediaClipper.name` |
+To add a new built-in media type, create a sub-package under
+`vtsearch/media/` with an `__init__.py` that exposes the relevant
+sentinels. Symlinked directories are supported.
+
+Third-party or project-specific types can still be registered manually
+via `register()`, `register_embedder()`, and `register_clipper()`.
 
 ---
 
@@ -921,13 +931,21 @@ class CodeMediaType(MediaType):
 
 ### Register the new type
 
-Add two lines to `vtsearch/media/__init__.py`, alongside the existing
-registrations at the bottom of the file:
+Expose the sentinels in your sub-package's `__init__.py`:
 
 ```python
-from vtsearch.media.code.media_type import CodeMediaType   # noqa: E402
-register(CodeMediaType())
+# vtsearch/media/code/__init__.py
+
+from vtsearch.media.code.media_type import CodeMediaType
+from vtsearch.media.code.embedder import CodeBertEmbedder
+
+MEDIA_TYPE = CodeMediaType()
+EMBEDDERS = [CodeBertEmbedder()]
+CLIPPERS = []  # No clippers yet — add when needed
 ```
+
+The auto-discovery system finds these sentinels at import time. No
+changes to `vtsearch/media/__init__.py` are needed.
 
 ### MediaType abstract interface reference
 
@@ -1056,8 +1074,13 @@ class CodeBertEmbedder(MediaEmbedder):
 
     # --- Model lifecycle (required abstract method) ---
 
-    def load_models(self) -> None:
-        """Load the embedding model. Must be idempotent."""
+    def _load_models_impl(self) -> None:
+        """Load the embedding model. Must be idempotent.
+
+        Override ``_load_models_impl`` (not ``load_models``).
+        The public ``load_models()`` wrapper handles locking and
+        ImportError wrapping automatically.
+        """
         if self._model is not None:
             return
         from sentence_transformers import SentenceTransformer
@@ -1097,12 +1120,19 @@ class CodeBertEmbedder(MediaEmbedder):
 
 ### Register the embedder
 
-Add to `vtsearch/media/__init__.py`:
+Add the embedder to the `EMBEDDERS` sentinel list in your media type's
+`__init__.py`:
 
 ```python
-from vtsearch.media.code.embedder import CodeBertEmbedder  # noqa: E402
-register_embedder(CodeBertEmbedder())
+# vtsearch/media/code/__init__.py
+
+from vtsearch.media.code.embedder import CodeBertEmbedder
+# ...
+EMBEDDERS = [CodeBertEmbedder()]
 ```
+
+For an alternative embedder on an **existing** media type, add it to that
+type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
 
 ### MediaEmbedder abstract interface reference
 
@@ -1115,10 +1145,10 @@ register_embedder(CodeBertEmbedder())
 
 **Required abstract methods:**
 
-| Method                    | Signature                        | Description                    |
-|---------------------------|----------------------------------|--------------------------------|
-| `load_models()`           | `() -> None`                     | Load model; must be idempotent |
-| `embed_media(file_path)`  | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
+| Method                      | Signature                        | Description                    |
+|-----------------------------|----------------------------------|--------------------------------|
+| `_load_models_impl()`       | `() -> None`                     | Load model; must be idempotent. Override this, not `load_models()` |
+| `embed_media(file_path)`    | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
 
 **Optional overridable methods:**
 
@@ -1171,6 +1201,7 @@ clippers return **new media dicts** that can replace the original.
 | `TextSentenceClipper` | `text_sentence` | `text` | Splits into individual sentences |
 | `VideoDefaultClipper` | `video_default` | `video` | Returns video unchanged |
 | `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Tiles into 2s segments |
+| `VideoSceneClipper` | `video_scene` | `video` | Splits at detected scene boundaries |
 | `DocumentDefaultClipper` | `document_default` | `document` | Returns document unchanged |
 
 ### What to implement
@@ -1218,11 +1249,15 @@ class SoundOverlapClipper(MediaClipper):
 
 ### Register the clipper
 
-Add to `vtsearch/media/__init__.py`:
+Add the clipper to the `CLIPPERS` sentinel list in your media type's
+`__init__.py`:
 
 ```python
-from vtsearch.media.audio.clipper import SoundOverlapClipper  # noqa: E402
-register_clipper(SoundOverlapClipper(2.0))
+# vtsearch/media/audio/__init__.py
+
+from vtsearch.media.audio.clipper import SoundOverlapClipper
+# ...
+CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(2.0)]
 ```
 
 ### MediaClipper abstract interface reference
@@ -1240,11 +1275,13 @@ register_clipper(SoundOverlapClipper(2.0))
 |-----------------|------------------------|------------------------------------|
 | `clip(media)`   | `(dict) -> list[dict]` | Split one media into one or more   |
 
-**Optional overridable methods:**
+**Optional overridable methods/properties:**
 
-| Method       | Signature      | Description                                              |
-|--------------|----------------|----------------------------------------------------------|
-| `to_dict()`  | `() -> dict`   | JSON-serialisable metadata (default: name + media_type)  |
+| Method/Property  | Signature / Returns      | Description                                              |
+|------------------|--------------------------|----------------------------------------------------------|
+| `to_dict()`      | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)  |
+| `parameters`     | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, etc.) |
+| `with_params(p)` | `(dict) -> MediaClipper` | Return new clipper with overridden parameters             |
 
 ### Clip method contract
 
@@ -1521,26 +1558,31 @@ class ObjectExtractor(Extractor):
 
 ## Dependency Management
 
-VTSearch declares all dependencies in `pyproject.toml`:
+Runtime dependencies are managed via **per-plugin `requirements.txt`
+files**, auto-discovered by `install-plugin-deps.sh`. Each plugin
+sub-package (media type, importer, exporter, etc.) can include its own
+`requirements.txt` in its directory.
 
 ```
-pyproject.toml
-  [project.dependencies]          # All app deps (Flask, NumPy, transformers, media types, etc.)
-  [project.optional-dependencies]
-    cpu                           # CPU-only PyTorch wheel
-    gpu                           # GPU PyTorch wheel
-    dev                           # Dev tools (pytest, ruff)
+vtsearch/media/image/requirements.txt     # Pillow, ultralytics, …
+vtsearch/media/audio/requirements.txt     # librosa, soundfile, …
+vtsearch/exporters/webhook/requirements.txt
 ```
 
-All media types, importers/exporters, and eval deps are in the base
-`[project.dependencies]`. The only optional extras are `cpu`/`gpu` (for
-choosing the right PyTorch build) and `dev` (for test/lint tools).
+Running `bash install-plugin-deps.sh` regenerates
+`requirements-plugins.txt` with `-r` references to each plugin's file.
+The top-level `requirements.txt` includes this, so `pip install -r
+requirements.txt` installs everything.
+
+`pyproject.toml` is kept minimal — only `cpu`/`gpu` (for choosing the
+right PyTorch build) and `dev` (for test/lint tools) live there.
 
 ### For a new media type, importer, or exporter
 
-Add your packages to `[project.dependencies]` in `pyproject.toml`.
-Failed imports of a plugin's sub-package emit a warning rather than
-crashing, so missing system-level dependencies degrade gracefully.
+Add a `requirements.txt` inside your plugin's directory, then run
+`bash install-plugin-deps.sh` to regenerate the dependency tree. Failed
+imports of a plugin's sub-package emit a warning rather than crashing, so
+missing dependencies degrade gracefully.
 
 ---
 
@@ -1552,7 +1594,7 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
 
 ### New Results Exporter Checklist
@@ -1561,7 +1603,7 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `export(self, results, field_values)` — return a dict with a `"message"` key
 - [ ] Expose `EXPORTER = YourExporter()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/exporters` includes your exporter
 
 ### New Label Importer Checklist
@@ -1570,7 +1612,7 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 
 ### New Processor Importer Checklist
@@ -1579,7 +1621,7 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a dict with `media_type`, `weights`, `threshold`
 - [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
 
 ### New Settings Source Checklist
@@ -1589,7 +1631,7 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Implement `load(self, field_values)` — return a settings dict
 - [ ] Implement `save(self, settings_data, field_values)` — persist settings
 - [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/settings-sources` includes your source
 
 ### New Labelset Source Checklist
@@ -1599,32 +1641,32 @@ crashing, so missing system-level dependencies degrade gracefully.
 - [ ] Implement `load(self, field_values)` — return a list of label dicts
 - [ ] Implement `save(self, labelset, field_values)` — persist a `LabelSet`
 - [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
-- [ ] Add any extra packages to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
 
 ### New Media Type Checklist
 
 - [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Register in `vtsearch/media/__init__.py` with `register(YourType())`
-- [ ] Add deps to `[project.optional-dependencies]` in `pyproject.toml`
+- [ ] Expose `MEDIA_TYPE`, `EMBEDDERS`, and `CLIPPERS` sentinels in `__init__.py`
+- [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
 
 ### New Media Embedder Checklist
 
-- [ ] Create `vtsearch/media/<type>/embedder.py`
-- [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `load_models()`, `embed_media()`
+- [ ] Create `vtsearch/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
+- [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
 - [ ] Optionally set `description_wrappers` for enriched text embedding
-- [ ] Register in `vtsearch/media/__init__.py` with `register_embedder(YourEmbedder())`
+- [ ] Add to the `EMBEDDERS` list in the media type's `__init__.py`
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist
 
 - [ ] Create or add to `vtsearch/media/<type>/clipper.py`
 - [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
-- [ ] Register in `vtsearch/media/__init__.py` with `register_clipper(YourClipper())`
+- [ ] Add to the `CLIPPERS` list in the media type's `__init__.py`
 - [ ] Test: verify `clip()` returns valid media dicts
 
 ### New Media Converter Checklist
