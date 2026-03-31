@@ -80,6 +80,23 @@ def _get_md5_value(d: dict[str, Any]) -> str:
     return d.get("md5") or d.get("MD5") or ""
 
 
+def _pop_embedding_key(d: dict[str, Any]) -> Any:
+    """Pop and return the embedding value from *d*, trying ``"embedding"`` key.
+
+    Returns the value (or ``None`` if the key is absent) and removes the
+    matched key from *d* so it doesn't leak into downstream metadata.
+    """
+    return d.pop("embedding", None)
+
+
+def _get_embedding_value(d: dict[str, Any]) -> Any:
+    """Return the embedding value from *d* without mutating it.
+
+    Returns ``None`` when the key is absent.
+    """
+    return d.get("embedding")
+
+
 def _streaming_md5(file_path: Path) -> str:
     """Compute MD5 hash of a file using constant memory."""
     h = hashlib.md5()
@@ -151,8 +168,11 @@ def load_dataset_from_folder(
             Keys follow the same lookup logic as ``content_vectors`` (relative
             path first, then basename).  When a metadata dict contains a
             non-empty ``"md5"`` key, that value is used as the media's MD5
-            instead of computing it from the file contents.  The metadata dict
-            is also attached to the media as ``custom_metadata``.
+            instead of computing it from the file contents.  When it contains
+            an ``"embedding"`` key, that value is used as the media's
+            embedding vector (highest priority, above ``content_vectors``
+            and the embedding model).  The metadata dict is also attached
+            to the media as ``custom_metadata``.
         skip_embedding: When ``True``, skip embedder resolution and model
             loading entirely.  Files with pre-computed vectors in
             ``content_vectors`` use those; files without are included with
@@ -226,9 +246,20 @@ def load_dataset_from_folder(
                 total_files,
             )
 
-            # Look up pre-computed vectors by relative path first, then
-            # fall back to basename for backward compatibility.
-            if content_vectors and rel_path in content_vectors:
+            # Look up per-file custom metadata (relative path first, then
+            # basename fallback — same lookup order as content_vectors).
+            file_cm: dict[str, Any] | None = None
+            if custom_metadata_map:
+                if rel_path in custom_metadata_map:
+                    file_cm = custom_metadata_map[rel_path]
+                elif file_path.name in custom_metadata_map:
+                    file_cm = custom_metadata_map[file_path.name]
+
+            # Resolve embedding: custom_metadata > content_vectors > model
+            cm_embedding = _get_embedding_value(file_cm) if file_cm else None
+            if cm_embedding is not None:
+                embedding = cm_embedding
+            elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
@@ -242,15 +273,6 @@ def load_dataset_from_folder(
                     continue
 
             embedder_id = emb.name if emb else ""
-
-            # Look up per-file custom metadata (relative path first, then
-            # basename fallback — same lookup order as content_vectors).
-            file_cm: dict[str, Any] | None = None
-            if custom_metadata_map:
-                if rel_path in custom_metadata_map:
-                    file_cm = custom_metadata_map[rel_path]
-                elif file_path.name in custom_metadata_map:
-                    file_cm = custom_metadata_map[file_path.name]
 
             # Resolve MD5: custom_metadata > content_md5s > computed
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
@@ -472,7 +494,19 @@ def load_dataset_from_folder_chunked(
                 total_files,
             )
 
-            if content_vectors and rel_path in content_vectors:
+            # Look up per-file custom metadata (same logic as non-chunked).
+            file_cm: dict[str, Any] | None = None
+            if custom_metadata_map:
+                if rel_path in custom_metadata_map:
+                    file_cm = custom_metadata_map[rel_path]
+                elif file_path.name in custom_metadata_map:
+                    file_cm = custom_metadata_map[file_path.name]
+
+            # Resolve embedding: custom_metadata > content_vectors > model
+            cm_embedding = _get_embedding_value(file_cm) if file_cm else None
+            if cm_embedding is not None:
+                embedding = cm_embedding
+            elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
@@ -484,14 +518,6 @@ def load_dataset_from_folder_chunked(
                 embedding = emb.embed_media(file_path)
                 if embedding is None:
                     continue
-
-            # Look up per-file custom metadata (same logic as non-chunked).
-            file_cm: dict[str, Any] | None = None
-            if custom_metadata_map:
-                if rel_path in custom_metadata_map:
-                    file_cm = custom_metadata_map[rel_path]
-                elif file_path.name in custom_metadata_map:
-                    file_cm = custom_metadata_map[file_path.name]
 
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
