@@ -252,7 +252,7 @@ def _discover_media_plugins() -> None:
     for entry in sorted(package_dir.iterdir()):
         if entry.name.startswith((".", "_")):
             continue
-        if not entry.is_dir() or not (entry / "__init__.py").exists():
+        if not entry.is_dir() or "." in entry.name or not (entry / "__init__.py").exists():
             continue
         try:
             mod = importlib.import_module(f"vtsearch.media.{entry.name}")
