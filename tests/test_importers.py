@@ -1338,6 +1338,56 @@ class TestSymlinkedImporterDiscovery:
                     del sys.modules[key]
 
 
+    def test_dotted_symlink_name_is_skipped(self, tmp_path):
+        """A symlink whose name contains a dot (e.g. 'foo.symbolic_link')
+        should be silently skipped — dots in directory names break importlib
+        module path construction."""
+        import os
+        import sys
+
+        from vtsearch.utils.registry import PluginRegistry
+
+        # Create a valid importer package.
+        ext_pkg = tmp_path / "dotted_imp"
+        ext_pkg.mkdir()
+        (ext_pkg / "__init__.py").write_text(
+            "from vtsearch.datasets.importers.base import DatasetImporter\n"
+            "from vtsearch.utils.registry import PluginField\n"
+            "\n"
+            "class _Imp(DatasetImporter):\n"
+            '    name = "dotted_symlink_test"\n'
+            '    display_name = "Dotted Symlink Test"\n'
+            '    description = "Should not be loaded"\n'
+            "    fields = [PluginField(key='path', label='Path', field_type='folder')]\n"
+            "    def run(self, field_values, medias): return []\n"
+            "\n"
+            "IMPORTER = _Imp()\n"
+        )
+
+        # Symlink with a dotted name into the importers directory.
+        import importlib
+
+        parent = importlib.import_module("vtsearch.datasets.importers")
+        pkg_dir = os.path.dirname(parent.__file__)
+        link = os.path.join(pkg_dir, "dx_uuid.symbolic_link")
+        os.symlink(str(ext_pkg), link)
+
+        try:
+            reg = PluginRegistry(
+                package="vtsearch.datasets.importers",
+                sentinel="IMPORTER",
+                label="dataset importer",
+            )
+            names = [p.name for p in reg.list()]
+            # The dotted-name symlink must NOT appear.
+            assert "dotted_symlink_test" not in names
+        finally:
+            os.unlink(link)
+            for key in list(sys.modules):
+                if "dx_uuid" in key:
+                    del sys.modules[key]
+
+
 class TestRglobFollowSymlinks:
     """rglob_follow_symlinks should descend into symlinked directories."""
 

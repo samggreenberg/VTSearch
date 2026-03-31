@@ -238,6 +238,13 @@ class PluginRegistry(Generic[T]):
 
             # Sub-packages (directories with __init__.py)
             if entry.is_dir():
+                # Skip names containing dots — they aren't valid Python
+                # identifiers and would be misinterpreted as nested module
+                # paths by importlib (e.g. "foo.symbolic_link" would try to
+                # import package "foo" first).  This commonly happens with
+                # symlinks whose names include an extension or suffix.
+                if "." in entry.name:
+                    continue
                 if not (entry / "__init__.py").exists():
                     continue
                 self._try_load(entry.name)
