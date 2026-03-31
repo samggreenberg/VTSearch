@@ -334,6 +334,126 @@ class TestImporterProvidedBoth:
 # ---------------------------------------------------------------------------
 
 
+class TestImporterCustomMetadataMD5:
+    """Verify that MD5 embedded in custom_metadata_map flows through correctly."""
+
+    def test_custom_metadata_md5_used_as_media_md5(self, tmp_path):
+        """When custom_metadata_map has an 'md5' key, it should be used as the media's MD5."""
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        class MetadataMD5Importer(DatasetImporter):
+            name = "test_cm_md5"
+            display_name = "Test CM MD5"
+            description = "Test importer using custom_metadata_map for MD5."
+            fields = [
+                ImporterField("media_type", "Media Type", "text", default="sounds"),
+                ImporterField("path", "Path", "text"),
+            ]
+
+            def run(self, field_values, medias, thin=False):
+                self.custom_metadata_map["tone.wav"] = {
+                    "md5": "metadata_md5_" + "a" * 20,
+                    "source": "test",
+                }
+                load_dataset_from_folder(
+                    Path(field_values["path"]),
+                    field_values.get("media_type", "sounds"),
+                    medias,
+                    custom_metadata_map=self.custom_metadata_map or None,
+                    on_progress=lambda *a: None,
+                    thin=thin,
+                )
+
+        _write_wav(tmp_path / "tone.wav")
+        mt, emb = _make_mock_media_type()
+        imp = MetadataMD5Importer()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+
+        assert len(medias) == 1
+        assert medias[1]["md5"] == "metadata_md5_" + "a" * 20
+        # custom_metadata should also be attached
+        assert medias[1]["custom_metadata"]["source"] == "test"
+
+    def test_custom_metadata_md5_takes_priority_over_content_md5s(self, tmp_path):
+        """custom_metadata_map MD5 should beat content_md5s."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        cm_md5 = "custom_meta_" + "1" * 20
+        content_md5 = "content_md5_" + "2" * 20
+
+        _write_wav(tmp_path / "prio.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                content_md5s={"prio.wav": content_md5},
+                custom_metadata_map={"prio.wav": {"md5": cm_md5}},
+                on_progress=lambda *a: None,
+            )
+
+        assert medias[1]["md5"] == cm_md5
+
+    def test_custom_metadata_md5_in_thin_mode(self, tmp_path):
+        """custom_metadata_map MD5 should work in thin mode too."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        cm_md5 = "thinmeta_" + "f" * 23
+
+        _write_wav(tmp_path / "slim.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map={"slim.wav": {"md5": cm_md5}},
+                on_progress=lambda *a: None,
+                thin=True,
+            )
+
+        assert medias[1]["md5"] == cm_md5
+
+    def test_folder_importer_custom_metadata_md5_passthrough(self, tmp_path):
+        """The folder importer should pass custom_metadata_map through, including its MD5."""
+        from vtsearch.datasets.importers.folder import IMPORTER
+
+        cm_md5 = "folder_cm_" + "9" * 22
+        _write_wav(tmp_path / "cm.wav")
+        mt, emb = _make_mock_media_type()
+
+        IMPORTER.custom_metadata_map = {"cm.wav": {"md5": cm_md5, "tag": "hello"}}
+        medias: dict = {}
+        try:
+            with _patch_media_registry(mt, emb):
+                IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            assert medias[1]["md5"] == cm_md5
+            assert medias[1]["custom_metadata"]["tag"] == "hello"
+        finally:
+            IMPORTER.custom_metadata_map = {}
+
+    def test_apply_custom_metadata_md5_post_load(self):
+        """apply_custom_metadata_md5 should extract MD5 from custom_metadata after loading."""
+        from vtsearch.datasets.loader import apply_custom_metadata_md5
+
+        media_dict = {
+            1: {"md5": "original_hash", "custom_metadata": {"md5": "authoritative_hash", "extra": "data"}},
+            2: {"md5": "stays_same", "custom_metadata": {"extra": "no md5 here"}},
+        }
+        count = apply_custom_metadata_md5(media_dict)
+        assert count == 1
+        assert media_dict[1]["md5"] == "authoritative_hash"
+        # The md5 key should be popped from custom_metadata
+        assert "md5" not in media_dict[1]["custom_metadata"]
+        assert media_dict[1]["custom_metadata"]["extra"] == "data"
+        assert media_dict[2]["md5"] == "stays_same"
+
+
 class TestFolderImporterPassthrough:
     """Verify the folder importer wires content_vectors/content_md5s to load_dataset_from_folder."""
 
