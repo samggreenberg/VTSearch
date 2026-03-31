@@ -240,22 +240,10 @@
 }
 
 .settings-tab-icon {
-  transition: transform 0.3s ease;
+  transition: transform 0.4s ease;
   transform: rotate(0deg);
 
   &--active {
-    animation: wheel-settle 0.4s ease forwards;
-  }
-}
-
-@keyframes wheel-settle {
-  0% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(11.25deg);
-  }
-  100% {
     transform: rotate(22.5deg);
   }
 }
