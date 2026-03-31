@@ -101,8 +101,10 @@ class DatasetImporter(PluginBase):
     ``filename`` to a metadata dict.  When a metadata dict contains a
     non-empty ``"md5"`` key, that value is used as the media's content hash
     (taking priority over both :attr:`content_md5s` and on-the-fly
-    calculation).  The metadata dict is also attached to the media as
-    ``custom_metadata``.
+    calculation).  When it contains an ``"embedding"`` key, that value is
+    used as the media's embedding vector (taking priority over both
+    :attr:`content_vectors` and the embedding model).  The metadata dict
+    is also attached to the media as ``custom_metadata``.
 
     CLI support
     -----------
@@ -138,9 +140,12 @@ class DatasetImporter(PluginBase):
         #: Mapping of filename to a per-file custom metadata dict.  When a
         #: metadata dict contains a non-empty ``"md5"`` key, that value is
         #: used as the media's MD5 hash (skipping the normal calculation).
-        #: The metadata dict is also attached to the media as
-        #: ``custom_metadata``.  Keys follow the same lookup order as
-        #: :attr:`content_vectors` (relative path first, then basename).
+        #: When it contains an ``"embedding"`` key, that value is used as
+        #: the media's embedding vector (skipping both :attr:`content_vectors`
+        #: and the embedding model).  The metadata dict is also attached to
+        #: the media as ``custom_metadata``.  Keys follow the same lookup
+        #: order as :attr:`content_vectors` (relative path first, then
+        #: basename).
         self.custom_metadata_map: dict[str, dict[str, Any]] = {}
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:

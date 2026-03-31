@@ -454,6 +454,228 @@ class TestImporterCustomMetadataMD5:
         assert media_dict[2]["md5"] == "stays_same"
 
 
+class TestImporterCustomMetadataEmbedding:
+    """Verify that an embedding in custom_metadata_map flows through correctly."""
+
+    def test_custom_metadata_embedding_used_as_media_embedding(self, tmp_path):
+        """When custom_metadata_map has an 'embedding' key, it should be used as the media's embedding."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(42)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+
+        _write_wav(tmp_path / "tone.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map={"tone.wav": {"embedding": cm_vec, "source": "test"}},
+                on_progress=lambda *a: None,
+            )
+
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        emb.embed_media.assert_not_called()
+        assert medias[1]["custom_metadata"]["source"] == "test"
+
+    def test_custom_metadata_embedding_takes_priority_over_content_vectors(self, tmp_path):
+        """custom_metadata_map embedding should beat content_vectors."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(7)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+        cv_vec = np.ones(8, dtype=np.float32) * 99.0
+
+        _write_wav(tmp_path / "prio.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                content_vectors={"prio.wav": cv_vec},
+                custom_metadata_map={"prio.wav": {"embedding": cm_vec}},
+                on_progress=lambda *a: None,
+            )
+
+        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+
+    def test_custom_metadata_embedding_in_thin_mode(self, tmp_path):
+        """custom_metadata_map embedding should work in thin mode."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(11)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+
+        _write_wav(tmp_path / "slim.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map={"slim.wav": {"embedding": cm_vec}},
+                on_progress=lambda *a: None,
+                thin=True,
+            )
+
+        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        emb.embed_media.assert_not_called()
+
+    def test_custom_metadata_both_embedding_and_md5(self, tmp_path):
+        """custom_metadata_map can provide both embedding and MD5 in a single entry."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(55)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+        cm_md5 = "meta_both_" + "b" * 22
+
+        _write_wav(tmp_path / "both.wav")
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map={"both.wav": {"embedding": cm_vec, "md5": cm_md5}},
+                on_progress=lambda *a: None,
+            )
+
+        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        assert medias[1]["md5"] == cm_md5
+        emb.embed_media.assert_not_called()
+
+    def test_custom_metadata_embedding_mixed_with_model(self, tmp_path):
+        """Files with custom_metadata embedding skip the model; others use the model."""
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(33)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+        model_vec = np.ones(8, dtype=np.float32) * 0.5
+
+        _write_wav(tmp_path / "meta.wav")
+        _write_wav(tmp_path / "model.wav")
+        mt, emb = _make_mock_media_type()
+        emb.embed_media.return_value = model_vec
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map={"meta.wav": {"embedding": cm_vec}},
+                on_progress=lambda *a: None,
+            )
+
+        embs = {m["filename"]: m["embedding"] for m in medias.values()}
+        np.testing.assert_array_equal(embs["meta.wav"], cm_vec)
+        np.testing.assert_array_equal(embs["model.wav"], model_vec)
+
+    def test_custom_metadata_embedding_chunked(self, tmp_path):
+        """custom_metadata_map embedding should work with the chunked loader."""
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        rng = np.random.default_rng(88)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+
+        _write_wav(tmp_path / "chunk.wav")
+        mt, emb = _make_mock_media_type()
+
+        with _patch_media_registry(mt, emb):
+            chunks = list(load_dataset_from_folder_chunked(
+                tmp_path, "sounds", chunk_size=10,
+                custom_metadata_map={"chunk.wav": {"embedding": cm_vec}},
+                on_progress=lambda *a: None,
+            ))
+
+        all_medias = {}
+        for chunk in chunks:
+            all_medias.update(chunk)
+        assert len(all_medias) == 1
+        np.testing.assert_array_equal(all_medias[1]["embedding"], cm_vec)
+        emb.embed_media.assert_not_called()
+
+    def test_importer_custom_metadata_embedding_end_to_end(self, tmp_path):
+        """A DatasetImporter providing embedding via custom_metadata_map should work end-to-end."""
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        rng = np.random.default_rng(77)
+        cm_vec = rng.standard_normal(8).astype(np.float32)
+        cm_md5 = "e2e_cm_" + "f" * 25
+
+        class MetadataImporter(DatasetImporter):
+            name = "test_cm_emb"
+            display_name = "Test CM Embedding"
+            description = "Test importer using custom_metadata_map for embedding."
+            fields = [
+                ImporterField("media_type", "Media Type", "text", default="sounds"),
+                ImporterField("path", "Path", "text"),
+            ]
+
+            def run(self, field_values, medias, thin=False):
+                self.custom_metadata_map["clip.wav"] = {
+                    "embedding": cm_vec,
+                    "md5": cm_md5,
+                    "tag": "from_metadata",
+                }
+                load_dataset_from_folder(
+                    Path(field_values["path"]),
+                    field_values.get("media_type", "sounds"),
+                    medias,
+                    custom_metadata_map=self.custom_metadata_map or None,
+                    on_progress=lambda *a: None,
+                    thin=thin,
+                )
+
+        _write_wav(tmp_path / "clip.wav")
+        mt, emb = _make_mock_media_type()
+        imp = MetadataImporter()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+
+        assert len(medias) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        assert medias[1]["md5"] == cm_md5
+        assert medias[1]["custom_metadata"]["tag"] == "from_metadata"
+        emb.embed_media.assert_not_called()
+
+    def test_importer_custom_metadata_embedding_in_sorting(self, tmp_path):
+        """Embeddings from custom_metadata_map should work in train_and_score."""
+        import torch
+
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtsearch.models.training import train_and_score
+
+        rng = np.random.default_rng(42)
+        names = [f"s{i}.wav" for i in range(6)]
+        cm_map: dict[str, dict] = {}
+        for name in names:
+            _write_wav(tmp_path / name)
+            cm_map[name] = {"embedding": rng.standard_normal(8).astype(np.float32)}
+
+        mt, emb = _make_mock_media_type()
+
+        medias: dict = {}
+        with _patch_media_registry(mt, emb):
+            load_dataset_from_folder(
+                tmp_path, "sounds", medias,
+                custom_metadata_map=cm_map,
+                on_progress=lambda *a: None,
+            )
+
+        good = {1: None, 2: None}
+        bad = {3: None, 4: None}
+        results, threshold, model = train_and_score(medias, good, bad)
+        assert len(results) == 6
+        for entry in results:
+            assert 0.0 <= entry["score"] <= 1.0
+
+
 class TestFolderImporterPassthrough:
     """Verify the folder importer wires content_vectors/content_md5s to load_dataset_from_folder."""
 
