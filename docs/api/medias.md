@@ -67,14 +67,18 @@ GET /api/medias/{media_id}/image
 `image/bmp` based on filename extension).
 400 if not an image. 404 if not found.
 
-### Get paragraph text
+### Get text content
 
 ```
 GET /api/medias/{media_id}/paragraph
+GET /api/medias/{media_id}/text
 ```
 
+Both paths serve the same handler. Returns the text content and statistics
+for a text media item.
+
 → `{"content": "...", "word_count": 150, "character_count": 900}`
-400 if not a paragraph. 404 if not found.
+400 if not a text media. 404 if not found.
 
 ### Generic media endpoint
 
@@ -307,6 +311,26 @@ POST /api/labels/import
 Matches by origin+origin_name first, falls back to MD5.
 
 → `{"applied": 8, "skipped": 2}`
+
+### Upload media to pile
+
+```
+POST /api/medias/add-to-pile
+```
+
+**Form:**
+- `file` — the media file to upload.
+- `label` — `"good"` or `"bad"`.
+
+Uploads a media file and adds it to the Good or Bad pile. If a media with
+the same MD5 already exists, the existing media is voted accordingly.
+Otherwise, the file is embedded using the dataset's embedder, inserted as
+a new media item, and then voted.
+
+→ `{"ok": true, "media_id": 123, "is_new": true}` (201 if new, 200 if existing)
+400 if no file, empty file, or invalid label. 400 if no dataset loaded.
+
+---
 
 ### Fill labels from sort results
 

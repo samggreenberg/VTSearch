@@ -8,14 +8,15 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | Section | Description |
 |---------|-------------|
 | [Authentication & UI](api/auth.md) | Auth status, login/logout, static assets |
-| [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels |
+| [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels, pile upload |
 | [Labeling & Diversity](api/labeling.md) | Inclusion, thresholds, labeling progress, diversity tree |
 | [Detectors & Processors](api/detectors.md) | Detectors, extractors, localizers, pre-generated processors |
-| [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters |
+| [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters, file browsing |
 | [Import & Export](api/io.md) | Result exporters, label importers, processor importers |
 | [Settings](api/settings.md) | App settings, autorun processors, settings sources, labelset sources |
 | [Models](api/models.md) | Trainable models, model registry |
-| [Dashboard & Lookup](api/dashboard.md) | Dashboard info, media lookup, multi-dataset find |
+| [Dashboard & Lookup](api/dashboard.md) | Dashboard info, multi-dataset find, find progress |
+| [File Browser](api/file-browser.md) | Server filesystem browsing |
 
 ## Conventions
 

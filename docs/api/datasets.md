@@ -229,6 +229,56 @@ GET /api/dataset/demo-list
 
 `status`: `"ready"`, `"needs_embedding"`, or `"needs_download"`.
 
+### Demo categories
+
+```
+GET /api/dataset/demo-categories/{name}
+```
+
+Lists the categories within a specific demo dataset.
+
+→ `{"categories": ["dog", "cat", "bird", "traffic"]}`
+404 if the demo name is not recognized.
+
+---
+
+## File Browsing
+
+### Browse media files
+
+```
+GET /api/browse-media-files
+```
+
+**Query:**
+- `source` (required): `"demo:<name>"` (a demo dataset) or `"folder"` (the
+  configured `saved_datasets_dir`).
+- `path` (optional): relative sub-path within the root (default `""`).
+
+Lists files and subdirectories within an allowed root, filtered to only
+media files with recognized extensions.
+
+→ ```json
+{
+  "directories": [{"name": "dog", "path": "dog", "modified_at": "2025-03-31T10:15:00"}],
+  "files": [{"name": "bark.wav", "path": "dog/bark.wav", "size_bytes": 12345, "modified_at": "2025-03-31T10:15:00"}],
+  "root_path": "/absolute/path/to/root"
+}
+```
+
+### Select browsed file
+
+```
+POST /api/browse-media-files/select
+```
+
+**Body:** `{"source": "demo:esc50_s", "path": "dog/1-100032-A-0.wav"}`
+
+Copies a file from a browse source into `data/example_media/` with a unique
+prefix to avoid collisions.
+
+→ `{"filename": "abc123_bark.wav", "original_name": "bark.wav"}` (201)
+
 ---
 
 ## Staging (for combine-datasets flow)
@@ -351,6 +401,26 @@ PUT /api/datasets/registry/{dataset_id}/rename
 **Body:** `{"name": "New Name"}`
 
 → `{"ok": true, "name": "New Name"}`
+
+### Dataset statistics
+
+```
+GET /api/datasets/registry/{dataset_id}/stats
+```
+
+Returns ingest statistics for a registered dataset.
+
+→ ```json
+{
+  "num_items": 1250,
+  "num_dupes": 45,
+  "file_type_counts": {"audio/wav": 800, "audio/mp3": 450},
+  "ingest_started_at": "2025-03-31T10:15:00",
+  "ingest_finished_at": "2025-03-31T10:45:00"
+}
+```
+
+404 if the dataset does not exist.
 
 ### Set dataset readers
 

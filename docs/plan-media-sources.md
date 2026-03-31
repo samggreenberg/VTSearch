@@ -1,10 +1,13 @@
-# MediaSource Abstraction — Implementation Plan
+# MediaSource Abstraction — Design Document
 
-> **Status: Implemented.** The `MediaSource` abstraction described in this
-> document has been fully implemented. Sources live in
-> `vtsearch/datasets/sources/` and use `PluginRegistry` auto-discovery
-> (with the `SOURCE` sentinel) rather than the hardcoded factory proposed
-> below. See `tests/test_media_sources.py` for test coverage.
+> **Status: Implemented.** This design has been fully implemented. The
+> code lives in `vtsearch/datasets/sources/` with `PluginRegistry`
+> auto-discovery (using the `SOURCE` sentinel) rather than the hardcoded
+> factory originally proposed. Tests are in `tests/test_media_sources.py`.
+>
+> This document is preserved as a design reference — it explains the
+> reasoning behind the architecture. For current usage, see
+> [EXTENDING.md](EXTENDING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Problem
 

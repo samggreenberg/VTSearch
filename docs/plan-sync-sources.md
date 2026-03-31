@@ -1,5 +1,13 @@
 # Sync Sources: Persistent Bidirectional Sync for Settings and Labelsets
 
+> **Status: Implemented.** The core sync source system (all 7 implementation
+> steps) is complete and tested. See `vtsearch/settings_io/sources/`,
+> `vtsearch/labels/sources/`, and `tests/test_sync_sources.py`. Two additive
+> enhancements remain unimplemented (see [Not yet implemented](#not-yet-implemented)).
+>
+> This document is preserved as a design reference. For current usage, see
+> [EXTENDING.md](EXTENDING.md) and the [Settings API docs](api/settings.md).
+
 ## Problem
 
 Currently, importing settings or labels is a **one-shot** operation. If you import labelset A into detector A and then add labels (making detector A'), the original labelset A is stale. You'd have to manually re-export. Same for settings: import from a file, tweak a setting, and the file is out of date.
@@ -199,10 +207,11 @@ For network-based sources, the `save()` method should be debounced (batch writes
 
 ### Not yet implemented
 
+These are additive enhancements that don't affect the current implementation.
+They can be added independently without breaking existing functionality:
+
 - **Auto-import on detector load**: When a detector is loaded and has a linked labelset source, auto-pull labels from the source.
 - **Auto-attach on label import**: When a label import comes from a source-capable importer, auto-link the source to the detector.
-
-These are additive enhancements that don't affect the current implementation.
 
 ## Test Plan
 
