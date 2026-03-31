@@ -1,6 +1,9 @@
 # Refactoring Plan
 
-Structural improvements identified March 2026. Each section is a self-contained task that can be implemented and merged independently. Ordered by impact and risk.
+Structural improvements identified March 2026. Each section is a self-contained
+task that can be implemented and merged independently. Ordered by impact and risk.
+
+**Progress:** 5 of 14 items complete (Phase 1 done, Phase 2–5 mostly pending).
 
 ---
 
@@ -33,9 +36,9 @@ Completed. `_seed_good_votes_from_examples()` moved to
 
 ---
 
-## Phase 2: Eliminate Duplication
+## Phase 2: Eliminate Duplication (all pending)
 
-### 2.1 Consolidate the training pipeline
+### 2.1 Consolidate the training pipeline ⬜
 
 **Problem:** The pattern of collecting embeddings, validating splits, training a model, and computing a threshold is reimplemented in `detectors_training.py` (4 handlers), `sorting.py` (`learned_sort`, `label_file_sort`), and `trainable_models.py` (`_apply_and_retrain`).
 
@@ -48,7 +51,7 @@ Completed. `_seed_good_votes_from_examples()` moved to
 
 ---
 
-### 2.2 Consolidate legacy detector weight fallback
+### 2.2 Consolidate legacy detector weight fallback ⬜
 
 **Problem:** Identical legacy weight format handling in 3 locations.
 
@@ -60,7 +63,7 @@ Completed. `_seed_good_votes_from_examples()` moved to
 
 ---
 
-### 2.3 Deduplicate embedder boilerplate
+### 2.3 Deduplicate embedder boilerplate ⬜
 
 **Problem:** All 7 embedders repeat the same `_load_models_impl()` ceremony. `_extract_tensor()` is copy-pasted between image and video embedders.
 
@@ -73,7 +76,7 @@ Completed. `_seed_good_votes_from_examples()` moved to
 
 ---
 
-### 2.4 Create shared route helpers for plugin lookup and JSON extraction
+### 2.4 Create shared route helpers for plugin lookup and JSON extraction ⬜
 
 **Problem:** "Unknown plugin" error handling duplicated in 5+ routes with minor inconsistencies. `request.get_json(force=True, silent=True) or {}` appears 30+ times with variations.
 
@@ -87,9 +90,9 @@ Completed. `_seed_good_votes_from_examples()` moved to
 
 ---
 
-## Phase 3: Architectural Improvements
+## Phase 3: Architectural Improvements (1 of 4 done)
 
-### 3.1 Break the `models/` ↔ `datasets/` circular dependency
+### 3.1 Break the `models/` ↔ `datasets/` circular dependency ⬜
 
 **Problem:** `models/resolver.py` does late imports from `datasets/sources/` and `datasets/importers/`. `datasets/ingest.py` imports from `models/resolver.py`.
 
@@ -111,7 +114,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 3.3 Reduce `settings.py` boilerplate (~839 lines)
+### 3.3 Reduce `settings.py` boilerplate (~839 lines) ⬜
 
 **Problem:** ~70% of the file is copy-pasted accessor patterns for left/right per-media-type settings, each with legacy scalar coercion.
 
@@ -126,7 +129,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 3.4 Clean up `utils/state_core.py` proxy complexity
+### 3.4 Clean up `utils/state_core.py` proxy complexity ⬜
 
 **Problem:** 35+ manually overridden proxy methods and hidden data dependencies.
 
@@ -139,9 +142,9 @@ auto-discovered like all other plugin families.
 
 ---
 
-## Phase 4: Cleanup
+## Phase 4: Cleanup (all pending)
 
-### 4.1 Move `_build_extractor`/`_build_localizer` out of `detectors_crud.py`
+### 4.1 Move `_build_extractor`/`_build_localizer` out of `detectors_crud.py` ⬜
 
 **Problem:** Private functions in a CRUD module are imported by `detectors_scoring.py` and `detectors.py`.
 
@@ -153,7 +156,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 4.2 Review autoload media embedder settings functions
+### 4.2 Review autoload media embedder settings functions ⬜
 
 **Problem:** `get_autoload_media_embedders`, `set_autoload_media_embedders`, `toggle_autoload_media_embedder` in `settings.py` may have limited usage.
 
@@ -166,7 +169,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 4.3 Relocate `medias.py` test infrastructure
+### 4.3 Relocate `medias.py` test infrastructure ⬜
 
 **Problem:** `vtsearch/medias.py` (91 lines) generates test media and embeddings. It's only used by `conftest.py` and `app.py` demo mode.
 
@@ -178,9 +181,9 @@ auto-discovered like all other plugin families.
 
 ---
 
-## Phase 5: Frontend
+## Phase 5: Frontend (all pending)
 
-### 5.1 Split `dashboard.component.ts` (1,173 lines)
+### 5.1 Split `dashboard.component.ts` (1,173 lines) ⬜
 
 **Problem:** Manages dataset selection, model selection, loading tasks, column resizing, sorting state, and modal orchestration in one component.
 
@@ -192,7 +195,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 5.2 Split `label-view.component.ts` (784 lines)
+### 5.2 Split `label-view.component.ts` (784 lines) ⬜
 
 **Problem:** Manages panel layout, resize, polling, keyboard shortcuts, and autopilot in one component.
 
@@ -203,7 +206,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 5.3 Extract `BaseImporterComponent` for modal reuse
+### 5.3 Extract `BaseImporterComponent` for modal reuse ⬜
 
 **Problem:** `dataset-importer-modal`, `label-importer-modal`, and `processor-importer-modal` independently implement the same picker→form flow, form state, file selection, and submission logic.
 
@@ -213,7 +216,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 5.4 Add barrel files
+### 5.4 Add barrel files ⬜
 
 **Steps:**
 1. Create `frontend/src/app/services/index.ts` re-exporting all services
