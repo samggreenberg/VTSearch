@@ -50,9 +50,10 @@ deployments. Runs locally or in Docker.
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [demos.md](demos.md) | Available demo datasets |
 | [old_io.md](old_io.md) | Retired IO module reference implementations |
+| [REFACTORING.md](REFACTORING.md) | Structural refactoring plan with completion status |
 | [plan-media-sources.md](plan-media-sources.md) | MediaSource abstraction design document (implemented) |
-| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (bidirectional settings/labelset sync) |
-| [design/](design/) | Architecture design documents (CLI detector-converter pipeline) |
+| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (implemented, two enhancements pending) |
+| [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (design proposal, not yet implemented) |
 
 ---
 
@@ -212,6 +213,20 @@ python -m pytest tests/test_gpu.py -v -m gpu
 # All tests
 python -m pytest tests/ -v -m ''
 ```
+
+### Test groups
+
+For faster iteration, run tests by area instead of the full suite:
+
+```bash
+./run-tests.sh core          # basic app functionality
+./run-tests.sh api           # API contracts and security
+./run-tests.sh sorting       # sort algorithms and diversity
+./run-tests.sh datasets      # dataset loading and management
+./run-tests.sh io            # import/export and sync
+```
+
+See `CLAUDE.md` for the complete group-to-file mapping.
 
 ### Test markers
 

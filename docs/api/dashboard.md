@@ -37,6 +37,36 @@ PUT /api/dashboard/dataset-rename
 
 ## Multi-dataset Find
 
+### Check label resolution (pre-flight)
+
+```
+POST /api/find/check-labels
+```
+
+**Body:** `{"dataset_ids": ["id1", "id2"], "model_ids": ["m1"]}`
+
+Pre-flight check that reports how many trainable-model labels can be resolved
+for the given models and datasets. Call this before starting a Find to warn
+the user about unresolved labels.
+
+→ ```json
+{
+  "warnings": [
+    {
+      "model_name": "Mammals",
+      "total_labels": 82,
+      "resolved_labels": 60,
+      "failed_labels": 22
+    }
+  ]
+}
+```
+
+`warnings` only contains entries for models with at least one unresolved label.
+An empty `warnings` list means everything is fine.
+
+### Run find
+
 ```
 POST /api/find
 ```
@@ -55,3 +85,24 @@ POST /api/find
   "total_hits": 42
 }
 ```
+
+### Find progress
+
+```
+GET /api/find/progress
+```
+
+→ ```json
+{
+  "status": "running",
+  "message": "Scoring with \"ModelName\" on \"DatasetName\"...",
+  "cur": 150,
+  "total": 300,
+  "step": 2,
+  "total_steps": 3,
+  "error": null
+}
+```
+
+`status` is `"idle"` or `"running"`. `step` / `total_steps` track the
+high-level Find phases (prepare models, load data, score).
