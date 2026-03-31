@@ -211,6 +211,8 @@ class FolderDatasetImporter(DatasetImporter):
         try:
             load_dataset_from_folder(
                 folder, media_type, medias, thin=thin, embedder_name=emb_name,
+                content_vectors=self.content_vectors or None,
+                content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
             )
         except ValueError:
@@ -248,6 +250,8 @@ class FolderDatasetImporter(DatasetImporter):
         try:
             yield from load_dataset_from_folder_chunked(
                 folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                content_vectors=self.content_vectors or None,
+                content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
             )
         except ValueError:
