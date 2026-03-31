@@ -60,6 +60,7 @@ _TEST_GROUPS = {
         "test_csv_webhook_exporters",
         "test_export_options",
         "test_importers",
+        "test_dataset_importer_media",
         "test_label_importers",
         "test_label_import_endpoint",
         "test_label_import_ingestion",
