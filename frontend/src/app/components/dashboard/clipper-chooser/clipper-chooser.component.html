@@ -1,0 +1,56 @@
+<vt-modal title="Choose MediaClipper" [open]="open" [showCloseButton]="false" (closed)="cancel()">
+  @if (clippers.length === 0) {
+    <p class="empty-state">No clippers available for this media type.</p>
+  } @else {
+    <div class="clipper-chooser">
+      <div class="clipper-tab-bar">
+        @for (clipper of clippers; track clipper.name) {
+          <button
+            class="clipper-tab"
+            [class.active]="activeTab === clipper.name"
+            (click)="selectTab(clipper.name)"
+          >{{ clipper.display_name || clipper.name }}</button>
+        }
+      </div>
+
+      <div class="clipper-tab-content">
+        @if (activeClipper) {
+          @if (activeQuestions.length > 0) {
+            @for (q of activeQuestions; track q.key) {
+              <div class="form-group">
+                <label class="form-label" [for]="'cq-' + q.key">{{ q.label }}</label>
+                @if (q.type === 'number') {
+                  <input
+                    [id]="'cq-' + q.key"
+                    type="number"
+                    class="form-input"
+                    [min]="q.min ?? null"
+                    [max]="q.max ?? null"
+                    [step]="q.step"
+                    [ngModel]="paramValues[activeTab]?.[q.key]"
+                    (ngModelChange)="paramValues[activeTab][q.key] = $event"
+                  />
+                } @else {
+                  <input
+                    [id]="'cq-' + q.key"
+                    type="text"
+                    class="form-input"
+                    [ngModel]="paramValues[activeTab]?.[q.key]"
+                    (ngModelChange)="paramValues[activeTab][q.key] = $event"
+                  />
+                }
+              </div>
+            }
+          } @else {
+            <p class="no-settings">This clipper has no configurable settings.</p>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <div class="form-actions" modal-footer>
+    <button class="btn btn--secondary" (click)="cancel()">Cancel</button>
+    <button class="btn btn--primary" (click)="confirm()" [disabled]="clippers.length === 0">OK</button>
+  </div>
+</vt-modal>

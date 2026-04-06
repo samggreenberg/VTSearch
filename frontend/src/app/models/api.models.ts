@@ -402,6 +402,7 @@ export interface ClipperInfo {
   display_name?: string;
   media_type: string;
   parameters?: ClipperParameter[];
+  creation_questions?: ClipperParameter[];
   [key: string]: unknown;
 }
 

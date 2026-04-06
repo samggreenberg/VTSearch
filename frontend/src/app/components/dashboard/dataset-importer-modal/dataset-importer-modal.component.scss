@@ -192,6 +192,11 @@
 .badge-embedding { background: var(--badge-embedding, var(--accent)); }
 .badge-download { background: var(--border); color: var(--text-muted); }
 
+.clipper-btn {
+  text-align: left;
+  white-space: nowrap;
+}
+
 .server-folder-browser { gap: 12px; }
 .sf-browse-section { gap: 6px; }
 .sf-breadcrumbs { display: flex; align-items: center; gap: 2px; font-size: .8rem; flex-wrap: wrap; }

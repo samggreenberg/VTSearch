@@ -1212,6 +1212,26 @@ class MediaClipper(ABC):
         """
         return []
 
+    @property
+    def creation_questions(self) -> list[dict[str, Any]]:
+        """Return a list of questions to present when the user chooses this clipper.
+
+        Each question is a dict with the same schema as :attr:`parameters`
+        descriptors:
+
+        * ``key`` — parameter name (used in :meth:`with_params`).
+        * ``label`` — human-readable label / question for the UI.
+        * ``type`` — ``"number"`` or ``"string"``.
+        * ``default`` — current/default value.
+        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+
+        By default this returns :attr:`parameters`, so any clipper that
+        already declares parameters automatically exposes them as creation
+        questions.  Subclasses may override to present a different (richer
+        or reduced) set of questions at creation time.
+        """
+        return self.parameters
+
     def with_params(self, params: dict[str, Any]) -> "MediaClipper":
         """Return a **new** clipper of the same type with overridden parameters.
 
@@ -1255,4 +1275,7 @@ class MediaClipper(ABC):
         params = self.parameters
         if params:
             d["parameters"] = params
+        cq = self.creation_questions
+        if cq:
+            d["creation_questions"] = cq
         return d
