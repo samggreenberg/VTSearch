@@ -121,33 +121,59 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
 
     def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
         """Export autodetect results (detector hits)."""
+        # Scan all hits to determine which clip columns are present.
+        all_hits: list[tuple[str, Any, dict]] = []
+        for det_result in results.get("results", {}).values():
+            detector_name = det_result.get("detector_name", "unknown")
+            threshold = det_result.get("threshold", "")
+            for hit in det_result.get("hits", []):
+                all_hits.append((detector_name, threshold, hit))
+
+        has_clip_start = any(h.get("clip_start") is not None for _, _, h in all_hits)
+        has_clip_end = any(h.get("clip_end") is not None for _, _, h in all_hits)
+        has_clip_box = any(h.get("clip_box") is not None for _, _, h in all_hits)
+
+        base_cols = ["detector", "threshold", "filename", "category", "score"]
+        if has_clip_start:
+            base_cols.append("clip_start")
+        if has_clip_end:
+            base_cols.append("clip_end")
+        if has_clip_box:
+            base_cols.append("clip_box")
+        base_cols.extend(["origin", "origin_name"])
+
         total_hits = 0
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["detector", "threshold", "filename", "category", "score", "origin", "origin_name"])
+            writer.writerow(base_cols)
 
-            for det_result in results.get("results", {}).values():
-                detector_name = det_result.get("detector_name", "unknown")
-                threshold = det_result.get("threshold", "")
-                for hit in det_result.get("hits", []):
-                    origin = hit.get("origin")
-                    origin_str = ""
-                    if origin:
-                        from vtsearch.datasets.origin import Origin
+            for detector_name, threshold, hit in all_hits:
+                origin = hit.get("origin")
+                origin_str = ""
+                if origin:
+                    from vtsearch.datasets.origin import Origin
 
-                        origin_str = Origin.from_dict(origin).display()
-                    writer.writerow(
-                        [
-                            _sanitize_csv_cell(str(detector_name)),
-                            threshold,
-                            _sanitize_csv_cell(hit.get("filename", "")),
-                            _sanitize_csv_cell(hit.get("category", "")),
-                            hit.get("score", ""),
-                            _sanitize_csv_cell(origin_str),
-                            _sanitize_csv_cell(hit.get("origin_name", "")),
-                        ]
-                    )
-                    total_hits += 1
+                    origin_str = Origin.from_dict(origin).display()
+                row = [
+                    _sanitize_csv_cell(str(detector_name)),
+                    threshold,
+                    _sanitize_csv_cell(hit.get("filename", "")),
+                    _sanitize_csv_cell(hit.get("category", "")),
+                    hit.get("score", ""),
+                ]
+                if has_clip_start:
+                    row.append(hit.get("clip_start", ""))
+                if has_clip_end:
+                    row.append(hit.get("clip_end", ""))
+                if has_clip_box:
+                    cb = hit.get("clip_box")
+                    row.append(",".join(str(v) for v in cb) if cb else "")
+                row.extend([
+                    _sanitize_csv_cell(origin_str),
+                    _sanitize_csv_cell(hit.get("origin_name", "")),
+                ])
+                writer.writerow(row)
+                total_hits += 1
 
         return {
             "message": (

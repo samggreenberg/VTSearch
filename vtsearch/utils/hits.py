@@ -38,6 +38,15 @@ def build_media_hit(
         hit["origin_name"] = media["origin_name"]
     if media.get("md5"):
         hit["md5"] = media["md5"]
+    # Include clip boundary fields when present (clipped sub-medias).
+    if media.get("clip_start") is not None:
+        hit["clip_start"] = media["clip_start"]
+    if media.get("clip_end") is not None:
+        hit["clip_end"] = media["clip_end"]
+    if media.get("clip_box") is not None:
+        hit["clip_box"] = media["clip_box"]
+    if media.get("clip_index") is not None:
+        hit["clip_index"] = media["clip_index"]
     if extra:
         hit.update(extra)
     return hit

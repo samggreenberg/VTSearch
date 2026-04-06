@@ -735,3 +735,265 @@ class TestApplyClipperProgress:
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0}, on_progress=None)
         assert len(clips_dict) >= 1  # Clips were still produced
+
+
+# ---------------------------------------------------------------------------
+# Clip metadata in display_metadata and enriched exports
+# ---------------------------------------------------------------------------
+
+
+class TestClipDisplayMetadata:
+    """display_metadata should include clip boundary fields when present."""
+
+    def test_audio_clip_metadata(self):
+        from vtsearch.media import get as get_media_type
+
+        mt = get_media_type("audio")
+        media = {"type": "audio", "clip_start": 0.0, "clip_end": 2.0, "clip_index": 0}
+        meta = mt.display_metadata(media)
+        assert meta["Clip Start"] == 0.0
+        assert meta["Clip End"] == 2.0
+        assert meta["Clip Index"] == 0
+
+    def test_image_clip_metadata(self):
+        from vtsearch.media import get as get_media_type
+
+        mt = get_media_type("image")
+        media = {"type": "image", "clip_box": [0, 0, 100, 100], "clip_index": 0}
+        meta = mt.display_metadata(media)
+        assert meta["Clip Box"] == "0,0,100,100"
+        assert meta["Clip Index"] == 0
+
+    def test_video_clip_metadata(self):
+        from vtsearch.media import get as get_media_type
+
+        mt = get_media_type("video")
+        media = {"type": "video", "clip_start": 1.5, "clip_end": 4.0, "clip_index": 1}
+        meta = mt.display_metadata(media)
+        assert meta["Clip Start"] == 1.5
+        assert meta["Clip End"] == 4.0
+        assert meta["Clip Index"] == 1
+
+    def test_text_clip_metadata(self):
+        from vtsearch.media import get as get_media_type
+
+        mt = get_media_type("text")
+        media = {"type": "text", "clip_index": 2}
+        meta = mt.display_metadata(media)
+        assert meta["Clip Index"] == 2
+
+    def test_no_clip_fields_when_absent(self):
+        from vtsearch.media import get as get_media_type
+
+        mt = get_media_type("audio")
+        media = {"type": "audio", "duration": 3.0}
+        meta = mt.display_metadata(media)
+        assert "Clip Start" not in meta
+        assert "Clip End" not in meta
+        assert "Clip Index" not in meta
+
+
+class TestClipFieldsInEnrichedExport:
+    """Enriched label export should surface clip boundary columns."""
+
+    def test_enriched_export_has_clip_columns(self, client):
+        saved = dict(medias)
+        medias.clear()
+        try:
+            from vtsearch.routes.datasets_loading import _apply_clipper
+
+            clips_dict = {1: _make_audio_media(1, duration=5.0)}
+            _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
+            for cid, clip in clips_dict.items():
+                medias[cid] = clip
+
+            # Vote on a clip
+            good_votes[1] = None
+
+            resp = client.get("/api/labels/export?enrich=1")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            cols = data["available_columns"]
+            assert "Clip Start" in cols
+            assert "Clip End" in cols
+            assert "Clip Index" in cols
+            # Clip Box should NOT be present for audio clips
+            assert "Clip Box" not in cols
+
+            # Verify custom_metadata on the label entry
+            entry = data["labels"][0]
+            meta = entry["custom_metadata"]
+            assert "Clip Start" in meta
+            assert "Clip End" in meta
+        finally:
+            medias.clear()
+            medias.update(saved)
+
+    def test_enriched_export_image_clip_box(self, client):
+        saved = dict(medias)
+        medias.clear()
+        try:
+            from vtsearch.routes.datasets_loading import _apply_clipper
+
+            clips_dict = {1: _make_image_media(1, width=300, height=100)}
+            _apply_clipper(clips_dict, "image_tiling")
+            for cid, clip in clips_dict.items():
+                medias[cid] = clip
+
+            good_votes[1] = None
+
+            resp = client.get("/api/labels/export?enrich=1")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            cols = data["available_columns"]
+            assert "Clip Box" in cols
+            assert "Clip Index" in cols
+        finally:
+            medias.clear()
+            medias.update(saved)
+
+    def test_no_clip_columns_without_clips(self, client):
+        """Unclipped media should not have clip columns in export."""
+        good_votes[1] = None  # Vote on default test media
+        resp = client.get("/api/labels/export?enrich=1")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        cols = data["available_columns"]
+        assert "Clip Start" not in cols
+        assert "Clip End" not in cols
+        assert "Clip Box" not in cols
+        assert "Clip Index" not in cols
+
+
+class TestClipFieldsInBuildMediaHit:
+    """build_media_hit should include clip fields when present."""
+
+    def test_hit_includes_clip_start_end(self):
+        from vtsearch.utils.hits import build_media_hit
+
+        media = {
+            "filename": "clip.wav",
+            "category": "audio",
+            "md5": "abc123",
+            "clip_start": 0.0,
+            "clip_end": 2.5,
+            "clip_index": 0,
+        }
+        hit = build_media_hit(1, media, 0.95)
+        assert hit["clip_start"] == 0.0
+        assert hit["clip_end"] == 2.5
+        assert hit["clip_index"] == 0
+
+    def test_hit_includes_clip_box(self):
+        from vtsearch.utils.hits import build_media_hit
+
+        media = {
+            "filename": "tile.png",
+            "category": "image",
+            "md5": "def456",
+            "clip_box": [10, 20, 110, 120],
+            "clip_index": 1,
+        }
+        hit = build_media_hit(1, media, 0.8)
+        assert hit["clip_box"] == [10, 20, 110, 120]
+        assert hit["clip_index"] == 1
+
+    def test_hit_omits_clip_fields_when_absent(self):
+        from vtsearch.utils.hits import build_media_hit
+
+        media = {"filename": "full.wav", "category": "audio", "md5": "xyz"}
+        hit = build_media_hit(1, media, 0.5)
+        assert "clip_start" not in hit
+        assert "clip_end" not in hit
+        assert "clip_box" not in hit
+        assert "clip_index" not in hit
+
+
+class TestCsvExportClipColumns:
+    """CSV autodetect export should include clip columns when present."""
+
+    def test_csv_includes_clip_start_end(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exporter = ServerCsvLabelsetExporter()
+        results = {
+            "detectors_run": 1,
+            "results": {
+                "det1": {
+                    "detector_name": "det1",
+                    "threshold": 0.5,
+                    "hits": [
+                        {"filename": "a.wav", "category": "audio", "score": 0.9,
+                         "clip_start": 0.0, "clip_end": 2.0, "origin_name": "a.wav"},
+                        {"filename": "b.wav", "category": "audio", "score": 0.8,
+                         "clip_start": 2.0, "clip_end": 4.0, "origin_name": "b.wav"},
+                    ],
+                }
+            },
+        }
+        filepath = tmp_path / "results.csv"
+        exporter.export(results, {"filepath": str(filepath)})
+
+        import csv
+        with open(filepath) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert "clip_start" in rows[0]
+        assert "clip_end" in rows[0]
+        assert rows[0]["clip_start"] == "0.0"
+        assert rows[1]["clip_end"] == "4.0"
+
+    def test_csv_includes_clip_box(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exporter = ServerCsvLabelsetExporter()
+        results = {
+            "detectors_run": 1,
+            "results": {
+                "det1": {
+                    "detector_name": "det1",
+                    "threshold": 0.5,
+                    "hits": [
+                        {"filename": "tile.png", "category": "image", "score": 0.9,
+                         "clip_box": [0, 0, 100, 100], "origin_name": "tile.png"},
+                    ],
+                }
+            },
+        }
+        filepath = tmp_path / "results.csv"
+        exporter.export(results, {"filepath": str(filepath)})
+
+        import csv
+        with open(filepath) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert "clip_box" in rows[0]
+        assert rows[0]["clip_box"] == "0,0,100,100"
+
+    def test_csv_omits_clip_columns_without_clips(self, tmp_path):
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exporter = ServerCsvLabelsetExporter()
+        results = {
+            "detectors_run": 1,
+            "results": {
+                "det1": {
+                    "detector_name": "det1",
+                    "threshold": 0.5,
+                    "hits": [
+                        {"filename": "full.wav", "category": "audio", "score": 0.7,
+                         "origin_name": "full.wav"},
+                    ],
+                }
+            },
+        }
+        filepath = tmp_path / "results.csv"
+        exporter.export(results, {"filepath": str(filepath)})
+
+        import csv
+        with open(filepath) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert "clip_start" not in rows[0]
+        assert "clip_end" not in rows[0]
+        assert "clip_box" not in rows[0]

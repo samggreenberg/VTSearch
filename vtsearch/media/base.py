@@ -709,6 +709,19 @@ class MediaType(ABC):
         fs = media.get("file_size")
         if fs:
             result["File Size"] = fs
+        # Clip boundary fields — present only on clipped sub-medias.
+        cs = media.get("clip_start")
+        if cs is not None:
+            result["Clip Start"] = cs
+        ce = media.get("clip_end")
+        if ce is not None:
+            result["Clip End"] = ce
+        cb = media.get("clip_box")
+        if cb is not None:
+            result["Clip Box"] = ",".join(str(v) for v in cb)
+        ci = media.get("clip_index")
+        if ci is not None:
+            result["Clip Index"] = ci
         return result
 
     # ------------------------------------------------------------------
