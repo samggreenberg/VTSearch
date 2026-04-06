@@ -44,6 +44,36 @@ class TestMediaClipperABC:
         c = VideoSceneClipper()
         assert c.display_name == "Video Scene"
 
+    def test_creation_questions_defaults_to_parameters(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        assert c.creation_questions == c.parameters
+        assert len(c.creation_questions) == 2
+
+    def test_creation_questions_empty_for_default_clipper(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        assert c.creation_questions == []
+        assert c.creation_questions == c.parameters
+
+    def test_to_dict_includes_creation_questions_when_present(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        d = c.to_dict()
+        assert "creation_questions" in d
+        assert len(d["creation_questions"]) == 2
+        assert d["creation_questions"][0]["key"] == "duration"
+
+    def test_to_dict_omits_creation_questions_when_empty(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        d = c.to_dict()
+        assert "creation_questions" not in d
+
 
 # ---------------------------------------------------------------------------
 # SoundDefaultClipper
@@ -841,6 +871,20 @@ class TestClippersApiEndpoint:
         clippers = data["clippers"]
         assert len(clippers) >= 1
         assert all(c["media_type"] == "document" for c in clippers)
+
+    def test_creation_questions_in_api_response(self, client):
+        resp = client.get("/api/clippers?media_type=audio")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        tiling = next(c for c in clippers if c["name"] == "sound_tiling")
+        assert "creation_questions" in tiling
+        assert len(tiling["creation_questions"]) == 2
+        keys = [q["key"] for q in tiling["creation_questions"]]
+        assert "duration" in keys
+        # Default clipper should not have creation_questions
+        default = next(c for c in clippers if c["name"] == "sound_default")
+        assert "creation_questions" not in default
 
 
 # ---------------------------------------------------------------------------

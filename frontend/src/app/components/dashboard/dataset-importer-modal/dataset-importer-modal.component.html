@@ -61,17 +61,9 @@
               </select>
             }
             @if (demoClippers.length > 1) {
-              <label class="form-label" for="demo-clipper" title="Pre-processing clipper that segments or trims media before embedding (e.g. audio chunking)">Clipper:</label>
-              <select
-                id="demo-clipper"
-                class="form-select form-select--inline"
-                [ngModel]="selectedDemoClipper"
-                (ngModelChange)="onDemoClipperChange($event)"
-              >
-                @for (clipper of demoClippers; track clipper.name) {
-                  <option [value]="clipper.name">{{ clipper.display_name || clipper.name }}</option>
-                }
-              </select>
+              <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
+                Clipper: {{ clipperDisplayName('demo') }}
+              </button>
             }
           </div>
         }
@@ -196,47 +188,11 @@
 
       @if (availableClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="field-clipper" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-          <select
-            id="field-clipper"
-            class="form-select"
-            [ngModel]="selectedClipper"
-            (ngModelChange)="onClipperChange($event)"
-          >
-            @for (clipper of availableClippers; track clipper.name) {
-              <option [value]="clipper.name">{{ clipper.display_name || clipper.name }}</option>
-            }
-          </select>
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('form')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('form') }}
+          </button>
         </div>
-        @if (selectedClipperParams.length > 0) {
-          <div class="clipper-params">
-            @for (param of selectedClipperParams; track param.key) {
-              <div class="form-group">
-                <label class="form-label" [for]="'clipper-param-' + param.key">{{ param.label }}</label>
-                @if (param.type === 'number') {
-                  <input
-                    [id]="'clipper-param-' + param.key"
-                    type="number"
-                    class="form-input"
-                    [min]="param.min ?? null"
-                    [max]="param.max ?? null"
-                    [step]="param.step"
-                    [ngModel]="clipperParamValues[param.key]"
-                    (ngModelChange)="clipperParamValues[param.key] = $event"
-                  />
-                } @else {
-                  <input
-                    [id]="'clipper-param-' + param.key"
-                    type="text"
-                    class="form-input"
-                    [ngModel]="clipperParamValues[param.key]"
-                    (ngModelChange)="clipperParamValues[param.key] = $event"
-                  />
-                }
-              </div>
-            }
-          </div>
-        }
       }
 
       @if (error) {
@@ -334,17 +290,10 @@
 
       @if (sfClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" for="sf-clipper" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-          <select
-            id="sf-clipper"
-            class="form-select"
-            [ngModel]="sfSelectedClipper"
-            (ngModelChange)="sfOnClipperChange($event)"
-          >
-            @for (clipper of sfClippers; track clipper.name) {
-              <option [value]="clipper.name">{{ clipper.name }}</option>
-            }
-          </select>
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('sf') }}
+          </button>
         </div>
       }
 
@@ -366,4 +315,10 @@
       </button>
     </div>
   }
+  <vt-clipper-chooser
+    [open]="clipperChooserOpen"
+    [clippers]="clipperChooserClippers"
+    (selected)="onClipperChooserSelected($event)"
+    (cancelled)="onClipperChooserCancelled()"
+  />
 </vt-modal>
