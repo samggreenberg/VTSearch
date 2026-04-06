@@ -200,6 +200,10 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
       ``clip_end``, ``clip_box``) so they survive label export/import.
     - A fresh embedding computed from the clipped content (audio/image/text)
       instead of inheriting the parent's embedding.
+
+    Any importer-provided MD5 or embedding on the *parent* media is
+    discarded for clips produced by a non-trivial clipper, since those
+    values describe the full media item, not the sub-item.
     """
     if not clipper_name:
         return
@@ -214,15 +218,21 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
         clipper = clipper.with_params(clipper_params)
 
     all_clipped: list[dict] = []
+    # Track which clips need MD5/embedding recomputation.  Any clip that
+    # came from a multi-output clipper call is a genuine sub-item whose
+    # inherited MD5 and embedding describe the *parent*, not the clip.
+    needs_recompute: list[bool] = []
+
     for media in list(clips_dict.values()):
         clipped = clipper.clip(media)
+        is_real_clip = len(clipped) > 1
         for idx, clip in enumerate(clipped):
             orig = clip.get("origin")
             if isinstance(orig, dict):
                 clip["origin"] = dict(orig)
                 clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
                 clip["origin"]["params"]["clipper"] = clipper_name
-                if len(clipped) > 1:
+                if is_real_clip:
                     clip["origin"]["params"]["clip_index"] = str(idx)
                 # Persist clip boundaries in origin so they survive label
                 # export/import and can be used for cross-dataset resolution.
@@ -233,9 +243,10 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
                 if clip.get("clip_box") is not None:
                     clip["origin"]["params"]["clip_box"] = ",".join(str(v) for v in clip["clip_box"])
             all_clipped.append(clip)
+            needs_recompute.append(is_real_clip)
 
-    # Recompute MD5 and re-embed clips whose content changed.
-    _fixup_clip_md5_and_embeddings(all_clipped, clipper.media_type)
+    # Recompute MD5 and re-embed every genuine sub-item.
+    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type)
 
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
@@ -243,61 +254,54 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
         clips_dict[new_id] = clip
 
 
-def _fixup_clip_md5_and_embeddings(clips: list[dict], media_type: str) -> None:
-    """Recompute MD5 and embeddings for clips with modified content.
+def _fixup_clip_md5_and_embeddings(
+    clips: list[dict], needs_recompute: list[bool], media_type: str,
+) -> None:
+    """Recompute MD5 and embeddings for clips that are genuine sub-items.
 
     Without this, all clips from the same parent would share the parent's
     MD5 (causing ``collapse_duplicates`` to merge them) and the parent's
-    embedding (degrading ML training quality).
+    embedding (degrading ML training quality).  Importer-supplied MD5 and
+    embedding values are also stale for sub-items, so they are replaced
+    unconditionally when the clipper produced multiple outputs.
     """
     import hashlib
-    import os
-    import tempfile
 
-    for clip in clips:
-        content_bytes = _clip_content_bytes(clip)
+    for clip, recompute in zip(clips, needs_recompute):
+        if not recompute:
+            continue
+
+        content_bytes = _clip_content_bytes(clip, media_type)
         if content_bytes is not None:
             clip["md5"] = hashlib.md5(content_bytes).hexdigest()
             _reembed_clip(clip, content_bytes, media_type)
-        elif clip.get("clip_start") is not None or clip.get("clip_box") is not None:
-            # Video clips: bytes unchanged but boundaries differ — create a
-            # unique MD5 by hashing the parent bytes + clip boundaries so that
-            # dedup doesn't collapse distinct clips.
+        else:
+            # Metadata-only clips (e.g. video): bytes unchanged but
+            # boundaries differ — create a unique MD5 by hashing the
+            # parent bytes + clip boundaries so dedup doesn't collapse
+            # distinct clips.
             parent_bytes = clip.get("media_bytes", b"")
             boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
             combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
             clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
 
 
-def _clip_content_bytes(clip: dict) -> bytes | None:
-    """Return the content bytes for a clip if its content was modified.
+def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
+    """Return the embeddable content bytes for a clip.
 
-    Returns ``None`` for clips whose bytes are unchanged (e.g. video
-    metadata-only clips or default/pass-through clippers).
+    For media types where the clipper produces new bytes (audio, image) or
+    a new string (text), return those bytes so the caller can hash and
+    re-embed them.  For metadata-only clips (video), return ``None`` —
+    the caller will use a boundary-based hash instead.
     """
-    # Audio/image clips: clipper replaces media_bytes with sliced/cropped content.
-    if clip.get("clip_index") is not None and clip.get("media_bytes") is not None:
-        # Only if there's evidence the clipper produced new bytes (clip_start
-        # for audio/video, clip_box for image).
-        if clip.get("clip_start") is not None and clip.get("media_bytes") is not None:
-            # Audio clips create new WAV bytes; video clips do NOT.
-            # Distinguish by checking if clip_box exists (image) or by
-            # checking media type context — but since we don't have the
-            # media type here, we check the origin's clipper name.
-            origin = clip.get("origin", {})
-            clipper_name = origin.get("params", {}).get("clipper", "")
-            if clipper_name.startswith("sound_"):
-                return clip["media_bytes"]
-            # Video clippers don't modify bytes — handled by boundary-hash path.
-            return None
-        if clip.get("clip_box") is not None:
-            return clip["media_bytes"]
-    # Text clips: clipper replaces media_string.
-    if clip.get("clip_index") is not None and clip.get("media_string") is not None:
-        origin = clip.get("origin", {})
-        clipper_name = origin.get("params", {}).get("clipper", "")
-        if clipper_name.startswith("text_"):
-            return clip["media_string"].encode("utf-8")
+    if media_type == "video":
+        # Video clippers store boundaries as metadata without slicing
+        # the underlying bytes, so there is nothing new to hash/embed.
+        return None
+    if clip.get("media_bytes") is not None and media_type != "text":
+        return clip["media_bytes"]
+    if clip.get("media_string") is not None and media_type == "text":
+        return clip["media_string"].encode("utf-8")
     return None
 
 
