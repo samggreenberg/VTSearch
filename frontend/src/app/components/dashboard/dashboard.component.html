@@ -209,7 +209,7 @@
   <vt-new-model-modal
     [defaultMediaType]="activeDatasetMediaType"
     (closed)="closeNewModelModal()"
-    (created)="onModelCreated()"
+    (created)="onModelCreated($event)"
   />
 }
 
