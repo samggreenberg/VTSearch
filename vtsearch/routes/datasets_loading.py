@@ -217,6 +217,14 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
     if clipper_params:
         clipper = clipper.with_params(clipper_params)
 
+    # Extract the effective clipper parameter values so they can be
+    # stored in each clip's origin.  This uses to_dict() which concrete
+    # clippers override to add their current values (duration, threshold,
+    # etc.), then strips the base keys that aren't parameter values.
+    _clipper_dict = clipper.to_dict()
+    _base_keys = {"name", "display_name", "media_type", "parameters"}
+    effective_params = {k: v for k, v in _clipper_dict.items() if k not in _base_keys}
+
     all_clipped: list[dict] = []
     # Track which clips need MD5/embedding recomputation.  Any clip that
     # came from a multi-output clipper call is a genuine sub-item whose
@@ -232,6 +240,11 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
                 clip["origin"] = dict(orig)
                 clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
                 clip["origin"]["params"]["clipper"] = clipper_name
+                # Store the clipper's effective parameter values so that
+                # cross-dataset resolution can reconstruct the exact same
+                # clipper configuration.
+                for pk, pv in effective_params.items():
+                    clip["origin"]["params"][f"clipper_{pk}"] = str(pv)
                 if is_real_clip:
                     clip["origin"]["params"]["clip_index"] = str(idx)
                 # Persist clip boundaries in origin so they survive label

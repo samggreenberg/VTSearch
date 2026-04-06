@@ -293,6 +293,46 @@ class TestApplyClipperOriginBoundaries:
             assert params["clipper"] == "text_sentence"
             assert "clip_index" in params
 
+    def test_audio_clip_origin_stores_clipper_params(self):
+        """Clipper parameter values (duration, min_overlap) must be stored
+        in origin so cross-dataset resolution can reconstruct the clipper."""
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips_dict = {1: _make_audio_media(1, duration=5.0)}
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.5, "min_overlap": 0.5})
+
+        for clip in clips_dict.values():
+            params = clip["origin"]["params"]
+            assert params["clipper_duration"] == "2.5"
+            assert params["clipper_min_overlap"] == "0.5"
+
+    def test_video_scene_origin_stores_clipper_params(self):
+        """Scene clipper's threshold and min_scene_duration must be stored."""
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        # VideoSceneClipper won't produce multiple clips without real video,
+        # but the params should still be stored on the single passthrough.
+        clips_dict = {1: _make_video_media(1, duration=10.0)}
+        _apply_clipper(clips_dict, "video_tiling", {"duration": 3.0, "min_overlap": 0.5})
+
+        for clip in clips_dict.values():
+            params = clip["origin"]["params"]
+            assert params["clipper_duration"] == "3.0"
+            assert params["clipper_min_overlap"] == "0.5"
+
+    def test_default_clipper_stores_no_extra_params(self):
+        """Default clippers have no parameter values to store."""
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips_dict = {1: _make_audio_media(1, duration=5.0)}
+        _apply_clipper(clips_dict, "sound_default")
+
+        params = clips_dict[1]["origin"]["params"]
+        assert params["clipper"] == "sound_default"
+        # No clipper_* keys beyond "clipper" itself
+        clipper_keys = [k for k in params if k.startswith("clipper_")]
+        assert clipper_keys == []
+
 
 # ---------------------------------------------------------------------------
 # Label export with clipped media

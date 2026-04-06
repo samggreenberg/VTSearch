@@ -342,7 +342,7 @@ def _apply_clip_and_embed(
     clip_box = params.get("clip_box")
 
     # --- Audio clips: slice WAV bytes ---
-    if clip_start is not None and clip_end is not None and clipper_name.startswith("sound_"):
+    if clip_start is not None and clip_end is not None and media_type == "audio":
         try:
             from vtsearch.media.audio.clipper import _wav_slice
 
@@ -390,7 +390,7 @@ def _apply_clip_and_embed(
             return embed_file(file_path, media_type)
 
     # --- Text clips: extract the sentence by clip_index ---
-    if clipper_name.startswith("text_") and media_type == "text":
+    if media_type == "text":
         try:
             clip_index = params.get("clip_index")
             if clip_index is not None:
