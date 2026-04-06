@@ -27,7 +27,7 @@
                     [min]="q.min ?? null"
                     [max]="q.max ?? null"
                     [step]="q.step"
-                    [ngModel]="paramValues[activeTab]?.[q.key]"
+                    [ngModel]="paramValues[activeTab][q.key]"
                     (ngModelChange)="paramValues[activeTab][q.key] = $event"
                   />
                 } @else {
@@ -35,7 +35,7 @@
                     [id]="'cq-' + q.key"
                     type="text"
                     class="form-input"
-                    [ngModel]="paramValues[activeTab]?.[q.key]"
+                    [ngModel]="paramValues[activeTab][q.key]"
                     (ngModelChange)="paramValues[activeTab][q.key] = $event"
                   />
                 }
