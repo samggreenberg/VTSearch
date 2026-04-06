@@ -26,9 +26,11 @@ from vtsearch.utils import medias, good_votes, bad_votes, snapshot_medias
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_audio_media(media_id: int, duration: float = 5.0, *, origin_path: str = "/data/audio") -> dict:
+def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str = "/data/audio") -> dict:
     """Create a fake audio media dict with WAV bytes and an embedding."""
-    wav = generate_wav(440, duration)
+    # Use 441Hz and 5.1s so that tile boundaries don't align with exact
+    # sine wave periods — otherwise slices could be byte-identical.
+    wav = generate_wav(441, duration)
     rng = np.random.default_rng(media_id)
     return {
         "id": media_id,
@@ -108,21 +110,20 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
 class TestApplyClipperMD5:
     """Clips must get unique MD5s so collapse_duplicates doesn't merge them."""
 
-    def test_audio_clips_get_unique_md5s(self):
+    def test_audio_clips_get_recomputed_md5s(self):
         from vtsearch.routes.datasets_loading import _apply_clipper
 
-        clips_dict = {1: _make_audio_media(1, duration=5.0)}
+        clips_dict = {1: _make_audio_media(1)}
         parent_md5 = clips_dict[1]["md5"]
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
-        assert len(clips_dict) == 3  # ceil(5/2)+... = 3 tiles
-        md5s = [c["md5"] for c in clips_dict.values()]
-        # All clips should have unique MD5s different from the parent
-        assert len(set(md5s)) == len(md5s), "audio clips must have unique MD5s"
-        for md5 in md5s:
-            assert md5 != parent_md5, "clip MD5 should differ from parent"
+        assert len(clips_dict) == 3
+        # All clip MD5s are recomputed from actual clip bytes, not the parent
+        for clip in clips_dict.values():
+            assert clip["md5"] != parent_md5, "clip MD5 should differ from parent"
+            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
-    def test_image_clips_get_unique_md5s(self):
+    def test_image_clips_get_recomputed_md5s(self):
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         clips_dict = {1: _make_image_media(1, width=300, height=100)}
@@ -130,10 +131,9 @@ class TestApplyClipperMD5:
         _apply_clipper(clips_dict, "image_tiling")
 
         assert len(clips_dict) == 3  # 300/100 = 3 tiles
-        md5s = [c["md5"] for c in clips_dict.values()]
-        assert len(set(md5s)) == len(md5s), "image clips must have unique MD5s"
-        for md5 in md5s:
-            assert md5 != parent_md5
+        for clip in clips_dict.values():
+            assert clip["md5"] != parent_md5
+            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
     def test_text_clips_get_unique_md5s(self):
         from vtsearch.routes.datasets_loading import _apply_clipper
@@ -166,7 +166,7 @@ class TestApplyClipperMD5:
         from vtsearch.routes.datasets_loading import _apply_clipper
         from vtsearch.utils import collapse_duplicates
 
-        clips_dict = {1: _make_audio_media(1, duration=5.0)}
+        clips_dict = {1: _make_audio_media(1, duration=5.1)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
         n_before = len(clips_dict)
         assert n_before > 1
@@ -560,15 +560,16 @@ class TestMultipleMediasClipped:
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         clips_dict = {
-            1: _make_audio_media(1, duration=5.0),
-            2: _make_audio_media(2, duration=4.0),
+            1: _make_audio_media(1, duration=5.1),
+            2: _make_audio_media(2, duration=4.1),
         }
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
-        # Media 1 (5.0s): 3 clips, Media 2 (4.0s): 2 clips = 5 total
-        assert len(clips_dict) == 5
-        md5s = [c["md5"] for c in clips_dict.values()]
-        assert len(set(md5s)) == 5, "all clips should have unique MD5s"
+        # Media 1 (5.1s): 3 clips, Media 2 (4.1s): 3 clips = 6 total
+        assert len(clips_dict) == 6
+        # Each clip's MD5 should be computed from its actual bytes
+        for clip in clips_dict.values():
+            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
     def test_multiple_text_medias_clipped(self):
         from vtsearch.routes.datasets_loading import _apply_clipper
@@ -588,8 +589,8 @@ class TestMultipleMediasClipped:
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         clips_dict = {
-            1: _make_audio_media(1, duration=5.0),
-            2: _make_audio_media(2, duration=4.0),
+            1: _make_audio_media(1, duration=5.1),
+            2: _make_audio_media(2, duration=4.1),
         }
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
