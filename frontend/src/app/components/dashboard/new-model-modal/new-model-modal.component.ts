@@ -35,7 +35,7 @@ export class NewModelModalComponent implements OnInit {
   @Input() defaultMediaType = '';
 
   @Output() closed = new EventEmitter<void>();
-  @Output() created = new EventEmitter<void>();
+  @Output() created = new EventEmitter<string>();
 
   view: ModalView = 'main';
   name = '';
@@ -337,9 +337,9 @@ export class NewModelModalComponent implements OnInit {
         examples: examplesPayload,
       })
       .subscribe({
-        next: () => {
+        next: (resp: any) => {
           this.submitting = false;
-          this.created.emit();
+          this.created.emit(resp?.model?.id || '');
         },
         error: (err) => {
           this.submitting = false;
