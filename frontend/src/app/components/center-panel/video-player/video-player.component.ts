@@ -18,6 +18,8 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
 
   videoSrc = '';
 
+  private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
+
   constructor(private activeContext: ActiveContextService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -33,6 +35,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopClipEnforcement();
     const video = this.videoRef?.nativeElement;
     if (video) {
       video.pause();
@@ -70,9 +73,43 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   }
 
   onLoadedMetadata(): void {
-    if (this.videoRef?.nativeElement) {
-      this.videoRef.nativeElement.volume = this.volume;
-      this.syncPlaybackState();
+    const video = this.videoRef?.nativeElement;
+    if (!video) return;
+    video.volume = this.volume;
+
+    // For clipped videos, seek to clip_start and enforce clip boundaries.
+    if (this.media?.clip_start != null) {
+      video.currentTime = this.media.clip_start;
+      this.startClipEnforcement();
+    } else {
+      this.stopClipEnforcement();
+    }
+
+    this.syncPlaybackState();
+  }
+
+  private startClipEnforcement(): void {
+    this.stopClipEnforcement();
+    if (this.media?.clip_start == null || this.media?.clip_end == null) return;
+
+    const clipStart = this.media.clip_start;
+    const clipEnd = this.media.clip_end;
+
+    // Poll every 100ms to enforce clip boundaries. When the video
+    // reaches clip_end, loop back to clip_start instead of continuing.
+    this.clipCheckInterval = setInterval(() => {
+      const video = this.videoRef?.nativeElement;
+      if (!video || video.paused) return;
+      if (video.currentTime >= clipEnd || video.currentTime < clipStart) {
+        video.currentTime = clipStart;
+      }
+    }, 100);
+  }
+
+  private stopClipEnforcement(): void {
+    if (this.clipCheckInterval != null) {
+      clearInterval(this.clipCheckInterval);
+      this.clipCheckInterval = null;
     }
   }
 

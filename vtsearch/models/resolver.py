@@ -316,6 +316,109 @@ def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
     return result
 
 
+def _apply_clip_and_embed(
+    file_path: Path,
+    media_type: str,
+    origin: dict[str, Any],
+) -> np.ndarray | None:
+    """Apply clip params from *origin* to a resolved file and embed the result.
+
+    If the origin contains clip parameters (``clip_start``/``clip_end`` for
+    audio, ``clip_box`` for images, or a text sentence clipper), the file is
+    clipped first and the clipped content is embedded.  Falls back to
+    :func:`embed_file` when no clip params are present.
+    """
+    import os
+    import tempfile
+
+    params = origin.get("params", {})
+    clipper_name = params.get("clipper", "")
+
+    if not clipper_name:
+        return embed_file(file_path, media_type)
+
+    clip_start = params.get("clip_start")
+    clip_end = params.get("clip_end")
+    clip_box = params.get("clip_box")
+
+    # --- Audio clips: slice WAV bytes ---
+    if clip_start is not None and clip_end is not None and media_type == "audio":
+        try:
+            from vtsearch.media.audio.clipper import _wav_slice
+
+            wav_bytes = file_path.read_bytes()
+            sliced = _wav_slice(wav_bytes, float(clip_start), float(clip_end))
+            fd, tmp = tempfile.mkstemp(suffix=".wav")
+            try:
+                os.write(fd, sliced)
+                os.close(fd)
+                return embed_file(Path(tmp), media_type)
+            finally:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        except Exception:
+            log.debug("_apply_clip_and_embed: audio clip failed, falling back", exc_info=True)
+            return embed_file(file_path, media_type)
+
+    # --- Image clips: crop to clip_box ---
+    if clip_box is not None and media_type == "image":
+        try:
+            import io as _io
+
+            from PIL import Image
+
+            box_values = [int(float(v)) for v in clip_box.split(",")]
+            img = Image.open(file_path)
+            cropped = img.crop(tuple(box_values))
+            buf = _io.BytesIO()
+            cropped.save(buf, format=img.format or "PNG")
+            crop_bytes = buf.getvalue()
+            fd, tmp = tempfile.mkstemp(suffix=".png")
+            try:
+                os.write(fd, crop_bytes)
+                os.close(fd)
+                return embed_file(Path(tmp), media_type)
+            finally:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        except Exception:
+            log.debug("_apply_clip_and_embed: image clip failed, falling back", exc_info=True)
+            return embed_file(file_path, media_type)
+
+    # --- Text clips: extract the sentence by clip_index ---
+    if media_type == "text":
+        try:
+            clip_index = params.get("clip_index")
+            if clip_index is not None:
+                import re
+
+                text = file_path.read_text(encoding="utf-8")
+                sentence_re = re.compile(r"(?<=[.!?])\s+")
+                sentences = [s.strip() for s in sentence_re.split(text) if s.strip()]
+                idx = int(clip_index)
+                if 0 <= idx < len(sentences):
+                    fd, tmp = tempfile.mkstemp(suffix=".txt")
+                    try:
+                        os.write(fd, sentences[idx].encode("utf-8"))
+                        os.close(fd)
+                        return embed_file(Path(tmp), media_type)
+                    finally:
+                        try:
+                            os.unlink(tmp)
+                        except OSError:
+                            pass
+        except Exception:
+            log.debug("_apply_clip_and_embed: text clip failed, falling back", exc_info=True)
+            return embed_file(file_path, media_type)
+
+    # Video clips and unrecognised clippers: embed the full file.
+    return embed_file(file_path, media_type)
+
+
 def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
@@ -386,7 +489,13 @@ def resolve_label_embeddings(
                 progress_callback(current=i + 1, total=_total_entries)
             continue
 
-        embedding = embed_file(file_path, media_type)
+        # Use clip-aware embedding when the label has clip params in its
+        # origin (e.g. from a clipped dataset).  This ensures cross-dataset
+        # resolution embeds the clipped content, not the whole parent file.
+        if origin is not None and origin.get("params", {}).get("clipper"):
+            embedding = _apply_clip_and_embed(file_path, media_type, origin)
+        else:
+            embedding = embed_file(file_path, media_type)
         if embedding is None:
             result.missing_entries.append(entry)
             _embed_failed += 1
