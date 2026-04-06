@@ -87,6 +87,7 @@ class ImageMediaType(MediaType):
         fs = media.get("file_size")
         if fs:
             result["File Size"] = fs
+        result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})
         return result
 
     # ------------------------------------------------------------------
