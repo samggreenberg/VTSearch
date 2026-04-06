@@ -127,6 +127,32 @@ class TestCollapseDuplicates:
         count = collapse_duplicates(media_dict)
         assert count == 0
 
+    def test_on_progress_callback(self):
+        """on_progress receives (current, total) during duplicate collapsing."""
+        media_dict = {
+            1: _make_media(1, md5="aaa"),
+            2: _make_media(2, md5="aaa"),
+            3: _make_media(3, md5="bbb"),
+            4: _make_media(4, md5="ccc"),
+        }
+        calls = []
+        collapse_duplicates(media_dict, on_progress=lambda cur, tot: calls.append((cur, tot)))
+        # Should have been called at least once
+        assert len(calls) >= 1
+        # Total should equal the number of MD5 groups
+        assert calls[0][1] == 3  # aaa, bbb, ccc
+        # First call starts at 0
+        assert calls[0][0] == 0
+
+    def test_on_progress_none_is_safe(self):
+        """Passing on_progress=None doesn't break anything."""
+        media_dict = {
+            1: _make_media(1, md5="aaa"),
+            2: _make_media(2, md5="aaa"),
+        }
+        count = collapse_duplicates(media_dict, on_progress=None)
+        assert count == 1
+
 
 class TestGetDupeCount:
     def test_no_dupes(self):

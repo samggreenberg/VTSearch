@@ -207,6 +207,7 @@ class FolderDatasetImporter(DatasetImporter):
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         has_regular = True
         try:
             load_dataset_from_folder(
@@ -214,6 +215,7 @@ class FolderDatasetImporter(DatasetImporter):
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
@@ -247,12 +249,14 @@ class FolderDatasetImporter(DatasetImporter):
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "sounds")
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
                 folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
         except ValueError:
             if media_type != "images" and not field_values.get("converters"):

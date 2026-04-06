@@ -719,8 +719,17 @@ def load_registered_dataset(dataset_id: str):
                 clear_thread_progress()
 
             tracker.check_cancelled()
-            tracker.update("loading", "Removing duplicates…", 0, 0, step=2, total_steps=_LOAD_STEPS)
-            collapse_duplicates(ctx.medias)
+
+            def _dedup_progress(current: int, total: int) -> None:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Removing duplicates…",
+                    current=current, total=total,
+                    step=2, total_steps=_LOAD_STEPS,
+                )
+
+            _dedup_progress(0, 0)
+            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
