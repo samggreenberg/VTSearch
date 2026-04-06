@@ -692,3 +692,46 @@ class TestMultipleMediasClipped:
 
         ids = sorted(clips_dict.keys())
         assert ids == list(range(1, len(clips_dict) + 1))
+
+
+# ---------------------------------------------------------------------------
+# _apply_clipper — on_progress callback
+# ---------------------------------------------------------------------------
+
+class TestApplyClipperProgress:
+    """Verify that _apply_clipper reports progress via the on_progress callback."""
+
+    def test_progress_reports_clipping_and_embedding_phases(self):
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips_dict = {
+            1: _make_audio_media(1, duration=5.1),
+            2: _make_audio_media(2, duration=4.1),
+        }
+        calls = []
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0},
+                       on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)))
+
+        clipping_calls = [c for c in calls if c[2] == "clipping"]
+        embedding_calls = [c for c in calls if c[2] == "embedding"]
+
+        # Should have clipping progress calls (one per input media)
+        assert len(clipping_calls) == 2
+        assert clipping_calls[0] == (0, 2, "clipping")
+        assert clipping_calls[1] == (1, 2, "clipping")
+
+        # Should have embedding progress calls (one per output clip)
+        assert len(embedding_calls) > 0
+        # First embedding call starts at 0
+        assert embedding_calls[0][0] == 0
+        # Total should equal the number of clips produced
+        total_clips = embedding_calls[0][1]
+        assert total_clips == len(clips_dict)
+
+    def test_no_progress_without_callback(self):
+        """Passing on_progress=None doesn't break anything."""
+        from vtsearch.routes.datasets_loading import _apply_clipper
+
+        clips_dict = {1: _make_audio_media(1, duration=5.1)}
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0}, on_progress=None)
+        assert len(clips_dict) >= 1  # Clips were still produced

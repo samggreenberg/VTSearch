@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
 from vtsearch.utils.state_core import _state_lock, medias
 
@@ -122,7 +122,10 @@ def find_missing_entries(
     return missing
 
 
-def collapse_duplicates(media_dict: dict[int, dict[str, Any]]) -> int:
+def collapse_duplicates(
+    media_dict: dict[int, dict[str, Any]],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> int:
     """Collapse duplicate medias (same MD5) into single representative items.
 
     For each group of medias sharing the same MD5, the first media becomes
@@ -133,6 +136,7 @@ def collapse_duplicates(media_dict: dict[int, dict[str, Any]]) -> int:
 
     Args:
         media_dict: The mutable medias dict.  Modified in place.
+        on_progress: Optional ``(current, total)`` callback for progress.
 
     Returns:
         The number of duplicate groups collapsed (i.e. groups of size >= 2).
@@ -144,7 +148,10 @@ def collapse_duplicates(media_dict: dict[int, dict[str, Any]]) -> int:
             md5_groups.setdefault(md5, []).append(cid)
 
     dupe_count = 0
-    for md5, cids in md5_groups.items():
+    total_groups = len(md5_groups)
+    for group_idx, (md5, cids) in enumerate(md5_groups.items()):
+        if on_progress and group_idx % 200 == 0:
+            on_progress(group_idx, total_groups)
         if len(cids) < 2:
             continue
         dupe_count += 1

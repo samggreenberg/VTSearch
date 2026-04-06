@@ -190,7 +190,12 @@ def _normalize_media_type(value: str) -> str:
         return value
 
 
-def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
+def _apply_clipper(
+    clips_dict: dict,
+    clipper_name: str,
+    clipper_params: dict | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
 
     After clipping, each clip gets:
@@ -204,6 +209,10 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
     Any importer-provided MD5 or embedding on the *parent* media is
     discarded for clips produced by a non-trivial clipper, since those
     values describe the full media item, not the sub-item.
+
+    Args:
+        on_progress: Optional callback ``(current, total, phase)`` invoked
+            during clipping and re-embedding so callers can report progress.
     """
     if not clipper_name:
         return
@@ -231,7 +240,11 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
     # inherited MD5 and embedding describe the *parent*, not the clip.
     needs_recompute: list[bool] = []
 
-    for media in list(clips_dict.values()):
+    media_list = list(clips_dict.values())
+    total_medias = len(media_list)
+    for media_idx, media in enumerate(media_list):
+        if on_progress:
+            on_progress(media_idx, total_medias, "clipping")
         clipped = clipper.clip(media)
         is_real_clip = len(clipped) > 1
         for idx, clip in enumerate(clipped):
@@ -259,7 +272,7 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
             needs_recompute.append(is_real_clip)
 
     # Recompute MD5 and re-embed every genuine sub-item.
-    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type)
+    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type, on_progress=on_progress)
 
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
@@ -268,7 +281,10 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
 
 
 def _fixup_clip_md5_and_embeddings(
-    clips: list[dict], needs_recompute: list[bool], media_type: str,
+    clips: list[dict],
+    needs_recompute: list[bool],
+    media_type: str,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> None:
     """Recompute MD5 and embeddings for clips that are genuine sub-items.
 
@@ -280,7 +296,10 @@ def _fixup_clip_md5_and_embeddings(
     """
     import hashlib
 
-    for clip, recompute in zip(clips, needs_recompute):
+    total_clips = len(clips)
+    for clip_idx, (clip, recompute) in enumerate(zip(clips, needs_recompute)):
+        if on_progress:
+            on_progress(clip_idx, total_clips, "embedding")
         if not recompute:
             continue
 
@@ -511,18 +530,40 @@ def _run_origin_load_in_background(
 
             tracker.check_cancelled()
             apply_custom_metadata_md5(ctx.medias)
-            tracker.update(
-                "loading", "Removing duplicates…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
-            )
+
             # Tag medias that don't already have an origin.
             for media in ctx.medias.values():
                 if media.get("origin") is None:
                     media["origin"] = origin
                 if not media.get("origin_name"):
                     media["origin_name"] = media.get("filename", "")
+
             if clipper:
-                _apply_clipper(ctx.medias, clipper, clipper_params)
-            collapse_duplicates(ctx.medias)
+                def _clipper_progress(current: int, total: int, phase: str) -> None:
+                    tracker.check_cancelled()
+                    if phase == "clipping":
+                        msg = "Clipping media…"
+                    else:
+                        msg = "Embedding clips…"
+                    tracker.update(
+                        "loading", msg,
+                        current=current, total=total,
+                        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    )
+
+                _clipper_progress(0, 0, "clipping")
+                _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress)
+
+            def _dedup_progress(current: int, total: int) -> None:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Removing duplicates…",
+                    current=current, total=total,
+                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                )
+
+            _dedup_progress(0, 0)
+            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
