@@ -286,13 +286,16 @@ def _fixup_clip_md5_and_embeddings(
     media_type: str,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> None:
-    """Recompute MD5 and embeddings for clips that are genuine sub-items.
+    """Recompute MD5 and embeddings for clips that need it.
 
-    Without this, all clips from the same parent would share the parent's
-    MD5 (causing ``collapse_duplicates`` to merge them) and the parent's
-    embedding (degrading ML training quality).  Importer-supplied MD5 and
-    embedding values are also stale for sub-items, so they are replaced
-    unconditionally when the clipper produced multiple outputs.
+    A clip needs recomputation when:
+    - ``needs_recompute`` is ``True`` (genuine sub-item from a multi-output
+      clipper — the parent's MD5 and embedding are stale), **or**
+    - the clip has no embedding at all (import phase was skipped because a
+      clipper was going to re-embed anyway).
+
+    Without the MD5 fix, all clips from the same parent would share the
+    parent's MD5 (causing ``collapse_duplicates`` to merge them).
     """
     import hashlib
 
@@ -300,14 +303,19 @@ def _fixup_clip_md5_and_embeddings(
     for clip_idx, (clip, recompute) in enumerate(zip(clips, needs_recompute)):
         if on_progress:
             on_progress(clip_idx, total_clips, "embedding")
-        if not recompute:
+
+        # Also embed clips that have no embedding (e.g. when the import
+        # phase skipped embedding because a clipper was specified).
+        needs_embed = recompute or clip.get("embedding") is None
+        if not needs_embed:
             continue
 
         content_bytes = _clip_content_bytes(clip, media_type)
         if content_bytes is not None:
-            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+            if recompute:
+                clip["md5"] = hashlib.md5(content_bytes).hexdigest()
             _reembed_clip(clip, content_bytes, media_type)
-        else:
+        elif recompute:
             # Metadata-only clips (e.g. video): bytes unchanged but
             # boundaries differ — create a unique MD5 by hashing the
             # parent bytes + clip boundaries so dedup doesn't collapse
@@ -685,6 +693,14 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # importer writes a .clipper sidecar for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
+
+    # When a multi-output clipper is selected, skip embedding during the
+    # import phase.  The clipper step will re-embed every clip anyway, so
+    # computing parent embeddings up front is wasted work.  Default
+    # clippers (pass-through, single output) still need the parent
+    # embedding since it won't be recomputed.
+    if clipper_name and not clipper_name.endswith("_default"):
+        field_values["skip_embedding"] = True
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).
