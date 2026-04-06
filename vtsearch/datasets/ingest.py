@@ -193,7 +193,14 @@ def _ingest_via_resolver(
         if file_path is None:
             continue
 
-        embedding = embed_file(file_path, media_type_id)
+        # Use clip-aware embedding when the origin has clip params, so that
+        # re-ingested clipped media gets the correct (clipped) embedding.
+        if origin_dict.get("params", {}).get("clipper"):
+            from vtsearch.models.resolver import _apply_clip_and_embed
+
+            embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict)
+        else:
+            embedding = embed_file(file_path, media_type_id)
         if embedding is None:
             continue
 

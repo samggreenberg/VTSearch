@@ -191,7 +191,16 @@ def _normalize_media_type(value: str) -> str:
 
 
 def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
-    """Apply a clipper to all medias in *clips_dict*, replacing them in-place."""
+    """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
+
+    After clipping, each clip gets:
+    - A recomputed MD5 based on its actual content (so that dedup doesn't
+      collapse distinct clips from the same parent).
+    - Clip boundaries stored in ``origin["params"]`` (``clip_start``,
+      ``clip_end``, ``clip_box``) so they survive label export/import.
+    - A fresh embedding computed from the clipped content (audio/image/text)
+      instead of inheriting the parent's embedding.
+    """
     if not clipper_name:
         return
     from vtsearch.media import get_clipper
@@ -215,12 +224,112 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
                 clip["origin"]["params"]["clipper"] = clipper_name
                 if len(clipped) > 1:
                     clip["origin"]["params"]["clip_index"] = str(idx)
+                # Persist clip boundaries in origin so they survive label
+                # export/import and can be used for cross-dataset resolution.
+                if clip.get("clip_start") is not None:
+                    clip["origin"]["params"]["clip_start"] = str(clip["clip_start"])
+                if clip.get("clip_end") is not None:
+                    clip["origin"]["params"]["clip_end"] = str(clip["clip_end"])
+                if clip.get("clip_box") is not None:
+                    clip["origin"]["params"]["clip_box"] = ",".join(str(v) for v in clip["clip_box"])
             all_clipped.append(clip)
+
+    # Recompute MD5 and re-embed clips whose content changed.
+    _fixup_clip_md5_and_embeddings(all_clipped, clipper.media_type)
 
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
         clip["id"] = new_id
         clips_dict[new_id] = clip
+
+
+def _fixup_clip_md5_and_embeddings(clips: list[dict], media_type: str) -> None:
+    """Recompute MD5 and embeddings for clips with modified content.
+
+    Without this, all clips from the same parent would share the parent's
+    MD5 (causing ``collapse_duplicates`` to merge them) and the parent's
+    embedding (degrading ML training quality).
+    """
+    import hashlib
+    import os
+    import tempfile
+
+    for clip in clips:
+        content_bytes = _clip_content_bytes(clip)
+        if content_bytes is not None:
+            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+            _reembed_clip(clip, content_bytes, media_type)
+        elif clip.get("clip_start") is not None or clip.get("clip_box") is not None:
+            # Video clips: bytes unchanged but boundaries differ — create a
+            # unique MD5 by hashing the parent bytes + clip boundaries so that
+            # dedup doesn't collapse distinct clips.
+            parent_bytes = clip.get("media_bytes", b"")
+            boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
+            combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
+            clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+
+
+def _clip_content_bytes(clip: dict) -> bytes | None:
+    """Return the content bytes for a clip if its content was modified.
+
+    Returns ``None`` for clips whose bytes are unchanged (e.g. video
+    metadata-only clips or default/pass-through clippers).
+    """
+    # Audio/image clips: clipper replaces media_bytes with sliced/cropped content.
+    if clip.get("clip_index") is not None and clip.get("media_bytes") is not None:
+        # Only if there's evidence the clipper produced new bytes (clip_start
+        # for audio/video, clip_box for image).
+        if clip.get("clip_start") is not None and clip.get("media_bytes") is not None:
+            # Audio clips create new WAV bytes; video clips do NOT.
+            # Distinguish by checking if clip_box exists (image) or by
+            # checking media type context — but since we don't have the
+            # media type here, we check the origin's clipper name.
+            origin = clip.get("origin", {})
+            clipper_name = origin.get("params", {}).get("clipper", "")
+            if clipper_name.startswith("sound_"):
+                return clip["media_bytes"]
+            # Video clippers don't modify bytes — handled by boundary-hash path.
+            return None
+        if clip.get("clip_box") is not None:
+            return clip["media_bytes"]
+    # Text clips: clipper replaces media_string.
+    if clip.get("clip_index") is not None and clip.get("media_string") is not None:
+        origin = clip.get("origin", {})
+        clipper_name = origin.get("params", {}).get("clipper", "")
+        if clipper_name.startswith("text_"):
+            return clip["media_string"].encode("utf-8")
+    return None
+
+
+def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
+    """Re-embed a clip from its actual content bytes."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    try:
+        from vtsearch.models.resolver import embed_file
+    except ImportError:
+        return
+
+    # Determine file extension from media type.
+    ext_map = {"audio": ".wav", "image": ".png", "text": ".txt"}
+    ext = ext_map.get(media_type, ".bin")
+
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    try:
+        os.write(fd, content_bytes)
+        os.close(fd)
+        embedding = embed_file(Path(tmp_path), media_type)
+        if embedding is not None:
+            clip["embedding"] = embedding
+    except Exception:
+        pass  # Keep parent embedding if re-embedding fails.
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def _auto_register_dataset(

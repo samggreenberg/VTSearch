@@ -10,6 +10,10 @@ export interface MediaItem {
   custom_metadata: Record<string, unknown>;
   origin_name?: string;
   description?: string;
+  clip_start?: number;
+  clip_end?: number;
+  clip_index?: number;
+  clip_box?: number[];
 }
 
 export interface TextResponse {
