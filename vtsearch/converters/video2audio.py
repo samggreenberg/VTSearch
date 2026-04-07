@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch.converters.base import MediaConverter
+from vtsearch.utils.ffmpeg import get_ffmpeg_exe
 
 
 class Video2AudioMediaConverter(MediaConverter):
@@ -54,9 +55,10 @@ class Video2AudioMediaConverter(MediaConverter):
             wav_path = str(Path(tmpdir) / "output.wav")
 
             try:
+                ffmpeg = get_ffmpeg_exe()
                 subprocess.run(
                     [
-                        "ffmpeg", "-y",
+                        ffmpeg, "-y",
                         "-i", str(src_path),
                         "-vn",
                         "-acodec", "pcm_s16le",
@@ -67,7 +69,7 @@ class Video2AudioMediaConverter(MediaConverter):
                     check=True,
                 )
             except FileNotFoundError:
-                print("Video2AudioMediaConverter requires ffmpeg on $PATH")
+                print("Video2AudioMediaConverter requires ffmpeg — install it or 'pip install imageio-ffmpeg'")
                 return []
             except subprocess.CalledProcessError as e:
                 stderr_text = e.stderr[:500].decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")[:500]
