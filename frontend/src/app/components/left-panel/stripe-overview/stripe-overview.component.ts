@@ -23,6 +23,12 @@ export class StripeOverviewComponent implements OnChanges {
   /** Cached threshold position — rebuilt only when inputs change. */
   cachedThresholdPosition: number | null = null;
 
+  onStripeKeyboard(): void {
+    if (!this.sortOrder || this.sortOrder.length === 0) return;
+    const midIndex = Math.floor(this.sortOrder.length / 2);
+    this.stripeClick.emit(midIndex);
+  }
+
   onStripeClick(event: MouseEvent): void {
     if (!this.sortOrder || this.sortOrder.length === 0) return;
     const el = event.currentTarget as HTMLElement;
