@@ -856,7 +856,7 @@ class TestClippersApiEndpoint:
         assert "image_default" not in names
 
     def test_filter_by_folder_name(self, client):
-        resp = client.get("/api/clippers?media_type=images")
+        resp = client.get("/api/clippers?media_type=image")
         assert resp.status_code == 200
         data = resp.get_json()
         clippers = data["clippers"]

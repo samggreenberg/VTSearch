@@ -193,7 +193,7 @@ class TestConvertersAPI:
         assert "video2audio" not in names
 
     def test_filter_by_folder_import_name(self, client):
-        resp = client.get("/api/converters?target=sounds")
+        resp = client.get("/api/converters?target=audio")
         assert resp.status_code == 200
         data = resp.get_json()
         names = [c["name"] for c in data["converters"]]
@@ -201,14 +201,14 @@ class TestConvertersAPI:
         assert "video2image" not in names
 
     def test_filter_by_target_images(self, client):
-        resp = client.get("/api/converters?target=images")
+        resp = client.get("/api/converters?target=image")
         assert resp.status_code == 200
         data = resp.get_json()
         names = [c["name"] for c in data["converters"]]
         assert "video2image" in names
 
     def test_filter_no_converters(self, client):
-        resp = client.get("/api/converters?target=videos")
+        resp = client.get("/api/converters?target=video")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["converters"] == []

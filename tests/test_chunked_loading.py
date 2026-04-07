@@ -180,7 +180,7 @@ class TestFolderChunked:
             list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
             assert False, "Expected ValueError"
         except ValueError as e:
-            assert "No sounds files found" in str(e)
+            assert "No audio files found" in str(e)
 
 
 # ======================================================================

@@ -579,7 +579,7 @@ class TestConvertersAPISourceFilter:
         assert "document2image" not in names
 
     def test_converters_filter_by_source_folder_name(self, client):
-        resp = client.get("/api/converters?source=videos")
+        resp = client.get("/api/converters?source=video")
         data = resp.get_json()
         names = [c["name"] for c in data["converters"]]
         assert "video2image" in names

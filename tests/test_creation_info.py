@@ -32,7 +32,7 @@ class TestBuildCliArgs:
         imp = _DummyImporter()
         args = imp.build_cli_args({"media_type": "audio", "path": "/data/audio"})
         assert "--importer test_dummy" in args
-        assert "--media-type sounds" in args
+        assert "--media-type audio" in args
         assert "--path /data/audio" in args
 
     def test_empty_values_skipped(self):
@@ -66,14 +66,14 @@ class TestRealImporterCliArgs:
     def test_folder_importer_cli_args(self):
         imp = get_importer("folder")
         args = imp.build_cli_args({"media_type": "audio", "path": "/my/folder"})
-        assert args == "--importer folder --media-type sounds --path /my/folder"
+        assert args == "--importer folder --media-type audio --path /my/folder"
 
     def test_http_archive_importer_cli_args(self):
         imp = get_importer("http_archive")
         args = imp.build_cli_args({"url": "https://example.com/data.zip", "media_type": "image"})
         assert "--importer http_archive" in args
         assert "--url https://example.com/data.zip" in args
-        assert "--media-type images" in args
+        assert "--media-type image" in args
 
 
 # ---------------------------------------------------------------------------
