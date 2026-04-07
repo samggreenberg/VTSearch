@@ -26,7 +26,7 @@ class TestMediaClipperABC:
         d = c.to_dict()
         assert d == {
             "name": "sound_default",
-            "display_name": "Sound Default",
+            "display_name": "Default",
             "description": "Import each audio file as-is, without splitting.",
             "media_type": "audio",
         }
@@ -35,19 +35,19 @@ class TestMediaClipperABC:
         from vtsearch.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
-        assert c.display_name == "Sound Default"
+        assert c.display_name == "Default"
 
     def test_display_name_tiling(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
-        assert c.display_name == "Sound Tiling"
+        assert c.display_name == "Tiling"
 
     def test_display_name_video_scene(self):
         from vtsearch.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
-        assert c.display_name == "Video Scene"
+        assert c.display_name == "Scene"
 
     def test_creation_questions_defaults_to_parameters(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
@@ -192,7 +192,7 @@ class TestSoundTilingClipper:
         c = SoundTilingClipper(3.5)
         d = c.to_dict()
         assert d["name"] == "sound_tiling"
-        assert d["display_name"] == "Sound Tiling"
+        assert d["display_name"] == "Tiling"
         assert d["media_type"] == "audio"
         assert d["duration"] == 3.5
         assert d["min_overlap"] == 0.0
@@ -316,7 +316,7 @@ class TestVideoTilingClipper:
         c = VideoTilingClipper(3.5)
         d = c.to_dict()
         assert d["name"] == "video_tiling"
-        assert d["display_name"] == "Video Tiling"
+        assert d["display_name"] == "Tiling"
         assert d["media_type"] == "video"
         assert d["duration"] == 3.5
         assert d["min_overlap"] == 0.0
@@ -963,7 +963,7 @@ class TestDatasetRegistryClipperColumn:
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         ds = data["datasets"][0]
-        assert ds["clipper"] == "Sound Tiling"
+        assert ds["clipper"] == "Tiling"
 
     def test_registry_clipper_defaults_to_empty(self, client):
         from vtsearch.datasets.registry import register_dataset

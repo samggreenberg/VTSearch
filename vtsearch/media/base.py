@@ -1219,11 +1219,12 @@ class MediaClipper(ABC):
     def display_name(self) -> str:
         """Human-readable name for UI dropdowns.
 
-        Defaults to title-casing the :attr:`name` with underscores replaced
-        by spaces (e.g. ``"sound_tiling"`` → ``"Sound Tiling"``).  Subclasses
-        may override for a custom label.
+        Strips the media-type prefix before the first underscore and
+        title-cases the remainder (e.g. ``"sound_tiling"`` → ``"Tiling"``).
+        Subclasses may override for a custom label.
         """
-        return self.name.replace("_", " ").title()
+        _, _, suffix = self.name.partition("_")
+        return suffix.replace("_", " ").title() if suffix else self.name.title()
 
     @property
     def description(self) -> str:
