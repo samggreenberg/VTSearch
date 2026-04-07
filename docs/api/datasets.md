@@ -48,7 +48,13 @@ GET /api/clippers
 **Query:** `?media_type=audio` — optional, filter by `type_id` or
 `folder_import_name`.
 
-→ `{"clippers": [{"name": "sound_default", "media_type": "audio", ...}]}`
+→ `{"clippers": [{"name": "sound_default", "media_type": "audio", "display_name": "Sound Default", "description": "Import each audio file as-is, without splitting.", ...}]}`
+
+Each clipper object includes `name`, `display_name`, `media_type`, and
+an optional `description` (short tooltip text). Clippers with
+configurable settings also include `parameters` and
+`creation_questions` arrays, where each parameter has `key`, `label`,
+`type`, `default`, and an optional `description` for hover tooltips.
 
 ### Converters
 
