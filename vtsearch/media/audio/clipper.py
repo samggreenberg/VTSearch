@@ -53,6 +53,10 @@ class SoundDefaultClipper(MediaClipper):
     def media_type(self) -> str:
         return "audio"
 
+    @property
+    def description(self) -> str:
+        return "Import each audio file as-is, without splitting."
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]
 
@@ -89,6 +93,10 @@ class SoundTilingClipper(MediaClipper):
     @property
     def media_type(self) -> str:
         return "audio"
+
+    @property
+    def description(self) -> str:
+        return "Split each audio file into fixed-length overlapping segments."
 
     @property
     def duration(self) -> float:
@@ -138,6 +146,7 @@ class SoundTilingClipper(MediaClipper):
             {
                 "key": "duration",
                 "label": "Clip length (seconds)",
+                "description": "Duration of each audio segment in seconds.",
                 "type": "number",
                 "default": self._duration,
                 "min": 0.1,
@@ -147,6 +156,7 @@ class SoundTilingClipper(MediaClipper):
             {
                 "key": "min_overlap",
                 "label": "Minimum overlap (seconds)",
+                "description": "Minimum overlap between consecutive segments. Higher values produce more tiles.",
                 "type": "number",
                 "default": self._min_overlap,
                 "min": 0,

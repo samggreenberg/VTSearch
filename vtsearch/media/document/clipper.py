@@ -18,5 +18,9 @@ class DocumentDefaultClipper(MediaClipper):
     def media_type(self) -> str:
         return "document"
 
+    @property
+    def description(self) -> str:
+        return "Import each document as-is, without splitting."
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]

@@ -8,6 +8,7 @@
           <button
             class="clipper-tab"
             [class.active]="activeTab === clipper.name"
+            [title]="clipper.description || ''"
             (click)="selectTab(clipper.name)"
           >{{ clipper.display_name || clipper.name }}</button>
         }
@@ -15,10 +16,13 @@
 
       <div class="clipper-tab-content">
         @if (activeClipper) {
+          @if (activeClipper.description) {
+            <p class="clipper-description">{{ activeClipper.description }}</p>
+          }
           @if (activeQuestions.length > 0) {
             @for (q of activeQuestions; track q.key) {
               <div class="form-group">
-                <label class="form-label" [for]="'cq-' + q.key">{{ q.label }}</label>
+                <label class="form-label" [for]="'cq-' + q.key" [title]="q.description || ''">{{ q.label }}</label>
                 @if (q.type === 'number') {
                   <input
                     [id]="'cq-' + q.key"

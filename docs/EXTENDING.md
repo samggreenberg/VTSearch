@@ -1361,16 +1361,16 @@ clippers return **new media dicts** that can replace the original.
 
 | Clipper | Name | Media Type | Description |
 |---------|------|------------|-------------|
-| `SoundDefaultClipper` | `sound_default` | `audio` | Returns audio unchanged |
-| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Tiles into 2s segments |
-| `ImageDefaultClipper` | `image_default` | `image` | Returns image unchanged |
-| `ImageTilingClipper` | `image_tiling` | `image` | Tiles tall images into squares |
-| `TextDefaultClipper` | `text_default` | `text` | Returns text unchanged |
-| `TextSentenceClipper` | `text_sentence` | `text` | Splits into individual sentences |
-| `VideoDefaultClipper` | `video_default` | `video` | Returns video unchanged |
-| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Tiles into 2s segments |
-| `VideoSceneClipper` | `video_scene` | `video` | Splits at detected scene boundaries |
-| `DocumentDefaultClipper` | `document_default` | `document` | Returns document unchanged |
+| `SoundDefaultClipper` | `sound_default` | `audio` | Import each audio file as-is, without splitting |
+| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Split each audio file into fixed-length overlapping segments |
+| `ImageDefaultClipper` | `image_default` | `image` | Import each image as-is, without splitting |
+| `ImageTilingClipper` | `image_tiling` | `image` | Tile each image into equidistant square crops along the longer axis |
+| `TextDefaultClipper` | `text_default` | `text` | Import each text entry as-is, without splitting |
+| `TextSentenceClipper` | `text_sentence` | `text` | Split each text entry into individual sentences |
+| `VideoDefaultClipper` | `video_default` | `video` | Import each video as-is, without splitting |
+| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Split each video into fixed-length overlapping segments |
+| `VideoSceneClipper` | `video_scene` | `video` | Automatically split each video at detected scene changes |
+| `DocumentDefaultClipper` | `document_default` | `document` | Import each document as-is, without splitting |
 
 ### What to implement
 
@@ -1398,6 +1398,11 @@ class SoundOverlapClipper(MediaClipper):
     def media_type(self) -> str:
         """The type_id this clipper operates on."""
         return "audio"
+
+    @property
+    def description(self) -> str:
+        """Short tooltip shown on hover in the clipper chooser UI."""
+        return "Tile audio with 50% overlap between consecutive segments."
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         """Split media into one or more media dicts of the same type.
@@ -1445,11 +1450,18 @@ CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(
 
 **Optional overridable methods/properties:**
 
-| Method/Property  | Signature / Returns      | Description                                              |
-|------------------|--------------------------|----------------------------------------------------------|
-| `to_dict()`      | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)  |
-| `parameters`     | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, etc.) |
-| `with_params(p)` | `(dict) -> MediaClipper` | Return new clipper with overridden parameters             |
+| Method/Property      | Signature / Returns      | Description                                                       |
+|----------------------|--------------------------|-------------------------------------------------------------------|
+| `display_name`       | `str`                    | Human-readable name for UI tabs (default: title-cased `name`)     |
+| `description`        | `str`                    | Short tooltip text shown on hover in the clipper chooser UI       |
+| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)           |
+| `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
+| `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
+| `with_params(p)`     | `(dict) -> MediaClipper` | Return new clipper with overridden parameters                     |
+
+Parameter dicts support an optional `description` key alongside `label`
+— this is shown as a tooltip when the user hovers over the setting in
+the clipper chooser dialog.
 
 ### Clip method contract
 
@@ -1981,6 +1993,8 @@ missing dependencies degrade gracefully.
 
 - [ ] Create or add to `vtsearch/media/<type>/clipper.py`
 - [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
+- [ ] Override `description` with a short tooltip string for the chooser UI
+- [ ] If adding `parameters`, include a `description` key in each param dict
 - [ ] Add to the `CLIPPERS` list in the media type's `__init__.py`
 - [ ] Test: verify `clip()` returns valid media dicts
 
