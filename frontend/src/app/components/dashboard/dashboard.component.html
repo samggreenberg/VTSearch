@@ -174,7 +174,7 @@
         [title]="labelHint || 'Open the labeling view to vote on items and train the selected model on the selected dataset'"
         (click)="onLabel()"
       >
-        <svg [class.icon-waggle]="trainLoading" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10l-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/><line x1="22" y1="10" x2="22" y2="16"/></svg>
+        <svg aria-hidden="true" [class.icon-waggle]="trainLoading" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10l-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/><line x1="22" y1="10" x2="22" y2="16"/></svg>
         Train
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
@@ -187,7 +187,7 @@
         [title]="findHint || 'Score every item in the selected dataset using the selected model and show ranked results'"
         (click)="onFind()"
       >
-        <svg [class.icon-waggle]="findLoading" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>
+        <svg aria-hidden="true" [class.icon-waggle]="findLoading" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>
         Find
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>

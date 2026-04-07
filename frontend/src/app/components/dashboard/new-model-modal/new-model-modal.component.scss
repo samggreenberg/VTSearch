@@ -200,14 +200,14 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--accent, #2196f3);
+  color: var(--accent);
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.85rem;
 
   &:hover {
     text-decoration: underline;
-    background: var(--bg-hover, #e8e8e8);
+    background: var(--bg-hover);
   }
 }
 
@@ -293,7 +293,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-primary, var(--bg-subtle));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--shadow-dropdown);
   overflow: hidden;
 }
 

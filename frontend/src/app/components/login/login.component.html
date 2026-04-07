@@ -4,11 +4,14 @@
     <h2>VTSearch</h2>
     <p class="login-subtitle">Enter your name to get started</p>
     <form (ngSubmit)="submit()" class="login-form">
+      <label for="login-username" class="sr-only">Username</label>
       <input
+        id="login-username"
         type="text"
         [(ngModel)]="username"
         name="username"
         placeholder="Username"
+        aria-label="Username"
         autofocus
         autocomplete="username"
         maxlength="64"

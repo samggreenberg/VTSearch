@@ -24,7 +24,7 @@
               }
               <span>{{ getMediaTypeLabel(mediaType) }}</span>
             </span>
-            <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
+            <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
           </button>
           @if (mediaTypeDropdownOpen) {
             <div class="custom-select-options">
@@ -45,7 +45,7 @@
         <div class="example-display">
           <label class="col-label">Example</label>
           <div class="example-row">
-            <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
+            <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
             <span class="example-label" [title]="exampleDisplay">{{ exampleDisplay }}</span>
             <button type="button" class="btn btn--secondary btn--sm" (click)="clearExample()">Change</button>
           </div>

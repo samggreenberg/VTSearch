@@ -12,7 +12,7 @@
   }
 
   &.loading-error {
-    background: var(--error-bg, rgba(220, 38, 38, 0.06));
+    background: var(--error-bg);
   }
 
   &.dimmed {
@@ -254,17 +254,17 @@ td {
     .error-msg {
       flex: 1;
       font-size: 0.8rem;
-      color: var(--error-text, #991b1b);
+      color: var(--error-text);
     }
 
     .btn--cancel {
       background: transparent;
-      color: var(--error-text, #991b1b);
-      border: 1px solid var(--error-border, #fca5a5);
+      color: var(--error-text);
+      border: 1px solid var(--error-border);
 
       &:hover {
-        background: var(--error-border, #fca5a5);
-        color: #fff;
+        background: var(--error-border);
+        color: var(--btn-filled-text);
       }
     }
   }

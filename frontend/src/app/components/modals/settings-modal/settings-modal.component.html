@@ -44,7 +44,7 @@
           <h3>Appearance</h3>
           <div class="form-group">
             <label class="form-label" title="Color theme for the application interface">Theme</label>
-            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme">
+            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
               <option value="dark">Dark</option>
               <option value="light">Light</option>
               <option value="highviz">High Visibility</option>
@@ -98,7 +98,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab, $event)" title="Choose thumbnail size for the grid view">
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab, $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -133,7 +133,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab, $event)" title="Choose thumbnail size for the grid view">
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab, $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
