@@ -784,10 +784,14 @@ SETTINGS_EXPORTER = S3SettingsExporter()
 
 ## Adding a Settings Source
 
-Settings sources provide **bidirectional sync** — pairing a load (import)
-and save (export) behind a single plugin. When a source is active,
-changing any setting auto-exports to the source, and syncing pulls from
-the source back into the app.
+Settings sources provide **bidirectional sync** — combining the roles of
+a settings importer and exporter into a single plugin that stays
+connected. When a source is active, changing any setting auto-exports to
+the source, and syncing pulls from the source back into the app.
+
+Use a **Settings Importer** or **Settings Exporter** (above) for
+one-shot operations. Use a **Settings Source** when you want ongoing
+automatic sync.
 
 ### File structure
 
@@ -894,8 +898,12 @@ fallback.
 ## Adding a Labelset Source
 
 Labelset sources provide **bidirectional sync** for detector labels —
-each detector can link to a source that auto-exports labels on change
-and imports them on sync.
+combining the roles of a label importer and exporter into a single
+plugin. Each detector can link to a source that auto-exports labels on
+change and imports them on sync.
+
+Use a **Label Importer** (above) for one-shot label import. Use a
+**Labelset Source** when you want ongoing automatic sync per-detector.
 
 ### File structure
 
