@@ -20,7 +20,7 @@
             @if (isVideo(entry.id)) {
               <video class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" muted preload="metadata"></video>
             } @else {
-              <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" />
+              <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.id)" />
             }
           } @else if (placeholderIcon(entry.id)) {
             <span class="vote-placeholder">{{ placeholderIcon(entry.id) }}</span>

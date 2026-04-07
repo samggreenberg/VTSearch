@@ -69,13 +69,34 @@ describe('MediaItemComponent', () => {
     expect(fixture.nativeElement.querySelector('.media-item.labeled-bad')).toBeTruthy();
   });
 
-  it('should not show thumbnail for audio type', () => {
-    expect(component.thumbnailUrl).toBeNull();
+  it('should show thumbnail for audio type', () => {
+    expect(component.thumbnailUrl).toBe('/api/medias/1/image');
   });
 
   it('should show thumbnail for image type', () => {
     component.media = { ...mockMedia, type: 'image' };
     expect(component.thumbnailUrl).toBe('/api/medias/1/image');
+  });
+
+  it('should not show thumbnail for text type', () => {
+    component.media = { ...mockMedia, type: 'text' };
+    expect(component.thumbnailUrl).toBeNull();
+  });
+
+  it('should fall back to placeholder when thumbnail fails to load', () => {
+    component.viewMode = 'grid';
+    expect(component.thumbnailUrl).toBe('/api/medias/1/image');
+    component.onThumbnailError();
+    expect(component.thumbnailUrl).toBeNull();
+    expect(component.placeholderIcon).toBe('\u266B');
+  });
+
+  it('should reset thumbnailFailed when media changes', () => {
+    component.onThumbnailError();
+    expect(component.thumbnailUrl).toBeNull();
+    component.media = { ...mockMedia, id: 2 };
+    component.ngOnChanges({ media: {} as any });
+    expect(component.thumbnailUrl).toBe('/api/medias/2/image');
   });
 
   it('should show score when provided', () => {
