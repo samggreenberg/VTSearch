@@ -390,6 +390,7 @@ export interface ProcessorImporterInfo {
 export interface ClipperParameter {
   key: string;
   label: string;
+  description?: string;
   type: 'number' | 'string';
   default: number | string;
   min?: number;
@@ -400,6 +401,7 @@ export interface ClipperParameter {
 export interface ClipperInfo {
   name: string;
   display_name?: string;
+  description?: string;
   media_type: string;
   parameters?: ClipperParameter[];
   creation_questions?: ClipperParameter[];

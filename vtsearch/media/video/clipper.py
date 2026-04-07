@@ -19,6 +19,10 @@ class VideoDefaultClipper(MediaClipper):
     def media_type(self) -> str:
         return "video"
 
+    @property
+    def description(self) -> str:
+        return "Import each video as-is, without splitting."
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]
 
@@ -63,6 +67,10 @@ class VideoTilingClipper(MediaClipper):
         return "video"
 
     @property
+    def description(self) -> str:
+        return "Split each video into fixed-length overlapping segments."
+
+    @property
     def duration(self) -> float:
         return self._duration
 
@@ -101,6 +109,7 @@ class VideoTilingClipper(MediaClipper):
             {
                 "key": "duration",
                 "label": "Clip length (seconds)",
+                "description": "Duration of each video segment in seconds.",
                 "type": "number",
                 "default": self._duration,
                 "min": 0.1,
@@ -110,6 +119,7 @@ class VideoTilingClipper(MediaClipper):
             {
                 "key": "min_overlap",
                 "label": "Minimum overlap (seconds)",
+                "description": "Minimum overlap between consecutive segments. Higher values produce more tiles.",
                 "type": "number",
                 "default": self._min_overlap,
                 "min": 0,
@@ -247,6 +257,10 @@ class VideoSceneClipper(MediaClipper):
         return "video"
 
     @property
+    def description(self) -> str:
+        return "Automatically split each video at detected scene changes."
+
+    @property
     def threshold(self) -> float:
         return self._threshold
 
@@ -317,6 +331,7 @@ class VideoSceneClipper(MediaClipper):
             {
                 "key": "threshold",
                 "label": "Sensitivity (0\u20131)",
+                "description": "Histogram correlation threshold. Lower values require more dramatic visual change to trigger a scene break.",
                 "type": "number",
                 "default": self._threshold,
                 "min": 0,
@@ -326,6 +341,7 @@ class VideoSceneClipper(MediaClipper):
             {
                 "key": "min_scene_duration",
                 "label": "Min scene length (seconds)",
+                "description": "Minimum duration for a scene. Boundaries that would create shorter scenes are suppressed.",
                 "type": "number",
                 "default": self._min_scene_duration,
                 "min": 0.1,

@@ -1205,6 +1205,15 @@ class MediaClipper(ABC):
         """
         return self.name.replace("_", " ").title()
 
+    @property
+    def description(self) -> str:
+        """Short tooltip description shown on hover in the clipper chooser.
+
+        Subclasses should override to provide a brief explanation of what
+        the clipper does.  Defaults to an empty string.
+        """
+        return ""
+
     # ------------------------------------------------------------------
     # Parameters
     # ------------------------------------------------------------------
@@ -1285,6 +1294,9 @@ class MediaClipper(ABC):
             "display_name": self.display_name,
             "media_type": self.media_type,
         }
+        desc = self.description
+        if desc:
+            d["description"] = desc
         params = self.parameters
         if params:
             d["parameters"] = params

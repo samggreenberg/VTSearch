@@ -793,7 +793,9 @@ export class DatasetImporterModalComponent implements OnInit {
       selected = this.sfSelectedClipper;
     }
     const clipper = clippers.find((c) => c.name === selected);
-    return clipper?.display_name || clipper?.name || 'Default';
+    if (!clipper) return 'None';
+    if (clipper.name.endsWith('_default')) return 'None';
+    return clipper.display_name || clipper.name;
   }
 
   sfSubmit(): void {
