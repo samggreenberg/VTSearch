@@ -1,5 +1,25 @@
 # Setup Guide
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Getting the code](#getting-the-code)
+  - [Setting up an SSH key](#setting-up-an-ssh-key)
+  - [Clone the repository](#clone-the-repository)
+- [Setting up a virtual environment](#setting-up-a-virtual-environment)
+- [Installing dependencies](#installing-dependencies)
+- [Building the frontend](#building-the-frontend)
+- [Running the app](#running-the-app)
+- [Docker](#docker)
+  - [Prerequisites](#prerequisites-1)
+  - [CPU (default)](#cpu-default)
+  - [GPU](#gpu)
+  - [Data persistence](#data-persistence)
+  - [Rebuilding](#rebuilding)
+- [Running the tests](#running-the-tests)
+- [Environment variables](#environment-variables)
+- [Next steps](#next-steps)
+
 ## Prerequisites
 
 You need **Python 3.10+** installed. Check by running:
