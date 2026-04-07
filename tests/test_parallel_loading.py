@@ -539,7 +539,7 @@ class TestConcurrentModelLoading:
                 call_count += 1
                 self._model = "loaded"
 
-            def embed_media(self, file_path):
+            def _embed_media_impl(self, file_path):
                 return None
 
             def embed_text(self, text):

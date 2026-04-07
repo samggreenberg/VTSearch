@@ -1257,8 +1257,12 @@ class CodeBertEmbedder(MediaEmbedder):
 
     # --- Embedding (required abstract method) ---
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
         """Return a fixed-size embedding vector for the file.
+
+        Override ``_embed_media_impl`` (not ``embed_media``).
+        The public ``embed_media()`` wrapper acquires a global lock
+        so that only one forward pass runs at a time.
 
         Returns None if embedding fails. The vector dimensionality
         must be consistent and must match embed_text().

@@ -97,7 +97,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
             "a picture of {text}",
         ]
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:
