@@ -55,12 +55,12 @@ vt-icon.icon-spinning {
   &.voted,
   &.vote-flash {
     background: var(--color-good);
-    color: var(--header-text, #fff);
+    color: var(--btn-filled-text);
   }
 
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-good) 85%, black);
+    background: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
   }
 }
 
@@ -75,11 +75,11 @@ vt-icon.icon-spinning {
   &.voted,
   &.vote-flash {
     background: var(--color-bad);
-    color: var(--header-text, #fff);
+    color: var(--btn-filled-text);
   }
 
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-bad) 85%, black);
+    background: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
   }
 }

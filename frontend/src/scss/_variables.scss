@@ -66,6 +66,8 @@
   --header-btn-hover-bg: rgba(255, 255, 255, 0.22);
   --header-btn-hover-border: rgba(255, 255, 255, 0.6);
   --toggle-active-text: #000;
+  --btn-primary-text: #ffffff;
+  --btn-filled-text: #ffffff;
 }
 
 [data-theme="light"] {
@@ -133,6 +135,8 @@
   --header-btn-hover-bg: rgba(255, 255, 255, 0.3);
   --header-btn-hover-border: rgba(255, 255, 255, 0.7);
   --toggle-active-text: #ffffff;
+  --btn-primary-text: #ffffff;
+  --btn-filled-text: #ffffff;
 }
 
 [data-theme="highviz"] {
@@ -200,4 +204,6 @@
   --header-btn-hover-bg: #333333;
   --header-btn-hover-border: #ffff00;
   --toggle-active-text: #000;
+  --btn-primary-text: #000000;
+  --btn-filled-text: #000000;
 }

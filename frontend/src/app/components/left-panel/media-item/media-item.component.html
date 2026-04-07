@@ -15,7 +15,7 @@
 >
   @if (isGrid) {
     @if (thumbnailUrl) {
-      <img class="media-thumbnail" [src]="thumbnailUrl" alt="" loading="lazy" />
+      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" />
     } @else if (placeholderIcon) {
       <span class="media-placeholder">{{ placeholderIcon }}</span>
     }

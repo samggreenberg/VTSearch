@@ -136,7 +136,7 @@
         bottom: 20%;
         right: 0;
         width: 2px;
-        background: var(--accent, #5b8fff);
+        background: var(--accent);
         opacity: 0.35;
         transition: opacity 0.15s;
       }
@@ -183,7 +183,7 @@
 .badge-ready, .badge-embedding, .badge-download {
   display: inline-block;
   padding: 1px 7px;
-  color: #fff;
+  color: var(--btn-filled-text);
   font-size: .7rem;
   border-radius: 3px;
 }
