@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -10,7 +10,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   templateUrl: './media-item.component.html',
   styleUrl: './media-item.component.scss',
 })
-export class MediaItemComponent {
+export class MediaItemComponent implements OnChanges {
   @Input({ required: true }) media!: MediaItem;
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
@@ -21,14 +21,24 @@ export class MediaItemComponent {
   @Output() select = new EventEmitter<number>();
   @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
+  thumbnailFailed = false;
+  private lastMediaId: number | null = null;
+
   constructor(private activeContext: ActiveContextService) {}
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['media'] && this.media.id !== this.lastMediaId) {
+      this.thumbnailFailed = false;
+      this.lastMediaId = this.media.id;
+    }
+  }
 
   get isGrid(): boolean {
     return this.viewMode === 'grid';
   }
 
   get thumbnailUrl(): string | null {
-    if (!this.isGrid) return null;
+    if (this.thumbnailFailed) return null;
     if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document' || this.media.type === 'audio') {
       return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
     }
@@ -41,6 +51,10 @@ export class MediaItemComponent {
     if (this.media.type === 'audio') return '\u266B';
     if (this.media.type === 'text') return '\u00B6';
     return '\u25A1';
+  }
+
+  onThumbnailError(): void {
+    this.thumbnailFailed = true;
   }
 
   get displayName(): string {
