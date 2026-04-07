@@ -422,7 +422,7 @@ class LabelFileProcessorImporter(ProcessorImporter):
         ),
         ProcessorImporterField(
             key="media_type", label="Media Type", field_type="select",
-            options=["", "audio", "image", "video", "paragraph"],
+            options=["", "audio", "image", "video", "text"],
             default="", required=False,
             description="Override auto-detected media type (leave blank to auto-detect).",
         ),
@@ -460,7 +460,7 @@ def _media_type_for_path(p: Path) -> str | None:
     if ext in _AUDIO_EXTS: return "audio"
     if ext in _IMAGE_EXTS: return "image"
     if ext in _VIDEO_EXTS: return "video"
-    if ext in _TEXT_EXTS:  return "paragraph"
+    if ext in _TEXT_EXTS:  return "text"
     return None
 
 
@@ -538,7 +538,7 @@ class CsvLabelFileProcessorImporter(ProcessorImporter):
         ),
         ProcessorImporterField(
             key="media_type", label="Media Type", field_type="select",
-            options=["", "audio", "image", "video", "paragraph"],
+            options=["", "audio", "image", "video", "text"],
             default="", required=False,
             description="Override auto-detected media type (leave blank to auto-detect).",
         ),

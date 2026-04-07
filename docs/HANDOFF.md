@@ -135,11 +135,17 @@ architecture:
   email, webhooks, or the GUI.
 - **Label importers** — import labels from server-side JSON or CSV files.
 - **Processor importers** — import detectors from server-side JSON files.
+- **Settings importers** — one-shot settings import from JSON files.
+- **Settings exporters** — one-shot settings export to JSON files.
 - **Settings sources** — bidirectional sync for settings (auto-export on
   change, import on sync). Supports `{username}` template for per-user files.
 - **Labelset sources** — bidirectional sync for detector labels (auto-export
   on vote/import, import on sync). Supports `{detector_id}`/`{detector_name}`
   templates. Linked per-detector via `DetectorContext.labelset_source`.
+- **Media converters** — transform content between media types (e.g.
+  document pages to images, video to audio).
+- **Media sources** — resolve individual media files from dataset origins
+  (local folders, HTTP archives).
 
 See [EXTENDING.md](EXTENDING.md) for how to add new plugins.
 

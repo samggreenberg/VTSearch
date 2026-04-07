@@ -31,7 +31,7 @@ to `routes/media_server.py`, evaluation endpoints to `routes/eval.py`.
 Completed. `_seed_good_votes_from_examples()` moved to
 `models/media_seeding.py`, `_restore_labels_from_trainable_model()` to
 `models/label_restoration.py`, `_apply_and_retrain()` to
-`models/training_workflow.py`. `trainable_models.py` is now ~859 lines
+`models/training_workflow.py`. `trainable_models.py` is now ~868 lines
 (down from 1,194).
 
 ---
@@ -183,7 +183,7 @@ auto-discovered like all other plugin families.
 
 ## Phase 5: Frontend (all pending)
 
-### 5.1 Split `dashboard.component.ts` (1,173 lines) ⬜
+### 5.1 Split `dashboard.component.ts` (1,301 lines) ⬜
 
 **Problem:** Manages dataset selection, model selection, loading tasks, column resizing, sorting state, and modal orchestration in one component.
 
@@ -195,7 +195,7 @@ auto-discovered like all other plugin families.
 
 ---
 
-### 5.2 Split `label-view.component.ts` (784 lines) ⬜
+### 5.2 Split `label-view.component.ts` (810 lines) ⬜
 
 **Problem:** Manages panel layout, resize, polling, keyboard shortcuts, and autopilot in one component.
 
