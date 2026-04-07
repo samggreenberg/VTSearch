@@ -62,7 +62,7 @@ class TestThinLoadFromFolder:
         _make_wav_file(tmp_path, "test1.wav")
         _make_wav_file(tmp_path, "test2.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert len(medias) == 2
         for media in medias.values():
             assert media["media_path"] is not None
@@ -71,7 +71,7 @@ class TestThinLoadFromFolder:
     def test_thin_clips_have_no_bytes(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         media = medias[1]
         assert media["media_bytes"] is None
         assert media["media_string"] is None
@@ -79,7 +79,7 @@ class TestThinLoadFromFolder:
     def test_thin_clips_have_embedding(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         media = medias[1]
         assert isinstance(media["embedding"], np.ndarray)
         assert len(media["embedding"]) > 0
@@ -88,28 +88,28 @@ class TestThinLoadFromFolder:
         wav_path = _make_wav_file(tmp_path, "test.wav")
         expected_size = wav_path.stat().st_size
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert medias[1]["file_size"] == expected_size
 
     def test_thin_clips_have_correct_md5(self, tmp_path):
         wav_path = _make_wav_file(tmp_path, "test.wav")
         expected_md5 = hashlib.md5(wav_path.read_bytes()).hexdigest()
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert medias[1]["md5"] == expected_md5
 
     def test_thin_no_duration(self, tmp_path):
         """Thin mode skips load_media_data, so duration stays at default 0."""
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert medias[1]["duration"] == 0
 
     def test_full_mode_has_bytes(self, tmp_path):
         """Full mode (thin=False) should still load bytes as before."""
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=False)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=False)
         assert medias[1]["media_bytes"] is not None
         assert isinstance(medias[1]["media_bytes"], bytes)
 
@@ -117,7 +117,7 @@ class TestThinLoadFromFolder:
         """Full mode should also store media_path for potential future use."""
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias, thin=False)
+        load_dataset_from_folder(tmp_path, "audio", medias, thin=False)
         assert medias[1]["media_path"] is not None
 
 
@@ -281,7 +281,7 @@ class TestThinImporters:
 
         importer = FolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
-        importer.run({"path": str(tmp_path), "media_type": "sounds"}, medias, thin=True)
+        importer.run({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
         assert len(medias) > 0
         assert medias[1]["media_bytes"] is None
         assert medias[1]["media_path"] is not None
@@ -292,7 +292,7 @@ class TestThinImporters:
 
         importer = FolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
-        importer.run_cli({"path": str(tmp_path), "media_type": "sounds"}, medias, thin=True)
+        importer.run_cli({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
         assert len(medias) > 0
         assert medias[1]["media_bytes"] is None
 

@@ -572,7 +572,7 @@ class TestFindLabel:
 
         label_origin = {
             "importer": "folder",
-            "params": {"path": str(label_folder), "media_type": "sounds"},
+            "params": {"path": str(label_folder), "media_type": "audio"},
         }
 
         # Build labelset entries with origins pointing to the folder

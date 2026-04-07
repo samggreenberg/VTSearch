@@ -49,9 +49,7 @@ deployments. Runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [demos.md](demos.md) | Available demo datasets |
-| [old_io.md](old_io.md) | Retired IO module reference implementations |
 | [REFACTORING.md](REFACTORING.md) | Structural refactoring plan with completion status |
-| [plan-media-sources.md](plan-media-sources.md) | MediaSource abstraction design document (implemented) |
 | [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (implemented, two enhancements pending) |
 | [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (design proposal, not yet implemented) |
 

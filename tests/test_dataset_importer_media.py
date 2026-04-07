@@ -79,7 +79,7 @@ class _VectorAndMD5Importer:
             display_name = "Test Vector+MD5"
             description = "Test importer providing vectors and MD5s."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="sounds"),
+                ImporterField("media_type", "Media Type", "text", default="audio"),
                 ImporterField("path", "Path", "text"),
             ]
 
@@ -88,7 +88,7 @@ class _VectorAndMD5Importer:
                 self.content_md5s.update(md5s)
                 load_dataset_from_folder(
                     Path(field_values["path"]),
-                    field_values.get("media_type", "sounds"),
+                    field_values.get("media_type", "audio"),
                     medias,
                     content_vectors=self.content_vectors or None,
                     content_md5s=self.content_md5s or None,
@@ -122,7 +122,7 @@ class TestImporterProvidedVectors:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
@@ -144,7 +144,7 @@ class TestImporterProvidedVectors:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 2
         embs = {m["filename"]: m["embedding"] for m in medias.values()}
@@ -169,7 +169,7 @@ class TestImporterProvidedVectors:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 2
         embs = {m["filename"]: m["embedding"] for m in medias.values()}
@@ -190,7 +190,7 @@ class TestImporterProvidedVectors:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias, thin=True)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
@@ -213,7 +213,7 @@ class TestImporterProvidedMD5s:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
         assert medias[1]["md5"] == pre_md5
@@ -233,7 +233,7 @@ class TestImporterProvidedMD5s:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         md5s = {m["filename"]: m["md5"] for m in medias.values()}
         assert md5s["a.wav"] == md5_a
@@ -252,7 +252,7 @@ class TestImporterProvidedMD5s:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias, thin=True)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
 
         assert medias[1]["md5"] == pre_md5
 
@@ -273,7 +273,7 @@ class TestImporterProvidedMD5s:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         md5s = {m["filename"]: m["md5"] for m in medias.values()}
         assert md5s["pre.wav"] == pre_md5
@@ -298,7 +298,7 @@ class TestImporterProvidedBoth:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
@@ -320,7 +320,7 @@ class TestImporterProvidedBoth:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 3
         for m in medias.values():
@@ -347,7 +347,7 @@ class TestImporterCustomMetadataMD5:
             display_name = "Test CM MD5"
             description = "Test importer using custom_metadata_map for MD5."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="sounds"),
+                ImporterField("media_type", "Media Type", "text", default="audio"),
                 ImporterField("path", "Path", "text"),
             ]
 
@@ -358,7 +358,7 @@ class TestImporterCustomMetadataMD5:
                 }
                 load_dataset_from_folder(
                     Path(field_values["path"]),
-                    field_values.get("media_type", "sounds"),
+                    field_values.get("media_type", "audio"),
                     medias,
                     custom_metadata_map=self.custom_metadata_map or None,
                     on_progress=lambda *a: None,
@@ -371,7 +371,7 @@ class TestImporterCustomMetadataMD5:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
         assert medias[1]["md5"] == "metadata_md5_" + "a" * 20
@@ -391,7 +391,7 @@ class TestImporterCustomMetadataMD5:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 content_md5s={"prio.wav": content_md5},
                 custom_metadata_map={"prio.wav": {"md5": cm_md5}},
                 on_progress=lambda *a: None,
@@ -411,7 +411,7 @@ class TestImporterCustomMetadataMD5:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map={"slim.wav": {"md5": cm_md5}},
                 on_progress=lambda *a: None,
                 thin=True,
@@ -431,7 +431,7 @@ class TestImporterCustomMetadataMD5:
         medias: dict = {}
         try:
             with _patch_media_registry(mt, emb):
-                IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+                IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
             assert medias[1]["md5"] == cm_md5
             assert medias[1]["custom_metadata"]["tag"] == "hello"
         finally:
@@ -470,7 +470,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map={"tone.wav": {"embedding": cm_vec, "source": "test"}},
                 on_progress=lambda *a: None,
             )
@@ -494,7 +494,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 content_vectors={"prio.wav": cv_vec},
                 custom_metadata_map={"prio.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
@@ -515,7 +515,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map={"slim.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
                 thin=True,
@@ -538,7 +538,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map={"both.wav": {"embedding": cm_vec, "md5": cm_md5}},
                 on_progress=lambda *a: None,
             )
@@ -563,7 +563,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map={"meta.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
             )
@@ -584,7 +584,7 @@ class TestImporterCustomMetadataEmbedding:
 
         with _patch_media_registry(mt, emb):
             chunks = list(load_dataset_from_folder_chunked(
-                tmp_path, "sounds", chunk_size=10,
+                tmp_path, "audio", chunk_size=10,
                 custom_metadata_map={"chunk.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
             ))
@@ -610,7 +610,7 @@ class TestImporterCustomMetadataEmbedding:
             display_name = "Test CM Embedding"
             description = "Test importer using custom_metadata_map for embedding."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="sounds"),
+                ImporterField("media_type", "Media Type", "text", default="audio"),
                 ImporterField("path", "Path", "text"),
             ]
 
@@ -622,7 +622,7 @@ class TestImporterCustomMetadataEmbedding:
                 }
                 load_dataset_from_folder(
                     Path(field_values["path"]),
-                    field_values.get("media_type", "sounds"),
+                    field_values.get("media_type", "audio"),
                     medias,
                     custom_metadata_map=self.custom_metadata_map or None,
                     on_progress=lambda *a: None,
@@ -635,7 +635,7 @@ class TestImporterCustomMetadataEmbedding:
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
@@ -663,7 +663,7 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 custom_metadata_map=cm_map,
                 on_progress=lambda *a: None,
             )
@@ -693,7 +693,7 @@ class TestFolderImporterPassthrough:
         medias: dict = {}
         try:
             with _patch_media_registry(mt, emb):
-                IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+                IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
             assert len(medias) == 1
             np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
             emb.embed_media.assert_not_called()
@@ -714,7 +714,7 @@ class TestFolderImporterPassthrough:
         medias: dict = {}
         try:
             with _patch_media_registry(mt, emb):
-                IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+                IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
             assert len(medias) == 1
             assert medias[1]["md5"] == pre_md5
         finally:
@@ -745,7 +745,7 @@ class TestImporterMediasInSorting:
         imp = _VectorAndMD5Importer.create(tmp_path, vectors=vectors, md5s=md5s)
         medias: dict = {}
         with _patch_media_registry(mt, emb):
-            imp.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         return medias, vectors, md5s
 

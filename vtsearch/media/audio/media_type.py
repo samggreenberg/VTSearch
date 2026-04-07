@@ -124,7 +124,7 @@ class AudioMediaType(MediaType):
 
     @property
     def folder_import_name(self) -> str:
-        return "sounds"
+        return "audio"
 
     @property
     def tab_title(self) -> str:

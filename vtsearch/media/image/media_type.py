@@ -58,7 +58,7 @@ class ImageMediaType(MediaType):
 
     @property
     def folder_import_name(self) -> str:
-        return "images"
+        return "image"
 
     @property
     def tab_title(self) -> str:

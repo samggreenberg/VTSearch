@@ -32,7 +32,7 @@ Example – a minimal SFTP importer skeleton::
             ImporterField(
                 "media_type", "Media Type", "select",
                 options=all_folder_names(),
-                default="sounds",
+                default="audio",
             ),
         ]
 
@@ -259,7 +259,7 @@ class DatasetImporter(PluginBase):
         """Build a CLI argument string that would recreate this import.
 
         The returned string contains only the importer-specific portion, e.g.
-        ``"--importer folder --media-type sounds --path /data/audio"``.  The
+        ``"--importer folder --media-type audio --path /data/audio"``.  The
         caller can prepend ``python app.py --autodetect`` and append
         ``--settings <file>`` as needed.
 

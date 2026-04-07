@@ -20,7 +20,7 @@ GET /api/media-types
       "name": "Audio",
       "icon": "🔊",
       "tab_title": "Sounds",
-      "folder_import_name": "sounds",
+      "folder_import_name": "audio",
       "loops": true,
       "file_extensions": ["*.wav", "*.mp3"]
     }
@@ -167,7 +167,7 @@ POST /api/dataset/load-file
 POST /api/dataset/load-folder
 ```
 
-**Body:** `{"path": "/data/sounds", "media_type": "sounds"}`
+**Body:** `{"path": "/data/sounds", "media_type": "audio"}`
 
 → `{"ok": true, "message": "Loading started"}`
 

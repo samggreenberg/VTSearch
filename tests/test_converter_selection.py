@@ -233,14 +233,14 @@ class TestFolderImporterConverterFields:
     def test_build_cli_args_without_converters(self):
         from vtsearch.datasets.importers.folder import IMPORTER
 
-        args = IMPORTER.build_cli_args({"media_type": "images", "path": "/data"})
+        args = IMPORTER.build_cli_args({"media_type": "image", "path": "/data"})
         assert "--converters" not in args
 
     def test_build_cli_args_with_converters(self):
         from vtsearch.datasets.importers.folder import IMPORTER
 
         args = IMPORTER.build_cli_args({
-            "media_type": "images",
+            "media_type": "image",
             "path": "/data",
             "converters": "video2image,document2image",
         })
@@ -249,7 +249,7 @@ class TestFolderImporterConverterFields:
     def test_build_origin_without_converters(self):
         from vtsearch.datasets.importers.folder import IMPORTER
 
-        origin = IMPORTER.build_origin({"media_type": "images", "path": "/data"})
+        origin = IMPORTER.build_origin({"media_type": "image", "path": "/data"})
         assert origin["importer"] == "folder"
         assert "converters" not in origin["params"]
 
@@ -257,7 +257,7 @@ class TestFolderImporterConverterFields:
         from vtsearch.datasets.importers.folder import IMPORTER
 
         origin = IMPORTER.build_origin({
-            "media_type": "images",
+            "media_type": "image",
             "path": "/data",
             "converters": "video2image",
         })
@@ -270,7 +270,7 @@ class TestHttpArchiveImporterConverterFields:
 
         args = IMPORTER.build_cli_args({
             "url": "https://example.com/a.zip",
-            "media_type": "images",
+            "media_type": "image",
             "converters": "video2image",
         })
         assert "--converters video2image" in args
@@ -280,7 +280,7 @@ class TestHttpArchiveImporterConverterFields:
 
         origin = IMPORTER.build_origin({
             "url": "https://example.com/a.zip",
-            "media_type": "images",
+            "media_type": "image",
             "converters": "document2image",
         })
         assert origin["params"]["converters"] == "document2image"
@@ -328,7 +328,7 @@ class TestRunConvertersOnFolder:
         run_converters_on_folder(
             folder_path=tmp_path,
             converter_names=[],
-            target_media_type="images",
+            target_media_type="image",
             medias=medias,
         )
         assert medias == {}
@@ -341,7 +341,7 @@ class TestRunConvertersOnFolder:
         run_converters_on_folder(
             folder_path=tmp_path,
             converter_names=["nonexistent_converter"],
-            target_media_type="images",
+            target_media_type="image",
             medias=medias,
             on_progress=lambda *a: None,
         )
@@ -362,7 +362,7 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
             )
@@ -387,10 +387,10 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
-                base_origin={"importer": "folder", "params": {"path": str(tmp_path), "media_type": "images"}},
+                base_origin={"importer": "folder", "params": {"path": str(tmp_path), "media_type": "image"}},
             )
 
         assert len(medias) == 1
@@ -435,7 +435,7 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
             )
@@ -471,7 +471,7 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
             )
@@ -497,7 +497,7 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
             )
@@ -522,7 +522,7 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=tmp_path,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
             )
@@ -554,10 +554,10 @@ class TestRunConvertersOnFolder:
             run_converters_on_folder(
                 folder_path=root,
                 converter_names=["video2image"],
-                target_media_type="images",
+                target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
-                base_origin={"importer": "folder", "params": {"path": str(root), "media_type": "images"}},
+                base_origin={"importer": "folder", "params": {"path": str(root), "media_type": "image"}},
             )
 
         assert len(medias) == 1
@@ -645,14 +645,14 @@ class TestFolderImporterWithConverters:
         ):
             medias: dict = {}
             IMPORTER.run(
-                {"path": str(tmp_path), "media_type": "images", "converters": "video2image"},
+                {"path": str(tmp_path), "media_type": "image", "converters": "video2image"},
                 medias,
             )
             mock_load.assert_called_once()
             mock_conv.assert_called_once()
             # _run_selected_converters(folder, media_type, field_values, medias, thin=False)
             call_args = mock_conv.call_args
-            assert call_args[0][1] == "images"  # media_type
+            assert call_args[0][1] == "image"  # media_type
             assert "video2image" in call_args[0][2].get("converters", "")
 
     def test_run_without_converters_does_not_call_runner(self, tmp_path):
@@ -666,7 +666,7 @@ class TestFolderImporterWithConverters:
             patch("vtsearch.datasets.importers.folder._run_selected_converters") as mock_conv,
         ):
             medias: dict = {}
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
             mock_conv.assert_called_once()  # still called, but with empty converters
             # The actual runner inside checks for empty string and returns immediately
 
@@ -689,7 +689,7 @@ class TestFolderImporterWithConverters:
         ):
             medias: dict = {}
             IMPORTER.run(
-                {"path": str(tmp_path), "media_type": "images", "converters": "video2image"},
+                {"path": str(tmp_path), "media_type": "image", "converters": "video2image"},
                 medias,
             )
             # Should not raise because converters produced output
@@ -709,7 +709,7 @@ class TestImportAPIConverters:
                 "/api/dataset/import/folder",
                 json={
                     "path": "/tmp/test",
-                    "media_type": "images",
+                    "media_type": "image",
                     "converters": "video2image,document2image",
                 },
             )
@@ -724,7 +724,7 @@ class TestImportAPIConverters:
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/folder",
-                json={"path": "/tmp/test", "media_type": "images"},
+                json={"path": "/tmp/test", "media_type": "image"},
             )
             assert resp.status_code == 200
             field_values = mock_run.call_args[0][1]

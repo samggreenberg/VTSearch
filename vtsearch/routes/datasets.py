@@ -559,7 +559,7 @@ def load_dataset_folder():
         return data
 
     folder_path = data.get("path")
-    media_type = data.get("media_type", "sounds")  # Default to sounds for backward compatibility
+    media_type = data.get("media_type", "audio")  # Default to audio
 
     if not folder_path:
         return jsonify({"error": "No folder path provided"}), 400

@@ -163,14 +163,14 @@ class TestHttpArchiveImporterSSRF:
             return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
-                imp.run({"url": "http://localhost:8080/secret.zip", "media_type": "sounds"}, {})
+                imp.run({"url": "http://localhost:8080/secret.zip", "media_type": "audio"}, {})
 
     def test_run_rejects_non_http_scheme(self):
         from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with pytest.raises(ValueError, match="http or https"):
-            imp.run({"url": "file:///etc/passwd", "media_type": "sounds"}, {})
+            imp.run({"url": "file:///etc/passwd", "media_type": "audio"}, {})
 
     def test_download_and_extract_rejects_private_url(self):
         from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter

@@ -63,7 +63,7 @@ class DocumentMediaType(MediaType):
 
     @property
     def folder_import_name(self) -> str:
-        return "documents"
+        return "document"
 
     @property
     def tab_title(self) -> str:

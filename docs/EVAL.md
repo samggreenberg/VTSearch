@@ -67,7 +67,7 @@ python -m vtsearch.eval --list
 
 ## Available eval datasets
 
-Each eval dataset wraps a demo dataset and defines text queries targeting specific categories.
+Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results).
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|

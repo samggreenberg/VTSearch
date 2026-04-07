@@ -47,7 +47,7 @@ describe('DatasetImporterModalComponent', () => {
       num_files: 8189,
       download_size_mb: 330,
       description: '102 flower categories',
-      media_type: 'images',
+      media_type: 'image',
       num_categories: 102,
       pkl_embedder: 'clip',
     },
@@ -64,7 +64,7 @@ describe('DatasetImporterModalComponent', () => {
 
   const mockMediaTypes = [
     { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Audio' },
-    { type_id: 'images', name: 'Images', icon: 'image', tab_title: 'Images' },
+    { type_id: 'image', name: 'Images', icon: 'image', tab_title: 'Images' },
   ];
 
   beforeEach(async () => {
@@ -237,7 +237,7 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     openAndFlushDemoPicker();
 
-    expect(component.demoTabs).toEqual(['audio', 'images']);
+    expect(component.demoTabs).toEqual(['audio', 'image']);
     expect(component.activeTab).toBe('audio');
   });
 
@@ -248,11 +248,11 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.filteredDemos.length).toBe(1);
     expect(component.filteredDemos[0].name).toBe('gtzan');
 
-    component.selectDemoTab('images');
+    component.selectDemoTab('image');
 
     // selectDemoTab triggers loadDemoEmbedders for the new tab
     httpMock.expectOne(req =>
-      req.url === '/api/embedders' && req.params.get('media_type') === 'images',
+      req.url === '/api/embedders' && req.params.get('media_type') === 'image',
     ).flush({ embedders: mockImageEmbedders });
     // refetchDemoStatuses fires
     httpMock.expectOne(req =>
@@ -374,14 +374,14 @@ describe('DatasetImporterModalComponent', () => {
         num_files: 8189,
         download_size_mb: 330,
         description: '102 flower categories',
-        media_type: 'images',
+        media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
       },
     ];
 
     component.demos = demosWithEmbedder;
-    component.activeTab = 'images';
+    component.activeTab = 'image';
     component.selectedDemoEmbedder = 'siglip';
 
     // Call updateDemoStatuses via the public embedder change handler
@@ -404,14 +404,14 @@ describe('DatasetImporterModalComponent', () => {
         num_files: 8189,
         download_size_mb: 330,
         description: '102 flower categories',
-        media_type: 'images',
+        media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
       },
     ];
 
     component.demos = demosWithEmbedder;
-    component.activeTab = 'images';
+    component.activeTab = 'image';
     component.selectedDemoEmbedder = 'clip';
 
     (component as any).updateDemoStatuses();
@@ -432,14 +432,14 @@ describe('DatasetImporterModalComponent', () => {
         num_files: 100,
         download_size_mb: 10,
         description: 'Unknown embedder',
-        media_type: 'images',
+        media_type: 'image',
         num_categories: 5,
         pkl_embedder: '',  // unknown
       },
     ];
 
     component.demos = demosUnknown;
-    component.activeTab = 'images';
+    component.activeTab = 'image';
     component.selectedDemoEmbedder = 'clip';
 
     (component as any).updateDemoStatuses();
@@ -473,14 +473,14 @@ describe('DatasetImporterModalComponent', () => {
         num_files: 8189,
         download_size_mb: 330,
         description: '102 flower categories',
-        media_type: 'images',
+        media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
       },
     ];
 
     component.demos = crossTabDemos;
-    component.activeTab = 'images';
+    component.activeTab = 'image';
     component.selectedDemoEmbedder = 'siglip';  // Doesn't match 'clip'
 
     (component as any).updateDemoStatuses();

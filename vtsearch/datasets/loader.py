@@ -142,7 +142,7 @@ def load_dataset_from_folder(
     Args:
         folder_path: Path to the root directory containing media files.
             Subdirectories are scanned recursively.
-        media_type: Folder-import alias for the media type (e.g. ``"sounds"``).
+        media_type: Media type identifier (e.g. ``"audio"``).
         medias: Dict to populate in-place. Existing entries are removed before
             loading. Keys are sequential integer media IDs starting from 1.
         content_vectors: Optional mapping of filename to a pre-computed
@@ -405,7 +405,7 @@ def load_dataset_from_folder_chunked(
     Args:
         folder_path: Path to the root directory containing media files.
             Subdirectories are scanned recursively.
-        media_type: Folder-import alias (e.g. ``"sounds"``).
+        media_type: Media type identifier (e.g. ``"audio"``).
         chunk_size: Maximum number of medias per chunk.
         content_vectors: Optional pre-computed embeddings keyed by filename
             (relative path or basename; relative path is tried first).

@@ -293,10 +293,10 @@ class TestHttpArchiveImporterMetadata:
     def test_media_type_options(self):
         fields = {f.key: f for f in self._get_importer().fields}
         opts = fields["media_type"].options
-        assert "sounds" in opts
-        assert "videos" in opts
-        assert "images" in opts
-        assert "paragraphs" in opts
+        assert "audio" in opts
+        assert "video" in opts
+        assert "image" in opts
+        assert "text" in opts
 
 
 # ---------------------------------------------------------------------------
@@ -521,7 +521,7 @@ class TestLoadDatasetContentVectors:
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
+                tmp_path, "audio", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
 
         assert len(medias) == 1
@@ -546,7 +546,7 @@ class TestLoadDatasetContentVectors:
             None
 
         with self._patch_media_registry(mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, content_vectors={}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, content_vectors={}, on_progress=_noop)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
@@ -574,7 +574,7 @@ class TestLoadDatasetContentVectors:
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
+                tmp_path, "audio", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
             )
 
         assert len(medias) == 2
@@ -601,7 +601,7 @@ class TestLoadDatasetContentVectors:
             None
 
         with self._patch_media_registry(mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
@@ -629,7 +629,7 @@ class TestLoadDatasetContentVectors:
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias, content_vectors={"d.wav": pre_vector}, on_progress=_noop
+                tmp_path, "audio", medias, content_vectors={"d.wav": pre_vector}, on_progress=_noop
             )
 
         assert len(medias) == 1
@@ -671,7 +671,7 @@ class TestLoadDatasetSkipEmbedding:
              mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type, \
              mock.patch("vtsearch.media.get_embedder") as mock_get_emb:
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 content_vectors={"a.wav": pre_vector},
                 on_progress=lambda *a: None,
                 skip_embedding=True,
@@ -702,7 +702,7 @@ class TestLoadDatasetSkipEmbedding:
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
              mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type:
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 on_progress=lambda *a: None,
                 skip_embedding=True,
             )
@@ -735,7 +735,7 @@ class TestLoadDatasetSkipEmbedding:
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
              mock.patch("vtsearch.media.embedders_for_type"):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias,
+                tmp_path, "audio", medias,
                 on_progress=track_progress,
                 skip_embedding=True,
             )
@@ -770,7 +770,7 @@ class TestLoadDatasetSkipEmbedding:
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), \
              mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type:
             chunks = list(load_dataset_from_folder_chunked(
-                tmp_path, "sounds", chunk_size=10,
+                tmp_path, "audio", chunk_size=10,
                 content_vectors=vectors,
                 on_progress=lambda *a: None,
                 skip_embedding=True,
@@ -825,7 +825,7 @@ class TestLoadDatasetContentMD5s:
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
         assert len(medias) == 1
         assert medias[1]["md5"] == pre_md5
@@ -851,7 +851,7 @@ class TestLoadDatasetContentMD5s:
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={}, on_progress=_noop)
 
         assert len(medias) == 1
         assert medias[1]["md5"] == expected_md5
@@ -880,7 +880,7 @@ class TestLoadDatasetContentMD5s:
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
         assert len(medias) == 2
         md5s = {c["filename"]: c["md5"] for c in medias.values()}
@@ -908,7 +908,7 @@ class TestLoadDatasetContentMD5s:
             None
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
 
         assert len(medias) == 1
         assert medias[1]["md5"] == expected_md5
@@ -934,7 +934,7 @@ class TestLoadDatasetContentMD5s:
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop, thin=True
+                tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop, thin=True
             )
 
         assert len(medias) == 1
@@ -975,7 +975,7 @@ class TestLoadDatasetRelativePaths:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert medias[1]["filename"] == "a.wav"
         assert medias[1]["origin_name"] == "a.wav"
@@ -995,7 +995,7 @@ class TestLoadDatasetRelativePaths:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert medias[1]["filename"] == "cat_a/clip.wav"
         assert medias[1]["origin_name"] == "cat_a/clip.wav"
@@ -1016,7 +1016,7 @@ class TestLoadDatasetRelativePaths:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            load_dataset_from_folder(tmp_path, "sounds", medias, on_progress=lambda *a: None)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         filenames = {m["filename"] for m in medias.values()}
         assert "dir_a/clip.wav" in filenames
@@ -1038,7 +1038,7 @@ class TestLoadDatasetRelativePaths:
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "sounds", medias, content_vectors={"x.wav": pre}, on_progress=lambda *a: None
+                tmp_path, "audio", medias, content_vectors={"x.wav": pre}, on_progress=lambda *a: None
             )
 
         np.testing.assert_array_equal(medias[1]["embedding"], pre)
@@ -1058,7 +1058,7 @@ class TestLoadDatasetRelativePaths:
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             chunks = list(
-                load_dataset_from_folder_chunked(tmp_path, "sounds", 10, on_progress=lambda *a: None)
+                load_dataset_from_folder_chunked(tmp_path, "audio", 10, on_progress=lambda *a: None)
             )
 
         media = chunks[0][1]
@@ -1102,8 +1102,8 @@ class TestHttpArchiveExtractDirIsolation:
                 "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
             ),
         ):
-            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
-            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
 
         assert len(dirs_used) == 2
         # The two extract dirs must be different
@@ -1132,7 +1132,7 @@ class TestHttpArchiveExtractDirIsolation:
                 "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
             ),
         ):
-            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
 
         # The old shared directory should not exist
         assert not (tmp_path / "http_archive_extract").exists()
@@ -1160,7 +1160,7 @@ class TestHttpArchiveExtractDirIsolation:
                 "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
             ),
         ):
-            imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+            imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
 
         # No http_archive_extract_* dirs should remain
         remaining = list(tmp_path.glob("http_archive_extract_*"))
@@ -1191,7 +1191,7 @@ class TestHttpArchiveExtractDirIsolation:
             ),
         ):
             with pytest.raises(RuntimeError, match="boom"):
-                imp.run({"url": "http://example.com/a.zip", "media_type": "sounds"}, {})
+                imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
 
         remaining = list(tmp_path.glob("http_archive_extract_*"))
         assert remaining == []
@@ -1223,7 +1223,7 @@ class TestHttpArchiveExtractDirIsolation:
                 "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
             ),
         ):
-            chunks = list(imp.run_chunked({"url": "http://example.com/a.zip", "media_type": "sounds"}, 10))
+            chunks = list(imp.run_chunked({"url": "http://example.com/a.zip", "media_type": "audio"}, 10))
 
         assert len(chunks) == 1
         remaining = list(tmp_path.glob("http_archive_extract_*"))
@@ -1465,7 +1465,7 @@ class TestSymlinkedFolderImport:
         mt = self._make_fake_media_type()
         medias: dict = {}
         with self._patch_media_registry(mt):
-            load_dataset_from_folder(root, "sounds", medias, on_progress=lambda *a: None)
+            load_dataset_from_folder(root, "audio", medias, on_progress=lambda *a: None)
 
         filenames = {m["filename"] for m in medias.values()}
         assert "a.wav" in filenames
@@ -1487,7 +1487,7 @@ class TestSymlinkedFolderImport:
         mt = self._make_fake_media_type()
         with self._patch_media_registry(mt):
             chunks = list(load_dataset_from_folder_chunked(
-                root, "sounds", chunk_size=10, on_progress=lambda *a: None,
+                root, "audio", chunk_size=10, on_progress=lambda *a: None,
             ))
 
         all_medias = {}
