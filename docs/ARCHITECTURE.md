@@ -410,7 +410,7 @@ from vtsearch.datasets.loader import load_dataset_from_folder
 medias = {}
 load_dataset_from_folder(
     Path("my_audio_folder"),
-    media_type="sounds",
+    media_type="sounds",       # folder_import_name, not type_id ("audio")
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
@@ -464,6 +464,24 @@ registries in `vtsearch/media/__init__.py`:
 | Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+
+**`type_id` vs `folder_import_name`:** Each media type has two
+identifiers. The `type_id` is the canonical internal name used in API
+responses, embedder lookups, and detector metadata. The
+`folder_import_name` is the user-facing name used in CLI flags
+(`--media-type`), importer dropdowns, origin dicts, and
+`load_dataset_from_folder()`. The two differ:
+
+| `type_id` | `folder_import_name` |
+|-----------|---------------------|
+| `"audio"` | `"sounds"` |
+| `"image"` | `"images"` |
+| `"video"` | `"videos"` |
+| `"text"` | `"paragraphs"` |
+| `"document"` | `"documents"` |
+
+Use `get(type_id)` to look up by `type_id` and
+`get_by_folder_name(name)` to look up by `folder_import_name`.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
 (sentinel: `CONVERTER`) in `vtsearch/converters/__init__.py`, with
