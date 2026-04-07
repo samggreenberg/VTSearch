@@ -28,10 +28,11 @@ discovery/registration works, and includes a complete example.
 
 ## Shared Plugin Architecture
 
-Eight plugin systems — data importers, results exporters, label
+Ten plugin systems — data importers, results exporters, label
 importers, processor importers, settings importers, settings exporters,
-settings sources, and labelset sources — share the same architecture
-built on two base classes in `vtsearch/utils/registry.py`:
+settings sources, labelset sources, media converters, and media
+sources — share the same architecture built on two base classes in
+`vtsearch/utils/registry.py`:
 
 ### PluginField
 
