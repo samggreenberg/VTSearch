@@ -1,10 +1,12 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { NgIf } from '@angular/common';
 import { MediaItem } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-video-player',
   standalone: true,
+  imports: [NgIf],
   templateUrl: './video-player.component.html',
   styleUrl: './video-player.component.scss',
 })
@@ -17,6 +19,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   @ViewChild('videoEl') videoRef!: ElementRef<HTMLVideoElement>;
 
   videoSrc = '';
+  videoError = false;
 
   private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -24,6 +27,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
+      this.videoError = false;
       this.videoSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/video`);
     }
     if (changes['volume'] && this.videoRef?.nativeElement) {
@@ -48,6 +52,10 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
     if (!this.audioPlaying) {
       this.playingChanged.emit(true);
     }
+  }
+
+  onError(): void {
+    this.videoError = true;
   }
 
   onPause(): void {

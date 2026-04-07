@@ -352,8 +352,8 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
         if transcoded is not None:
             c["_transcoded_mp4"] = transcoded
             return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
-        # ffmpeg unavailable — serve raw bytes as best-effort fallback
-        return _send_video_bytes(media_bytes, "video/mp4", f"media_{media_id}{ext}")
+        # ffmpeg and OpenCV both unavailable — cannot transcode
+        return jsonify({"error": f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding"}), 415
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
