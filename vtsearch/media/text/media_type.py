@@ -50,7 +50,7 @@ class TextMediaType(MediaType):
 
     @property
     def folder_import_name(self) -> str:
-        return "paragraphs"
+        return "text"
 
     @property
     def tab_title(self) -> str:

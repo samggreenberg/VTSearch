@@ -288,7 +288,7 @@ class TestRunAutodetectWithImporter:
         with pytest.raises(FileNotFoundError, match="Folder not found"):
             run_autodetect_with_importer(
                 "folder",
-                {"path": "/nonexistent/folder", "media_type": "sounds"},
+                {"path": "/nonexistent/folder", "media_type": "audio"},
                 str(detector_path),
             )
 
@@ -300,7 +300,7 @@ class TestRunAutodetectWithImporter:
         with pytest.raises(NotADirectoryError, match="Not a directory"):
             run_autodetect_with_importer(
                 "folder",
-                {"path": str(fake_file), "media_type": "sounds"},
+                {"path": str(fake_file), "media_type": "audio"},
                 str(detector_path),
             )
 
@@ -309,7 +309,7 @@ class TestRunAutodetectWithImporter:
         with pytest.raises(ValueError, match="Invalid URL"):
             run_autodetect_with_importer(
                 "http_archive",
-                {"url": "not-a-url", "media_type": "sounds"},
+                {"url": "not-a-url", "media_type": "audio"},
                 str(detector_path),
             )
 
@@ -453,9 +453,9 @@ class TestImporterCLIArguments:
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
-        args = parser.parse_args(["--path", "/tmp/data", "--media-type", "images"])
+        args = parser.parse_args(["--path", "/tmp/data", "--media-type", "image"])
         assert args.path == "/tmp/data"
-        assert args.media_type == "images"
+        assert args.media_type == "image"
 
     def test_folder_importer_media_type_default(self):
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
@@ -465,7 +465,7 @@ class TestImporterCLIArguments:
         imp.add_cli_arguments(parser)
 
         args = parser.parse_args(["--path", "/tmp/data"])
-        assert args.media_type == "sounds"
+        assert args.media_type == "audio"
 
     def test_folder_importer_rejects_invalid_media_type(self):
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
@@ -494,23 +494,23 @@ class TestImporterCLIArguments:
         parser = argparse.ArgumentParser()
         imp.add_cli_arguments(parser)
 
-        args = parser.parse_args(["--url", "https://example.com/archive.zip", "--media-type", "images"])
+        args = parser.parse_args(["--url", "https://example.com/archive.zip", "--media-type", "image"])
         assert args.url == "https://example.com/archive.zip"
-        assert args.media_type == "images"
+        assert args.media_type == "image"
 
     def test_validate_catches_missing_required_field(self):
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
         imp = FolderDatasetImporter()
         with pytest.raises(ValueError, match="Missing required argument: --path"):
-            imp.validate_cli_field_values({"media_type": "sounds"})
+            imp.validate_cli_field_values({"media_type": "audio"})
 
     def test_validate_passes_with_all_fields(self):
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
         imp = FolderDatasetImporter()
         # Should not raise
-        imp.validate_cli_field_values({"media_type": "sounds", "path": "/tmp/data"})
+        imp.validate_cli_field_values({"media_type": "audio", "path": "/tmp/data"})
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +815,7 @@ class TestAutodetectImporterCLI:
                 "--path",
                 "/nonexistent/folder",
                 "--media-type",
-                "sounds",
+                "audio",
                 "--settings",
                 str(settings_path),
             ],

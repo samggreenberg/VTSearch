@@ -239,7 +239,7 @@ class TestMultiUserFileRestriction:
         try:
             resp = client.post(
                 "/api/dataset/load-folder",
-                json={"path": "/etc", "media_type": "sounds"},
+                json={"path": "/etc", "media_type": "audio"},
             )
             assert resp.status_code == 400
             assert "must be within" in resp.get_json()["error"]
@@ -311,7 +311,7 @@ class TestMultiUserFileRestriction:
             cwd = Path.cwd()
             resp = client.post(
                 "/api/dataset/load-folder",
-                json={"path": str(cwd / "some_folder"), "media_type": "sounds"},
+                json={"path": str(cwd / "some_folder"), "media_type": "audio"},
             )
             # Should not get a "must be within" error — may get "Invalid folder path"
             # since the folder doesn't exist, but not a path-validation error

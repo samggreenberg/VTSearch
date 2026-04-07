@@ -56,7 +56,7 @@ class VideoMediaType(MediaType):
 
     @property
     def folder_import_name(self) -> str:
-        return "videos"
+        return "video"
 
     @property
     def tab_title(self) -> str:

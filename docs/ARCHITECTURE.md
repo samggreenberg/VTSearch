@@ -410,7 +410,7 @@ from vtsearch.datasets.loader import load_dataset_from_folder
 medias = {}
 load_dataset_from_folder(
     Path("my_audio_folder"),
-    media_type="sounds",
+    media_type="audio",
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
@@ -464,6 +464,11 @@ registries in `vtsearch/media/__init__.py`:
 | Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+
+**`type_id` and `folder_import_name`:** Each media type has a `type_id`
+(e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
+same value. Both `get(type_id)` and `get_by_folder_name(name)` accept
+the canonical type ID.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
 (sentinel: `CONVERTER`) in `vtsearch/converters/__init__.py`, with
@@ -640,7 +645,7 @@ Each clip dict includes two provenance fields:
 ```python
 from vtsearch.datasets.origin import Origin
 
-o = Origin("folder", {"path": "/data/audio", "media_type": "sounds"})
+o = Origin("folder", {"path": "/data/audio", "media_type": "audio"})
 o.display()   # "folder(/data/audio)"
 o.to_dict()   # {"importer": "folder", "params": {"path": "/data/audio", ...}}
 ```

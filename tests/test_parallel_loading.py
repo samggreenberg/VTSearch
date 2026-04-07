@@ -323,7 +323,7 @@ class TestImportEndpointsReturnTaskId:
         with mock.patch("vtsearch.routes.datasets._run_importer_in_background", return_value="folder_task"):
             resp = client.post(
                 "/api/dataset/load-folder",
-                json={"path": str(folder), "media_type": "sounds"},
+                json={"path": str(folder), "media_type": "audio"},
             )
         assert resp.status_code == 200
         data = resp.get_json()

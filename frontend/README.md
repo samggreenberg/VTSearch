@@ -40,7 +40,7 @@ src/app/
 │   ├── label-view/            # Main labeling view (orchestrates left/center/right panels)
 │   ├── find-view/             # Multi-dataset search interface
 │   ├── login/                 # Authentication screen
-│   ├── modals/                # 17+ modal dialogs (export, import, settings, progress, etc.)
+│   ├── modals/                # 17 modal dialogs (export, import, settings, progress, etc.)
 │   ├── dialog-host/           # Modal container
 │   ├── file-browser/          # Server file picker
 │   ├── progress-bar/          # Progress indicators

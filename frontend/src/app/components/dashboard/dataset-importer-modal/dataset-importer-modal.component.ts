@@ -623,7 +623,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (guessedFolder && this.sfMediaTypeOptions.includes(guessedFolder)) {
       this.sfMediaType = guessedFolder;
     } else {
-      this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'sounds';
+      this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'audio';
     }
 
     this.sfLoadEmbedders(this.sfMediaType);

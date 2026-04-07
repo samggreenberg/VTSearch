@@ -337,7 +337,7 @@ def find_label():
             failed = _resolution_diagnostic["failed_resolution"]
             total = _resolution_diagnostic["total_labels"]
             mt = _resolution_diagnostic.get("media_type", "items")
-            # Pluralise: "images", "sounds", etc. — fall back to media_type + "s"
+            # Pluralise: "images", "audios", etc. — fall back to media_type + "s"
             mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
             resp["warning"] = f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
         return jsonify(resp), 400

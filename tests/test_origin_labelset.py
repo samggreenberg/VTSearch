@@ -25,9 +25,9 @@ from vtsearch.utils import build_media_lookup, resolve_media_ids
 
 class TestOrigin:
     def test_to_dict(self):
-        o = Origin("folder", {"path": "/data", "media_type": "sounds"})
+        o = Origin("folder", {"path": "/data", "media_type": "audio"})
         d = o.to_dict()
-        assert d == {"importer": "folder", "params": {"path": "/data", "media_type": "sounds"}}
+        assert d == {"importer": "folder", "params": {"path": "/data", "media_type": "audio"}}
 
     def test_from_dict(self):
         d = {"importer": "http_archive", "params": {"url": "https://example.com/data.zip"}}
@@ -321,7 +321,7 @@ class TestBuildOrigin:
             description = "Test importer."
             fields = [
                 ImporterField("path", "Path", "folder"),
-                ImporterField("media_type", "Media Type", "select", options=["sounds", "images"]),
+                ImporterField("media_type", "Media Type", "select", options=["audio", "image"]),
                 ImporterField("file", "File", "file"),  # Should be excluded
             ]
 
@@ -329,8 +329,8 @@ class TestBuildOrigin:
                 pass
 
         imp = TestImporter()
-        origin = imp.build_origin({"path": "/data/audio", "media_type": "sounds", "file": "ignored"})
-        assert origin == {"importer": "test", "params": {"path": "/data/audio", "media_type": "sounds"}}
+        origin = imp.build_origin({"path": "/data/audio", "media_type": "audio", "file": "ignored"})
+        assert origin == {"importer": "test", "params": {"path": "/data/audio", "media_type": "audio"}}
 
     def test_build_origin_excludes_empty_values(self):
         from vtsearch.datasets.importers.base import DatasetImporter, ImporterField

@@ -67,7 +67,7 @@ def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
     params = origin_dict.get("params", {})
     importer_name = origin_dict.get("importer", "")
 
-    # Folder origins store the folder-import name (e.g. "sounds" → "audio")
+    # Folder origins store the media type (e.g. "audio")
     folder_import_name = params.get("media_type", "")
     if folder_import_name:
         try:

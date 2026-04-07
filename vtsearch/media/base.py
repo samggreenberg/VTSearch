@@ -643,8 +643,8 @@ class MediaType(ABC):
     def folder_import_name(self) -> str:
         """Alias used by the ``/api/dataset/load-folder`` endpoint.
 
-        Defaults to :attr:`type_id`.  Override if your type uses a legacy
-        plural name (e.g. ``"sounds"``, ``"videos"``).
+        Defaults to :attr:`type_id`.  Legacy plural names (e.g. ``"sounds"``,
+        ``"videos"``) are accepted via the alias map in ``vtsearch.media``.
         """
         return self.type_id
 

@@ -17,7 +17,7 @@ python app.py --autodetect --dataset path/to/dataset.pkl --settings settings.jso
 **From any supported data source** (folder, HTTP archive):
 
 ```bash
-python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings settings.json
+python app.py --autodetect --importer folder --path /data/sounds --media-type audio --settings settings.json
 python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
@@ -27,7 +27,7 @@ Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `de
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-size 1000
-python app.py --autodetect --importer folder --path /data/sounds --media-type sounds --settings settings.json --chunk-size 500
+python app.py --autodetect --importer folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
 **Exporting results** — by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:

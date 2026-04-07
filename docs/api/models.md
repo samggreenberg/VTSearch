@@ -76,6 +76,25 @@ Saves the current good/bad votes as the model's labelset.
 
 → `{"success": true, "name": "...", "num_labels": 50}`
 
+### Import labels into model
+
+```
+POST /api/trainable-models/{name}/import-labels/{importer_name}
+```
+
+Run a label importer and merge results into this model's persisted labelset.
+Unlike `/api/label-importers/import/`, this does **not** require a dataset to
+be loaded. Field values are passed as JSON body or multipart form (same as
+regular label import).
+
+When the model's detector context **is** loaded, the new labels are also
+resolved against the loaded dataset's medias, applied to the detector's votes,
+and a fresh MLP is trained with a cross-validated threshold.
+
+→ `{"success": true, "applied": 12, "skipped": 3, "num_labels": 62, "message": "..."}`
+
+404 if model or importer not found. 400 on validation errors.
+
 ---
 
 ## Model Registry

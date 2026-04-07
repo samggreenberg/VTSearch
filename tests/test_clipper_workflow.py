@@ -40,7 +40,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str 
         "duration": duration,
         "md5": hashlib.md5(wav).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": origin_path, "media_type": "sounds"}},
+        "origin": {"importer": "folder", "params": {"path": origin_path, "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
     }
 
@@ -63,7 +63,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "height": height,
         "md5": hashlib.md5(img_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/images", "media_type": "images"}},
+        "origin": {"importer": "folder", "params": {"path": "/data/images", "media_type": "image"}},
         "origin_name": f"img_{media_id}.png",
     }
 
@@ -80,7 +80,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "media_bytes": text_bytes,
         "md5": hashlib.md5(text_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/texts", "media_type": "texts"}},
+        "origin": {"importer": "folder", "params": {"path": "/data/texts", "media_type": "text"}},
         "origin_name": f"text_{media_id}.txt",
     }
 
@@ -97,7 +97,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
         "duration": duration,
         "md5": hashlib.md5(fake_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/videos", "media_type": "videos"}},
+        "origin": {"importer": "folder", "params": {"path": "/data/videos", "media_type": "video"}},
         "origin_name": f"video_{media_id}.mp4",
     }
 

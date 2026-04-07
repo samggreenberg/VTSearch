@@ -191,7 +191,7 @@ class TestCustomMetadataMapInLoader:
         cm_map = {"test.wav": {"md5": custom_md5, "source": "external_db"}}
 
         load_dataset_from_folder(
-            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+            tmp_path, "audio", medias_dict, custom_metadata_map=cm_map,
         )
 
         assert len(medias_dict) == 1
@@ -215,7 +215,7 @@ class TestCustomMetadataMapInLoader:
         cm_map = {"test.wav": {"md5": "", "source": "external_db"}}
 
         load_dataset_from_folder(
-            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+            tmp_path, "audio", medias_dict, custom_metadata_map=cm_map,
         )
 
         media = next(iter(medias_dict.values()))
@@ -234,7 +234,7 @@ class TestCustomMetadataMapInLoader:
         wav_path.write_bytes(wav_bytes)
 
         medias_dict: dict = {}
-        load_dataset_from_folder(tmp_path, "sounds", medias_dict)
+        load_dataset_from_folder(tmp_path, "audio", medias_dict)
 
         media = next(iter(medias_dict.values()))
         expected_md5 = hashlib.md5(wav_bytes).hexdigest()
@@ -256,7 +256,7 @@ class TestCustomMetadataMapInLoader:
         cm_map = {"sub/test.wav": {"md5": custom_md5}}
 
         load_dataset_from_folder(
-            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+            tmp_path, "audio", medias_dict, custom_metadata_map=cm_map,
         )
 
         media = next(iter(medias_dict.values()))
@@ -275,7 +275,7 @@ class TestCustomMetadataMapInLoader:
         cm_map = {"test.wav": {"MD5": custom_md5, "source": "external_db"}}
 
         load_dataset_from_folder(
-            tmp_path, "sounds", medias_dict, custom_metadata_map=cm_map,
+            tmp_path, "audio", medias_dict, custom_metadata_map=cm_map,
         )
 
         assert len(medias_dict) == 1
