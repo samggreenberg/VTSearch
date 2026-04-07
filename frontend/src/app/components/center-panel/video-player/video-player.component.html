@@ -5,7 +5,13 @@
   [src]="videoSrc"
   [attr.aria-label]="media.filename || 'Video media'"
   class="video-element"
+  [class.hidden]="videoError"
   (loadedmetadata)="onLoadedMetadata()"
   (play)="onPlay()"
   (pause)="onPause()"
+  (error)="onError()"
 ></video>
+<div *ngIf="videoError" class="video-error">
+  <span class="error-icon">&#9888;</span>
+  <span>Video cannot be played. The format may require transcoding — install ffmpeg on the server.</span>
+</div>
