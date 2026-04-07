@@ -54,7 +54,10 @@ class VideoXClipEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing video libraries…", 0, 0)
+        self._on_progress("loading", "Importing torch…", 1, 2)
+        import torch  # noqa: F401, PLC0415
+
+        self._on_progress("loading", "Importing transformers…", 2, 2)
         from transformers import XCLIPModel, XCLIPProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading X-CLIP model weights…")
