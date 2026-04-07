@@ -51,8 +51,14 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing audio libraries…", 0, 0)
+        self._on_progress("loading", "Importing torch…", 1, 3)
+        import torch  # noqa: F401, PLC0415
+
+        self._on_progress("loading", "Importing transformers…", 2, 3)
         from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
+
+        self._on_progress("loading", "Importing librosa…", 3, 3)
+        import librosa  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLAP Music model weights…")
         with intercept_tqdm_progress(self._on_progress):
@@ -66,12 +72,8 @@ class AudioClapMusicEmbedder(MediaEmbedder):
                 ClapProcessor.from_pretrained, CLAP_MUSIC_MODEL_ID, cache_dir=cache_dir, token=False
             )
 
-        # Warmup: import librosa and run a dummy forward pass
-        self._on_progress("loading", "Warming up CLAP Music pipeline: importing libraries…", 1, 3)
-        import librosa  # noqa: F401, PLC0415
-        import torch  # noqa: PLC0415
-
-        self._on_progress("loading", "Warming up CLAP Music pipeline: preprocessing…", 2, 3)
+        # Warmup: run a dummy forward pass
+        self._on_progress("loading", "Warming up CLAP Music pipeline: preprocessing…", 1, 2)
         dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
@@ -81,7 +83,7 @@ class AudioClapMusicEmbedder(MediaEmbedder):
             max_length=480000,
             truncation=True,
         )
-        self._on_progress("loading", "Warming up CLAP Music pipeline: running model…", 3, 3)
+        self._on_progress("loading", "Warming up CLAP Music pipeline: running model…", 2, 2)
         device = next(self._model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():

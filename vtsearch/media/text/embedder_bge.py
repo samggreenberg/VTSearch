@@ -47,9 +47,14 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing text libraries…", 0, 0)
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        self._on_progress("loading", "Importing torch…", 1, 3)
+        import torch  # noqa: F401, PLC0415
+
+        self._on_progress("loading", "Importing transformers…", 2, 3)
         from transformers import BertModel  # noqa: PLC0415
+
+        self._on_progress("loading", "Importing sentence_transformers…", 3, 3)
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading BGE model…")
         BertModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
