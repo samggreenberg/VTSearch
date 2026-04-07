@@ -96,7 +96,7 @@ class TestEmbedTextEnriched:
             def _load_models_impl(self):
                 pass
 
-            def embed_media(self, file_path):
+            def _embed_media_impl(self, file_path):
                 return None
 
             def embed_text(self, text):

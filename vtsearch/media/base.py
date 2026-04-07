@@ -389,6 +389,14 @@ class MediaEmbedder(ABC):
 
     _model_load_lock: threading.Lock
 
+    # Global lock that serialises all ``embed_media`` calls across every
+    # embedder type.  Without this, concurrent dataset imports each run
+    # PyTorch forward passes in parallel on the same (singleton) model,
+    # which is not thread-safe and causes massive memory spikes — enough
+    # to push a 16 GB machine into swap-thrash and freeze the entire
+    # process (including Flask and signal handling).
+    _embed_lock = threading.Lock()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         # Each concrete embedder class gets its own lock so that concurrent
@@ -458,11 +466,23 @@ class MediaEmbedder(ABC):
     # Embedding
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         """Return a fixed-size embedding vector for the media file at *file_path*.
 
+        Acquires :attr:`_embed_lock` so that only one forward pass runs at a
+        time across all embedder types.  Subclasses must override
+        :meth:`_embed_media_impl` (not this method).
+
         Returns ``None`` if the file cannot be embedded.
+        """
+        with self._embed_lock:
+            return self._embed_media_impl(file_path)
+
+    @abstractmethod
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+        """Subclass hook: embed a single media file.
+
+        Override this instead of :meth:`embed_media`.
         """
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:

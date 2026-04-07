@@ -4,6 +4,9 @@ These tests verify class structure, registration, and property correctness
 without downloading model weights.
 """
 
+import threading
+from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -381,3 +384,103 @@ class TestNewEmbeddersInheritance:
             result = emb.embed_text_enriched("a cat")
         assert result is not None
         assert result.shape == (768,)
+
+
+class TestEmbedMediaLock:
+    """Verify that embed_media serialises concurrent calls via _embed_lock."""
+
+    def test_concurrent_embed_media_serialised(self):
+        """Two threads calling embed_media must not overlap (global lock)."""
+        from vtsearch.media.base import MediaEmbedder
+
+        inside = threading.Event()
+        proceed = threading.Event()
+        overlap_detected = False
+
+        class SlowEmbedder(MediaEmbedder):
+            @property
+            def name(self):
+                return "slow_test"
+
+            @property
+            def media_type_id(self):
+                return "test"
+
+            def _load_models_impl(self):
+                pass
+
+            def _embed_media_impl(self, file_path):
+                nonlocal overlap_detected
+                if inside.is_set():
+                    overlap_detected = True
+                inside.set()
+                proceed.wait(timeout=5)
+                inside.clear()
+                return np.zeros(8, dtype=np.float32)
+
+            def embed_text(self, text):
+                return None
+
+        emb = SlowEmbedder()
+        results = [None, None]
+
+        def call_embed(idx):
+            results[idx] = emb.embed_media(Path("/fake"))
+
+        t1 = threading.Thread(target=call_embed, args=(0,))
+        t2 = threading.Thread(target=call_embed, args=(1,))
+
+        # Save and replace the lock with a fresh one so we don't interfere
+        # with other tests (the class attr is shared).
+        original_lock = MediaEmbedder._embed_lock
+        MediaEmbedder._embed_lock = threading.Lock()
+        try:
+            t1.start()
+            # Wait for t1 to be inside _embed_media_impl
+            inside.wait(timeout=5)
+            assert inside.is_set(), "t1 should be inside _embed_media_impl"
+
+            t2.start()
+            # Give t2 a moment to hit the lock
+            import time
+            time.sleep(0.1)
+            # t2 should be blocked on the lock — inside should still be set by t1 only
+            assert not overlap_detected, "t2 entered _embed_media_impl while t1 was still inside"
+
+            # Let t1 finish
+            proceed.set()
+            t1.join(timeout=5)
+            t2.join(timeout=5)
+
+            assert not overlap_detected, "Concurrent embed_media calls overlapped"
+            assert results[0] is not None
+            assert results[1] is not None
+        finally:
+            MediaEmbedder._embed_lock = original_lock
+
+    def test_embed_media_delegates_to_impl(self):
+        """embed_media() should call _embed_media_impl() and return its result."""
+        from vtsearch.media.base import MediaEmbedder
+
+        class SimpleEmbedder(MediaEmbedder):
+            @property
+            def name(self):
+                return "simple_test"
+
+            @property
+            def media_type_id(self):
+                return "test"
+
+            def _load_models_impl(self):
+                pass
+
+            def _embed_media_impl(self, file_path):
+                return np.ones(4, dtype=np.float32)
+
+            def embed_text(self, text):
+                return None
+
+        emb = SimpleEmbedder()
+        result = emb.embed_media(Path("/fake"))
+        assert result is not None
+        np.testing.assert_array_equal(result, np.ones(4, dtype=np.float32))
