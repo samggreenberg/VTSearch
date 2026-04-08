@@ -226,8 +226,7 @@ def _download_and_extract(
         # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
         _validate_archive(temp_archive, archive_name, dataset_name)
 
-        total_bytes = temp_archive.stat().st_size
-        on_progress("downloading", f"Extracting {dataset_name}...", 0, total_bytes)
+        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
         suffix = archive_name.lower()
@@ -238,6 +237,7 @@ def _download_and_extract(
             # once and avoids a minutes-long stall on multi-GB archives.
             # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
             # Xet) transparently decompress .tar.gz files during transfer.
+            total_bytes = temp_archive.stat().st_size
             with open(temp_archive, "rb") as raw_f:
                 with tarfile.open(fileobj=raw_f, mode="r:*") as tar_ref:
                     for i, member in enumerate(tar_ref):
@@ -248,6 +248,7 @@ def _download_and_extract(
                         tar_ref.extract(member, temp_extract, filter="data")
             on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
         elif suffix.endswith(".tar"):
+            total_bytes = temp_archive.stat().st_size
             with open(temp_archive, "rb") as raw_f:
                 with tarfile.open(fileobj=raw_f, mode="r:") as tar_ref:
                     for i, member in enumerate(tar_ref):
