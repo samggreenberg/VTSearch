@@ -226,32 +226,37 @@ def _download_and_extract(
         # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
         _validate_archive(temp_archive, archive_name, dataset_name)
 
-        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+        total_bytes = temp_archive.stat().st_size
+        on_progress("downloading", f"Extracting {dataset_name}...", 0, total_bytes)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
         suffix = archive_name.lower()
         if suffix.endswith((".tar.gz", ".tgz")):
+            # Iterate lazily instead of calling getmembers() — the latter must
+            # decompress the entire gzip stream just to read tar headers, then
+            # extraction decompresses it *again*.  Lazy iteration decompresses
+            # once and avoids a minutes-long stall on multi-GB archives.
             # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
             # Xet) transparently decompress .tar.gz files during transfer.
-            with tarfile.open(temp_archive, "r:*") as tar_ref:
-                members = tar_ref.getmembers()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress(
-                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
-                        )
-                    tar_ref.extract(member, temp_extract, filter="data")
+            with open(temp_archive, "rb") as raw_f:
+                with tarfile.open(fileobj=raw_f, mode="r:*") as tar_ref:
+                    for i, member in enumerate(tar_ref):
+                        if i % 100 == 0:
+                            on_progress(
+                                "downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes
+                            )
+                        tar_ref.extract(member, temp_extract, filter="data")
+            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
         elif suffix.endswith(".tar"):
-            with tarfile.open(temp_archive, "r:") as tar_ref:
-                members = tar_ref.getmembers()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress(
-                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
-                        )
-                    tar_ref.extract(member, temp_extract, filter="data")
+            with open(temp_archive, "rb") as raw_f:
+                with tarfile.open(fileobj=raw_f, mode="r:") as tar_ref:
+                    for i, member in enumerate(tar_ref):
+                        if i % 100 == 0:
+                            on_progress(
+                                "downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes
+                            )
+                        tar_ref.extract(member, temp_extract, filter="data")
+            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
         elif suffix.endswith(".zip"):
             with zipfile.ZipFile(temp_archive, "r") as zip_ref:
                 members = zip_ref.namelist()
