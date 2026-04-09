@@ -95,7 +95,7 @@ VTSearch/
 │   │   ├── media_seeding.py        Media seeding utilities
 │   │   ├── label_restoration.py    Label restoration functionality
 │   │   ├── training_workflow.py    Training workflow orchestration
-│   │   └── weights_compat.py       Model weights compatibility layer
+│   │   └── weights_compat.py       Origin-based detector weight normalization
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -226,55 +226,56 @@ Arrows point from dependent → dependency.  Modules on the left import
 modules on the right.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Flask / HTTP layer                      │
-│                                                          │
+┌────────────────────────────────────────────────────────────┐
+│                     Flask / HTTP layer                     │
+│                                                            │
 │  app.py ──► auth, routes/* ──► utils/state, utils/progress │
-│                │                                          │
-│                ├──► models/embeddings, models/training    │
-│                ├──► datasets/loader                       │
-│                ├──► exporters (registry)                  │
-│                ├──► labels/importers (registry)           │
-│                ├──► processors/importers (registry)       │
-│                └──► settings                              │
-└──────────────────────────────────────────────────────────┘
-        │               │                │
-        ▼               ▼                ▼
-┌──────────────┐ ┌────────────┐ ┌───────────────────┐
+│                │                                           │
+│                ├──► models/embeddings, models/training     │
+│                ├──► datasets/loader                        │
+│                ├──► exporters (registry)                   │
+│                ├──► labels/importers (registry)            │
+│                ├──► processors/importers (registry)        │
+│                └──► settings                               │
+└────────────────────────────────────────────────────────────┘
+        │               │                   │
+        ▼               ▼                   ▼
+┌──────────────┐ ┌────────────┐ ┌────────────────────┐
 │ media/*      │ │ models/    │ │ datasets/          │
-│              │ │            │ │                     │
-│ audio    ─┐ │ │ training   │ │ loader ──► media/*  │
-│ image    ─┤ │ │ progress   │ │ downloader/          │
-│ text     ─┤ │ │ embeddings │ │ importers/*         │
-│ video    ─┤ │ │ loader     │ │                     │
-│ document ─┘ │ │            │ │                     │
-│   │         │ │   │        │ │                     │
-│   ▼         │ │   ▼        │ └───────────────────┘
-│ config.py   │ │ media/*    │
-│ torch/HF    │ │ config.py  │
-│ (NO Flask)  │ │ (NO Flask) │
+│              │ │            │ │                    │
+│ audio    ─┐  │ │ training   │ │ loader ──► media/* │
+│ image    ─┤  │ │ progress   │ │ downloader/        │
+│ text     ─┤  │ │ embeddings │ │ importers/*        │
+│ video    ─┤  │ │ loader     │ │                    │
+│ document ─┘  │ │            │ │                    │
+│   │          │ │   │        │ │                    │
+│   ▼          │ │   ▼        │ └────────────────────┘
+│ config.py    │ │ media/*    │
+│ torch/HF     │ │ config.py  │
+│ (NO Flask)   │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
 ┌──────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
-│ exporters/*              │  │ labels/importers/*      │  │ processors/importers/*   │
-│                          │  │                          │  │                          │
-│ base.py (ABC)            │  │ base.py (ABC)           │  │ base.py (ABC)            │
-│ server_json, server_csv  │  │ server_json, server_csv │  │ server_detector_file     │
-│ email_smtp, webhook, gui │  │                          │  │                          │
-│                          │  │ (NO Flask, NO state,     │  │ (NO Flask, NO state,     │
-│ (NO Flask, NO state,     │  │  pure data processing)   │  │  pure data processing)   │
-│  pure data in/out)       │  │                          │  │                          │
+│ exporters/*              │  │ labels/importers/*     │  │ processors/importers/*   │
+│                          │  │                        │  │                          │
+│ base.py (ABC)            │  │ base.py (ABC)          │  │ base.py (ABC)            │
+│ server_json, server_csv  │  │ server_json, server_csv│  │ server_detector_file     │
+│ email_smtp, webhook, gui │  │                        │  │                          │
+│                          │  │ (NO Flask, NO state,   │  │ (NO Flask, NO state,     │
+│ (NO Flask, NO state,     │  │  pure data processing) │  │  pure data processing)   │
+│  pure data in/out)       │  │                        │  │                          │
+│                          │  │                        │  │                          │
 └──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
 
 ┌─────────────────────────────┐  ┌─────────────────────────────┐
-│ settings_io/sources/*       │  │ labels/sources/*             │
-│                             │  │ labels/sync.py               │
-│ base.py (SettingsSource ABC)│  │                              │
-│ server_json_file            │  │ base.py (LabelsetSource ABC) │
-│                             │  │ server_json_file             │
-│ (NO Flask; reads/writes     │  │                              │
-│  settings via file I/O)     │  │ (NO Flask; reads/writes      │
-│                             │  │  labelsets via file I/O)     │
+│ settings_io/sources/*       │  │ labels/sources/*            │
+│                             │  │ labels/sync.py              │
+│ base.py (SettingsSource ABC)│  │                             │
+│ server_json_file            │  │ base.py (LabelsetSource ABC)│
+│                             │  │ server_json_file            │
+│ (NO Flask; reads/writes     │  │                             │
+│  settings via file I/O)     │  │ (NO Flask; reads/writes     │
+│                             │  │  labelsets via file I/O)    │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 

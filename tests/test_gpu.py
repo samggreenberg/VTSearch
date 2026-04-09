@@ -341,7 +341,7 @@ class TestDetectorGPU:
             # Train on CPU (as the app does)
             model = train_model(X, y, dim)
 
-            # Export weights (as /api/detector/export does)
+            # Export weights (serialise model state_dict to JSON-safe lists)
             state_dict = model.state_dict()
             weights = {k: v.tolist() for k, v in state_dict.items()}
 

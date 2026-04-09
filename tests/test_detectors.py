@@ -5,59 +5,15 @@ import numpy as np
 import pytest
 
 import app as app_module
-
-
-class TestDetectorExport:
-    def test_export_with_sufficient_votes(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "weights" in data
-        assert "threshold" in data
-        assert isinstance(data["weights"], dict)
-        assert isinstance(data["threshold"], (int, float))
-        # Origin info for weight-free serialisation
-        assert "good_origins" in data
-        assert "bad_origins" in data
-        assert "inclusion" in data
-        assert len(data["good_origins"]) == 3
-        assert len(data["bad_origins"]) == 3
-
-    def test_export_requires_good_votes(self, client):
-        app_module.bad_votes.update({k: None for k in [1, 2]})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert "need at least one good and one bad vote" in data["error"]
-
-    def test_export_requires_bad_votes(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 400
-
-    def test_export_weights_structure(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/detector/export")
-        data = resp.get_json()
-        weights = data["weights"]
-        # MLP has 4 layers: Linear, ReLU, Dropout, Linear
-        # So we expect 4 keys: 0.weight, 0.bias, 3.weight, 3.bias
-        assert "0.weight" in weights
-        assert "0.bias" in weights
-        assert "3.weight" in weights
-        assert "3.bias" in weights
+from helpers import train_detector_from_votes
 
 
 class TestDetectorSort:
     def test_sort_with_valid_detector(self, client):
-        # First export a detector
+        # Train a detector
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        export_resp = client.post("/api/detector/export")
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         # Now use it to sort
         resp = client.post("/api/detector-sort", json={"detector": detector})
@@ -70,8 +26,7 @@ class TestDetectorSort:
     def test_sort_results_sorted_descending(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        export_resp = client.post("/api/detector/export")
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         resp = client.post("/api/detector-sort", json={"detector": detector})
         data = resp.get_json()
@@ -81,8 +36,7 @@ class TestDetectorSort:
     def test_sort_scores_in_valid_range(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        export_resp = client.post("/api/detector/export")
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         resp = client.post("/api/detector-sort", json={"detector": detector})
         data = resp.get_json()
@@ -103,8 +57,7 @@ class TestDetectorSort:
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
 
         # Export detector
-        export_resp = client.post("/api/detector/export")
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         # Use detector to sort
         resp = client.post("/api/detector-sort", json={"detector": detector})
@@ -121,12 +74,10 @@ class TestAutorunDetectors:
     """Tests for the autorun-detectors management endpoints."""
 
     def _export_detector(self, client):
-        """Helper: vote on some medias and export a valid detector payload."""
+        """Helper: vote on some medias and train a valid detector payload."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        return resp.get_json()
+        return train_detector_from_votes()
 
     def _post_autorun(self, client, name, detector):
         return client.post(
@@ -371,9 +322,7 @@ class TestFindLabel:
         # Train a detector from votes
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        export_resp = client.post("/api/detector/export")
-        assert export_resp.status_code == 200
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         # Register as autorun detector
         det_name = "find-label-det"
@@ -1142,9 +1091,7 @@ class TestDetectorSortProgress:
         # Train a detector
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        export_resp = client.post("/api/detector/export")
-        assert export_resp.status_code == 200
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
@@ -1186,9 +1133,7 @@ class TestAutoDetect:
         """Helper: create and save an audio detector with autodetect enabled."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        export_resp = client.post("/api/detector/export")
-        assert export_resp.status_code == 200
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         save_resp = client.post(
             "/api/autorun-detectors",
@@ -1215,8 +1160,7 @@ class TestAutoDetect:
         """A detector for a different media type should not match audio medias."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        export_resp = client.post("/api/detector/export")
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
         app_module.good_votes.clear()
         app_module.bad_votes.clear()
 
