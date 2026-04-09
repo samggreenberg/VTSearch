@@ -15,7 +15,7 @@
 >
   @if (isGrid) {
     @if (thumbnailUrl) {
-      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" />
+      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
     } @else if (placeholderIcon) {
       <span class="media-placeholder">{{ placeholderIcon }}</span>
     }
@@ -24,6 +24,9 @@
     <span class="label-indicator" [class.good]="voteLabel === 'good'" [class.bad]="voteLabel === 'bad'">
       @if (voteLabel === 'good') { &#x2713; } @else if (voteLabel === 'bad') { &#x2717; }
     </span>
+    @if (thumbnailUrl) {
+      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+    }
     <span class="media-name">{{ displayName }}</span>
   }
   @if (score !== null) {

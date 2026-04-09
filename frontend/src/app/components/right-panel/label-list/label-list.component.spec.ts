@@ -152,8 +152,8 @@ describe('LabelListComponent', () => {
       expect(component.hasThumbnailUrl(3)).toBeTrue();
     });
 
-    it('should not have thumbnail URL for audio', () => {
-      expect(component.hasThumbnailUrl(1)).toBeFalse();
+    it('should have thumbnail URL for audio', () => {
+      expect(component.hasThumbnailUrl(1)).toBeTrue();
     });
 
     it('should identify video type', () => {
@@ -162,6 +162,7 @@ describe('LabelListComponent', () => {
     });
 
     it('should generate correct thumbnail URLs', () => {
+      expect(component.thumbnailUrl(1)).toBe('/api/medias/1/image');
       expect(component.thumbnailUrl(2)).toBe('/api/medias/2/image');
       expect(component.thumbnailUrl(3)).toBe('/api/medias/3/video');
     });
@@ -176,9 +177,9 @@ describe('LabelListComponent', () => {
       expect(component.isGrid).toBeFalse();
     });
 
-    it('should show placeholder icon for audio in grid mode', () => {
+    it('should not show placeholder icon for audio in grid mode (has thumbnail)', () => {
       component.viewMode = 'grid';
-      expect(component.placeholderIcon(1)).toBe('\u266B');
+      expect(component.placeholderIcon(1)).toBeNull();
     });
 
     it('should not show placeholder icon for image in grid mode', () => {

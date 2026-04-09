@@ -231,7 +231,7 @@ def _apply_clipper(
     # clippers override to add their current values (duration, threshold,
     # etc.), then strips the base keys that aren't parameter values.
     _clipper_dict = clipper.to_dict()
-    _base_keys = {"name", "display_name", "media_type", "parameters"}
+    _base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
     effective_params = {k: v for k, v in _clipper_dict.items() if k not in _base_keys}
 
     all_clipped: list[dict] = []
