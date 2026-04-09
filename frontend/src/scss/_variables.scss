@@ -46,6 +46,7 @@
   --scrollbar-thumb: #3a3d52;
   --scrollbar-thumb-hover: #7c8aff;
   --badge-embedding: #e0a020;
+  --btn-icon-hover-bg: rgba(255, 255, 255, 0.08);
 
   // Aliases used by component SCSS files
   --border-color: var(--border);
@@ -115,6 +116,7 @@
   --scrollbar-thumb: #c0c3cc;
   --scrollbar-thumb-hover: #5a68d8;
   --badge-embedding: #c99000;
+  --btn-icon-hover-bg: rgba(0, 0, 0, 0.07);
 
   // Aliases
   --border-color: var(--border);
@@ -184,6 +186,7 @@
   --scrollbar-thumb: #888888;
   --scrollbar-thumb-hover: #ffff00;
   --badge-embedding: #ffff00;
+  --btn-icon-hover-bg: rgba(255, 255, 255, 0.15);
 
   // Aliases
   --border-color: var(--border);
