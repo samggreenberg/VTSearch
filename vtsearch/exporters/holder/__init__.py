@@ -121,6 +121,7 @@ class HolderLabelsetExporter(LabelsetExporter):
     display_name = "Holder Package"
     description = "Create a Holder package with Good/Bad folders of contentIDs."
     icon = "\U0001f4e6"  # package
+    hidden_from_picker = True  # flip to False once API clients are implemented
     fields: list[ExporterField] = [
         # No user-supplied fields — a new package is created automatically.
         # Add Holder auth/URL fields here when needed:

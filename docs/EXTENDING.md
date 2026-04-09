@@ -263,7 +263,66 @@ Importers can attach arbitrary per-media display metadata by setting
 `media["custom_metadata"]` to a `dict[str, Any]`. For example:
 `{"Uploaded By": "alice", "Bucket": "my-data"}`. These fields are merged
 with the media type's built-in display fields and rendered in the labeling
-UI.
+UI.  When `enrich=true` is used on `GET /api/labels/export`, both
+`custom_metadata` **and** `origin.params` are flattened into the per-entry
+`custom_metadata` and `available_columns`, making fields like `contentID`
+or `mediaID` selectable export columns.
+
+### URL-backed media (`media_url`)
+
+For importers that fetch media from a remote service (e.g. PullWrest),
+set `media["media_url"]` to the URL of the media file.  The lazy-loading
+system (`_resolve_media_bytes` / `_resolve_media_string`) resolves media
+in this priority order:
+
+1. `media_bytes` / `media_string` — already in memory.
+2. `media_path` — local file on disk (thin mode with local files).
+3. `media_url` — remote URL (fetched on demand).
+
+In thin mode, URL-backed importers can skip downloading entirely: set
+`media_bytes=None`, `media_path=None`, and `media_url="https://..."`.
+Embeddings and MD5 can come from external services, so sorting and scoring
+work without ever downloading the actual media.  Bytes are fetched lazily
+only when the UI needs to display or play the media.
+
+### Direct media dict construction
+
+Most importers delegate to `load_dataset_from_folder()` after downloading
+files to a local directory.  However, importers whose data comes from
+API calls (not files on disk) can build media dicts directly in `run()`:
+
+```python
+def run(self, field_values, medias, thin=False):
+    for i, item in enumerate(api_results, start=1):
+        medias[i] = {
+            "id": i,
+            "type": "audio",
+            "filename": item["id"],
+            "md5": item["md5"],                  # pre-computed by the service
+            "embedding": item["embedding"],      # pre-computed by the service
+            "embedder": item["embedder_name"],   # must match a VTSearch embedder
+            "media_bytes": data if not thin else None,
+            "media_path": None,
+            "media_url": item["url"],            # URL-based lazy-fetch fallback
+            "media_string": None,
+            "file_size": len(data) if data else 0,
+            "duration": 0,
+            "category": "",
+            "origin": {                          # per-media origin (not dataset-level)
+                "importer": self.name,
+                "params": {"contentID": item["id"], ...},
+            },
+            "origin_name": item["id"],
+            "custom_metadata": {"contentID": item["id"], ...},
+        }
+```
+
+When building dicts directly, the importer should also override
+`build_origin()` to return an empty origin (since the default
+implementation captures dataset-level field values like query IDs that
+are not useful per-media).  The post-processing step only backfills
+`origin` on media that have `origin=None`, so per-media origins set
+in `run()` are preserved.
 
 ### How it gets invoked
 
@@ -303,8 +362,18 @@ The next `pip install -r requirements.txt` will pick them up.
 
 ## Adding a Results Exporter
 
-Results exporters deliver autodetect results to a destination (file,
-webhook, email, etc.). Auto-discovered — no changes to routes needed.
+Results exporters deliver autodetect results **or labels** to a destination
+(file, webhook, email, Holder, etc.).  Auto-discovered — no changes to
+routes needed.
+
+Exporters receive **two possible result formats** and should detect which:
+
+- **Auto-detect results**: `{"media_type": "audio", "results": {...}}`
+- **Labels**: `{"labels": [...], "selected_columns": [...]}` (from the
+  label export flow with `enrich=true`)
+
+Check `if "labels" in results` to distinguish them.  The built-in
+CSV/JSON/webhook exporters handle both formats.
 
 ### File structure
 

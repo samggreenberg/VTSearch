@@ -55,6 +55,7 @@ class HolderLabelImporter(LabelImporter):
     display_name = "Holder Package"
     description = "Import Good/Bad labels from a Holder package by its ID."
     icon = "\U0001f4e6"  # package
+    hidden_from_picker = True  # flip to False once API clients are implemented
     fields = [
         LabelImporterField(
             key="holder_id",
