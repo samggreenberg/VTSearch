@@ -51,6 +51,7 @@ __all__ = [
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
     "load_pretrained_local_first",
+    "timed_progress",
 ]
 
 
@@ -101,6 +102,44 @@ def extract_tensor(output: object):
             return val
     # Final fallback: treat as tuple-like and return first element
     return output[0]  # type: ignore[index]
+
+
+@contextlib.contextmanager
+def timed_progress(
+    on_progress: ProgressCallback,
+    status: str,
+    message: str,
+    current: int = 0,
+    total: int = 0,
+) -> Any:
+    """Show elapsed time in the progress message while a block executes.
+
+    Wraps a long-running blocking operation (typically a heavy ``import``)
+    so that the progress callback is updated every second with an elapsed-
+    time suffix, e.g. ``"Importing torch… (3s)"``.  This prevents the UI
+    from appearing frozen during operations that cannot report incremental
+    progress themselves.
+
+    The initial progress update is sent immediately (without a time suffix).
+    After the first second the background ticker appends ``(1s)``, ``(2s)``,
+    etc. until the ``with`` block exits.
+    """
+    stop = threading.Event()
+
+    def _ticker() -> None:
+        start = time.monotonic()
+        while not stop.wait(timeout=1.0):
+            elapsed = int(time.monotonic() - start)
+            on_progress(status, f"{message} ({elapsed}s)", current, total)
+
+    on_progress(status, message, current, total)
+    t = threading.Thread(target=_ticker, daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        t.join(timeout=2)
 
 
 def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:

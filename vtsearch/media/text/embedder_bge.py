@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import BGE_MODEL_ID
-from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, intercept_weight_loading_progress, load_pretrained_local_first
+from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -47,14 +47,14 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing torch…", 1, 3)
-        import torch  # noqa: F401, PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 3):
+            import torch  # noqa: F401, PLC0415
 
-        self._on_progress("loading", "Importing transformers…", 2, 3)
-        from transformers import BertModel  # noqa: PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 3):
+            from transformers import BertModel  # noqa: PLC0415
 
-        self._on_progress("loading", "Importing sentence_transformers…", 3, 3)
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing sentence_transformers…", 3, 3):
+            from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading BGE model…")
         BertModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
