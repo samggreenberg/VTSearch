@@ -722,3 +722,27 @@ class TestErrorResponseFormat:
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
+
+
+class TestApiCacheControl:
+    """API responses should prevent browser caching of mutable data."""
+
+    def setup_method(self):
+        app_module.app.config["TESTING"] = True
+        self.client = app_module.app.test_client()
+
+    def test_datasets_registry_no_store(self):
+        resp = self.client.get("/api/datasets/registry")
+        assert resp.headers.get("Cache-Control") == "no-store"
+
+    def test_loading_tasks_no_store(self):
+        resp = self.client.get("/api/dataset/loading-tasks")
+        assert resp.headers.get("Cache-Control") == "no-store"
+
+    def test_dataset_status_no_store(self):
+        resp = self.client.get("/api/dataset/status")
+        assert resp.headers.get("Cache-Control") == "no-store"
+
+    def test_medias_no_store(self):
+        resp = self.client.get("/api/medias")
+        assert resp.headers.get("Cache-Control") == "no-store"

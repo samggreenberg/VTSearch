@@ -124,6 +124,26 @@ def _set_request_context():
 
 
 # ---------------------------------------------------------------------------
+# Prevent browser caching of API responses
+# ---------------------------------------------------------------------------
+
+
+@app.after_request
+def _no_cache_api(response):
+    """Prevent browsers from caching mutable API responses.
+
+    Without this, concurrent or rapid-fire fetches to the same endpoint
+    (e.g. ``/api/datasets/registry``) can receive stale cached data,
+    causing the frontend to miss newly loaded datasets.
+    """
+    from flask import request
+
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Register Blueprints
 # ---------------------------------------------------------------------------
 
