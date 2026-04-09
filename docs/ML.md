@@ -88,21 +88,6 @@ The **document** media type has no embedding model of its own. Documents (PDF, D
 
 Embeddings are computed once when a dataset is loaded and stored as `numpy.ndarray` in each clip's `"embedding"` field. The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
-## Model Serialization
-
-Trained models are serialized as JSON dictionaries mapping state_dict keys to nested lists:
-
-```json
-{
-    "0.weight": [[...], ...],
-    "0.bias": [...],
-    "2.weight": [[...]],
-    "2.bias": [...]
-}
-```
-
-To reconstruct a model from saved weights, use `build_model(input_dim)` followed by `load_state_dict()`. The `input_dim` can be inferred from the first layer weights: `len(weights["0.weight"][0])`.
-
 ## Key Files
 
 - `vtsearch/models/training.py` — `build_model`, `train_model`, `train_and_score`, threshold functions

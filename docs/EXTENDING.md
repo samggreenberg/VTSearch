@@ -420,11 +420,11 @@ python app.py --autodetect --dataset data.pkl --settings settings.json \
 In addition to the exporter plugin system, VTSearch has built-in export
 endpoints:
 
-| Endpoint                  | Method | What it exports                           | Format          |
-|---------------------------|--------|-------------------------------------------|-----------------|
-| `/api/dataset/export`     | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
-| `/api/labels/export`      | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/detector/export`    | POST   | Trained MLP weights + threshold            | JSON            |
+| Endpoint                       | Method | What it exports                           | Format          |
+|--------------------------------|--------|-------------------------------------------|-----------------|
+| `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
+| `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
+| `/api/detector/export-server`  | POST   | Detector origins + inclusion to server file| JSON            |
 
 ### Wiring up dependencies
 

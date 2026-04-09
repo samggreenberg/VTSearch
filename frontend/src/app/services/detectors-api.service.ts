@@ -141,10 +141,6 @@ export class DetectorsApiService {
 
   // --- Training ---
 
-  exportWeights(): Observable<unknown> {
-    return this.http.post('/api/detector/export', {});
-  }
-
   exportWeightsToServer(): Observable<unknown> {
     return this.http.post('/api/detector/export-server', {});
   }

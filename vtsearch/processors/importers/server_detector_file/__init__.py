@@ -5,21 +5,12 @@ This importer reads a VTSearch detector JSON file from the server filesystem
 (browser-upload) importer which receives files uploaded from the user's
 browser.
 
-**Current format** (origin-based, no serialised weights)::
+**Expected format** (origin-based)::
 
     {
         "good_origins": [{"origin": {...}, "origin_name": "...", "filename": "...", "md5": "..."}],
         "bad_origins":  [{"origin": {...}, "origin_name": "...", "filename": "...", "md5": "..."}],
         "inclusion": 0,
-        "media_type": "audio",
-        "name": "my detector"
-    }
-
-**Legacy format** (weights-based, still accepted for backward compatibility)::
-
-    {
-        "weights": {"0.weight": [...], "0.bias": [...], "3.weight": [...], "3.bias": [...]},
-        "threshold": 0.5,
         "media_type": "audio",
         "name": "my detector"
     }
@@ -41,9 +32,11 @@ class ServerFileProcessorImporter(ProcessorImporter):
     """Import a processor (detector) from a JSON file on the server filesystem.
 
     The user provides a file path on the server (the machine running the
-    Python process).  The file must contain ``"weights"`` (serialised MLP
-    state dict) and ``"threshold"`` (float).  An optional ``"media_type"``
-    key specifies the media type; when absent it defaults to ``"audio"``.
+    Python process).  The file must contain ``"good_origins"`` and
+    ``"bad_origins"`` fields.  Weights are re-derived by resolving the
+    original media files, embedding, and training.  An optional
+    ``"media_type"`` key specifies the media type; when absent it defaults
+    to ``"audio"``.
     """
 
     name = "server_detector_file"
@@ -91,11 +84,9 @@ class ServerFileProcessorImporter(ProcessorImporter):
 def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     """Decode *raw* bytes as JSON and extract detector data.
 
-    Supports two formats:
-    - **New format**: ``good_origins`` / ``bad_origins`` / ``inclusion`` —
-      re-derives weights by resolving the original media, embedding, and
-      training.
-    - **Legacy format**: ``weights`` / ``threshold`` — used directly.
+    Requires origin-based format with ``good_origins`` / ``bad_origins`` /
+    ``inclusion``.  Weights are re-derived by resolving the original media,
+    embedding, and training.
     """
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -110,10 +101,9 @@ def _parse_detector_json(raw: bytes) -> dict[str, Any]:
     nw = normalize_detector_weights(data, media_type=media_type)
 
     result: dict[str, Any] = {"media_type": media_type}
-    if nw.origin_derived:
-        result["good_origins"] = nw.good_origins
-        result["bad_origins"] = nw.bad_origins
-        result["inclusion"] = nw.inclusion
+    result["good_origins"] = nw.good_origins
+    result["bad_origins"] = nw.bad_origins
+    result["inclusion"] = nw.inclusion
     result["weights"] = nw.weights
     result["threshold"] = nw.threshold
 

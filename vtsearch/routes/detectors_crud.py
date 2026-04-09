@@ -234,11 +234,7 @@ def set_autorun_detector_autodetect_route(name):
 
 @detectors_crud_bp.route("/api/autorun-detectors/<name>/export", methods=["GET"])
 def export_autorun_detector_route(name):
-    """Return the stored weights for a named autorun detector.
-
-    Unlike ``/api/detector/export`` which trains from current votes, this
-    endpoint returns the already-stored weights for a dashboard model.
-    """
+    """Return the stored weights for a named autorun detector (in-memory only)."""
     detectors = get_autorun_detectors()
     det = detectors.get(name)
     if det is None:

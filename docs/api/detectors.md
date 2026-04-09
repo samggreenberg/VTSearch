@@ -6,16 +6,6 @@
 
 ## Detectors
 
-### Export detector (train from votes)
-
-```
-POST /api/detector/export
-```
-
-Trains an MLP on current votes and exports weights.
-
-→ `{"weights": {...}, "threshold": 0.5, "good_origins": [...], "bad_origins": [...], "inclusion": 0}`
-
 ### Export detector to server file
 
 ```

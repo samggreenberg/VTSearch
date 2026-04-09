@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 import app as app_module
+from conftest import train_detector_from_votes
 
 
 # ---------------------------------------------------------------------------
@@ -36,13 +37,8 @@ def _vote_clips(client, good_ids, bad_ids):
 
 
 def _export_detector(client):
-    """Train and export a detector, returning the full payload."""
-    resp = client.post("/api/detector/export")
-    assert resp.status_code == 200, f"Detector export failed: {resp.get_json()}"
-    data = resp.get_json()
-    assert "weights" in data
-    assert "threshold" in data
-    return data
+    """Train a detector from current votes, returning the full payload."""
+    return train_detector_from_votes()
 
 
 def _save_autorun_detector(client, name, detector, *, autodetect=True):
@@ -591,9 +587,9 @@ class TestErrorRecoveryWorkflow:
         resp = client.post("/api/sort", json={"text": ""})
         assert resp.status_code == 400
 
-        # Step 5: Try detector export with no votes
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 400
+        # Step 5: Try training a detector with no votes (should fail)
+        with pytest.raises(ValueError, match="at least one good and one bad"):
+            train_detector_from_votes()
 
         # Step 6: Now do everything correctly and verify it works
         _vote_clips(client, [1, 2], [9, 10])
@@ -606,9 +602,8 @@ class TestErrorRecoveryWorkflow:
         assert resp.status_code == 200
         assert len(resp.get_json()["results"]) == app_module.NUM_MEDIAS
 
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        assert "weights" in resp.get_json()
+        detector = train_detector_from_votes()
+        assert "weights" in detector
 
         # Step 7: Verify votes are clean
         resp = client.get("/api/votes")
@@ -862,11 +857,10 @@ class TestSafeThresholdsWorkflow:
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": False})
         assert resp.status_code == 200
 
-        # Step 2: Vote and export a detector
+        # Step 2: Vote and train a detector
         _vote_clips(client, [1, 2, 3], [8, 9, 10])
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        threshold_off = resp.get_json()["threshold"]
+        detector_off = train_detector_from_votes()
+        threshold_off = detector_off["threshold"]
 
         # Step 3: Turn safe thresholds ON
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": True})
@@ -875,10 +869,9 @@ class TestSafeThresholdsWorkflow:
         resp = client.get("/api/safe-thresholds")
         assert resp.get_json()["safe_thresholds"] is True
 
-        # Step 4: Re-export detector — threshold may differ
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        threshold_on = resp.get_json()["threshold"]
+        # Step 4: Re-train detector — threshold may differ
+        detector_on = train_detector_from_votes()
+        threshold_on = detector_on["threshold"]
 
         # Both should be valid floats
         assert isinstance(threshold_off, (int, float))

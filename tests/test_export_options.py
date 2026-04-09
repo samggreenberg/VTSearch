@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 import app as app_module
+from conftest import train_detector_from_votes
 
 SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -263,12 +264,10 @@ class TestCliScoringNegativeHits:
         """The multi-detector CLI scorer should include negative_hits."""
         from vtsearch.utils import medias
 
-        # Train a detector via the API to get valid weights
+        # Train a detector to get valid weights
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        export_resp = client.post("/api/detector/export")
-        assert export_resp.status_code == 200
-        detector = export_resp.get_json()
+        detector = train_detector_from_votes()
 
         detectors = {"test": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 

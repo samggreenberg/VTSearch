@@ -58,7 +58,7 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 }
 ```
 
-- **Detector file** — In the web UI, vote on some items, then export a detector from the sorting panel. Save the returned JSON to a file. You can also use an autorun detector exported via the API (`POST /api/detector/export`).
+- **Detector file** — In the web UI, vote on some items, then export a detector to the server via the sorting panel. Detector files store origin information (not weights); weights are re-derived at load time.
 
 **Example output:**
 

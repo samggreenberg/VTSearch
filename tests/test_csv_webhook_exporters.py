@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 
 import app as app_module
+from conftest import train_detector_from_votes
 from vtsearch.cli import (
     _run_exporter,
     run_autodetect,
@@ -49,12 +50,10 @@ def _make_dataset_file(tmp_path, clips_dict):
 
 
 def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json"):
-    """Train a detector via the API and write its JSON to a file."""
+    """Train a detector and write its JSON to a file."""
     app_module.good_votes.update({k: None for k in good_ids})
     app_module.bad_votes.update({k: None for k in bad_ids})
-    resp = client.post("/api/detector/export")
-    assert resp.status_code == 200
-    detector = resp.get_json()
+    detector = train_detector_from_votes()
     app_module.good_votes.clear()
     app_module.bad_votes.clear()
 
