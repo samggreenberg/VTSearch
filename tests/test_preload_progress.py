@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from vtsearch.media.base import intercept_weight_loading_progress, load_pretrained_local_first
+from vtsearch.media.base import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
 from vtsearch.models.loader import _make_console_progress, preload_autoload_media_types
 
 
@@ -587,3 +587,111 @@ class TestLoadPretrainedLocalFirst:
         result = load_pretrained_local_first(fake_load, "model-id")
         assert result is sentinel
         assert mock_sleep.call_count == 2
+
+
+class TestTimedProgress:
+    """Unit tests for the timed_progress context manager."""
+
+    def test_sends_initial_progress_immediately(self):
+        """The initial progress message should be sent before the block executes."""
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((status, message, current, total))
+
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
+            pass  # fast — no tick fires
+
+        assert len(calls) >= 1
+        assert calls[0] == ("loading", "Importing torch…", 1, 2)
+
+    def test_no_elapsed_suffix_for_fast_operations(self):
+        """If the block completes in under 1 second, no elapsed suffix should appear."""
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((status, message, current, total))
+
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
+            pass  # completes instantly
+
+        # Only the initial call (no time suffix)
+        assert all("(" not in c[1] for c in calls)
+
+    def test_elapsed_time_updates_during_slow_operation(self):
+        """A slow block should produce elapsed-time suffixed messages."""
+        import time
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((status, message, current, total))
+
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
+            # Sleep long enough for at least one tick (~1s interval)
+            time.sleep(2.5)
+
+        # Should have the initial message plus at least one timed update
+        timed_calls = [c for c in calls if "(" in c[1]]
+        assert len(timed_calls) >= 1
+        # Check format: "Importing torch… (1s)" or "Importing torch… (2s)"
+        assert any("(1s)" in c[1] or "(2s)" in c[1] for c in timed_calls)
+        # All calls should preserve status, current, total
+        for c in calls:
+            assert c[0] == "loading"
+            assert c[2] == 1
+            assert c[3] == 2
+
+    def test_ticker_stops_after_block_exits(self):
+        """The background ticker thread should stop once the with block exits."""
+        import time
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append(time.monotonic())
+
+        with timed_progress(cb, "loading", "test", 0, 1):
+            time.sleep(1.5)
+
+        count_during = len(calls)
+        time.sleep(1.5)
+        count_after = len(calls)
+
+        # No new calls should arrive after the block exits
+        assert count_after == count_during
+
+    def test_exception_in_block_still_stops_ticker(self):
+        """The ticker should be cleaned up even if the block raises."""
+        import time
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append(message)
+
+        try:
+            with timed_progress(cb, "loading", "test", 0, 0):
+                time.sleep(1.5)
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+
+        count_during = len(calls)
+        time.sleep(1.5)
+        count_after = len(calls)
+
+        assert count_after == count_during
+
+    def test_works_with_console_progress_wrapper(self, capsys):
+        """timed_progress should integrate with _make_console_progress."""
+        import time
+
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
+            time.sleep(1.5)
+
+        captured = capsys.readouterr()
+        # Should see the initial message and at least one elapsed update
+        assert "Importing torch…" in captured.out

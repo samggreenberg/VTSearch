@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE
-from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first
+from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first, timed_progress
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -47,17 +47,17 @@ class AudioClapEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing torch…", 1, 4)
-        import torch  # noqa: F401, PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 4):
+            import torch  # noqa: F401, PLC0415
 
-        self._on_progress("loading", "Importing transformers…", 2, 4)
-        from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 4):
+            from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
-        self._on_progress("loading", "Importing librosa…", 3, 4)
-        import librosa  # noqa: F401, PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing librosa…", 3, 4):
+            import librosa  # noqa: F401, PLC0415
 
-        self._on_progress("loading", "Importing soundfile…", 4, 4)
-        import soundfile  # noqa: F401, PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing soundfile…", 4, 4):
+            import soundfile  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLAP model weights…")
         with intercept_tqdm_progress(self._on_progress):
