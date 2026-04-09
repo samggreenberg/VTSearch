@@ -631,12 +631,16 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
     if embedding is None:
         return jsonify({"error": "Failed to embed the uploaded file."}), 400
 
-    # Generate thumbnail for audio media
+    # Generate thumbnail for non-image media
     thumb = None
     if dataset_media_type == "audio":
         from vtsearch.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail(file_bytes)
+    elif dataset_media_type == "video":
+        from vtsearch.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
+
+        thumb = generate_video_thumbnail(file_bytes)
 
     with _state_lock:
         new_id = next_media_id(medias)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import tempfile
 from pathlib import Path
 
 from vtsearch.media.base import (
@@ -11,6 +13,88 @@ from vtsearch.media.base import (
     ProgressCallback,
     _noop_progress,
 )
+
+_THUMB_SIZE = 128
+
+
+def generate_video_thumbnail(video_bytes: bytes, *, size: int = _THUMB_SIZE) -> bytes | None:
+    """Extract the middle frame of a video and return it as a PNG thumbnail.
+
+    Uses OpenCV to decode the video and PIL to produce the PNG.  Returns
+    ``None`` if the video cannot be decoded or has no frames.
+    """
+    try:
+        import cv2  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+    except Exception:
+        return None
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    try:
+        tmp.write(video_bytes)
+        tmp.close()
+
+        cap = cv2.VideoCapture(tmp.name)
+        try:
+            if not cap.isOpened():
+                return None
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if frame_count <= 0:
+                return None
+            mid = frame_count // 2
+            cap.set(cv2.CAP_PROP_POS_FRAMES, mid)
+            ret, frame = cap.read()
+            if not ret:
+                return None
+        finally:
+            cap.release()
+    finally:
+        import os  # noqa: PLC0415
+
+        os.unlink(tmp.name)
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(frame_rgb)
+    img.thumbnail((size, size))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def generate_video_thumbnail_from_file(file_path: Path, *, size: int = _THUMB_SIZE) -> bytes | None:
+    """Extract the middle frame of a video file and return it as a PNG thumbnail."""
+    try:
+        import cv2  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+    except Exception:
+        return None
+
+    try:
+        cap = cv2.VideoCapture(str(file_path))
+        try:
+            if not cap.isOpened():
+                return None
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if frame_count <= 0:
+                return None
+            mid = frame_count // 2
+            cap.set(cv2.CAP_PROP_POS_FRAMES, mid)
+            ret, frame = cap.read()
+            if not ret:
+                return None
+        finally:
+            cap.release()
+    except Exception:
+        return None
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(frame_rgb)
+    img.thumbnail((size, size))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
 
 
 _VIDEO_MIME_TYPES: dict[str, str] = {
@@ -198,6 +282,7 @@ class VideoMediaType(MediaType):
                 "md5": hashlib.md5(video_bytes).hexdigest(),
                 "embedding": embedding,
                 "media_bytes": video_bytes,
+                "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,
                 "category": meta["category"],
                 "origin": {**demo_origin_template},
@@ -210,6 +295,10 @@ class VideoMediaType(MediaType):
     # ------------------------------------------------------------------
     # Clip data
     # ------------------------------------------------------------------
+
+    @property
+    def pickle_extra_fields(self) -> list[str]:
+        return ["thumbnail_bytes"]
 
     def load_media_data(self, file_path: Path) -> dict:
         with open(file_path, "rb") as f:
@@ -226,11 +315,34 @@ class VideoMediaType(MediaType):
                 cap.release()
         except Exception:
             duration = 0.0
-        return {"media_bytes": media_bytes, "duration": duration}
+        thumbnail = generate_video_thumbnail_from_file(file_path)
+        return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
 
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------
+
+    def image_response(self, media: dict) -> MediaResponse | None:
+        """Return the video thumbnail as a PNG image, or *None*."""
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return MediaResponse(
+                data=thumb,
+                mimetype="image/png",
+                download_name=f"media_{media['id']}_thumb.png",
+            )
+        # Fallback: generate on the fly from media bytes
+        raw = self._resolve_media_bytes(media)
+        if raw:
+            thumb = generate_video_thumbnail(raw)
+            if thumb:
+                media["thumbnail_bytes"] = thumb
+                return MediaResponse(
+                    data=thumb,
+                    mimetype="image/png",
+                    download_name=f"media_{media['id']}_thumb.png",
+                )
+        return None
 
     def media_response(self, media: dict) -> MediaResponse:
         filename = media.get("filename", "")
