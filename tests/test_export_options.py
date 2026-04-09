@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 import app as app_module
-from conftest import train_detector_from_votes
+from helpers import train_detector_from_votes
 
 SAMPLE_RESULTS = {
     "media_type": "audio",

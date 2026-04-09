@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 
 import app as app_module
-from conftest import train_detector_from_votes
+from helpers import train_detector_from_votes
 from vtsearch.cli import (
     _build_multi_results_dict,
     _merge_detector_results,
