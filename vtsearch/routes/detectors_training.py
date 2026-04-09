@@ -9,7 +9,7 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
-from vtsearch.routes.detectors_helpers import train_and_threshold, validate_good_bad_split
+from vtsearch.routes.detectors_helpers import serialize_weights, train_and_threshold, validate_good_bad_split
 from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, get_json_safe, validate_filepath_field
 from vtsearch.models import (
     build_model_from_weights,
