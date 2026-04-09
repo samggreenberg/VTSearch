@@ -61,7 +61,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
+bash install-cpu.sh
 python app.py --local        # binds to 0.0.0.0 (network-accessible)
 ```
 
@@ -259,7 +259,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .` (or build Docker image)
+- [ ] `bash install-cpu.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
