@@ -664,7 +664,8 @@ class TestEnsureAutorunProcessorsImported:
         """An autorun processor recipe with detector_file should be imported."""
         from vtsearch.utils import autorun_detectors
 
-        # Create a fake detector JSON
+        # Create a fake detector JSON (origin-based with weight fallback)
+        fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
         det_weights = {
             "0.weight": [[0.1] * 512],
             "0.bias": [0.0],
@@ -676,6 +677,8 @@ class TestEnsureAutorunProcessorsImported:
             json.dumps(
                 {
                     "media_type": "audio",
+                    "good_origins": fake_o,
+                    "bad_origins": fake_o,
                     "weights": det_weights,
                     "threshold": 0.5,
                 }

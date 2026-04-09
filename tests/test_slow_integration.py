@@ -29,6 +29,7 @@ import numpy as np
 import pytest
 
 import app as app_module
+from helpers import train_detector_from_votes
 from vtsearch.cli import (
     _build_multi_results_dict,
     _merge_detector_results,
@@ -92,12 +93,10 @@ def _make_pickle_dataset(
 
 
 def _make_detector_via_api(client, good_ids, bad_ids) -> dict:
-    """Train a detector through the Flask API and return its payload."""
+    """Train a detector from votes and return its payload."""
     app_module.good_votes.update({k: None for k in good_ids})
     app_module.bad_votes.update({k: None for k in bad_ids})
-    resp = client.post("/api/detector/export")
-    assert resp.status_code == 200, f"Detector export failed: {resp.get_json()}"
-    detector = resp.get_json()
+    detector = train_detector_from_votes()
     app_module.good_votes.clear()
     app_module.bad_votes.clear()
     return detector
@@ -768,12 +767,10 @@ class TestDetectorAutorunRoundTrip:
     clear all state → run auto-detect using autorun detector → verify results."""
 
     def test_autorun_detector_survives_state_clear(self, client):
-        # Step 1: Vote and export detector
+        # Step 1: Vote and train detector
         app_module.good_votes.update({1: None, 2: None, 3: None})
         app_module.bad_votes.update({18: None, 19: None, 20: None})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        detector = resp.get_json()
+        detector = train_detector_from_votes()
 
         # Step 2: Save as autorun detector with autodetect
         resp = client.post(
@@ -830,9 +827,7 @@ class TestVoteDetectorLabelCycle:
             client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
 
         # Step 2: Train detector and verify it works
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        detector = resp.get_json()
+        detector = train_detector_from_votes()
 
         resp = client.post("/api/detector-sort", json={"detector": detector})
         assert resp.status_code == 200
@@ -958,10 +953,8 @@ class TestTextSortVoteLabelExportDetector:
         reloaded = json.loads(label_path.read_text())
         assert len(reloaded["labels"]) == 6
 
-        # Step 4: Detector export should work with these votes
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        det = resp.get_json()
+        # Step 4: Detector training should work with these votes
+        det = train_detector_from_votes()
         assert "weights" in det
         assert "threshold" in det
 
@@ -988,9 +981,9 @@ class TestErrorRecoveryMultiStep:
     """Trigger errors mid-workflow and verify subsequent operations succeed."""
 
     def test_partial_workflow_failure_then_success(self, client):
-        # Step 1: Try detector export with no votes (should fail)
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 400
+        # Step 1: Try detector training with no votes (should fail)
+        with pytest.raises(ValueError, match="at least one good and one bad"):
+            train_detector_from_votes()
 
         # Step 2: Try learned sort with no votes (should fail)
         resp = client.post("/api/learned-sort")
@@ -1005,9 +998,8 @@ class TestErrorRecoveryMultiStep:
             assert resp.status_code == 200
 
         # Step 4: All operations should now succeed
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        assert "weights" in resp.get_json()
+        det = train_detector_from_votes()
+        assert "weights" in det
 
         resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
@@ -1058,9 +1050,7 @@ class TestAutoDetectExporterLabelRoundTrip:
         # Train and save detector
         app_module.good_votes.update({1: None, 2: None, 3: None})
         app_module.bad_votes.update({18: None, 19: None, 20: None})
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        detector = resp.get_json()
+        detector = train_detector_from_votes()
 
         resp = client.post(
             "/api/autorun-detectors",
@@ -1149,9 +1139,7 @@ class TestSequentialSortThenLearn:
             client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
 
         # Step 4: Detector sort
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        detector = resp.get_json()
+        detector = train_detector_from_votes()
         resp = client.post("/api/detector-sort", json={"detector": detector})
         assert resp.status_code == 200
         detector_ids = {r["id"] for r in resp.get_json()["results"]}
@@ -1303,9 +1291,7 @@ class TestLabelImporterDetectorChain:
         assert len(votes["bad"]) == 5
 
         # Step 4: Train detector
-        resp = client.post("/api/detector/export")
-        assert resp.status_code == 200
-        detector = resp.get_json()
+        detector = train_detector_from_votes()
 
         # Step 5: Save as autorun detector with autodetect
         resp = client.post(

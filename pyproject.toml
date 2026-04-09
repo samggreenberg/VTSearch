@@ -25,6 +25,7 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
     "slow: CLI subprocess tests that spawn a fresh Python process (~16s each)",

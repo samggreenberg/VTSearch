@@ -275,8 +275,15 @@ class TestServerFileProcessorImporter:
         assert "filepath" in fields
         assert fields["filepath"].field_type == "server_path"
 
+    def _fake_origins(self):
+        """Minimal origin entries for origin-based detector files."""
+        return [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
+
     def test_run_with_valid_file(self, tmp_path):
+        origins = self._fake_origins()
         payload = {
+            "good_origins": origins,
+            "bad_origins": origins,
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
             "threshold": 0.75,
             "media_type": "image",
@@ -289,14 +296,22 @@ class TestServerFileProcessorImporter:
         assert result["threshold"] == 0.75
 
     def test_run_defaults_media_type_to_audio(self, tmp_path):
-        payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
+        origins = self._fake_origins()
+        payload = {
+            "good_origins": origins, "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5,
+        }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
         result = self._get_importer().run({"filepath": str(p)})
         assert result["media_type"] == "audio"
 
     def test_run_includes_suggested_name(self, tmp_path):
-        payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5, "name": "my detector"}
+        origins = self._fake_origins()
+        payload = {
+            "good_origins": origins, "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5, "name": "my detector",
+        }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
         result = self._get_importer().run({"filepath": str(p)})
@@ -308,10 +323,10 @@ class TestServerFileProcessorImporter:
         with pytest.raises(ValueError, match="JSON"):
             self._get_importer().run({"filepath": str(p)})
 
-    def test_run_raises_on_missing_weights(self, tmp_path):
+    def test_run_raises_on_missing_origins(self, tmp_path):
         p = tmp_path / "bad.json"
         p.write_text(json.dumps({"threshold": 0.5}))
-        with pytest.raises(ValueError, match="weights"):
+        with pytest.raises(ValueError, match="good_origins.*bad_origins"):
             self._get_importer().run({"filepath": str(p)})
 
     def test_run_raises_when_no_filepath(self):
@@ -323,7 +338,11 @@ class TestServerFileProcessorImporter:
             self._get_importer().run({"filepath": str(tmp_path / "nonexistent.json")})
 
     def test_run_cli_delegates_to_run(self, tmp_path):
-        payload = {"weights": {"0.weight": [[1.0]], "0.bias": [0.1]}, "threshold": 0.6}
+        origins = self._fake_origins()
+        payload = {
+            "good_origins": origins, "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]], "0.bias": [0.1]}, "threshold": 0.6,
+        }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
         result = self._get_importer().run_cli({"filepath": str(p)})
@@ -345,7 +364,10 @@ class TestServerFileProcessorImporter:
     def test_api_import_from_server_path(self, client, tmp_path):
         from vtsearch.utils import autorun_detectors
 
+        fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
         payload = {
+            "good_origins": fake_o,
+            "bad_origins": fake_o,
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
             "threshold": 0.75,
             "media_type": "image",
@@ -423,7 +445,10 @@ class TestProcessorImportEndpoint:
     def test_detector_file_imports_and_saves(self, client, tmp_path):
         from vtsearch.utils import autorun_detectors
 
+        fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
         payload = {
+            "good_origins": fake_o,
+            "bad_origins": fake_o,
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.5]},
             "threshold": 0.75,
             "media_type": "image",
@@ -442,7 +467,11 @@ class TestProcessorImportEndpoint:
         assert "test_detector" in autorun_detectors
 
     def test_detector_file_defaults_to_audio(self, client, tmp_path):
-        payload = {"weights": {"0.weight": [[1.0]]}, "threshold": 0.5}
+        fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
+        payload = {
+            "good_origins": fake_o, "bad_origins": fake_o,
+            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5,
+        }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
         res = client.post(
@@ -462,7 +491,7 @@ class TestProcessorImportEndpoint:
         assert res.status_code == 400
         assert "json" in res.get_json()["error"].lower()
 
-    def test_detector_file_missing_weights_returns_400(self, client, tmp_path):
+    def test_detector_file_missing_origins_returns_400(self, client, tmp_path):
         p = tmp_path / "bad.json"
         p.write_text(json.dumps({"threshold": 0.5}))
         res = client.post(

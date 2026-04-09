@@ -35,54 +35,6 @@ detectors_training_bp = Blueprint("detectors_training", __name__)
 # ---------------------------------------------------------------------------
 
 
-@detectors_training_bp.route("/api/detector/export", methods=["POST"])
-def export_detector():
-    """Train MLP on current votes and export the model weights."""
-    from vtsearch.utils import bad_votes, good_votes
-
-    if not good_votes or not bad_votes:
-        return jsonify({"error": "need at least one good and one bad vote"}), 400
-
-    snap = snapshot_medias()
-
-    # Train the model
-    X_list = []
-    y_list = []
-    for cid in good_votes:
-        if cid in snap:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(1.0)
-    for cid in bad_votes:
-        if cid in snap:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(0.0)
-
-    if not X_list:
-        return jsonify({"error": "voted medias no longer loaded — reload the dataset"}), 400
-
-    try:
-        validate_good_bad_split(y_list)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-    weights = serialize_weights(model)
-
-    # Collect origin info so the client can forward it when saving
-    good_origins = collect_media_origins(good_votes, snap)
-    bad_origins = collect_media_origins(bad_votes, snap)
-
-    return jsonify(
-        {
-            "weights": weights,
-            "threshold": round(threshold, 4),
-            "good_origins": good_origins,
-            "bad_origins": bad_origins,
-            "inclusion": get_inclusion(),
-        }
-    )
-
-
 @detectors_training_bp.route("/api/detector/export-server", methods=["POST"])
 def export_detector_server():
     """Save current votes as a detector file on the server filesystem.

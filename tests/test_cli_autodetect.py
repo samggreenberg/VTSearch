@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import app as app_module
+from helpers import train_detector_from_votes
 from vtsearch.cli import (
     _build_multi_results_dict,
     _detect_media_type,
@@ -54,12 +55,10 @@ def _make_dataset_file(tmp_path, clips_dict):
 
 
 def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json"):
-    """Train a detector via the API and write its JSON to a file."""
+    """Train a detector and write its JSON to a file."""
     app_module.good_votes.update({k: None for k in good_ids})
     app_module.bad_votes.update({k: None for k in bad_ids})
-    resp = client.post("/api/detector/export")
-    assert resp.status_code == 200
-    detector = resp.get_json()
+    detector = train_detector_from_votes()
     app_module.good_votes.clear()
     app_module.bad_votes.clear()
 
@@ -183,25 +182,21 @@ class TestRunAutodetect:
         with pytest.raises(ValueError, match="No medias loaded"):
             run_autodetect(str(dataset_path), str(detector_path))
 
-    def test_detector_missing_weights_raises_error(self, tmp_path):
+    def test_detector_missing_origins_raises_error(self, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         bad_detector = tmp_path / "bad_detector.json"
         bad_detector.write_text(json.dumps({"threshold": 0.5}))
 
-        with pytest.raises(ValueError, match="missing 'weights'"):
+        with pytest.raises(ValueError, match="good_origins.*bad_origins"):
             run_autodetect(str(dataset_path), str(bad_detector))
 
-    def test_detector_missing_threshold_defaults_to_half(self, client, tmp_path):
+    def test_detector_with_weight_fallback_works(self, client, tmp_path):
+        """When origin resolution fails, pre-computed weights in the file are used."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         detector_path, detector = _make_detector_file(tmp_path, client, [1, 2], [3, 4])
 
-        # Write detector with threshold removed — should default to 0.5
-        del detector["threshold"]
-        no_threshold_path = tmp_path / "no_threshold.json"
-        no_threshold_path.write_text(json.dumps(detector))
-
-        # Should not raise; threshold defaults to 0.5
-        hits = run_autodetect(str(dataset_path), str(no_threshold_path))
+        # The detector file has origins (that can't resolve) AND weights (fallback)
+        hits = run_autodetect(str(dataset_path), str(detector_path))
         assert isinstance(hits, list)
 
     def test_hits_do_not_contain_embedding(self, client, tmp_path):
