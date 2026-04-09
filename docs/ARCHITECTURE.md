@@ -95,7 +95,7 @@ VTSearch/
 │   │   ├── media_seeding.py        Media seeding utilities
 │   │   ├── label_restoration.py    Label restoration functionality
 │   │   ├── training_workflow.py    Training workflow orchestration
-│   │   └── weights_compat.py       Model weights compatibility layer
+│   │   └── weights_compat.py       Origin-based detector weight normalization
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)

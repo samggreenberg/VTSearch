@@ -32,7 +32,7 @@ GET /api/detector/server-files
 GET /api/detector/server-files/{name}
 ```
 
-→ JSON detector data (weights, threshold, etc.)
+→ JSON detector data (origins, inclusion, media type, name)
 
 ### Score with detector
 

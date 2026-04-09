@@ -558,10 +558,13 @@ class S3ProcessorImporter(ProcessorImporter):
         """Download and parse a detector JSON from S3.
 
         Must return a dict with at minimum:
+            - "good_origins" (list): origin dicts for Good-labeled media
+            - "bad_origins" (list): origin dicts for Bad-labeled media
             - "media_type" (str): e.g. "audio", "image"
-            - "weights" (dict): MLP state dict as nested lists
-            - "threshold" (float): decision boundary in [0, 1]
         May also include:
+            - "inclusion" (int): inclusion bias from training
+            - "weights" (dict): pre-computed MLP weights (fallback)
+            - "threshold" (float): decision boundary in [0, 1]
             - "name" (str): suggested default name
         """
         import json
@@ -570,10 +573,17 @@ class S3ProcessorImporter(ProcessorImporter):
         s3 = boto3.client("s3")
         obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
         data = json.loads(obj["Body"].read())
+
+        from vtsearch.models.weights_compat import normalize_detector_weights
+
+        nw = normalize_detector_weights(data)
         return {
             "media_type": data.get("media_type", "audio"),
-            "weights": data["weights"],
-            "threshold": data.get("threshold", 0.5),
+            "good_origins": nw.good_origins,
+            "bad_origins": nw.bad_origins,
+            "inclusion": nw.inclusion,
+            "weights": nw.weights,
+            "threshold": nw.threshold,
         }
 
 
@@ -586,7 +596,7 @@ PROCESSOR_IMPORTER = S3ProcessorImporter()
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `run()` | `(field_values: dict) -> dict` | Return dict with `media_type`, `weights`, `threshold` |
+| `run()` | `(field_values: dict) -> dict` | Return dict with `good_origins`, `bad_origins`, `media_type`, `weights`, `threshold` |
 
 **Optional overrides:**
 
