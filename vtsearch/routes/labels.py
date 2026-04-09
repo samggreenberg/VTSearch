@@ -103,6 +103,12 @@ def export_labels():
                 meta = mt.display_metadata(media)
             except KeyError:
                 meta = {}
+            # Flatten origin params so fields like contentID, mediaID,
+            # media_url surface as selectable export columns.
+            origin = media.get("origin")
+            if isinstance(origin, dict):
+                for k, v in origin.get("params", {}).items():
+                    meta.setdefault(k, v)
             importer_custom = media.get("custom_metadata")
             if importer_custom:
                 meta.update(importer_custom)

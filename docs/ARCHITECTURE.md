@@ -119,7 +119,8 @@ VTSearch/
 │   │   ├── sources/                MediaSource abstraction for resolving media files
 │   │   │   ├── base.py             MediaSource ABC (list_items, fetch_item, resolve_path)
 │   │   │   ├── local_folder.py     LocalFolderSource implementation
-│   │   │   └── http_archive.py     HTTP archive source implementation
+│   │   │   ├── http_archive.py     HTTP archive source implementation
+│   │   │   └── pullwrest.py        PullWrestSource — fetch media via PullWrest (scaffold)
 │   │   └── importers/              Plugin system for data sources
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
@@ -640,6 +641,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
 
 ### Origin class (`vtsearch/datasets/origin.py`)
 
@@ -662,7 +664,9 @@ Origins are set automatically when data is loaded:
 ### LabelSet (`vtsearch/datasets/labelset.py`)
 
 A `LabelSet` extends the dataset concept: each element carries its origin,
-its name within that origin, **and** its label (`"good"` / `"bad"`).
+its name within that origin, its label (`"good"` / `"bad"`), and optional
+`metadata` (arbitrary key-value dict for round-tripping extra data like
+`contentID`, `mediaID`, etc.).
 
 ```python
 from vtsearch.datasets.labelset import LabelSet
@@ -680,4 +684,7 @@ ls2 = LabelSet.from_dict(data)
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  The format is backward-compatible: old consumers that only
-read `md5` + `label` continue to work.
+read `md5` + `label` continue to work.  With `enrich=true`, each entry
+gains `custom_metadata` (merged from media type display metadata, the
+media's `custom_metadata`, and the flattened `origin.params`) and the
+response includes an `available_columns` list.

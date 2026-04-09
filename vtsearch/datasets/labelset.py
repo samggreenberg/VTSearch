@@ -38,6 +38,11 @@ class LabeledElement:
             filename, e.g. ``"clip_123.wav"``).
         filename: Original filename of the media file.
         category: Category or class label from the dataset structure.
+        metadata: Arbitrary per-element metadata that round-trips through
+            serialisation.  Importers and external systems (e.g. Holder)
+            can attach extra key-value data here (such as ``contentID``,
+            ``mediaID``, ``media_url``).  ``None`` when no metadata is
+            present.
     """
 
     md5: str
@@ -46,6 +51,7 @@ class LabeledElement:
     origin_name: str = ""
     filename: str = ""
     category: str = ""
+    metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict.
@@ -62,6 +68,8 @@ class LabeledElement:
             d["filename"] = self.filename
         if self.category:
             d["category"] = self.category
+        if self.metadata is not None:
+            d["metadata"] = self.metadata
         return d
 
     @classmethod
@@ -74,6 +82,7 @@ class LabeledElement:
             origin_name=d.get("origin_name", ""),
             filename=d.get("filename", ""),
             category=d.get("category", ""),
+            metadata=d.get("metadata"),
         )
 
 
@@ -227,6 +236,7 @@ def _clip_to_elements(
     persistence).
     """
     origin = media.get("origin")
+    cm = media.get("custom_metadata") or None
     if expand_dupes and isinstance(origin, dict) and origin.get("importer") == "dupe_set":
         members = origin.get("members", [])
         if members:
@@ -238,6 +248,7 @@ def _clip_to_elements(
                     origin_name=m.get("origin_name", m.get("filename", "")),
                     filename=m.get("filename", ""),
                     category=m.get("category", ""),
+                    metadata=cm,
                 )
                 for m in members
             ]
@@ -251,5 +262,6 @@ def _clip_to_elements(
             origin_name=media.get("origin_name", media.get("filename", "")),
             filename=media.get("filename", ""),
             category=media.get("category", ""),
+            metadata=cm,
         )
     ]
