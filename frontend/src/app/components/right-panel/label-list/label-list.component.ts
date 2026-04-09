@@ -126,15 +126,9 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document' || media.type === 'audio');
   }
 
-  isVideo(id: number): boolean {
-    const media = this.mediaMap.get(id);
-    return !!media && media.type === 'video';
-  }
-
   thumbnailUrl(id: number): string {
     const media = this.mediaMap.get(id);
     if (!media) return '';
-    if (media.type === 'video') return this.activeContext.mediaUrl(`/api/medias/${id}/video`);
     return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
   }
 
