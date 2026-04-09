@@ -141,10 +141,6 @@ export class DetectorsApiService {
 
   // --- Training ---
 
-  exportWeightsToServer(): Observable<unknown> {
-    return this.http.post('/api/detector/export-server', {});
-  }
-
   importFromLabels(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/autorun-detectors/import-labels', params);
   }
