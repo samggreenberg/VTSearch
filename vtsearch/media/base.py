@@ -54,6 +54,25 @@ __all__ = [
 ]
 
 
+def _fetch_media_url(url: str) -> bytes | None:
+    """Fetch binary content from a ``media_url``.
+
+    Used by :meth:`MediaType._resolve_media_bytes` and
+    :meth:`MediaType._resolve_media_string` as a last-resort fallback when
+    neither ``media_bytes`` nor ``media_path`` are available (e.g. for
+    URL-backed media from PullWrest).
+    """
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+            return resp.read()
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning("Failed to fetch media_url: %s", url, exc_info=True)
+        return None
+
+
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
 
@@ -861,12 +880,13 @@ class MediaType(ABC):
     # ------------------------------------------------------------------
 
     def _resolve_media_bytes(self, media: dict) -> bytes | None:
-        """Return binary media data, lazy-loading from ``media_path`` if needed.
+        """Return binary media data, lazy-loading from path or URL.
 
-        In thin mode, ``media_bytes`` is ``None`` but ``media_path`` points to
-        the source file on disk.  This helper transparently loads the bytes on
-        demand so that :meth:`media_response` works regardless of how the media
-        was loaded.
+        Resolution order:
+
+        1. ``media_bytes`` — already in memory.
+        2. ``media_path`` — local file on disk (thin mode).
+        3. ``media_url`` — remote URL (URL-backed media, e.g. PullWrest).
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
@@ -877,13 +897,16 @@ class MediaType(ABC):
             if path.exists():
                 with open(path, "rb") as f:
                     return f.read()
+        media_url = media.get("media_url")
+        if media_url:
+            return _fetch_media_url(media_url)
         return None
 
     def _resolve_media_string(self, media: dict) -> str:
-        """Return text content, lazy-loading from ``media_path`` if needed.
+        """Return text content, lazy-loading from path or URL.
 
-        Same lazy-loading pattern as :meth:`_resolve_media_bytes` but for
-        text media types that store ``media_string`` instead of ``media_bytes``.
+        Same resolution order as :meth:`_resolve_media_bytes` but for text
+        media types that store ``media_string`` instead of ``media_bytes``.
         """
         media_string = media.get("media_string")
         if media_string is not None:
@@ -894,6 +917,11 @@ class MediaType(ABC):
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read().strip()
+        media_url = media.get("media_url")
+        if media_url:
+            data = _fetch_media_url(media_url)
+            if data is not None:
+                return data.decode("utf-8", errors="replace").strip()
         return ""
 
     # ------------------------------------------------------------------
