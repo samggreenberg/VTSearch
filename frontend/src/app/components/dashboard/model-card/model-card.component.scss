@@ -108,22 +108,20 @@ td {
   opacity: 0.7;
 }
 
-.check,
+.status-icon,
 .status-loaded {
-  color: var(--color-good);
+  color: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 4px;
 }
 
-.dim {
-  color: var(--text-dim);
-}
-
-.load-action {
+.load-action,
+.autorun-toggle {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: inherit;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
