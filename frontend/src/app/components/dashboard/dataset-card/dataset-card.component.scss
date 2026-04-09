@@ -119,16 +119,17 @@ td {
 }
 
 .status-loaded {
-  color: var(--color-good);
+  color: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 4px;
 }
 
 .load-action {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: inherit;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
