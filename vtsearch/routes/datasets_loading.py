@@ -608,6 +608,10 @@ def _run_origin_load_in_background(
                 _migrate_context_id(task_id, entry["id"])
                 context_id = entry["id"]
                 ctx.dataset_display_name = entry.get("name", name)
+                # Associate the loading task with the real dataset ID so the
+                # frontend can show the embedder-warmup progress inline on the
+                # dataset row instead of as an orphan loading task.
+                loading_tasks.set_dataset_id(task_id, entry["id"])
 
             # Warm up the embedder.  Use a progress wrapper that updates the
             # task tracker, not the global singleton.

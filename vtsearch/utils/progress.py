@@ -205,6 +205,13 @@ class LoadingTasksTracker:
         for entry in tasks:
             entry["tracker"].cancel()
 
+    def set_dataset_id(self, task_id: str, dataset_id: str) -> None:
+        """Associate a loading task with its final registry dataset ID."""
+        with self._lock:
+            entry = self._tasks.get(task_id)
+            if entry:
+                entry["dataset_id"] = dataset_id
+
     def remove_task(self, task_id: str) -> None:
         """Remove a completed/cancelled task from the tracker."""
         with self._lock:
