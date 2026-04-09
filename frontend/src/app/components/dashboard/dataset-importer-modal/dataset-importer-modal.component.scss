@@ -1,4 +1,8 @@
 .importer-card { padding: 12px 16px; }
+.importer-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .btn--sm { padding: 2px 10px; font-size: .85rem; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 

@@ -15,7 +15,7 @@
             <span class="importer-desc">Choose from a selection of pre-configured demo datasets</span>
           </button>
         } @else {
-          <button class="importer-card" (click)="selectImporter(imp)">
+          <button class="importer-card" [class.disabled]="imp['enabled'] === false" [disabled]="imp['enabled'] === false" (click)="selectImporter(imp)" [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''">
             <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
               <span class="importer-desc">{{ imp.description }}</span>

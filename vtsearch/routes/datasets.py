@@ -26,6 +26,7 @@ from vtsearch.datasets.registry import (
     get_loaded_ids as _reg_loaded_ids,
     is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
+    list_datasets as _reg_list_all,
     list_datasets_for_user as _reg_list_for_user,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
@@ -262,6 +263,18 @@ def dataset_importers():
 def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
     all_importers = [imp.to_dict() for imp in list_importers()]
+
+    # Annotate combine_datasets with an enabled flag: requires 2+ saved
+    # datasets sharing the same media type.
+    from collections import Counter
+
+    type_counts = Counter(e.get("media_type") for e in _reg_list_all())
+    can_combine = any(c >= 2 for c in type_counts.values())
+    for imp_dict in all_importers:
+        if imp_dict["name"] == "combine_datasets":
+            imp_dict["enabled"] = can_combine
+            break
+
     return jsonify({"importers": all_importers})
 
 

@@ -148,6 +148,77 @@ class TestCombineDatasetsBuiltinExclusion:
 
 
 # ---------------------------------------------------------------------------
+# Enabled flag in all-importers endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestCombineDatasetsEnabledFlag:
+    def _find_combine(self, client):
+        resp = client.get("/api/dataset/all-importers")
+        data = resp.get_json()
+        for imp in data["importers"]:
+            if imp["name"] == "combine_datasets":
+                return imp
+        return None
+
+    def test_disabled_with_no_saved_datasets(self, client):
+        """combine_datasets is disabled when the registry is empty."""
+        imp = self._find_combine(client)
+        assert imp is not None
+        assert imp["enabled"] is False
+
+    def test_disabled_with_one_dataset(self, client):
+        """combine_datasets is disabled with only one saved dataset."""
+        from vtsearch.datasets import registry
+
+        registry.register_dataset(
+            name="solo", media_type="audio", num_items=10, pkl_path="/tmp/solo.pkl"
+        )
+        try:
+            imp = self._find_combine(client)
+            assert imp["enabled"] is False
+        finally:
+            entries = registry.list_datasets()
+            for e in entries:
+                if e["name"] == "solo":
+                    registry.unregister_dataset(e["id"])
+
+    def test_disabled_with_two_different_media_types(self, client):
+        """combine_datasets is disabled when two datasets have different media types."""
+        from vtsearch.datasets import registry
+
+        e1 = registry.register_dataset(
+            name="audio_ds", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl"
+        )
+        e2 = registry.register_dataset(
+            name="image_ds", media_type="image", num_items=10, pkl_path="/tmp/b.pkl"
+        )
+        try:
+            imp = self._find_combine(client)
+            assert imp["enabled"] is False
+        finally:
+            registry.unregister_dataset(e1["id"])
+            registry.unregister_dataset(e2["id"])
+
+    def test_enabled_with_two_same_media_type(self, client):
+        """combine_datasets is enabled when two datasets share a media type."""
+        from vtsearch.datasets import registry
+
+        e1 = registry.register_dataset(
+            name="audio_a", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl"
+        )
+        e2 = registry.register_dataset(
+            name="audio_b", media_type="audio", num_items=5, pkl_path="/tmp/b.pkl"
+        )
+        try:
+            imp = self._find_combine(client)
+            assert imp["enabled"] is True
+        finally:
+            registry.unregister_dataset(e1["id"])
+            registry.unregister_dataset(e2["id"])
+
+
+# ---------------------------------------------------------------------------
 # Core combining logic
 # ---------------------------------------------------------------------------
 
