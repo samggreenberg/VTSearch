@@ -47,6 +47,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private _pausedByVisibility = false;
   private subs: Subscription[] = [];
 
   constructor(
@@ -67,6 +68,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
     if (this.spinTimer) clearTimeout(this.spinTimer);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
   /** Stop all media playback (used on navigation away). */
@@ -85,10 +87,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     }
   }
 
-  /** Initialize: load settings, start keyboard listener. */
+  /** Initialize: load settings, start keyboard listener, listen for tab visibility. */
   init(): void {
     this.loadSettings();
     this.keyboard.start();
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.subs.push(
       this.keyboard.action$.subscribe((action) => {
         switch (action.type) {
@@ -195,8 +198,34 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   onPlayingChanged(playing: boolean): void {
+    if (this._pausedByVisibility) return;
     this.audioPlaying = playing;
     this.settingsState.update({ audio_playing: this.audioPlaying }).subscribe();
+  }
+
+  private onVisibilityChange = (): void => {
+    if (document.hidden) {
+      if (this.audioPlaying) {
+        this._pausedByVisibility = true;
+        this.stopPlayback();
+      }
+    } else {
+      if (this._pausedByVisibility) {
+        this._pausedByVisibility = false;
+        this.resumePlayback();
+      }
+    }
+  };
+
+  private resumePlayback(): void {
+    if (this.audioPlayer) {
+      const audio = this.audioPlayer.audioRef?.nativeElement;
+      if (audio) audio.play().catch(() => {});
+    }
+    if (this.videoPlayer) {
+      const video = this.videoPlayer.videoRef?.nativeElement;
+      if (video) video.play().catch(() => {});
+    }
   }
 
   private togglePlayback(): void {
