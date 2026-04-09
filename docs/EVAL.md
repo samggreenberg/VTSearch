@@ -22,7 +22,7 @@ This will:
 Install dependencies (if you haven't already):
 
 ```bash
-bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
+bash install-cpu.sh
 ```
 
 Matplotlib and pandas are required for plot generation and are included in the dev dependencies.
