@@ -60,10 +60,12 @@ export class KeyboardService implements OnDestroy {
         break;
       case 'ArrowUp':
         e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: 0.05 }));
         break;
       case 'ArrowDown':
         e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: -0.05 }));
         break;
       case ' ':
