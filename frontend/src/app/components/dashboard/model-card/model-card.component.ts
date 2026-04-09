@@ -125,10 +125,9 @@ export class ModelCardComponent implements OnChanges {
     this.export.emit();
   }
 
-  onAutorunToggle(event: Event): void {
+  onAutorunToggle(event: MouseEvent): void {
     event.stopPropagation();
-    const checked = (event.target as HTMLInputElement).checked;
-    this.autorunToggle.emit(checked);
+    this.autorunToggle.emit(!this.model.autodetect);
   }
 
   formatDate(timestamp: number | null): string {

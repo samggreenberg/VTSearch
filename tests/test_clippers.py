@@ -24,25 +24,60 @@ class TestMediaClipperABC:
 
         c = SoundDefaultClipper()
         d = c.to_dict()
-        assert d == {"name": "sound_default", "display_name": "Sound Default", "media_type": "audio"}
+        assert d == {
+            "name": "sound_default",
+            "display_name": "Default",
+            "description": "Import each audio file as-is, without splitting.",
+            "media_type": "audio",
+        }
 
     def test_display_name_default(self):
         from vtsearch.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
-        assert c.display_name == "Sound Default"
+        assert c.display_name == "Default"
 
     def test_display_name_tiling(self):
         from vtsearch.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
-        assert c.display_name == "Sound Tiling"
+        assert c.display_name == "Tiling"
 
     def test_display_name_video_scene(self):
         from vtsearch.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
-        assert c.display_name == "Video Scene"
+        assert c.display_name == "Scene"
+
+    def test_creation_questions_defaults_to_parameters(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        assert c.creation_questions == c.parameters
+        assert len(c.creation_questions) == 2
+
+    def test_creation_questions_empty_for_default_clipper(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        assert c.creation_questions == []
+        assert c.creation_questions == c.parameters
+
+    def test_to_dict_includes_creation_questions_when_present(self):
+        from vtsearch.media.audio.clipper import SoundTilingClipper
+
+        c = SoundTilingClipper(2.0)
+        d = c.to_dict()
+        assert "creation_questions" in d
+        assert len(d["creation_questions"]) == 2
+        assert d["creation_questions"][0]["key"] == "duration"
+
+    def test_to_dict_omits_creation_questions_when_empty(self):
+        from vtsearch.media.audio.clipper import SoundDefaultClipper
+
+        c = SoundDefaultClipper()
+        d = c.to_dict()
+        assert "creation_questions" not in d
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +192,7 @@ class TestSoundTilingClipper:
         c = SoundTilingClipper(3.5)
         d = c.to_dict()
         assert d["name"] == "sound_tiling"
-        assert d["display_name"] == "Sound Tiling"
+        assert d["display_name"] == "Tiling"
         assert d["media_type"] == "audio"
         assert d["duration"] == 3.5
         assert d["min_overlap"] == 0.0
@@ -281,7 +316,7 @@ class TestVideoTilingClipper:
         c = VideoTilingClipper(3.5)
         d = c.to_dict()
         assert d["name"] == "video_tiling"
-        assert d["display_name"] == "Video Tiling"
+        assert d["display_name"] == "Tiling"
         assert d["media_type"] == "video"
         assert d["duration"] == 3.5
         assert d["min_overlap"] == 0.0
@@ -826,7 +861,7 @@ class TestClippersApiEndpoint:
         assert "image_default" not in names
 
     def test_filter_by_folder_name(self, client):
-        resp = client.get("/api/clippers?media_type=images")
+        resp = client.get("/api/clippers?media_type=image")
         assert resp.status_code == 200
         data = resp.get_json()
         clippers = data["clippers"]
@@ -841,6 +876,20 @@ class TestClippersApiEndpoint:
         clippers = data["clippers"]
         assert len(clippers) >= 1
         assert all(c["media_type"] == "document" for c in clippers)
+
+    def test_creation_questions_in_api_response(self, client):
+        resp = client.get("/api/clippers?media_type=audio")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        clippers = data["clippers"]
+        tiling = next(c for c in clippers if c["name"] == "sound_tiling")
+        assert "creation_questions" in tiling
+        assert len(tiling["creation_questions"]) == 2
+        keys = [q["key"] for q in tiling["creation_questions"]]
+        assert "duration" in keys
+        # Default clipper should not have creation_questions
+        default = next(c for c in clippers if c["name"] == "sound_default")
+        assert "creation_questions" not in default
 
 
 # ---------------------------------------------------------------------------
@@ -914,7 +963,7 @@ class TestDatasetRegistryClipperColumn:
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         ds = data["datasets"][0]
-        assert ds["clipper"] == "Sound Tiling"
+        assert ds["clipper"] == "Tiling"
 
     def test_registry_clipper_defaults_to_empty(self, client):
         from vtsearch.datasets.registry import register_dataset

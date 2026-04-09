@@ -466,7 +466,7 @@ class TestLabelImportMissingElements:
             (text_dir / "hello.txt").write_text(content)
             md5 = hashlib.md5(content.encode()).hexdigest()
 
-            origin = {"importer": "folder", "params": {"path": str(text_dir), "media_type": "paragraphs"}}
+            origin = {"importer": "folder", "params": {"path": str(text_dir), "media_type": "text"}}
 
             known_md5 = app_module.medias[1]["md5"]
             payload = json.dumps(

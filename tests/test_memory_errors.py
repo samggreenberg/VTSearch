@@ -150,7 +150,7 @@ class TestFolderMemoryError:
         ):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
-                    tmp_path, "sounds", target, on_progress=mock_progress,
+                    tmp_path, "audio", target, on_progress=mock_progress,
                 )
 
         assert len(target) == 0

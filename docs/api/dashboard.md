@@ -106,3 +106,28 @@ GET /api/find/progress
 
 `status` is `"idle"` or `"running"`. `step` / `total_steps` track the
 high-level Find phases (prepare models, load data, score).
+
+### Apply labels from model (Find Label)
+
+```
+POST /api/find-label
+```
+
+**Body:** `{"model_id": "abc123"}` — optionally include `"dataset_id"` to
+override the request-scoped dataset context.
+
+Resolves the model from the registry, scores every loaded media using the
+model's weights, and applies Good/Bad labels for **all** elements based on
+the threshold. If no pre-trained weights are available, trains on-the-fly
+from the trainable model's labelset (resolving label origins as needed).
+
+→ ```json
+{
+  "results": [{"id": 0, "score": 0.9812}, ...],
+  "threshold": 0.5,
+  "applied": 42,
+  "total_scored": 500
+}
+```
+
+404 if model not found. 400 if `model_id` is missing.

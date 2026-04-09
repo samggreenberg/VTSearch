@@ -116,7 +116,7 @@ The `clipper` field describes what the detector *expects*, not a user preference
 
 ### 2. Training captures the input spec
 
-When `export_detector` or `export_detector_server` trains a detector, record:
+When `export_detector_server` trains a detector, record:
 - The active clipper (if the current dataset was loaded with clipping)
 
 The converter is NOT recorded — it's handled automatically by the registry at inference time. Only the clipper matters because it affects the granularity of the embeddings the detector was trained on.

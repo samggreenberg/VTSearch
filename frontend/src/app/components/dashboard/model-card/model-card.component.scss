@@ -25,6 +25,7 @@
 td {
   padding: 6px 10px;
   white-space: nowrap;
+  vertical-align: middle;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -107,20 +108,26 @@ td {
   opacity: 0.7;
 }
 
-.check,
+.status-icon,
 .status-loaded {
-  color: var(--color-good);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
 }
 
-.dim {
-  color: var(--text-dim);
-}
-
-.load-action {
-  color: var(--text-dim);
+.load-action,
+.autorun-toggle {
+  background: none;
+  border: none;
+  color: inherit;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 4px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: color 0.15s, background 0.15s;
 
   &:hover {

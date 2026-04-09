@@ -10,6 +10,10 @@ export interface MediaItem {
   custom_metadata: Record<string, unknown>;
   origin_name?: string;
   description?: string;
+  clip_start?: number;
+  clip_end?: number;
+  clip_index?: number;
+  clip_box?: number[];
 }
 
 export interface TextResponse {
@@ -386,6 +390,7 @@ export interface ProcessorImporterInfo {
 export interface ClipperParameter {
   key: string;
   label: string;
+  description?: string;
   type: 'number' | 'string';
   default: number | string;
   min?: number;
@@ -396,8 +401,10 @@ export interface ClipperParameter {
 export interface ClipperInfo {
   name: string;
   display_name?: string;
+  description?: string;
   media_type: string;
   parameters?: ClipperParameter[];
+  creation_questions?: ClipperParameter[];
   [key: string]: unknown;
 }
 

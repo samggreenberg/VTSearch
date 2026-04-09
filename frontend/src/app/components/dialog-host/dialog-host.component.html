@@ -5,6 +5,7 @@
       class="form-input"
       [(ngModel)]="dialog.dialogInputValue"
       (keydown.enter)="onButtonClick('__input__')"
+      [attr.aria-label]="dialog.dialogTitle"
       autofocus
     />
   }

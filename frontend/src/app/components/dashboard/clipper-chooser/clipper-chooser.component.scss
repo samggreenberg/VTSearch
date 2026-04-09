@@ -1,0 +1,64 @@
+.clipper-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.clipper-tab-bar {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 2px solid var(--border);
+}
+
+.clipper-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all .15s;
+  margin-bottom: -2px;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+  }
+
+  &.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+.clipper-tab-content {
+  min-height: 80px;
+  padding: 4px 0;
+}
+
+.clipper-description {
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .82rem;
+  margin: 0 0 8px;
+}
+
+.no-settings {
+  color: var(--text-muted);
+  font-size: .85rem;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

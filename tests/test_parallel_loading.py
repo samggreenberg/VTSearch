@@ -134,6 +134,34 @@ class TestLoadingTasksTracker:
         assert len(tasks) == 1
         assert tasks[0]["media_type"] == "image"
 
+    def test_set_dataset_id(self):
+        """set_dataset_id updates the dataset_id on an existing task."""
+        tracker = LoadingTasksTracker()
+        tracker.create_task("t1", "DS")
+        tasks = tracker.list_tasks()
+        assert tasks[0].get("dataset_id") is None or tasks[0].get("dataset_id") == ""
+
+        tracker.set_dataset_id("t1", "real-registry-id")
+        tasks = tracker.list_tasks()
+        assert tasks[0]["dataset_id"] == "real-registry-id"
+
+    def test_set_dataset_id_nonexistent(self):
+        """set_dataset_id on a missing task is a no-op."""
+        tracker = LoadingTasksTracker()
+        tracker.set_dataset_id("nope", "some-id")  # should not raise
+
+    def test_set_dataset_id_visible_after_finish(self):
+        """dataset_id is still visible on recently-finished tasks."""
+        tracker = LoadingTasksTracker()
+        pt = tracker.create_task("t1", "DS")
+        tracker.set_dataset_id("t1", "ds-123")
+        pt.update("idle", "Done")
+        tracker.mark_finished("t1")
+
+        tasks = tracker.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0]["dataset_id"] == "ds-123"
+
 
 # ---------------------------------------------------------------------------
 # Thread-local progress tests
@@ -323,7 +351,7 @@ class TestImportEndpointsReturnTaskId:
         with mock.patch("vtsearch.routes.datasets._run_importer_in_background", return_value="folder_task"):
             resp = client.post(
                 "/api/dataset/load-folder",
-                json={"path": str(folder), "media_type": "sounds"},
+                json={"path": str(folder), "media_type": "audio"},
             )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -539,7 +567,7 @@ class TestConcurrentModelLoading:
                 call_count += 1
                 self._model = "loaded"
 
-            def embed_media(self, file_path):
+            def _embed_media_impl(self, file_path):
                 return None
 
             def embed_text(self, text):

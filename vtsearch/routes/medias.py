@@ -13,6 +13,7 @@ from flask import Blueprint, Response, jsonify, make_response, request, send_fil
 
 from vtsearch.media.base import MediaResponse
 from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.utils.ffmpeg import get_ffmpeg_exe
 from vtsearch.utils import (
     _state_lock,
     apply_label,
@@ -47,9 +48,10 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
 
         # --- Attempt 1: ffmpeg (best quality, preserves audio) -----------
         try:
+            ffmpeg = get_ffmpeg_exe()
             subprocess.run(
                 [
-                    "ffmpeg", "-y",
+                    ffmpeg, "-y",
                     "-i", str(src_path),
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
@@ -220,6 +222,10 @@ def list_medias() -> Response:
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
+        # Include clip metadata so the frontend can trim playback / display.
+        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
+            if clip_key in c:
+                media_data[clip_key] = c[clip_key]
         result.append(media_data)
     return jsonify(result)
 
@@ -278,6 +284,9 @@ def batch_medias() -> tuple[Response, int] | Response:
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
+        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
+            if clip_key in c:
+                media_data[clip_key] = c[clip_key]
         result.append(media_data)
     return jsonify(result)
 
@@ -345,8 +354,8 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
         if transcoded is not None:
             c["_transcoded_mp4"] = transcoded
             return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
-        # ffmpeg unavailable — serve raw bytes as best-effort fallback
-        return _send_video_bytes(media_bytes, "video/mp4", f"media_{media_id}{ext}")
+        # ffmpeg and OpenCV both unavailable — cannot transcode
+        return jsonify({"error": f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding"}), 415
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:

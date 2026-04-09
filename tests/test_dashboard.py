@@ -471,8 +471,8 @@ class TestEmbeddersApiEndpoint:
         assert "clip" not in names
 
     def test_filter_by_folder_name(self, client):
-        """GET /api/embedders?media_type=images returns image embedders."""
-        resp = client.get("/api/embedders?media_type=images")
+        """GET /api/embedders?media_type=image returns image embedders."""
+        resp = client.get("/api/embedders?media_type=image")
         assert resp.status_code == 200
         data = resp.get_json()
         embedders = data["embedders"]

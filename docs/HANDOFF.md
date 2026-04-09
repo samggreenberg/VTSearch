@@ -49,9 +49,7 @@ deployments. Runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
 | [demos.md](demos.md) | Available demo datasets |
-| [old_io.md](old_io.md) | Retired IO module reference implementations |
 | [REFACTORING.md](REFACTORING.md) | Structural refactoring plan with completion status |
-| [plan-media-sources.md](plan-media-sources.md) | MediaSource abstraction design document (implemented) |
 | [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (implemented, two enhancements pending) |
 | [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (design proposal, not yet implemented) |
 
@@ -63,7 +61,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
+bash install-cpu.sh
 python app.py --local        # binds to 0.0.0.0 (network-accessible)
 ```
 
@@ -135,11 +133,17 @@ architecture:
   email, webhooks, or the GUI.
 - **Label importers** — import labels from server-side JSON or CSV files.
 - **Processor importers** — import detectors from server-side JSON files.
+- **Settings importers** — one-shot settings import from JSON files.
+- **Settings exporters** — one-shot settings export to JSON files.
 - **Settings sources** — bidirectional sync for settings (auto-export on
   change, import on sync). Supports `{username}` template for per-user files.
 - **Labelset sources** — bidirectional sync for detector labels (auto-export
   on vote/import, import on sync). Supports `{detector_id}`/`{detector_name}`
   templates. Linked per-detector via `DetectorContext.labelset_source`.
+- **Media converters** — transform content between media types (e.g.
+  document pages to images, video to audio).
+- **Media sources** — resolve individual media files from dataset origins
+  (local folders, HTTP archives).
 
 See [EXTENDING.md](EXTENDING.md) for how to add new plugins.
 
@@ -255,7 +259,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .` (or build Docker image)
+- [ ] `bash install-cpu.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`

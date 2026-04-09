@@ -118,9 +118,12 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return this.viewMode === 'grid';
   }
 
+  private thumbnailFailedIds = new Set<number>();
+
   hasThumbnailUrl(id: number): boolean {
+    if (this.thumbnailFailedIds.has(id)) return false;
     const media = this.mediaMap.get(id);
-    return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document');
+    return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document' || media.type === 'audio');
   }
 
   isVideo(id: number): boolean {
@@ -135,11 +138,15 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
   }
 
+  onThumbnailError(id: number): void {
+    this.thumbnailFailedIds.add(id);
+  }
+
   placeholderIcon(id: number): string | null {
     if (!this.isGrid) return null;
+    if (this.hasThumbnailUrl(id)) return null;
     const media = this.mediaMap.get(id);
     if (!media) return null;
-    if (media.type === 'image' || media.type === 'video' || media.type === 'document') return null;
     if (media.type === 'audio') return '\u266B';
     if (media.type === 'text') return '\u00B6';
     return '\u25A1';

@@ -358,7 +358,7 @@ Install commands:
 
 ```bash
 # CPU with all features + dev tools
-bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
+bash install-cpu.sh
 
 # GPU
 bash install-gpu.sh
@@ -429,5 +429,5 @@ via the folder or pickle importer instead.
 
 **Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-bash install-plugin-deps.sh && pip install -r requirements.txt && pip install --no-deps -e .
+bash install-cpu.sh
 ```

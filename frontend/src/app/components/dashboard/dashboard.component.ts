@@ -2,7 +2,7 @@ import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
-import { catchError, takeUntil, switchMap } from 'rxjs/operators';
+import { catchError, filter, take, takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
@@ -74,6 +74,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   addLabelsModelId = '';
   trainLoading = false;
   findLoading = false;
+  trainAfterModelCreation = false;
 
   datasetSortColumn = 'name';
   datasetSortAsc = true;
@@ -704,16 +705,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeNewModelModal(): void {
     this.newModelModalOpen = false;
     this.newModelClosing = true;
+    this.trainAfterModelCreation = false;
   }
 
   onNewModelAnimationEnd(): void {
     this.newModelClosing = false;
   }
 
-  onModelCreated(): void {
+  onModelCreated(modelId?: string): void {
     this.newModelModalOpen = false;
     this.newModelClosing = true;
     this.datasetState.refresh();
+
+    if (this.trainAfterModelCreation && modelId) {
+      this.trainAfterModelCreation = false;
+      // Select the newly created model and proceed to training once models list is refreshed
+      this.selectedModelIds.clear();
+      this.selectedModelIds.add(modelId);
+      this.knownModelIds.add(modelId);
+      this.datasetState.models$
+        .pipe(
+          filter((models) => models.some((m) => m.id === modelId)),
+          take(1),
+          takeUntil(this.destroy$),
+        )
+        .subscribe(() => this.onLabel());
+    }
   }
 
   // --- Cancel ---
@@ -929,7 +946,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get labelEnabled(): boolean {
     const selectedDatasets = this.resolvedSelectedDatasets;
     const selectedModels = this.resolvedSelectedModels;
-    if (selectedDatasets.length !== 1 || selectedModels.length !== 1) return false;
+    if (selectedDatasets.length !== 1) return false;
+    if (selectedModels.length === 0) return true; // will prompt to create a model
+    if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
     if (!model.trainable) return false;
     if (model.media_type !== selectedDatasets[0].media_type) return false;
@@ -979,7 +998,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const nModels = this.resolvedSelectedModels.length;
     if (nDatasets === 0) return 'Select a dataset';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
-    if (nModels === 0) return 'Select a model';
+    if (nModels === 0) return 'Create a new model and start training';
     if (nModels > 1) return 'Select exactly 1 model';
     const model = this.resolvedSelectedModels[0];
     if (model && !model.trainable) return 'Model is not trainable';
@@ -1003,6 +1022,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!dataset) return;
 
     const modelId = [...this.selectedModelIds][0] || null;
+    if (!modelId) {
+      // No model selected — open the New Model modal; on creation we'll proceed to training
+      this.trainAfterModelCreation = true;
+      this.openNewModelModal();
+      return;
+    }
     const model = modelId ? this.models.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();

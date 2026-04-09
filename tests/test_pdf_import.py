@@ -2,10 +2,10 @@
 
 These tests verify:
 - render_pdf_pages converts PDF pages into PIL Images with correct naming
-- Folder importer picks up PDFs when media_type is "images"
+- Folder importer picks up PDFs when media_type is "image"
 - PDF-derived medias have origin {"importer": "pdf", ...}
 - PDF-only folders work (no regular image files present)
-- PDFs are ignored when media_type is not "images"
+- PDFs are ignored when media_type is not "image"
 - Thin mode stores no media_bytes for PDF pages
 """
 
@@ -107,7 +107,7 @@ class TestFolderImporterPdf:
     def _make_fake_image_media_type(self):
         mt = mock.MagicMock()
         mt.type_id = "image"
-        mt.folder_import_name = "images"
+        mt.folder_import_name = "image"
         mt.file_extensions = ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"]
         mt.load_media_data.return_value = {"media_bytes": b"fake", "duration": 0, "width": 100, "height": 100}
         return mt
@@ -143,7 +143,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         # 1 regular image + 2 PDF pages = 3 total
         assert len(medias) == 3
@@ -161,7 +161,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["origin"] and m["origin"]["importer"] == "pdf"]
         assert len(pdf_medias) == 1
@@ -180,7 +180,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         pdf_names = sorted(m["filename"] for m in medias.values() if m["filename"].startswith("slides.pdf-"))
         assert pdf_names == ["slides.pdf-1", "slides.pdf-2", "slides.pdf-3"]
@@ -197,7 +197,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         assert len(medias) == 2
 
@@ -206,11 +206,11 @@ class TestFolderImporterPdf:
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        # _load_pdf_images is only called when media_type == "images",
+        # _load_pdf_images is only called when media_type == "image",
         # so verify the folder importer run method doesn't call it for sounds
         mt = mock.MagicMock()
         mt.type_id = "audio"
-        mt.folder_import_name = "sounds"
+        mt.folder_import_name = "audio"
         mt.file_extensions = ["*.wav"]
         mt.embed_media.return_value = np.zeros(512)
         mt.load_media_data.return_value = {"duration": 1.0}
@@ -232,7 +232,7 @@ class TestFolderImporterPdf:
 
         medias: dict = {}
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "sounds"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         # Only the WAV should be loaded, not the PDF
         assert len(medias) == 1
@@ -249,7 +249,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias, thin=True)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias, thin=True)
 
         pdf_medias = [m for m in medias.values() if m["filename"].endswith(".pdf-1")]
         assert len(pdf_medias) == 1
@@ -267,7 +267,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
         assert all(m["type"] == "image" for m in pdf_medias)
@@ -283,7 +283,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
         assert len(pdf_medias) == 1
@@ -303,7 +303,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
         assert len(pdf_medias) == 1
@@ -320,7 +320,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         # 2 + 3 = 5 pages total
         assert len(medias) == 5
@@ -335,7 +335,7 @@ class TestFolderImporterPdf:
         medias: dict = {}
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "images"}, medias)
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
 
         m = list(medias.values())[0]
         assert m["origin_name"] == m["filename"]
@@ -348,7 +348,7 @@ class TestPdfSymlinkDiscovery:
     def _make_fake_image_media_type(self):
         mt = mock.MagicMock()
         mt.type_id = "image"
-        mt.folder_import_name = "images"
+        mt.folder_import_name = "image"
         mt.file_extensions = ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"]
         mt.load_media_data.return_value = {"media_bytes": b"fake", "duration": 0, "width": 100, "height": 100}
         return mt

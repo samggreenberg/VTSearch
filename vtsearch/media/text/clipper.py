@@ -19,6 +19,10 @@ class TextDefaultClipper(MediaClipper):
     def media_type(self) -> str:
         return "text"
 
+    @property
+    def description(self) -> str:
+        return "Import each text entry as-is, without splitting."
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]
 
@@ -42,6 +46,10 @@ class TextSentenceClipper(MediaClipper):
     @property
     def media_type(self) -> str:
         return "text"
+
+    @property
+    def description(self) -> str:
+        return "Split each text entry into individual sentences."
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         text = media.get("media_string") or ""

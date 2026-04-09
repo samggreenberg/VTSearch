@@ -1081,7 +1081,7 @@ class TestLoadModelCrossDatasetResolution:
 
         label_origin = {
             "importer": "folder",
-            "params": {"path": str(label_folder), "media_type": "sounds"},
+            "params": {"path": str(label_folder), "media_type": "audio"},
         }
 
         # Labelset entries with Dataset A origin info and DIFFERENT MD5s

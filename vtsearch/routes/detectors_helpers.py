@@ -1,7 +1,7 @@
 """Shared helpers for detector training routes.
 
 Consolidates the repeated train → calibrate → safe-threshold → serialise
-pipeline that appears in ``export_detector``, ``import_detector_labels``,
+pipeline that appears in ``import_detector_labels``,
 ``train_from_label_import``, and ``multi_find``.
 """
 

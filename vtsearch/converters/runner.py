@@ -54,8 +54,8 @@ def run_converters_on_folder(
     Args:
         folder_path: Root directory to scan.
         converter_names: List of converter names (e.g. ``["video2image"]``).
-        target_media_type: Folder-import alias of the target media type
-            (e.g. ``"images"``).
+        target_media_type: The target media type identifier
+            (e.g. ``"image"``).
         medias: The medias dict to append to (not cleared).
         thin: When ``True``, store converter output in a temp directory
             instead of holding bytes in memory.  Currently all converted

@@ -16,6 +16,7 @@ from vtsearch.media.base import (
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
     load_pretrained_local_first,
+    timed_progress,
 )
 
 if TYPE_CHECKING:
@@ -57,8 +58,11 @@ class ImageSiglipEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing image libraries…", 0, 0)
-        from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 2):
+            import torch  # noqa: F401, PLC0415
+
+        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 2):
+            from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading SigLIP model weights…")
         with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
@@ -94,7 +98,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
             "a picture of {text}",
         ]
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:

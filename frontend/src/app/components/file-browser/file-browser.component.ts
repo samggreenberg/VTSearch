@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileBrowserApiService, BrowseEntry } from '../../services/file-browser-api.service';
@@ -10,7 +10,7 @@ import { FileBrowserApiService, BrowseEntry } from '../../services/file-browser-
   templateUrl: './file-browser.component.html',
   styleUrl: './file-browser.component.scss',
 })
-export class FileBrowserComponent implements OnInit {
+export class FileBrowserComponent implements OnInit, OnChanges {
   /** Comma-separated extensions to filter files, e.g. ".csv,.json" */
   @Input() extensions = '';
 
@@ -38,6 +38,12 @@ export class FileBrowserComponent implements OnInit {
 
   ngOnInit(): void {
     this.inputValue = this.value;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['value']) {
+      this.inputValue = this.value;
+    }
   }
 
   /** Open the file browser panel and load the root directory. */

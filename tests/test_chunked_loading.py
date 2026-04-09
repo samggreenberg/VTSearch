@@ -95,7 +95,7 @@ class TestFolderChunked:
         """When total files < chunk_size, yields exactly one chunk."""
         _make_wav_file(tmp_path, "a.wav")
         _make_wav_file(tmp_path, "b.wav")
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
         assert len(chunks) == 1
         assert len(chunks[0]) == 2
 
@@ -103,7 +103,7 @@ class TestFolderChunked:
         """Files are split across multiple chunks of the correct size."""
         for i in range(5):
             _make_wav_file(tmp_path, f"file_{i}.wav", frequency=440.0 + i * 10)
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=2, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, thin=True))
         assert len(chunks) == 3  # 2, 2, 1
         assert len(chunks[0]) == 2
         assert len(chunks[1]) == 2
@@ -113,14 +113,14 @@ class TestFolderChunked:
         """Each chunk's media IDs start at 1 (not continuing from prior chunk)."""
         for i in range(4):
             _make_wav_file(tmp_path, f"file_{i}.wav", frequency=440.0 + i * 10)
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=2, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, thin=True))
         for chunk in chunks:
             assert 1 in chunk
 
     def test_thin_mode_no_bytes(self, tmp_path):
         """Thin mode: media_bytes is None, media_path is set."""
         _make_wav_file(tmp_path, "test.wav")
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
         media = chunks[0][1]
         assert media["media_bytes"] is None
         assert media["media_path"] is not None
@@ -129,14 +129,14 @@ class TestFolderChunked:
     def test_full_mode_has_bytes(self, tmp_path):
         """Full mode: media_bytes is populated."""
         _make_wav_file(tmp_path, "test.wav")
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=False))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=False))
         media = chunks[0][1]
         assert media["media_bytes"] is not None
 
     def test_embeddings_present(self, tmp_path):
         """Each media in a chunk has an embedding array."""
         _make_wav_file(tmp_path, "test.wav")
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
         media = chunks[0][1]
         assert isinstance(media["embedding"], np.ndarray)
         assert len(media["embedding"]) > 0
@@ -145,7 +145,7 @@ class TestFolderChunked:
         """The total number of medias across all chunks equals total files."""
         for i in range(7):
             _make_wav_file(tmp_path, f"f_{i}.wav", frequency=440.0 + i * 10)
-        chunks = list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=3, thin=True))
+        chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=3, thin=True))
         total_clips = sum(len(c) for c in chunks)
         assert total_clips == 7
 
@@ -156,12 +156,12 @@ class TestFolderChunked:
 
         # Monolithic
         mono_clips: dict[int, dict[str, Any]] = {}
-        load_dataset_from_folder(tmp_path, "sounds", mono_clips, thin=True)
+        load_dataset_from_folder(tmp_path, "audio", mono_clips, thin=True)
         mono_filenames = {c["filename"] for c in mono_clips.values()}
 
         # Chunked
         chunked_filenames: set[str] = set()
-        for chunk in load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=2, thin=True):
+        for chunk in load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, thin=True):
             for media in chunk.values():
                 chunked_filenames.add(media["filename"])
 
@@ -177,10 +177,10 @@ class TestFolderChunked:
 
     def test_empty_folder_raises(self, tmp_path):
         try:
-            list(load_dataset_from_folder_chunked(tmp_path, "sounds", chunk_size=10, thin=True))
+            list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
             assert False, "Expected ValueError"
         except ValueError as e:
-            assert "No sounds files found" in str(e)
+            assert "No audio files found" in str(e)
 
 
 # ======================================================================
@@ -462,7 +462,7 @@ class TestFolderImporterChunked:
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
         imp = FolderDatasetImporter()
-        chunks = list(imp.run_chunked({"path": str(tmp_path), "media_type": "sounds"}, chunk_size=2, thin=True))
+        chunks = list(imp.run_chunked({"path": str(tmp_path), "media_type": "audio"}, chunk_size=2, thin=True))
         assert len(chunks) == 2
         for chunk in chunks:
             assert len(chunk) == 2
@@ -472,7 +472,7 @@ class TestFolderImporterChunked:
         from vtsearch.datasets.importers.folder import FolderDatasetImporter
 
         imp = FolderDatasetImporter()
-        chunks = list(imp.run_chunked_cli({"path": str(tmp_path), "media_type": "sounds"}, chunk_size=10, thin=True))
+        chunks = list(imp.run_chunked_cli({"path": str(tmp_path), "media_type": "audio"}, chunk_size=10, thin=True))
         assert len(chunks) == 1
         assert len(chunks[0]) == 1
 
@@ -481,7 +481,7 @@ class TestFolderImporterChunked:
 
         imp = FolderDatasetImporter()
         try:
-            list(imp.run_chunked_cli({"path": "/nonexistent/path", "media_type": "sounds"}, chunk_size=10))
+            list(imp.run_chunked_cli({"path": "/nonexistent/path", "media_type": "audio"}, chunk_size=10))
             assert False, "Expected FileNotFoundError"
         except FileNotFoundError:
             pass

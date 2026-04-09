@@ -389,7 +389,7 @@ class TestResolveLabelEmbeddings:
         (folder / "good1.wav").write_bytes(b"good_audio")
         (folder / "bad1.wav").write_bytes(b"bad_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "sounds"}}
+        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
         labels = [
             {"label": "good", "origin": origin, "origin_name": "good1.wav", "md5": "aaa", "filename": "good1.wav"},
             {"label": "bad", "origin": origin, "origin_name": "bad1.wav", "md5": "bbb", "filename": "bad1.wav"},
@@ -411,7 +411,7 @@ class TestResolveLabelEmbeddings:
         folder.mkdir()
         (folder / "good1.wav").write_bytes(b"good_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "sounds"}}
+        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
         labels = [
             {"label": "good", "origin": origin, "origin_name": "good1.wav", "md5": "aaa", "filename": "good1.wav"},
             {"label": "bad", "origin": origin, "origin_name": "missing.wav", "md5": "bbb", "filename": "missing.wav"},
@@ -498,7 +498,7 @@ class TestMultiFindCrossDatasetFallback:
         )
 
         # Create a trainable model with labels from label_folder
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "sounds"}}
+        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "audio"}}
         from vtsearch.routes.trainable_models import _model_path, _write_model
 
         tm_name = "test_cross_detector"
@@ -918,7 +918,7 @@ class TestFindCheckLabels:
         (label_folder / "good.wav").write_bytes(b"good_audio")
         # bad.wav does NOT exist
 
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "sounds"}}
+        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "audio"}}
         tm_name = "test_cl_part"
         tm_data = {
             "name": "Part Model",

@@ -176,7 +176,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files contained in the archive.",
-            default="sounds",
+            default="audio",
         ),
     ]
 
@@ -206,7 +206,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
         validate_url(url)
-        media_type = field_values.get("media_type", "sounds")
+        media_type = field_values.get("media_type", "audio")
 
         DATA_DIR.mkdir(exist_ok=True)
 
@@ -228,12 +228,14 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         archive_path.unlink(missing_ok=True)
 
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             load_dataset_from_folder(
                 extract_dir, media_type, medias, on_progress=progress, thin=thin, embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
             # Run any user-selected converters on the extracted folder.
             _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
@@ -285,14 +287,16 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         from vtsearch.datasets.loader import load_dataset_from_folder_chunked
 
         extract_dir = self._download_and_extract(field_values)
-        media_type = field_values.get("media_type", "sounds")
+        media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
                 extract_dir, media_type, chunk_size, thin=thin, embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
             # Run converters on the extracted folder and yield as a chunk.
             converters_str = field_values.get("converters", "")

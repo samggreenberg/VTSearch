@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, forkJoin } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { DatasetRegistryEntry, LoadingTask, ModelRegistryEntry } from '../models/api.models';
 import { DatasetsApiService } from './datasets-api.service';
 import { TrainableModelsApiService } from './trainable-models-api.service';
@@ -14,6 +14,8 @@ export class DatasetStateService implements OnDestroy {
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
   private readonly errorMessageSubject = new BehaviorSubject<string>('');
   private readonly destroy$ = new Subject<void>();
+  /** Emits whenever a refresh is requested; switchMap ensures only the latest response is used. */
+  private readonly refreshTrigger$ = new Subject<void>();
 
   readonly datasets$ = this.datasetsSubject.asObservable();
   readonly models$ = this.modelsSubject.asObservable();
@@ -25,7 +27,27 @@ export class DatasetStateService implements OnDestroy {
   constructor(
     private datasetsApi: DatasetsApiService,
     private modelsApi: TrainableModelsApiService,
-  ) {}
+  ) {
+    // Single subscription that uses switchMap to cancel in-flight requests
+    // when a new refresh is triggered, preventing stale responses from
+    // overwriting fresh data.
+    this.refreshTrigger$
+      .pipe(
+        switchMap(() =>
+          forkJoin({
+            datasets: this.datasetsApi.getRegistry(),
+            models: this.modelsApi.getRegistry(),
+          }),
+        ),
+        takeUntil(this.destroy$),
+      )
+      .subscribe({
+        next: ({ datasets, models }) => {
+          this.datasetsSubject.next(datasets.datasets || []);
+          this.modelsSubject.next(models.models || []);
+        },
+      });
+  }
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -73,17 +95,7 @@ export class DatasetStateService implements OnDestroy {
   }
 
   refresh(): void {
-    forkJoin({
-      datasets: this.datasetsApi.getRegistry(),
-      models: this.modelsApi.getRegistry(),
-    })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: ({ datasets, models }) => {
-          this.datasetsSubject.next(datasets.datasets || []);
-          this.modelsSubject.next(models.models || []);
-        },
-      });
+    this.refreshTrigger$.next();
   }
 
   clear(): void {

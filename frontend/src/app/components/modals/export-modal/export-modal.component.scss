@@ -163,7 +163,7 @@
 
   &.active {
     color: var(--text-primary);
-    border-bottom-color: var(--color-accent, #4a90d9);
+    border-bottom-color: var(--color-accent);
     font-weight: 600;
   }
 }

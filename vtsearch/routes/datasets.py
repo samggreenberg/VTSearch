@@ -26,6 +26,7 @@ from vtsearch.datasets.registry import (
     get_loaded_ids as _reg_loaded_ids,
     is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
+    list_datasets as _reg_list_all,
     list_datasets_for_user as _reg_list_for_user,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
@@ -262,6 +263,18 @@ def dataset_importers():
 def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
     all_importers = [imp.to_dict() for imp in list_importers()]
+
+    # Annotate combine_datasets with an enabled flag: requires 2+ saved
+    # datasets sharing the same media type.
+    from collections import Counter
+
+    type_counts = Counter(e.get("media_type") for e in _reg_list_all())
+    can_combine = any(c >= 2 for c in type_counts.values())
+    for imp_dict in all_importers:
+        if imp_dict["name"] == "combine_datasets":
+            imp_dict["enabled"] = can_combine
+            break
+
     return jsonify({"importers": all_importers})
 
 
@@ -559,7 +572,7 @@ def load_dataset_folder():
         return data
 
     folder_path = data.get("path")
-    media_type = data.get("media_type", "sounds")  # Default to sounds for backward compatibility
+    media_type = data.get("media_type", "audio")  # Default to audio
 
     if not folder_path:
         return jsonify({"error": "No folder path provided"}), 400
@@ -719,8 +732,17 @@ def load_registered_dataset(dataset_id: str):
                 clear_thread_progress()
 
             tracker.check_cancelled()
-            tracker.update("loading", "Removing duplicates…", 0, 0, step=2, total_steps=_LOAD_STEPS)
-            collapse_duplicates(ctx.medias)
+
+            def _dedup_progress(current: int, total: int) -> None:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Removing duplicates…",
+                    current=current, total=total,
+                    step=2, total_steps=_LOAD_STEPS,
+                )
+
+            _dedup_progress(0, 0)
+            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()

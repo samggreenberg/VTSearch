@@ -20,6 +20,10 @@ class ImageDefaultClipper(MediaClipper):
     def media_type(self) -> str:
         return "image"
 
+    @property
+    def description(self) -> str:
+        return "Import each image as-is, without splitting."
+
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         return [media]
 
@@ -43,6 +47,10 @@ class ImageTilingClipper(MediaClipper):
     @property
     def media_type(self) -> str:
         return "image"
+
+    @property
+    def description(self) -> str:
+        return "Tile each image into equidistant square crops along the longer axis."
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         from PIL import Image  # noqa: PLC0415

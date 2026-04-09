@@ -122,7 +122,7 @@
 
   &:hover:not(:disabled) {
     background: var(--color-good);
-    color: #fff;
+    color: var(--btn-filled-text);
   }
 
   &:disabled {
@@ -156,7 +156,7 @@
 
   &:hover:not(:disabled) {
     background: var(--color-bad);
-    color: #fff;
+    color: var(--btn-filled-text);
   }
 
   &:disabled {

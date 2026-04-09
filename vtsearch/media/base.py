@@ -51,7 +51,27 @@ __all__ = [
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
     "load_pretrained_local_first",
+    "timed_progress",
 ]
+
+
+def _fetch_media_url(url: str) -> bytes | None:
+    """Fetch binary content from a ``media_url``.
+
+    Used by :meth:`MediaType._resolve_media_bytes` and
+    :meth:`MediaType._resolve_media_string` as a last-resort fallback when
+    neither ``media_bytes`` nor ``media_path`` are available (e.g. for
+    URL-backed media from PullWrest).
+    """
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+            return resp.read()
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning("Failed to fetch media_url: %s", url, exc_info=True)
+        return None
 
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
@@ -82,6 +102,44 @@ def extract_tensor(output: object):
             return val
     # Final fallback: treat as tuple-like and return first element
     return output[0]  # type: ignore[index]
+
+
+@contextlib.contextmanager
+def timed_progress(
+    on_progress: ProgressCallback,
+    status: str,
+    message: str,
+    current: int = 0,
+    total: int = 0,
+) -> Any:
+    """Show elapsed time in the progress message while a block executes.
+
+    Wraps a long-running blocking operation (typically a heavy ``import``)
+    so that the progress callback is updated every second with an elapsed-
+    time suffix, e.g. ``"Importing torch… (3s)"``.  This prevents the UI
+    from appearing frozen during operations that cannot report incremental
+    progress themselves.
+
+    The initial progress update is sent immediately (without a time suffix).
+    After the first second the background ticker appends ``(1s)``, ``(2s)``,
+    etc. until the ``with`` block exits.
+    """
+    stop = threading.Event()
+
+    def _ticker() -> None:
+        start = time.monotonic()
+        while not stop.wait(timeout=1.0):
+            elapsed = int(time.monotonic() - start)
+            on_progress(status, f"{message} ({elapsed}s)", current, total)
+
+    on_progress(status, message, current, total)
+    t = threading.Thread(target=_ticker, daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        t.join(timeout=2)
 
 
 def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
@@ -389,6 +447,14 @@ class MediaEmbedder(ABC):
 
     _model_load_lock: threading.Lock
 
+    # Global lock that serialises all ``embed_media`` calls across every
+    # embedder type.  Without this, concurrent dataset imports each run
+    # PyTorch forward passes in parallel on the same (singleton) model,
+    # which is not thread-safe and causes massive memory spikes — enough
+    # to push a 16 GB machine into swap-thrash and freeze the entire
+    # process (including Flask and signal handling).
+    _embed_lock = threading.Lock()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         # Each concrete embedder class gets its own lock so that concurrent
@@ -458,11 +524,23 @@ class MediaEmbedder(ABC):
     # Embedding
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
         """Return a fixed-size embedding vector for the media file at *file_path*.
 
+        Acquires :attr:`_embed_lock` so that only one forward pass runs at a
+        time across all embedder types.  Subclasses must override
+        :meth:`_embed_media_impl` (not this method).
+
         Returns ``None`` if the file cannot be embedded.
+        """
+        with self._embed_lock:
+            return self._embed_media_impl(file_path)
+
+    @abstractmethod
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+        """Subclass hook: embed a single media file.
+
+        Override this instead of :meth:`embed_media`.
         """
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -643,8 +721,8 @@ class MediaType(ABC):
     def folder_import_name(self) -> str:
         """Alias used by the ``/api/dataset/load-folder`` endpoint.
 
-        Defaults to :attr:`type_id`.  Override if your type uses a legacy
-        plural name (e.g. ``"sounds"``, ``"videos"``).
+        Defaults to :attr:`type_id`.  Legacy plural names (e.g. ``"sounds"``,
+        ``"videos"``) are accepted via the alias map in ``vtsearch.media``.
         """
         return self.type_id
 
@@ -709,6 +787,19 @@ class MediaType(ABC):
         fs = media.get("file_size")
         if fs:
             result["File Size"] = fs
+        # Clip boundary fields — present only on clipped sub-medias.
+        cs = media.get("clip_start")
+        if cs is not None:
+            result["Clip Start"] = cs
+        ce = media.get("clip_end")
+        if ce is not None:
+            result["Clip End"] = ce
+        cb = media.get("clip_box")
+        if cb is not None:
+            result["Clip Box"] = ",".join(str(v) for v in cb)
+        ci = media.get("clip_index")
+        if ci is not None:
+            result["Clip Index"] = ci
         return result
 
     # ------------------------------------------------------------------
@@ -828,12 +919,13 @@ class MediaType(ABC):
     # ------------------------------------------------------------------
 
     def _resolve_media_bytes(self, media: dict) -> bytes | None:
-        """Return binary media data, lazy-loading from ``media_path`` if needed.
+        """Return binary media data, lazy-loading from path or URL.
 
-        In thin mode, ``media_bytes`` is ``None`` but ``media_path`` points to
-        the source file on disk.  This helper transparently loads the bytes on
-        demand so that :meth:`media_response` works regardless of how the media
-        was loaded.
+        Resolution order:
+
+        1. ``media_bytes`` — already in memory.
+        2. ``media_path`` — local file on disk (thin mode).
+        3. ``media_url`` — remote URL (URL-backed media, e.g. PullWrest).
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
@@ -844,13 +936,16 @@ class MediaType(ABC):
             if path.exists():
                 with open(path, "rb") as f:
                     return f.read()
+        media_url = media.get("media_url")
+        if media_url:
+            return _fetch_media_url(media_url)
         return None
 
     def _resolve_media_string(self, media: dict) -> str:
-        """Return text content, lazy-loading from ``media_path`` if needed.
+        """Return text content, lazy-loading from path or URL.
 
-        Same lazy-loading pattern as :meth:`_resolve_media_bytes` but for
-        text media types that store ``media_string`` instead of ``media_bytes``.
+        Same resolution order as :meth:`_resolve_media_bytes` but for text
+        media types that store ``media_string`` instead of ``media_bytes``.
         """
         media_string = media.get("media_string")
         if media_string is not None:
@@ -861,6 +956,11 @@ class MediaType(ABC):
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read().strip()
+        media_url = media.get("media_url")
+        if media_url:
+            data = _fetch_media_url(media_url)
+            if data is not None:
+                return data.decode("utf-8", errors="replace").strip()
         return ""
 
     # ------------------------------------------------------------------
@@ -1186,11 +1286,21 @@ class MediaClipper(ABC):
     def display_name(self) -> str:
         """Human-readable name for UI dropdowns.
 
-        Defaults to title-casing the :attr:`name` with underscores replaced
-        by spaces (e.g. ``"sound_tiling"`` → ``"Sound Tiling"``).  Subclasses
-        may override for a custom label.
+        Strips the media-type prefix before the first underscore and
+        title-cases the remainder (e.g. ``"sound_tiling"`` → ``"Tiling"``).
+        Subclasses may override for a custom label.
         """
-        return self.name.replace("_", " ").title()
+        _, _, suffix = self.name.partition("_")
+        return suffix.replace("_", " ").title() if suffix else self.name.title()
+
+    @property
+    def description(self) -> str:
+        """Short tooltip description shown on hover in the clipper chooser.
+
+        Subclasses should override to provide a brief explanation of what
+        the clipper does.  Defaults to an empty string.
+        """
+        return ""
 
     # ------------------------------------------------------------------
     # Parameters
@@ -1211,6 +1321,26 @@ class MediaClipper(ABC):
         Clippers with no configurable parameters return ``[]`` (the default).
         """
         return []
+
+    @property
+    def creation_questions(self) -> list[dict[str, Any]]:
+        """Return a list of questions to present when the user chooses this clipper.
+
+        Each question is a dict with the same schema as :attr:`parameters`
+        descriptors:
+
+        * ``key`` — parameter name (used in :meth:`with_params`).
+        * ``label`` — human-readable label / question for the UI.
+        * ``type`` — ``"number"`` or ``"string"``.
+        * ``default`` — current/default value.
+        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+
+        By default this returns :attr:`parameters`, so any clipper that
+        already declares parameters automatically exposes them as creation
+        questions.  Subclasses may override to present a different (richer
+        or reduced) set of questions at creation time.
+        """
+        return self.parameters
 
     def with_params(self, params: dict[str, Any]) -> "MediaClipper":
         """Return a **new** clipper of the same type with overridden parameters.
@@ -1252,7 +1382,13 @@ class MediaClipper(ABC):
             "display_name": self.display_name,
             "media_type": self.media_type,
         }
+        desc = self.description
+        if desc:
+            d["description"] = desc
         params = self.parameters
         if params:
             d["parameters"] = params
+        cq = self.creation_questions
+        if cq:
+            d["creation_questions"] = cq
         return d

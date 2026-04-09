@@ -114,7 +114,7 @@ class TestDocumentMediaType:
 
     def test_folder_import_name(self):
         mt = DocumentMediaType()
-        assert mt.folder_import_name == "documents"
+        assert mt.folder_import_name == "document"
 
     def test_loops_false(self):
         mt = DocumentMediaType()
@@ -194,7 +194,7 @@ class TestDocumentRegistration:
     def test_get_by_folder_name(self):
         from vtsearch.media import get_by_folder_name
 
-        mt = get_by_folder_name("documents")
+        mt = get_by_folder_name("document")
         assert mt.type_id == "document"
 
 
@@ -515,7 +515,7 @@ class TestFolderImporterDocumentsOption:
 
         importer = FolderDatasetImporter()
         media_type_field = next(f for f in importer.fields if f.key == "media_type")
-        assert "documents" in media_type_field.options
+        assert "document" in media_type_field.options
 
 
 # ===========================================================================
@@ -579,7 +579,7 @@ class TestConvertersAPISourceFilter:
         assert "document2image" not in names
 
     def test_converters_filter_by_source_folder_name(self, client):
-        resp = client.get("/api/converters?source=videos")
+        resp = client.get("/api/converters?source=video")
         data = resp.get_json()
         names = [c["name"] for c in data["converters"]]
         assert "video2image" in names

@@ -1,6 +1,6 @@
 """Local-folder importer – scans a directory of media files and embeds them.
 
-When the media type is ``"images"``, PDF files (``*.pdf``) in the folder are
+When the media type is ``"image"``, PDF files (``*.pdf``) in the folder are
 also included: each page is rendered as a separate image and embedded with
 CLIP.  The origin for PDF-derived images is ``"pdf"`` (not ``"folder"``) so
 that provenance tracks back to the original document.
@@ -46,7 +46,7 @@ def _load_pdf_images(
     from vtsearch.datasets.pdf import render_pdf_pages  # noqa: PLC0415
     from vtsearch.media import embedders_for_type, get_by_folder_name, get_embedder  # noqa: PLC0415
 
-    mt = get_by_folder_name("images")
+    mt = get_by_folder_name("image")
 
     # Resolve the embedder
     emb = None
@@ -149,7 +149,7 @@ class FolderDatasetImporter(DatasetImporter):
     The user supplies an absolute filesystem path and selects the media type
     so that the correct file extensions are matched during the scan.
 
-    When the media type is ``"images"``, any ``*.pdf`` files in the folder
+    When the media type is ``"image"``, any ``*.pdf`` files in the folder
     are also processed: each page is rendered as a separate image.
 
     When converters are selected (via the ``converters`` field value), files
@@ -167,7 +167,7 @@ class FolderDatasetImporter(DatasetImporter):
             label="Media Type",
             field_type="select",
             description="Type of media files to scan for in the folder.",
-            default="sounds",
+            default="audio",
         ),
         ImporterField(
             key="path",
@@ -205,8 +205,9 @@ class FolderDatasetImporter(DatasetImporter):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
-        media_type = field_values.get("media_type", "sounds")
+        media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         has_regular = True
         try:
             load_dataset_from_folder(
@@ -214,13 +215,14 @@ class FolderDatasetImporter(DatasetImporter):
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
-            if media_type != "images" and not field_values.get("converters"):
+            if media_type != "image" and not field_values.get("converters"):
                 raise
             has_regular = False
-        if media_type == "images":
+        if media_type == "image":
             _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name)
 
         # Run any user-selected converters.
@@ -245,19 +247,21 @@ class FolderDatasetImporter(DatasetImporter):
         self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
-        media_type = field_values.get("media_type", "sounds")
+        media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
                 folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
             )
         except ValueError:
-            if media_type != "images" and not field_values.get("converters"):
+            if media_type != "image" and not field_values.get("converters"):
                 raise
-        if media_type == "images":
+        if media_type == "image":
             chunk: dict[int, dict[str, Any]] = {}
             _load_pdf_images(folder, chunk, thin=thin)
             if chunk:

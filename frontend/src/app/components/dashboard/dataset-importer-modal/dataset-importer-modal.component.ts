@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
+import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
@@ -12,7 +13,7 @@ type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent, ClipperChooserComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -86,6 +87,12 @@ export class DatasetImporterModalComponent implements OnInit {
   sfClipperParams: ClipperParameter[] = [];
   sfClipperParamValues: Record<string, number | string> = {};
   sfSubmitting = false;
+
+  // Clipper chooser modal state
+  clipperChooserOpen = false;
+  /** Which context opened the chooser: 'form' | 'demo' | 'sf' */
+  clipperChooserContext: 'form' | 'demo' | 'sf' = 'form';
+  clipperChooserClippers: ClipperInfo[] = [];
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -616,7 +623,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (guessedFolder && this.sfMediaTypeOptions.includes(guessedFolder)) {
       this.sfMediaType = guessedFolder;
     } else {
-      this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'sounds';
+      this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'audio';
     }
 
     this.sfLoadEmbedders(this.sfMediaType);
@@ -719,6 +726,76 @@ export class DatasetImporterModalComponent implements OnInit {
     for (const param of this.sfClipperParams) {
       this.sfClipperParamValues[param.key] = param.default;
     }
+  }
+
+  // --- Clipper chooser ---
+
+  openClipperChooser(context: 'form' | 'demo' | 'sf'): void {
+    this.clipperChooserContext = context;
+    if (context === 'form') {
+      this.clipperChooserClippers = this.availableClippers;
+    } else if (context === 'demo') {
+      this.clipperChooserClippers = this.demoClippers;
+    } else {
+      this.clipperChooserClippers = this.sfClippers;
+    }
+    this.clipperChooserOpen = true;
+  }
+
+  onClipperChooserSelected(selection: ClipperSelection): void {
+    this.clipperChooserOpen = false;
+    const ctx = this.clipperChooserContext;
+    if (ctx === 'form') {
+      this.selectedClipper = selection.name;
+      this.clipperParamValues = { ...selection.params };
+    } else if (ctx === 'demo') {
+      this.selectedDemoClipper = selection.name;
+      this.updateDemoStatuses();
+      this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
+    } else {
+      this.sfSelectedClipper = selection.name;
+      this.sfClipperParamValues = { ...selection.params };
+    }
+  }
+
+  onClipperChooserCancelled(): void {
+    this.clipperChooserOpen = false;
+    // Cancel returns the default clipper for the media type
+    const ctx = this.clipperChooserContext;
+    const clippers = this.clipperChooserClippers;
+    const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
+    const defaultName = defaultClipper?.name || '';
+    if (ctx === 'form') {
+      this.selectedClipper = defaultName;
+      this.resetClipperParams();
+    } else if (ctx === 'demo') {
+      this.selectedDemoClipper = defaultName;
+      this.updateDemoStatuses();
+      this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
+    } else {
+      this.sfSelectedClipper = defaultName;
+      this.sfResetClipperParams();
+    }
+  }
+
+  /** Display name for the currently selected clipper in a given context. */
+  clipperDisplayName(context: 'form' | 'demo' | 'sf'): string {
+    let clippers: ClipperInfo[];
+    let selected: string;
+    if (context === 'form') {
+      clippers = this.availableClippers;
+      selected = this.selectedClipper;
+    } else if (context === 'demo') {
+      clippers = this.demoClippers;
+      selected = this.selectedDemoClipper;
+    } else {
+      clippers = this.sfClippers;
+      selected = this.sfSelectedClipper;
+    }
+    const clipper = clippers.find((c) => c.name === selected);
+    if (!clipper) return 'None';
+    if (clipper.name.endsWith('_default')) return 'None';
+    return clipper.display_name || clipper.name;
   }
 
   sfSubmit(): void {

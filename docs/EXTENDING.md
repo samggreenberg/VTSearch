@@ -11,11 +11,16 @@ discovery/registration works, and includes a complete example.
   - [Results Exporters](#adding-a-results-exporter)
   - [Label Importers](#adding-a-label-importer)
   - [Processor Importers](#adding-a-processor-importer)
+  - [Settings Importers](#adding-a-settings-importer)
+  - [Settings Exporters](#adding-a-settings-exporter)
+  - [Settings Sources](#adding-a-settings-source)
+  - [Labelset Sources](#adding-a-labelset-source)
 - [Media system](#media-system) (explicit registration)
   - [Media Types](#adding-a-media-type)
   - [Media Embedders](#adding-a-media-embedder)
   - [Media Clippers](#adding-a-media-clipper)
   - [Media Converters](#adding-a-media-converter)
+  - [Media Sources](#adding-a-media-source)
 - [Processor system](#processor-system) (Detectors, Localizers, Extractors)
   - [Detectors](#adding-a-detector)
   - [Localizers](#adding-a-localizer)
@@ -28,10 +33,11 @@ discovery/registration works, and includes a complete example.
 
 ## Shared Plugin Architecture
 
-Eight plugin systems — data importers, results exporters, label
+Ten plugin systems — data importers, results exporters, label
 importers, processor importers, settings importers, settings exporters,
-settings sources, and labelset sources — share the same architecture
-built on two base classes in `vtsearch/utils/registry.py`:
+settings sources, labelset sources, media converters, and media
+sources — share the same architecture built on two base classes in
+`vtsearch/utils/registry.py`:
 
 ### PluginField
 
@@ -161,7 +167,7 @@ class S3Importer(DatasetImporter):
             label="Media Type",
             field_type="select",
             options=all_folder_names(),
-            default="sounds",
+            default="audio",
         ),
     ]
 
@@ -184,7 +190,7 @@ class S3Importer(DatasetImporter):
 
         bucket = field_values["bucket"]
         prefix = field_values.get("prefix", "")
-        media_type = field_values.get("media_type", "sounds")
+        media_type = field_values.get("media_type", "audio")
 
         download_dir = DATA_DIR / "s3_import"
         download_dir.mkdir(parents=True, exist_ok=True)
@@ -257,7 +263,66 @@ Importers can attach arbitrary per-media display metadata by setting
 `media["custom_metadata"]` to a `dict[str, Any]`. For example:
 `{"Uploaded By": "alice", "Bucket": "my-data"}`. These fields are merged
 with the media type's built-in display fields and rendered in the labeling
-UI.
+UI.  When `enrich=true` is used on `GET /api/labels/export`, both
+`custom_metadata` **and** `origin.params` are flattened into the per-entry
+`custom_metadata` and `available_columns`, making fields like `contentID`
+or `mediaID` selectable export columns.
+
+### URL-backed media (`media_url`)
+
+For importers that fetch media from a remote service (e.g. PullWrest),
+set `media["media_url"]` to the URL of the media file.  The lazy-loading
+system (`_resolve_media_bytes` / `_resolve_media_string`) resolves media
+in this priority order:
+
+1. `media_bytes` / `media_string` — already in memory.
+2. `media_path` — local file on disk (thin mode with local files).
+3. `media_url` — remote URL (fetched on demand).
+
+In thin mode, URL-backed importers can skip downloading entirely: set
+`media_bytes=None`, `media_path=None`, and `media_url="https://..."`.
+Embeddings and MD5 can come from external services, so sorting and scoring
+work without ever downloading the actual media.  Bytes are fetched lazily
+only when the UI needs to display or play the media.
+
+### Direct media dict construction
+
+Most importers delegate to `load_dataset_from_folder()` after downloading
+files to a local directory.  However, importers whose data comes from
+API calls (not files on disk) can build media dicts directly in `run()`:
+
+```python
+def run(self, field_values, medias, thin=False):
+    for i, item in enumerate(api_results, start=1):
+        medias[i] = {
+            "id": i,
+            "type": "audio",
+            "filename": item["id"],
+            "md5": item["md5"],                  # pre-computed by the service
+            "embedding": item["embedding"],      # pre-computed by the service
+            "embedder": item["embedder_name"],   # must match a VTSearch embedder
+            "media_bytes": data if not thin else None,
+            "media_path": None,
+            "media_url": item["url"],            # URL-based lazy-fetch fallback
+            "media_string": None,
+            "file_size": len(data) if data else 0,
+            "duration": 0,
+            "category": "",
+            "origin": {                          # per-media origin (not dataset-level)
+                "importer": self.name,
+                "params": {"contentID": item["id"], ...},
+            },
+            "origin_name": item["id"],
+            "custom_metadata": {"contentID": item["id"], ...},
+        }
+```
+
+When building dicts directly, the importer should also override
+`build_origin()` to return an empty origin (since the default
+implementation captures dataset-level field values like query IDs that
+are not useful per-media).  The post-processing step only backfills
+`origin` on media that have `origin=None`, so per-media origins set
+in `run()` are preserved.
 
 ### How it gets invoked
 
@@ -281,7 +346,7 @@ Importers are automatically usable from the command line:
 
 ```bash
 python app.py --autodetect --importer s3 --bucket my-data --prefix audio/ \
-    --media-type sounds --settings settings.json
+    --media-type audio --settings settings.json
 ```
 
 CLI arguments are auto-generated from `fields`. Override `run_cli()` if
@@ -297,8 +362,18 @@ The next `pip install -r requirements.txt` will pick them up.
 
 ## Adding a Results Exporter
 
-Results exporters deliver autodetect results to a destination (file,
-webhook, email, etc.). Auto-discovered — no changes to routes needed.
+Results exporters deliver autodetect results **or labels** to a destination
+(file, webhook, email, Holder, etc.).  Auto-discovered — no changes to
+routes needed.
+
+Exporters receive **two possible result formats** and should detect which:
+
+- **Auto-detect results**: `{"media_type": "audio", "results": {...}}`
+- **Labels**: `{"labels": [...], "selected_columns": [...]}` (from the
+  label export flow with `enrich=true`)
+
+Check `if "labels" in results` to distinguish them.  The built-in
+CSV/JSON/webhook exporters handle both formats.
 
 ### File structure
 
@@ -414,11 +489,11 @@ python app.py --autodetect --dataset data.pkl --settings settings.json \
 In addition to the exporter plugin system, VTSearch has built-in export
 endpoints:
 
-| Endpoint                  | Method | What it exports                           | Format          |
-|---------------------------|--------|-------------------------------------------|-----------------|
-| `/api/dataset/export`     | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
-| `/api/labels/export`      | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/detector/export`    | POST   | Trained MLP weights + threshold            | JSON            |
+| Endpoint                       | Method | What it exports                           | Format          |
+|--------------------------------|--------|-------------------------------------------|-----------------|
+| `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
+| `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
+| `/api/detector/export-server`  | POST   | Detector origins + inclusion to server file| JSON            |
 
 ### Wiring up dependencies
 
@@ -552,10 +627,13 @@ class S3ProcessorImporter(ProcessorImporter):
         """Download and parse a detector JSON from S3.
 
         Must return a dict with at minimum:
+            - "good_origins" (list): origin dicts for Good-labeled media
+            - "bad_origins" (list): origin dicts for Bad-labeled media
             - "media_type" (str): e.g. "audio", "image"
-            - "weights" (dict): MLP state dict as nested lists
-            - "threshold" (float): decision boundary in [0, 1]
         May also include:
+            - "inclusion" (int): inclusion bias from training
+            - "weights" (dict): pre-computed MLP weights (fallback)
+            - "threshold" (float): decision boundary in [0, 1]
             - "name" (str): suggested default name
         """
         import json
@@ -564,10 +642,17 @@ class S3ProcessorImporter(ProcessorImporter):
         s3 = boto3.client("s3")
         obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
         data = json.loads(obj["Body"].read())
+
+        from vtsearch.models.weights_compat import normalize_detector_weights
+
+        nw = normalize_detector_weights(data)
         return {
             "media_type": data.get("media_type", "audio"),
-            "weights": data["weights"],
-            "threshold": data.get("threshold", 0.5),
+            "good_origins": nw.good_origins,
+            "bad_origins": nw.bad_origins,
+            "inclusion": nw.inclusion,
+            "weights": nw.weights,
+            "threshold": nw.threshold,
         }
 
 
@@ -580,7 +665,7 @@ PROCESSOR_IMPORTER = S3ProcessorImporter()
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `run()` | `(field_values: dict) -> dict` | Return dict with `media_type`, `weights`, `threshold` |
+| `run()` | `(field_values: dict) -> dict` | Return dict with `good_origins`, `bad_origins`, `media_type`, `weights`, `threshold` |
 
 **Optional overrides:**
 
@@ -625,12 +710,167 @@ python app.py --autodetect --dataset data.pkl --settings settings.json
 
 ---
 
+## Adding a Settings Importer
+
+Settings importers let users import settings from external sources via
+a one-shot operation (as opposed to settings *sources*, which provide
+ongoing bidirectional sync). Auto-discovered at runtime.
+
+### File structure
+
+```
+vtsearch/settings_io/importers/<your_importer>/
+└── __init__.py       # Importer class + SETTINGS_IMPORTER instance (required)
+```
+
+### What to implement
+
+Subclass `SettingsImporter` from `vtsearch.settings_io.importers.base`.
+The `run()` method must return a dict of settings key-value pairs.
+
+```python
+# vtsearch/settings_io/importers/s3/__init__.py
+
+from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
+
+
+class S3SettingsImporter(SettingsImporter):
+    name = "s3"
+    display_name = "S3 Settings File"
+    description = "Import settings from an S3 object."
+    icon = "☁️"
+    fields = [
+        SettingsImporterField("bucket", "S3 Bucket", "text"),
+        SettingsImporterField("key", "Object Key", "text"),
+    ]
+
+    def run(self, field_values: dict) -> dict:
+        """Import settings from S3. Return a settings dict.
+
+        The returned dict is applied via the settings module's update
+        mechanism — only keys present in the dict are changed.
+        """
+        import boto3, json
+        s3 = boto3.client("s3")
+        obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
+        return json.loads(obj["Body"].read())
+
+
+SETTINGS_IMPORTER = S3SettingsImporter()
+```
+
+### SettingsImporter class reference
+
+**Required to implement:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `run()` | `(field_values: dict) -> dict[str, Any]` | Return settings key-value pairs to apply |
+
+**Default class attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `icon` | `"⚙️"` | Emoji shown in the UI |
+
+### How it gets invoked
+
+1. `GET /api/settings-importers` returns available importers.
+2. `POST /api/settings-importers/import/<name>` invokes `run()` and applies
+   the returned settings.
+
+---
+
+## Adding a Settings Exporter
+
+Settings exporters let users export the current app settings to an
+external destination (file download, remote server, etc.). Auto-discovered
+at runtime.
+
+### File structure
+
+```
+vtsearch/settings_io/exporters/<your_exporter>/
+└── __init__.py       # Exporter class + SETTINGS_EXPORTER instance (required)
+```
+
+### What to implement
+
+Subclass `SettingsExporter` from `vtsearch.settings_io.exporters.base`.
+The `export()` method receives the full settings dict and must return a
+dict with a `"message"` key.
+
+```python
+# vtsearch/settings_io/exporters/s3/__init__.py
+
+from vtsearch.settings_io.exporters.base import SettingsExporter, SettingsExporterField
+
+
+class S3SettingsExporter(SettingsExporter):
+    name = "s3"
+    display_name = "S3 Settings File"
+    description = "Export settings to an S3 object."
+    icon = "☁️"
+    fields = [
+        SettingsExporterField("bucket", "S3 Bucket", "text"),
+        SettingsExporterField("key", "Object Key", "text"),
+    ]
+
+    def export(self, settings_data: dict, field_values: dict) -> dict:
+        """Export settings to S3.
+
+        Args:
+            settings_data: The full settings dict from settings.get_all().
+            field_values: User-supplied field values.
+
+        Returns:
+            A dict with a "message" key (shown as confirmation).
+        """
+        import boto3, json
+        s3 = boto3.client("s3")
+        s3.put_object(
+            Bucket=field_values["bucket"],
+            Key=field_values["key"],
+            Body=json.dumps(settings_data, indent=2),
+        )
+        return {"message": f"Settings exported to s3://{field_values['bucket']}/{field_values['key']}"}
+
+
+SETTINGS_EXPORTER = S3SettingsExporter()
+```
+
+### SettingsExporter class reference
+
+**Required to implement:**
+
+| Member | Signature | Description |
+|--------|-----------|-------------|
+| `export()` | `(settings_data: dict, field_values: dict) -> dict` | Perform export; return dict with `"message"` key |
+
+**Default class attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `icon` | `"📤"` | Emoji shown in the UI |
+
+### How it gets invoked
+
+1. `GET /api/settings-exporters` returns available exporters.
+2. `POST /api/settings-exporters/export/<name>` invokes `export()` with
+   the current settings and user-supplied field values.
+
+---
+
 ## Adding a Settings Source
 
-Settings sources provide **bidirectional sync** — pairing a load (import)
-and save (export) behind a single plugin. When a source is active,
-changing any setting auto-exports to the source, and syncing pulls from
-the source back into the app.
+Settings sources provide **bidirectional sync** — combining the roles of
+a settings importer and exporter into a single plugin that stays
+connected. When a source is active, changing any setting auto-exports to
+the source, and syncing pulls from the source back into the app.
+
+Use a **Settings Importer** or **Settings Exporter** (above) for
+one-shot operations. Use a **Settings Source** when you want ongoing
+automatic sync.
 
 ### File structure
 
@@ -737,8 +977,12 @@ fallback.
 ## Adding a Labelset Source
 
 Labelset sources provide **bidirectional sync** for detector labels —
-each detector can link to a source that auto-exports labels on change
-and imports them on sync.
+combining the roles of a label importer and exporter into a single
+plugin. Each detector can link to a source that auto-exports labels on
+change and imports them on sync.
+
+Use a **Label Importer** (above) for one-shot label import. Use a
+**Labelset Source** when you want ongoing automatic sync per-detector.
 
 ### File structure
 
@@ -974,7 +1218,7 @@ changes to `vtsearch/media/__init__.py` are needed.
 
 | Property             | Returns     | Default            | Purpose                                   |
 |----------------------|-------------|--------------------|-------------------------------------------|
-| `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (e.g. `"sounds"`) |
+| `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
 | `tab_title`          | `str`       | `name + "s"`       | Plural name for UI tabs                    |
 | `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
 | `legacy_bytes_keys`  | `list[str]` | `[]`               | Legacy keys for inline bytes in old pickles |
@@ -1092,8 +1336,12 @@ class CodeBertEmbedder(MediaEmbedder):
 
     # --- Embedding (required abstract method) ---
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
         """Return a fixed-size embedding vector for the file.
+
+        Override ``_embed_media_impl`` (not ``embed_media``).
+        The public ``embed_media()`` wrapper acquires a global lock
+        so that only one forward pass runs at a time.
 
         Returns None if embedding fails. The vector dimensionality
         must be consistent and must match embed_text().
@@ -1196,16 +1444,16 @@ clippers return **new media dicts** that can replace the original.
 
 | Clipper | Name | Media Type | Description |
 |---------|------|------------|-------------|
-| `SoundDefaultClipper` | `sound_default` | `audio` | Returns audio unchanged |
-| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Tiles into 2s segments |
-| `ImageDefaultClipper` | `image_default` | `image` | Returns image unchanged |
-| `ImageTilingClipper` | `image_tiling` | `image` | Tiles tall images into squares |
-| `TextDefaultClipper` | `text_default` | `text` | Returns text unchanged |
-| `TextSentenceClipper` | `text_sentence` | `text` | Splits into individual sentences |
-| `VideoDefaultClipper` | `video_default` | `video` | Returns video unchanged |
-| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Tiles into 2s segments |
-| `VideoSceneClipper` | `video_scene` | `video` | Splits at detected scene boundaries |
-| `DocumentDefaultClipper` | `document_default` | `document` | Returns document unchanged |
+| `SoundDefaultClipper` | `sound_default` | `audio` | Import each audio file as-is, without splitting |
+| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Split each audio file into fixed-length overlapping segments |
+| `ImageDefaultClipper` | `image_default` | `image` | Import each image as-is, without splitting |
+| `ImageTilingClipper` | `image_tiling` | `image` | Tile each image into equidistant square crops along the longer axis |
+| `TextDefaultClipper` | `text_default` | `text` | Import each text entry as-is, without splitting |
+| `TextSentenceClipper` | `text_sentence` | `text` | Split each text entry into individual sentences |
+| `VideoDefaultClipper` | `video_default` | `video` | Import each video as-is, without splitting |
+| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Split each video into fixed-length overlapping segments |
+| `VideoSceneClipper` | `video_scene` | `video` | Automatically split each video at detected scene changes |
+| `DocumentDefaultClipper` | `document_default` | `document` | Import each document as-is, without splitting |
 
 ### What to implement
 
@@ -1233,6 +1481,11 @@ class SoundOverlapClipper(MediaClipper):
     def media_type(self) -> str:
         """The type_id this clipper operates on."""
         return "audio"
+
+    @property
+    def description(self) -> str:
+        """Short tooltip shown on hover in the clipper chooser UI."""
+        return "Tile audio with 50% overlap between consecutive segments."
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         """Split media into one or more media dicts of the same type.
@@ -1280,11 +1533,18 @@ CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(
 
 **Optional overridable methods/properties:**
 
-| Method/Property  | Signature / Returns      | Description                                              |
-|------------------|--------------------------|----------------------------------------------------------|
-| `to_dict()`      | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)  |
-| `parameters`     | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, etc.) |
-| `with_params(p)` | `(dict) -> MediaClipper` | Return new clipper with overridden parameters             |
+| Method/Property      | Signature / Returns      | Description                                                       |
+|----------------------|--------------------------|-------------------------------------------------------------------|
+| `display_name`       | `str`                    | Human-readable name for UI tabs (default: title-cased `name`)     |
+| `description`        | `str`                    | Short tooltip text shown on hover in the clipper chooser UI       |
+| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)           |
+| `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
+| `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
+| `with_params(p)`     | `(dict) -> MediaClipper` | Return new clipper with overridden parameters                     |
+
+Parameter dicts support an optional `description` key alongside `label`
+— this is shown as a tooltip when the user hovers over the setting in
+the clipper chooser dialog.
 
 ### Clip method contract
 
@@ -1411,6 +1671,130 @@ that expose a `CONVERTER` attribute. No manual registration in
 | Property | Returns | Description |
 |----------|---------|-------------|
 | `name`   | `str`   | Auto-generated as `"{source_type}2{target_type}"` |
+
+---
+
+## Adding a Media Source
+
+Media sources provide low-level access to media files at a location
+(local folder, HTTP archive, S3 bucket, etc.). They sit *below* dataset
+importers — importers that access file-like storage compose a
+`MediaSource` for single-file resolution and cross-dataset label
+re-ingestion.
+
+Sources are **stateful** (e.g. an archive source may download and extract
+on first access), so each call to `get_source_for_origin()` returns a
+fresh instance. Callers should call `cleanup()` when done.
+
+### File structure
+
+```
+vtsearch/datasets/sources/<your_source>/
+└── __init__.py       # Source factory + SOURCE instance (required)
+```
+
+### What to implement
+
+Unlike other plugin families, media sources use a **factory pattern**.
+The `SOURCE` sentinel is a factory object with a `create_from_origin()`
+method that returns a `MediaSource` instance.
+
+```python
+# vtsearch/datasets/sources/s3/__init__.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Iterator
+
+from vtsearch.datasets.sources.base import MediaItem, MediaSource
+
+
+class S3MediaSource(MediaSource):
+    """Access media files in an S3 bucket."""
+
+    name = "s3"
+
+    def __init__(self, bucket: str, prefix: str = "") -> None:
+        self._bucket = bucket
+        self._prefix = prefix
+
+    def list_items(self, extensions: list[str] | None = None) -> Iterator[MediaItem]:
+        """Yield all media items in the bucket (optionally filtered by extension)."""
+        import boto3
+        s3 = boto3.client("s3")
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=self._prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                filename = key.rsplit("/", 1)[-1]
+                if extensions and not any(filename.lower().endswith(e) for e in extensions):
+                    continue
+                yield MediaItem(key=key, filename=filename, source_name=self.name)
+
+    def fetch_item(self, key: str) -> Path | None:
+        """Download an item to a temp directory and return the local path."""
+        import boto3, tempfile
+        local = Path(tempfile.gettempdir()) / "vtsearch_s3" / key
+        local.parent.mkdir(parents=True, exist_ok=True)
+        if not local.exists():
+            boto3.client("s3").download_file(self._bucket, key, str(local))
+        return local
+
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
+        """Resolve a media file by origin_name or filename."""
+        for candidate in (origin_name, filename):
+            if candidate:
+                key = f"{self._prefix}{candidate}" if self._prefix else candidate
+                path = self.fetch_item(key)
+                if path and path.exists():
+                    return path
+        return None
+
+
+class _S3SourceFactory:
+    """Factory that creates S3MediaSource instances from origin dicts."""
+
+    name = "s3"
+
+    def create_from_origin(self, origin: dict[str, Any]) -> S3MediaSource | None:
+        params = origin.get("params", {})
+        bucket = params.get("bucket", "")
+        if not bucket:
+            return None
+        return S3MediaSource(bucket, params.get("prefix", ""))
+
+
+SOURCE = _S3SourceFactory()
+```
+
+### MediaSource abstract interface reference
+
+**Required abstract methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `list_items()` | `(extensions: list[str] \| None) -> Iterator[MediaItem]` | Yield all media items, optionally filtered |
+| `fetch_item()` | `(key: str) -> Path \| None` | Return local path for item (may download on demand) |
+| `resolve_path()` | `(origin_name: str, filename: str) -> Path \| None` | Find a file by origin_name or filename |
+
+**Optional methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `cleanup()` | `() -> None` | Release temporary resources (default: no-op) |
+
+**Data types:**
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `MediaItem` | `key`, `filename`, `source_name` | A discoverable file within a source |
+
+### How it gets invoked
+
+`get_source_for_origin(origin_dict)` looks up the factory by matching
+`origin["importer"]` to the factory's `name`, then calls
+`factory.create_from_origin(origin)`.
 
 ---
 
@@ -1646,6 +2030,30 @@ missing dependencies degrade gracefully.
 - [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
 
+### New Settings Importer Checklist
+
+- [ ] Create `vtsearch/settings_io/importers/<name>/__init__.py`
+- [ ] Subclass `SettingsImporter`, set `name`, `display_name`, `description`, `fields`
+- [ ] Implement `run(self, field_values)` — return a settings dict
+- [ ] Expose `SETTINGS_IMPORTER = YourImporter()` at module level
+- [ ] Test: start the app and check `GET /api/settings-importers` includes your importer
+
+### New Settings Exporter Checklist
+
+- [ ] Create `vtsearch/settings_io/exporters/<name>/__init__.py`
+- [ ] Subclass `SettingsExporter`, set `name`, `display_name`, `description`, `fields`
+- [ ] Implement `export(self, settings_data, field_values)` — return dict with `"message"` key
+- [ ] Expose `SETTINGS_EXPORTER = YourExporter()` at module level
+- [ ] Test: start the app and check `GET /api/settings-exporters` includes your exporter
+
+### New Media Source Checklist
+
+- [ ] Create `vtsearch/datasets/sources/<name>/__init__.py`
+- [ ] Create a `MediaSource` subclass with `list_items()`, `fetch_item()`, `resolve_path()`
+- [ ] Create a factory class with `name` and `create_from_origin(origin)` method
+- [ ] Expose `SOURCE = YourFactory()` at module level
+- [ ] Test: create an origin dict for your source and verify `get_source_for_origin()` returns it
+
 ### New Media Type Checklist
 
 - [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
@@ -1668,6 +2076,8 @@ missing dependencies degrade gracefully.
 
 - [ ] Create or add to `vtsearch/media/<type>/clipper.py`
 - [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
+- [ ] Override `description` with a short tooltip string for the chooser UI
+- [ ] If adding `parameters`, include a `description` key in each param dict
 - [ ] Add to the `CLIPPERS` list in the media type's `__init__.py`
 - [ ] Test: verify `clip()` returns valid media dicts
 

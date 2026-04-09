@@ -95,7 +95,7 @@ VTSearch/
 │   │   ├── media_seeding.py        Media seeding utilities
 │   │   ├── label_restoration.py    Label restoration functionality
 │   │   ├── training_workflow.py    Training workflow orchestration
-│   │   └── weights_compat.py       Model weights compatibility layer
+│   │   └── weights_compat.py       Origin-based detector weight normalization
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -119,7 +119,8 @@ VTSearch/
 │   │   ├── sources/                MediaSource abstraction for resolving media files
 │   │   │   ├── base.py             MediaSource ABC (list_items, fetch_item, resolve_path)
 │   │   │   ├── local_folder.py     LocalFolderSource implementation
-│   │   │   └── http_archive.py     HTTP archive source implementation
+│   │   │   ├── http_archive.py     HTTP archive source implementation
+│   │   │   └── pullwrest.py        PullWrestSource — fetch media via PullWrest (scaffold)
 │   │   └── importers/              Plugin system for data sources
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
@@ -225,55 +226,56 @@ Arrows point from dependent → dependency.  Modules on the left import
 modules on the right.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Flask / HTTP layer                      │
-│                                                          │
+┌────────────────────────────────────────────────────────────┐
+│                     Flask / HTTP layer                     │
+│                                                            │
 │  app.py ──► auth, routes/* ──► utils/state, utils/progress │
-│                │                                          │
-│                ├──► models/embeddings, models/training    │
-│                ├──► datasets/loader                       │
-│                ├──► exporters (registry)                  │
-│                ├──► labels/importers (registry)           │
-│                ├──► processors/importers (registry)       │
-│                └──► settings                              │
-└──────────────────────────────────────────────────────────┘
-        │               │                │
-        ▼               ▼                ▼
-┌──────────────┐ ┌────────────┐ ┌───────────────────┐
+│                │                                           │
+│                ├──► models/embeddings, models/training     │
+│                ├──► datasets/loader                        │
+│                ├──► exporters (registry)                   │
+│                ├──► labels/importers (registry)            │
+│                ├──► processors/importers (registry)        │
+│                └──► settings                               │
+└────────────────────────────────────────────────────────────┘
+        │               │                   │
+        ▼               ▼                   ▼
+┌──────────────┐ ┌────────────┐ ┌────────────────────┐
 │ media/*      │ │ models/    │ │ datasets/          │
-│              │ │            │ │                     │
-│ audio    ─┐ │ │ training   │ │ loader ──► media/*  │
-│ image    ─┤ │ │ progress   │ │ downloader/          │
-│ text     ─┤ │ │ embeddings │ │ importers/*         │
-│ video    ─┤ │ │ loader     │ │                     │
-│ document ─┘ │ │            │ │                     │
-│   │         │ │   │        │ │                     │
-│   ▼         │ │   ▼        │ └───────────────────┘
-│ config.py   │ │ media/*    │
-│ torch/HF    │ │ config.py  │
-│ (NO Flask)  │ │ (NO Flask) │
+│              │ │            │ │                    │
+│ audio    ─┐  │ │ training   │ │ loader ──► media/* │
+│ image    ─┤  │ │ progress   │ │ downloader/        │
+│ text     ─┤  │ │ embeddings │ │ importers/*        │
+│ video    ─┤  │ │ loader     │ │                    │
+│ document ─┘  │ │            │ │                    │
+│   │          │ │   │        │ │                    │
+│   ▼          │ │   ▼        │ └────────────────────┘
+│ config.py    │ │ media/*    │
+│ torch/HF     │ │ config.py  │
+│ (NO Flask)   │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
 ┌──────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
-│ exporters/*              │  │ labels/importers/*      │  │ processors/importers/*   │
-│                          │  │                          │  │                          │
-│ base.py (ABC)            │  │ base.py (ABC)           │  │ base.py (ABC)            │
-│ server_json, server_csv  │  │ server_json, server_csv │  │ server_detector_file     │
-│ email_smtp, webhook, gui │  │                          │  │                          │
-│                          │  │ (NO Flask, NO state,     │  │ (NO Flask, NO state,     │
-│ (NO Flask, NO state,     │  │  pure data processing)   │  │  pure data processing)   │
-│  pure data in/out)       │  │                          │  │                          │
+│ exporters/*              │  │ labels/importers/*     │  │ processors/importers/*   │
+│                          │  │                        │  │                          │
+│ base.py (ABC)            │  │ base.py (ABC)          │  │ base.py (ABC)            │
+│ server_json, server_csv  │  │ server_json, server_csv│  │ server_detector_file     │
+│ email_smtp, webhook, gui │  │                        │  │                          │
+│                          │  │ (NO Flask, NO state,   │  │ (NO Flask, NO state,     │
+│ (NO Flask, NO state,     │  │  pure data processing) │  │  pure data processing)   │
+│  pure data in/out)       │  │                        │  │                          │
+│                          │  │                        │  │                          │
 └──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
 
 ┌─────────────────────────────┐  ┌─────────────────────────────┐
-│ settings_io/sources/*       │  │ labels/sources/*             │
-│                             │  │ labels/sync.py               │
-│ base.py (SettingsSource ABC)│  │                              │
-│ server_json_file            │  │ base.py (LabelsetSource ABC) │
-│                             │  │ server_json_file             │
-│ (NO Flask; reads/writes     │  │                              │
-│  settings via file I/O)     │  │ (NO Flask; reads/writes      │
-│                             │  │  labelsets via file I/O)     │
+│ settings_io/sources/*       │  │ labels/sources/*            │
+│                             │  │ labels/sync.py              │
+│ base.py (SettingsSource ABC)│  │                             │
+│ server_json_file            │  │ base.py (LabelsetSource ABC)│
+│                             │  │ server_json_file            │
+│ (NO Flask; reads/writes     │  │                             │
+│  settings via file I/O)     │  │ (NO Flask; reads/writes     │
+│                             │  │  labelsets via file I/O)    │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 
@@ -410,7 +412,7 @@ from vtsearch.datasets.loader import load_dataset_from_folder
 medias = {}
 load_dataset_from_folder(
     Path("my_audio_folder"),
-    media_type="sounds",
+    media_type="audio",
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
@@ -464,6 +466,11 @@ registries in `vtsearch/media/__init__.py`:
 | Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+
+**`type_id` and `folder_import_name`:** Each media type has a `type_id`
+(e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
+same value. Both `get(type_id)` and `get_by_folder_name(name)` accept
+the canonical type ID.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
 (sentinel: `CONVERTER`) in `vtsearch/converters/__init__.py`, with
@@ -634,13 +641,14 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
 
 ### Origin class (`vtsearch/datasets/origin.py`)
 
 ```python
 from vtsearch.datasets.origin import Origin
 
-o = Origin("folder", {"path": "/data/audio", "media_type": "sounds"})
+o = Origin("folder", {"path": "/data/audio", "media_type": "audio"})
 o.display()   # "folder(/data/audio)"
 o.to_dict()   # {"importer": "folder", "params": {"path": "/data/audio", ...}}
 ```
@@ -656,7 +664,9 @@ Origins are set automatically when data is loaded:
 ### LabelSet (`vtsearch/datasets/labelset.py`)
 
 A `LabelSet` extends the dataset concept: each element carries its origin,
-its name within that origin, **and** its label (`"good"` / `"bad"`).
+its name within that origin, its label (`"good"` / `"bad"`), and optional
+`metadata` (arbitrary key-value dict for round-tripping extra data like
+`contentID`, `mediaID`, etc.).
 
 ```python
 from vtsearch.datasets.labelset import LabelSet
@@ -674,4 +684,7 @@ ls2 = LabelSet.from_dict(data)
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  The format is backward-compatible: old consumers that only
-read `md5` + `label` continue to work.
+read `md5` + `label` continue to work.  With `enrich=true`, each entry
+gains `custom_metadata` (merged from media type display metadata, the
+media's `custom_metadata`, and the flattened `origin.params`) and the
+response includes an `available_columns` list.

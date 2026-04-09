@@ -334,7 +334,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "sounds"}}
+        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "good.wav", "md5": "", "label": "good", "filename": "good.wav"},
             {"origin": origin, "origin_name": "bad.wav", "md5": "", "label": "bad", "filename": "bad.wav"},
@@ -367,7 +367,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "sounds"}}
+        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
         ]

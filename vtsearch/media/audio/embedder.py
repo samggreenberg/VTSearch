@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE
-from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first
+from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first, timed_progress
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -47,8 +47,17 @@ class AudioClapEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        self._on_progress("loading", "Importing audio libraries…", 0, 0)
-        from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
+        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 4):
+            import torch  # noqa: F401, PLC0415
+
+        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 4):
+            from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
+
+        with timed_progress(self._on_progress, "loading", "Importing librosa…", 3, 4):
+            import librosa  # noqa: F401, PLC0415
+
+        with timed_progress(self._on_progress, "loading", "Importing soundfile…", 4, 4):
+            import soundfile  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLAP model weights…")
         with intercept_tqdm_progress(self._on_progress):
@@ -63,19 +72,15 @@ class AudioClapEmbedder(MediaEmbedder):
                 ClapProcessor.from_pretrained, CLAP_MODEL_ID, cache_dir=cache_dir, token=False
             )
 
-        # Warmup: import librosa (heavy — pulls in numba, scipy, etc.),
-        # trigger the numba JIT for audio resampling, and run a single
-        # dummy forward pass so that the first real embed_media call runs
-        # at the same speed as every subsequent one.
-        self._on_progress("loading", "Warming up audio pipeline: importing libraries…", 1, 4)
-        import librosa  # noqa: F401, PLC0415
-        import torch  # noqa: PLC0415
-
+        # Warmup: trigger the numba JIT for audio resampling, and run a
+        # single dummy forward pass so that the first real embed_media call
+        # runs at the same speed as every subsequent one.
+        #
         # Trigger librosa/soxr resampling JIT by loading a tiny WAV at a
         # different sample rate.  Without this, the first embed_media()
         # call stalls for 10-30 s while numba compiles resampling kernels,
         # making the embedding progress bar appear frozen.
-        self._on_progress("loading", "Warming up audio pipeline: resampling JIT…", 2, 4)
+        self._on_progress("loading", "Warming up audio pipeline: resampling JIT…", 1, 3)
         import io  # noqa: PLC0415
 
         import soundfile as sf  # noqa: PLC0415
@@ -86,7 +91,7 @@ class AudioClapEmbedder(MediaEmbedder):
         _warmup_buf.seek(0)
         librosa.load(_warmup_buf, sr=CLAP_SAMPLE_RATE, mono=True)
 
-        self._on_progress("loading", "Warming up audio pipeline: preprocessing…", 3, 4)
+        self._on_progress("loading", "Warming up audio pipeline: preprocessing…", 2, 3)
         dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
@@ -96,7 +101,7 @@ class AudioClapEmbedder(MediaEmbedder):
             max_length=480000,
             truncation=True,
         )
-        self._on_progress("loading", "Warming up audio pipeline: running model…", 4, 4)
+        self._on_progress("loading", "Warming up audio pipeline: running model…", 3, 3)
         device = next(self._model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
@@ -117,7 +122,7 @@ class AudioClapEmbedder(MediaEmbedder):
             "the noise of {text}",
         ]
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:

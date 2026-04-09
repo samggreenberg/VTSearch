@@ -669,7 +669,7 @@ def load_model_route():
     )
     register_detector_context(det_ctx)
 
-    _LOAD_STEPS = 2  # restore labels, seed examples
+    _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
     task_id = f"_modload_{model_id[:8]}"
     tracker = model_loading_tasks.create_task(
         task_id, entry.get("name", model_id), model_id=model_id,
@@ -711,6 +711,35 @@ def load_model_route():
                     _seed_good_votes_from_examples(
                         tm_data.get("examples", [])
                     )
+
+                    # Train the MLP from restored votes so that Find can use
+                    # det_ctx.model directly without re-resolving label origins.
+                    tracker.check_cancelled()
+                    from vtsearch.utils import good_votes as _gv, bad_votes as _bv, snapshot_medias as _snap_medias
+
+                    if _gv and _bv:
+                        tracker.update(
+                            "loading", "Training model…", 0, 0,
+                            step=3, total_steps=_LOAD_STEPS,
+                        )
+                        from vtsearch.routes.detectors_helpers import train_and_threshold
+
+                        snap = _snap_medias()
+                        X_list = []
+                        y_list: list[float] = []
+                        for cid in _gv:
+                            if cid in snap:
+                                X_list.append(snap[cid]["embedding"])
+                                y_list.append(1.0)
+                        for cid in _bv:
+                            if cid in snap:
+                                X_list.append(snap[cid]["embedding"])
+                                y_list.append(0.0)
+
+                        if X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list):
+                            trained_model, threshold = train_and_threshold(X_list, y_list, snap=snap)
+                            det_ctx.model = trained_model
+                            det_ctx.threshold = threshold
 
             # Mark as fully loaded so the registry shows detector_loaded=True.
             add_loaded_model_id(model_id)

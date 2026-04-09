@@ -1,5 +1,25 @@
 # Setup Guide
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Getting the code](#getting-the-code)
+  - [Setting up an SSH key](#setting-up-an-ssh-key)
+  - [Clone the repository](#clone-the-repository)
+- [Setting up a virtual environment](#setting-up-a-virtual-environment)
+- [Installing dependencies](#installing-dependencies)
+- [Building the frontend](#building-the-frontend)
+- [Running the app](#running-the-app)
+- [Docker](#docker)
+  - [Prerequisites](#prerequisites-1)
+  - [CPU (default)](#cpu-default)
+  - [GPU](#gpu)
+  - [Data persistence](#data-persistence)
+  - [Rebuilding](#rebuilding)
+- [Running the tests](#running-the-tests)
+- [Environment variables](#environment-variables)
+- [Next steps](#next-steps)
+
 ## Prerequisites
 
 You need **Python 3.10+** installed. Check by running:
@@ -131,9 +151,7 @@ All dependencies live in `requirements.txt` files. Core deps are in the top-leve
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
-bash install-plugin-deps.sh        # auto-discover plugin deps
-pip install -r requirements.txt    # install everything (core + plugins + CPU PyTorch)
-pip install --no-deps -e .         # editable install for 'import vtsearch'
+bash install-cpu.sh
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
@@ -144,7 +162,7 @@ bash install-gpu.sh cu121    # for CUDA 12.1
 bash install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-`install-gpu.sh` is an all-in-one script — it runs `install-plugin-deps.sh` automatically, installs all dependencies with the correct CUDA PyTorch build, and does the editable install. No extra steps needed.
+Both scripts are all-in-one — they run `install-plugin-deps.sh` automatically, install all dependencies, and do the editable install. No extra steps needed.
 
 The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
 

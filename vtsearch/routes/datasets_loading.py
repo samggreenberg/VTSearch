@@ -190,8 +190,30 @@ def _normalize_media_type(value: str) -> str:
         return value
 
 
-def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None = None) -> None:
-    """Apply a clipper to all medias in *clips_dict*, replacing them in-place."""
+def _apply_clipper(
+    clips_dict: dict,
+    clipper_name: str,
+    clipper_params: dict | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
+) -> None:
+    """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
+
+    After clipping, each clip gets:
+    - A recomputed MD5 based on its actual content (so that dedup doesn't
+      collapse distinct clips from the same parent).
+    - Clip boundaries stored in ``origin["params"]`` (``clip_start``,
+      ``clip_end``, ``clip_box``) so they survive label export/import.
+    - A fresh embedding computed from the clipped content (audio/image/text)
+      instead of inheriting the parent's embedding.
+
+    Any importer-provided MD5 or embedding on the *parent* media is
+    discarded for clips produced by a non-trivial clipper, since those
+    values describe the full media item, not the sub-item.
+
+    Args:
+        on_progress: Optional callback ``(current, total, phase)`` invoked
+            during clipping and re-embedding so callers can report progress.
+    """
     if not clipper_name:
         return
     from vtsearch.media import get_clipper
@@ -204,23 +226,154 @@ def _apply_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | N
     if clipper_params:
         clipper = clipper.with_params(clipper_params)
 
+    # Extract the effective clipper parameter values so they can be
+    # stored in each clip's origin.  This uses to_dict() which concrete
+    # clippers override to add their current values (duration, threshold,
+    # etc.), then strips the base keys that aren't parameter values.
+    _clipper_dict = clipper.to_dict()
+    _base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
+    effective_params = {k: v for k, v in _clipper_dict.items() if k not in _base_keys}
+
     all_clipped: list[dict] = []
-    for media in list(clips_dict.values()):
+    # Track which clips need MD5/embedding recomputation.  Any clip that
+    # came from a multi-output clipper call is a genuine sub-item whose
+    # inherited MD5 and embedding describe the *parent*, not the clip.
+    needs_recompute: list[bool] = []
+
+    media_list = list(clips_dict.values())
+    total_medias = len(media_list)
+    for media_idx, media in enumerate(media_list):
+        if on_progress:
+            on_progress(media_idx, total_medias, "clipping")
         clipped = clipper.clip(media)
+        is_real_clip = len(clipped) > 1
         for idx, clip in enumerate(clipped):
             orig = clip.get("origin")
             if isinstance(orig, dict):
                 clip["origin"] = dict(orig)
                 clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
                 clip["origin"]["params"]["clipper"] = clipper_name
-                if len(clipped) > 1:
+                # Store the clipper's effective parameter values so that
+                # cross-dataset resolution can reconstruct the exact same
+                # clipper configuration.
+                for pk, pv in effective_params.items():
+                    clip["origin"]["params"][f"clipper_{pk}"] = str(pv)
+                if is_real_clip:
                     clip["origin"]["params"]["clip_index"] = str(idx)
+                # Persist clip boundaries in origin so they survive label
+                # export/import and can be used for cross-dataset resolution.
+                if clip.get("clip_start") is not None:
+                    clip["origin"]["params"]["clip_start"] = str(clip["clip_start"])
+                if clip.get("clip_end") is not None:
+                    clip["origin"]["params"]["clip_end"] = str(clip["clip_end"])
+                if clip.get("clip_box") is not None:
+                    clip["origin"]["params"]["clip_box"] = ",".join(str(v) for v in clip["clip_box"])
             all_clipped.append(clip)
+            needs_recompute.append(is_real_clip)
+
+    # Recompute MD5 and re-embed every genuine sub-item.
+    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type, on_progress=on_progress)
 
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
         clip["id"] = new_id
         clips_dict[new_id] = clip
+
+
+def _fixup_clip_md5_and_embeddings(
+    clips: list[dict],
+    needs_recompute: list[bool],
+    media_type: str,
+    on_progress: Callable[[int, int, str], None] | None = None,
+) -> None:
+    """Recompute MD5 and embeddings for clips that need it.
+
+    A clip needs recomputation when:
+    - ``needs_recompute`` is ``True`` (genuine sub-item from a multi-output
+      clipper — the parent's MD5 and embedding are stale), **or**
+    - the clip has no embedding at all (import phase was skipped because a
+      clipper was going to re-embed anyway).
+
+    Without the MD5 fix, all clips from the same parent would share the
+    parent's MD5 (causing ``collapse_duplicates`` to merge them).
+    """
+    import hashlib
+
+    total_clips = len(clips)
+    for clip_idx, (clip, recompute) in enumerate(zip(clips, needs_recompute)):
+        if on_progress:
+            on_progress(clip_idx, total_clips, "embedding")
+
+        # Also embed clips that have no embedding (e.g. when the import
+        # phase skipped embedding because a clipper was specified).
+        needs_embed = recompute or clip.get("embedding") is None
+        if not needs_embed:
+            continue
+
+        content_bytes = _clip_content_bytes(clip, media_type)
+        if content_bytes is not None:
+            if recompute:
+                clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+            _reembed_clip(clip, content_bytes, media_type)
+        elif recompute:
+            # Metadata-only clips (e.g. video): bytes unchanged but
+            # boundaries differ — create a unique MD5 by hashing the
+            # parent bytes + clip boundaries so dedup doesn't collapse
+            # distinct clips.
+            parent_bytes = clip.get("media_bytes", b"")
+            boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
+            combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
+            clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+
+
+def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
+    """Return the embeddable content bytes for a clip.
+
+    For media types where the clipper produces new bytes (audio, image) or
+    a new string (text), return those bytes so the caller can hash and
+    re-embed them.  For metadata-only clips (video), return ``None`` —
+    the caller will use a boundary-based hash instead.
+    """
+    if media_type == "video":
+        # Video clippers store boundaries as metadata without slicing
+        # the underlying bytes, so there is nothing new to hash/embed.
+        return None
+    if clip.get("media_bytes") is not None and media_type != "text":
+        return clip["media_bytes"]
+    if clip.get("media_string") is not None and media_type == "text":
+        return clip["media_string"].encode("utf-8")
+    return None
+
+
+def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
+    """Re-embed a clip from its actual content bytes."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    try:
+        from vtsearch.models.resolver import embed_file
+    except ImportError:
+        return
+
+    # Determine file extension from media type.
+    ext_map = {"audio": ".wav", "image": ".png", "text": ".txt"}
+    ext = ext_map.get(media_type, ".bin")
+
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    try:
+        os.write(fd, content_bytes)
+        os.close(fd)
+        embedding = embed_file(Path(tmp_path), media_type)
+        if embedding is not None:
+            clip["embedding"] = embedding
+    except Exception:
+        pass  # Keep parent embedding if re-embedding fails.
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def _auto_register_dataset(
@@ -385,18 +538,40 @@ def _run_origin_load_in_background(
 
             tracker.check_cancelled()
             apply_custom_metadata_md5(ctx.medias)
-            tracker.update(
-                "loading", "Removing duplicates…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
-            )
+
             # Tag medias that don't already have an origin.
             for media in ctx.medias.values():
                 if media.get("origin") is None:
                     media["origin"] = origin
                 if not media.get("origin_name"):
                     media["origin_name"] = media.get("filename", "")
+
             if clipper:
-                _apply_clipper(ctx.medias, clipper, clipper_params)
-            collapse_duplicates(ctx.medias)
+                def _clipper_progress(current: int, total: int, phase: str) -> None:
+                    tracker.check_cancelled()
+                    if phase == "clipping":
+                        msg = "Clipping media…"
+                    else:
+                        msg = "Embedding clips…"
+                    tracker.update(
+                        "loading", msg,
+                        current=current, total=total,
+                        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    )
+
+                _clipper_progress(0, 0, "clipping")
+                _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress)
+
+            def _dedup_progress(current: int, total: int) -> None:
+                tracker.check_cancelled()
+                tracker.update(
+                    "loading", "Removing duplicates…",
+                    current=current, total=total,
+                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                )
+
+            _dedup_progress(0, 0)
+            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
@@ -433,6 +608,10 @@ def _run_origin_load_in_background(
                 _migrate_context_id(task_id, entry["id"])
                 context_id = entry["id"]
                 ctx.dataset_display_name = entry.get("name", name)
+                # Associate the loading task with the real dataset ID so the
+                # frontend can show the embedder-warmup progress inline on the
+                # dataset row instead of as an orphan loading task.
+                loading_tasks.set_dataset_id(task_id, entry["id"])
 
             # Warm up the embedder.  Use a progress wrapper that updates the
             # task tracker, not the global singleton.
@@ -518,6 +697,14 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # importer writes a .clipper sidecar for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
+
+    # When a multi-output clipper is selected, skip embedding during the
+    # import phase.  The clipper step will re-embed every clip anyway, so
+    # computing parent embeddings up front is wasted work.  Default
+    # clippers (pass-through, single output) still need the parent
+    # embedding since it won't be recomputed.
+    if clipper_name and not clipper_name.endswith("_default"):
+        field_values["skip_embedding"] = True
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).

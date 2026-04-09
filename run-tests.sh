@@ -54,6 +54,16 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     echo "Checking frontend TypeScript build..."
     _fe_log=$(mktemp)
     if (cd frontend && npm run build:prod 2>&1) > "$_fe_log"; then
+        # Treat Angular compiler warnings (e.g. NG8107) as errors
+        if grep -q '▲ \[WARNING\]' "$_fe_log"; then
+            echo ""
+            echo "======================================================================"
+            echo "FRONTEND BUILD HAS WARNINGS (treated as errors)"
+            echo "======================================================================"
+            grep -A 10 '▲ \[WARNING\]' "$_fe_log"
+            rm -f "$_fe_log"
+            exit 1
+        fi
         echo "Frontend build OK"
     else
         echo ""
