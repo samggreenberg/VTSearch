@@ -119,13 +119,21 @@ td {
 
 .status-loaded {
   color: var(--color-good);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .load-action {
-  color: var(--text-dim);
+  background: none;
+  border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 4px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: color 0.15s, background 0.15s;
 
   &:hover {
