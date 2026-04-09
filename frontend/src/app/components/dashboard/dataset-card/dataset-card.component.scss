@@ -58,8 +58,7 @@ td {
   transition: color 0.15s, background 0.15s;
 
   &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    background: var(--btn-icon-hover-bg);
   }
 
   .pencil-active {
@@ -129,7 +128,7 @@ td {
 .load-action {
   background: none;
   border: none;
-  color: inherit;
+  color: var(--text-primary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -139,8 +138,7 @@ td {
   transition: color 0.15s, background 0.15s;
 
   &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    background: var(--btn-icon-hover-bg);
   }
 }
 
@@ -162,8 +160,7 @@ td {
   transition: color 0.15s, background 0.15s;
 
   &:hover:not(.disabled) {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    background: var(--btn-icon-hover-bg);
   }
 
   &.disabled {
@@ -185,8 +182,7 @@ td {
   transition: color 0.15s, background 0.15s;
 
   &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    background: var(--btn-icon-hover-bg);
   }
 
   .pie-active {
@@ -212,7 +208,7 @@ td {
 
   &:hover {
     color: var(--color-bad);
-    background: var(--bad-bg);
+    background: var(--btn-icon-hover-bg);
   }
 
   .trash-active {
