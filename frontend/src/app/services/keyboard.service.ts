@@ -52,10 +52,12 @@ export class KeyboardService implements OnDestroy {
     switch (e.key) {
       case 'ArrowRight':
         e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'vote', direction: 'good' }));
         break;
       case 'ArrowLeft':
         e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'vote', direction: 'bad' }));
         break;
       case 'ArrowUp':
@@ -70,6 +72,7 @@ export class KeyboardService implements OnDestroy {
         break;
       case ' ':
         e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'playback' }));
         break;
     }
