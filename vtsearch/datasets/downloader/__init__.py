@@ -36,9 +36,14 @@ from vtsearch.datasets.downloader.core import (
     FOOD101_URL,
     GTZAN_DOWNLOAD_SIZE_MB,
     GTZAN_URL,
+    HMDB51_DOWNLOAD_SIZE_MB,
+    HMDB51_URL,
     IMAGE_DIR,
     IMDB_DOWNLOAD_SIZE_MB,
     IMDB_URL,
+    KTH_ACTIONS,
+    KTH_BASE_URL,
+    KTH_DOWNLOAD_SIZE_MB,
     OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
     OXFORD_FLOWERS_LABELS_URL,
     OXFORD_FLOWERS_URL,
@@ -47,6 +52,8 @@ from vtsearch.datasets.downloader.core import (
     SPEECH_COMMANDS_V2_URL,
     STANFORD_DOGS_DOWNLOAD_SIZE_MB,
     STANFORD_DOGS_URL,
+    UCF101_FULL_DOWNLOAD_SIZE_MB,
+    UCF101_FULL_URL,
     UCF101_SUBSET_DOWNLOAD_SIZE_MB,
     UCF101_SUBSET_URL,
     UCSF_IDL_API_URL,
@@ -83,7 +90,12 @@ from vtsearch.datasets.downloader.images import (
 )
 
 # Video downloaders
-from vtsearch.datasets.downloader.video import download_ucf101_subset
+from vtsearch.datasets.downloader.video import (
+    download_hmdb51,
+    download_kth,
+    download_ucf101_full,
+    download_ucf101_subset,
+)
 
 # Text downloaders
 from vtsearch.datasets.downloader.text import (
@@ -122,9 +134,14 @@ __all__ = [
     "FOOD101_URL",
     "GTZAN_DOWNLOAD_SIZE_MB",
     "GTZAN_URL",
+    "HMDB51_DOWNLOAD_SIZE_MB",
+    "HMDB51_URL",
     "IMAGE_DIR",
     "IMDB_DOWNLOAD_SIZE_MB",
     "IMDB_URL",
+    "KTH_ACTIONS",
+    "KTH_BASE_URL",
+    "KTH_DOWNLOAD_SIZE_MB",
     "OXFORD_FLOWERS_DOWNLOAD_SIZE_MB",
     "OXFORD_FLOWERS_LABELS_URL",
     "OXFORD_FLOWERS_URL",
@@ -134,6 +151,8 @@ __all__ = [
     "SPEECH_COMMANDS_V2_URL",
     "STANFORD_DOGS_DOWNLOAD_SIZE_MB",
     "STANFORD_DOGS_URL",
+    "UCF101_FULL_DOWNLOAD_SIZE_MB",
+    "UCF101_FULL_URL",
     "UCF101_SUBSET_DOWNLOAD_SIZE_MB",
     "UCF101_SUBSET_URL",
     "UCSF_IDL_API_URL",
@@ -157,6 +176,9 @@ __all__ = [
     "download_oxford_flowers",
     "download_stanford_dogs",
     # Video
+    "download_hmdb51",
+    "download_kth",
+    "download_ucf101_full",
     "download_ucf101_subset",
     # Text
     "download_20newsgroups",

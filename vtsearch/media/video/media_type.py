@@ -185,13 +185,69 @@ class VideoMediaType(MediaType):
         "BandMarching", "BaseballPitch", "Basketball", "BasketballDunk", "BenchPress",
     ]
 
+    _HMDB51_CATEGORIES = [
+        "brush_hair", "cartwheel", "catch", "chew", "clap", "climb", "climb_stairs",
+        "dive", "draw_sword", "dribble", "drink", "eat", "fall_floor", "fencing",
+        "flic_flac", "golf", "handstand", "hit", "hug", "jump", "kick", "kick_ball",
+        "kiss", "laugh", "pick", "pour", "pullup", "punch", "push", "pushup",
+        "ride_bike", "ride_horse", "run", "shake_hands", "shoot_ball", "shoot_bow",
+        "shoot_gun", "sit", "situp", "smile", "smoke", "somersault", "stand",
+        "swing_baseball", "sword", "sword_exercise", "talk", "throw", "turn", "walk",
+        "wave",
+    ]
+
+    _UCF101_FULL_CATEGORIES = [
+        "ApplyEyeMakeup", "ApplyLipstick", "Archery", "BabyCrawling", "BalanceBeam",
+        "BandMarching", "BaseballPitch", "Basketball", "BasketballDunk", "BenchPress",
+        "Biking", "Billiards", "BlowDryHair", "BlowingCandles", "BodyWeightSquats",
+        "Bowling", "BoxingPunchingBag", "BoxingSpeedBag", "BreastStroke", "BrushingTeeth",
+        "CleanAndJerk", "CliffDiving", "CricketBowling", "CricketShot", "CuttingInKitchen",
+        "Diving", "Drumming", "Fencing", "FieldHockeyPenalty", "FloorGymnastics",
+        "FrisbeeCatch", "FrontCrawl", "GolfSwing", "Haircut", "Hammering",
+        "HammerThrow", "HandstandPushups", "HandstandWalking", "HeadMassage", "HighJump",
+        "HorseRace", "HorseRiding", "HulaHoop", "IceDancing", "JavelinThrow",
+        "JugglingBalls", "JumpingJack", "JumpRope", "Kayaking", "Knitting",
+        "LongJump", "Lunges", "MilitaryParade", "Mixing", "MoppingFloor",
+        "Nunchucks", "ParallelBars", "PizzaTossing", "PlayingCello", "PlayingDaf",
+        "PlayingDhol", "PlayingFlute", "PlayingGuitar", "PlayingPiano", "PlayingSitar",
+        "PlayingTabla", "PlayingViolin", "PoleVault", "PommelHorse", "PullUps",
+        "Punch", "PushUps", "Rafting", "RockClimbingIndoor", "RopeClimbing",
+        "Rowing", "SalsaSpin", "ShavingBeard", "Shotput", "SkateBoarding",
+        "Skiing", "Skijet", "SkyDiving", "SoccerJuggling", "SoccerPenalty",
+        "StillRings", "SumoWrestling", "Surfing", "Swing", "TableTennisShot",
+        "TaiChi", "TennisSwing", "ThrowDiscus", "TrampolineJumping", "Typing",
+        "UnevenBars", "VolleyballSpiking", "WalkingWithDog", "WallPushups",
+        "WritingOnBoard", "YoYo",
+    ]
+
+    _KTH_CATEGORIES = [
+        "boxing", "handclapping", "handwaving", "jogging", "running", "walking",
+    ]
+
     @property
     def demo_datasets(self) -> list:
-        from vtsearch.datasets.downloader import UCF101_SUBSET_DOWNLOAD_SIZE_MB, VIDEO_DIR  # noqa: PLC0415
+        from vtsearch.datasets.downloader import (  # noqa: PLC0415
+            HMDB51_DOWNLOAD_SIZE_MB,
+            KTH_DOWNLOAD_SIZE_MB,
+            UCF101_FULL_DOWNLOAD_SIZE_MB,
+            UCF101_SUBSET_DOWNLOAD_SIZE_MB,
+            VIDEO_DIR,
+        )
 
         cats = self._DEMO_CATEGORIES
         folder = VIDEO_DIR / "ucf101"
+
+        hmdb_cats = self._HMDB51_CATEGORIES
+        hmdb_folder = VIDEO_DIR / "hmdb51"
+
+        ucf_full_cats = self._UCF101_FULL_CATEGORIES
+        ucf_full_folder = VIDEO_DIR / "ucf101_full"
+
+        kth_cats = self._KTH_CATEGORIES
+        kth_folder = VIDEO_DIR / "kth"
+
         return [
+            # UCF-101 subset (10 classes, 171 MB download)
             DemoDataset(
                 id="ucf101_s", label="UCF-101 (S)",
                 description="Action recognition videos sourced from YouTube, covering sports and everyday activities.",
@@ -210,11 +266,93 @@ class VideoMediaType(MediaType):
                 categories=cats, source="ucf101", required_folder=folder,
                 slice_start=40, slice_end=150, download_size_mb=UCF101_SUBSET_DOWNLOAD_SIZE_MB,
             ),
+            # HMDB51 (51 action classes, ~2 GB download)
+            DemoDataset(
+                id="hmdb51_s", label="HMDB51 (S)",
+                description="Human motion clips from movies and web videos, covering 51 diverse action categories.",
+                categories=hmdb_cats, source="hmdb51", required_folder=hmdb_folder,
+                slice_start=0, slice_end=5, download_size_mb=HMDB51_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="hmdb51_m", label="HMDB51 (M)",
+                description="Human motion clips from movies and web videos, covering 51 diverse action categories.",
+                categories=hmdb_cats, source="hmdb51", required_folder=hmdb_folder,
+                slice_start=5, slice_end=15, download_size_mb=HMDB51_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="hmdb51_l", label="HMDB51 (L)",
+                description="Human motion clips from movies and web videos, covering 51 diverse action categories.",
+                categories=hmdb_cats, source="hmdb51", required_folder=hmdb_folder,
+                slice_start=15, slice_end=50, download_size_mb=HMDB51_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="hmdb51_a", label="HMDB51 (A)",
+                description="Human motion clips from movies and web videos, covering 51 diverse action categories.",
+                categories=hmdb_cats, source="hmdb51", required_folder=hmdb_folder,
+                slice_start=0, slice_end=None, download_size_mb=HMDB51_DOWNLOAD_SIZE_MB,
+            ),
+            # UCF-101 full (101 action classes, ~7 GB download)
+            DemoDataset(
+                id="ucf101_full_s", label="UCF-101 Full (S)",
+                description="Full UCF-101 with all 101 action classes — sports, instruments, daily activities.",
+                categories=ucf_full_cats, source="ucf101_full", required_folder=ucf_full_folder,
+                slice_start=0, slice_end=5, download_size_mb=UCF101_FULL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="ucf101_full_m", label="UCF-101 Full (M)",
+                description="Full UCF-101 with all 101 action classes — sports, instruments, daily activities.",
+                categories=ucf_full_cats, source="ucf101_full", required_folder=ucf_full_folder,
+                slice_start=5, slice_end=15, download_size_mb=UCF101_FULL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="ucf101_full_l", label="UCF-101 Full (L)",
+                description="Full UCF-101 with all 101 action classes — sports, instruments, daily activities.",
+                categories=ucf_full_cats, source="ucf101_full", required_folder=ucf_full_folder,
+                slice_start=15, slice_end=50, download_size_mb=UCF101_FULL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="ucf101_full_a", label="UCF-101 Full (A)",
+                description="Full UCF-101 with all 101 action classes — sports, instruments, daily activities.",
+                categories=ucf_full_cats, source="ucf101_full", required_folder=ucf_full_folder,
+                slice_start=0, slice_end=None, download_size_mb=UCF101_FULL_DOWNLOAD_SIZE_MB,
+            ),
+            # KTH Actions (6 action classes, ~1.1 GB download)
+            DemoDataset(
+                id="kth_s", label="KTH Actions (S)",
+                description="Simple human actions in controlled settings — a classic action recognition benchmark.",
+                categories=kth_cats, source="kth", required_folder=kth_folder,
+                slice_start=0, slice_end=10, download_size_mb=KTH_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="kth_m", label="KTH Actions (M)",
+                description="Simple human actions in controlled settings — a classic action recognition benchmark.",
+                categories=kth_cats, source="kth", required_folder=kth_folder,
+                slice_start=10, slice_end=30, download_size_mb=KTH_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="kth_l", label="KTH Actions (L)",
+                description="Simple human actions in controlled settings — a classic action recognition benchmark.",
+                categories=kth_cats, source="kth", required_folder=kth_folder,
+                slice_start=30, slice_end=70, download_size_mb=KTH_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="kth_a", label="KTH Actions (A)",
+                description="Simple human actions in controlled settings — a classic action recognition benchmark.",
+                categories=kth_cats, source="kth", required_folder=kth_folder,
+                slice_start=0, slice_end=None, download_size_mb=KTH_DOWNLOAD_SIZE_MB,
+            ),
         ]
 
     # ------------------------------------------------------------------
     # Demo dataset loading
     # ------------------------------------------------------------------
+
+    _VIDEO_SOURCE_DOWNLOADERS = {
+        "ucf101": "download_ucf101_subset",
+        "hmdb51": "download_hmdb51",
+        "ucf101_full": "download_ucf101_full",
+        "kth": "download_kth",
+    }
 
     def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None, embedder=None):
         import hashlib  # noqa: PLC0415
@@ -232,13 +370,15 @@ class VideoMediaType(MediaType):
                 raise ValueError(f"No embedders registered for media type {self.type_id!r}")
             embedder = avail[0]
 
-        if source != "ucf101":
+        downloader_name = self._VIDEO_SOURCE_DOWNLOADERS.get(source)
+        if downloader_name is None:
             raise ValueError(f"Unsupported video source: {source!r}")
 
-        from vtsearch.datasets.downloader import download_ucf101_subset  # noqa: PLC0415
+        import vtsearch.datasets.downloader as dl_module  # noqa: PLC0415
         from vtsearch.datasets.loader import load_video_metadata_from_folders  # noqa: PLC0415
 
-        video_dir = download_ucf101_subset(on_progress=on_progress)
+        download_fn = getattr(dl_module, downloader_name)
+        video_dir = download_fn(on_progress=on_progress)
         metadata = load_video_metadata_from_folders(video_dir, categories)
 
         by_cat: dict[str, list] = {}
@@ -251,7 +391,7 @@ class VideoMediaType(MediaType):
             video_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
 
         if getattr(embedder, "_model", None) is None:
-            on_progress("loading", "Loading video embedding model…", 0, 0)
+            on_progress("loading", "Loading video embedding model\u2026", 0, 0)
             original_cb = embedder._on_progress
             embedder._on_progress = on_progress
             try:

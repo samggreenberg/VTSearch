@@ -92,6 +92,7 @@ _TEST_GROUPS = {
         "test_imdb_download",
         "test_ucsf_documents_download",
         "test_download_and_extract",
+        "test_video_datasets_download",
     ],
     "integration": [
         "test_integration",
