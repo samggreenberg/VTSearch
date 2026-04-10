@@ -12,6 +12,7 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
+    demo_slice,
 )
 
 
@@ -218,125 +219,131 @@ class ImageMediaType(MediaType):
 
         cats101 = self._DEMO_CATEGORIES_CALTECH101
         cats256 = self._DEMO_CATEGORIES_CALTECH256
+        ct101_desc = "Centered, well-lit object photos — a classic vision benchmark."
+        ct101_folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
+        food_desc = "Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark."
+        food_folder = DATA_DIR / "food-101" / "images"
+        euro_desc = "Sentinel-2 satellite imagery classified by land use type."
+        euro_folder = DATA_DIR / "EuroSAT_RGB"
+        dogs_desc = "Fine-grained dog breed photos — many visually similar breeds."
+        dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
         return [
             DemoDataset(
                 id="caltech101_s", label="Caltech-101 (S)",
-                description="Centered, well-lit object photos — a classic vision benchmark.",
-                categories=cats101, source="caltech101",
-                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
-                slice_start=0, slice_end=20, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                description=ct101_desc, categories=cats101, source="caltech101",
+                required_folder=ct101_folder,
+                slice_frac_start=0.0, slice_frac_end=1 / 7, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="caltech101_m", label="Caltech-101 (M)",
-                description="Centered, well-lit object photos — a classic vision benchmark.",
-                categories=cats101, source="caltech101",
-                required_folder=DATA_DIR / "caltech-101" / "101_ObjectCategories",
-                slice_start=20, slice_end=60, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+                description=ct101_desc, categories=cats101, source="caltech101",
+                required_folder=ct101_folder,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
-                id="caltech256_l", label="Caltech-256 (L)",
+                id="caltech101_l", label="Caltech-101 (L)",
+                description=ct101_desc, categories=cats101, source="caltech101",
+                required_folder=ct101_folder,
+                slice_frac_start=3 / 7, slice_frac_end=None, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="caltech101_a", label="Caltech-101 (A)",
+                description=ct101_desc, categories=cats101, source="caltech101",
+                required_folder=ct101_folder,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="caltech256_a", label="Caltech-256 (A)",
                 description="Harder object photos with more varied, cluttered backgrounds than Caltech-101.",
                 categories=cats256, source="caltech256",
                 required_folder=DATA_DIR / "caltech-256" / "256_ObjectCategories",
-                slice_start=0, slice_end=80, download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="oxford_flowers_102_a", label="Oxford Flowers 102 (A)",
                 description="Close-up flower photography with fine-grained species variation.",
                 categories=self._OXFORD_FLOWERS_CATEGORIES, source="oxford_flowers_102",
                 required_folder=DATA_DIR / "oxford_flowers",
-                slice_start=0, slice_end=80, download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_s", label="Food-101 (S)",
-                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
-                categories=self._FOOD101_CATEGORIES, source="food101",
-                required_folder=DATA_DIR / "food-101" / "images",
-                slice_start=0, slice_end=143, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+                description=food_desc, categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=food_folder,
+                slice_frac_start=0.0, slice_frac_end=1 / 7, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_m", label="Food-101 (M)",
-                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
-                categories=self._FOOD101_CATEGORIES, source="food101",
-                required_folder=DATA_DIR / "food-101" / "images",
-                slice_start=143, slice_end=429, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+                description=food_desc, categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=food_folder,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_l", label="Food-101 (L)",
-                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
-                categories=self._FOOD101_CATEGORIES, source="food101",
-                required_folder=DATA_DIR / "food-101" / "images",
-                slice_start=429, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+                description=food_desc, categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=food_folder,
+                slice_frac_start=3 / 7, slice_frac_end=None, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="food101_a", label="Food-101 (A)",
-                description="Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark.",
-                categories=self._FOOD101_CATEGORIES, source="food101",
-                required_folder=DATA_DIR / "food-101" / "images",
-                slice_start=0, slice_end=1000, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
+                description=food_desc, categories=self._FOOD101_CATEGORIES, source="food101",
+                required_folder=food_folder,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=FOOD101_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_s", label="EuroSAT (S)",
-                description="Sentinel-2 satellite imagery classified by land use type.",
-                categories=self._EUROSAT_CATEGORIES, source="eurosat",
-                required_folder=DATA_DIR / "EuroSAT_RGB",
-                slice_start=0, slice_end=386, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+                description=euro_desc, categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=euro_folder,
+                slice_frac_start=0.0, slice_frac_end=1 / 7, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_m", label="EuroSAT (M)",
-                description="Sentinel-2 satellite imagery classified by land use type.",
-                categories=self._EUROSAT_CATEGORIES, source="eurosat",
-                required_folder=DATA_DIR / "EuroSAT_RGB",
-                slice_start=386, slice_end=1158, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+                description=euro_desc, categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=euro_folder,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_l", label="EuroSAT (L)",
-                description="Sentinel-2 satellite imagery classified by land use type.",
-                categories=self._EUROSAT_CATEGORIES, source="eurosat",
-                required_folder=DATA_DIR / "EuroSAT_RGB",
-                slice_start=1158, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+                description=euro_desc, categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=euro_folder,
+                slice_frac_start=3 / 7, slice_frac_end=None, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="eurosat_a", label="EuroSAT (A)",
-                description="Sentinel-2 satellite imagery classified by land use type.",
-                categories=self._EUROSAT_CATEGORIES, source="eurosat",
-                required_folder=DATA_DIR / "EuroSAT_RGB",
-                slice_start=0, slice_end=2700, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
+                description=euro_desc, categories=self._EUROSAT_CATEGORIES, source="eurosat",
+                required_folder=euro_folder,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_s", label="Stanford Dogs (S)",
-                description="Fine-grained dog breed photos — many visually similar breeds.",
-                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
-                required_folder=DATA_DIR / "stanford_dogs" / "Images",
-                slice_start=0, slice_end=24, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+                description=dogs_desc, categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=dogs_folder,
+                slice_frac_start=0.0, slice_frac_end=1 / 7, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_m", label="Stanford Dogs (M)",
-                description="Fine-grained dog breed photos — many visually similar breeds.",
-                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
-                required_folder=DATA_DIR / "stanford_dogs" / "Images",
-                slice_start=24, slice_end=72, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+                description=dogs_desc, categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=dogs_folder,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_l", label="Stanford Dogs (L)",
-                description="Fine-grained dog breed photos — many visually similar breeds.",
-                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
-                required_folder=DATA_DIR / "stanford_dogs" / "Images",
-                slice_start=72, slice_end=171, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+                description=dogs_desc, categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=dogs_folder,
+                slice_frac_start=3 / 7, slice_frac_end=None, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="stanford_dogs_a", label="Stanford Dogs (A)",
-                description="Fine-grained dog breed photos — many visually similar breeds.",
-                categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
-                required_folder=DATA_DIR / "stanford_dogs" / "Images",
-                slice_start=0, slice_end=171, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+                description=dogs_desc, categories=self._STANFORD_DOGS_CATEGORIES, source="stanford_dogs",
+                required_folder=dogs_folder,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="ucsf_documents_a", label="UCSF Documents (A)",
                 description="Scanned industry document pages from the UCSF Industry Documents Library.",
                 categories=self._UCSF_DOCUMENTS_CATEGORIES, source="ucsf_documents",
                 required_folder=DATA_DIR / "ucsf_documents",
-                slice_start=0, slice_end=25, download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None, download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
             ),
         ]
 
@@ -344,7 +351,10 @@ class ImageMediaType(MediaType):
     # Demo dataset loading
     # ------------------------------------------------------------------
 
-    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None, embedder=None):
+    def load_demo_source(
+        self, source, categories, slice_start, slice_end, clips,
+        on_progress=None, embedder=None, slice_frac_start=None, slice_frac_end=None, **kwargs,
+    ):
         import hashlib  # noqa: PLC0415
         import io as _io  # noqa: PLC0415
 
@@ -431,7 +441,9 @@ class ImageMediaType(MediaType):
 
             selected: list[tuple[Path, str]] = []
             for cat in categories:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                selected.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             _embed_file_images(selected)
             return None
@@ -451,7 +463,9 @@ class ImageMediaType(MediaType):
 
             selected: list[tuple[Path, str]] = []
             for cat in categories:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                selected.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             _embed_file_images(selected)
             return None
@@ -474,7 +488,9 @@ class ImageMediaType(MediaType):
 
             selected = []
             for cat in categories:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                selected.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             _embed_file_images(selected)
             return None
@@ -502,7 +518,9 @@ class ImageMediaType(MediaType):
 
             selected = []
             for cat in categories:
-                selected.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                selected.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             _embed_file_images(selected)
             return None
@@ -528,7 +546,9 @@ class ImageMediaType(MediaType):
 
             selected_pages: list[tuple[str, "Image.Image", str]] = []
             for cat in categories:
-                for page_name, pil_image in by_cat_pages.get(cat, [])[slice_start:slice_end]:
+                for page_name, pil_image in demo_slice(
+                    by_cat_pages.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ):
                     selected_pages.append((page_name, pil_image, cat))
 
             if getattr(embedder, "_model", None) is None:
@@ -588,7 +608,9 @@ class ImageMediaType(MediaType):
                 if cat in category_indices:
                     cat_idx = category_indices[cat]
                     cat_mask = [i for i, lbl in enumerate(labels) if lbl == cat_idx]
-                    for idx in cat_mask[slice_start:(slice_end or len(cat_mask))]:
+                    for idx in demo_slice(
+                        cat_mask, slice_start, slice_end or len(cat_mask), slice_frac_start, slice_frac_end,
+                    ):
                         selected_images.append(images[idx])
                         selected_labels.append(cat)
 

@@ -220,8 +220,8 @@ EVAL_DATASETS: dict[str, dict] = {
         "demo_dataset": "caltech101_m",
         "queries": _IMAGES_QUERIES,
     },
-    "caltech256_l": {
-        "demo_dataset": "caltech256_l",
+    "caltech256_a": {
+        "demo_dataset": "caltech256_a",
         "queries": _IMAGES_L_QUERIES,
     },
     # Text

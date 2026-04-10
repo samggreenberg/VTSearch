@@ -651,12 +651,26 @@ class DemoDataset:
     """Per-category start index for element slicing (inclusive).
 
     When multiple datasets share the same categories, this allows them to
-    use disjoint subsets of elements within each category."""
+    use disjoint subsets of elements within each category.  Ignored when
+    ``slice_frac_start``/``slice_frac_end`` are set."""
 
     slice_end: Optional[int] = None
     """Per-category end index for element slicing (exclusive).
 
-    ``None`` means take all remaining elements after ``slice_start``."""
+    ``None`` means take all remaining elements after ``slice_start``.
+    Ignored when ``slice_frac_start``/``slice_frac_end`` are set."""
+
+    slice_frac_start: Optional[float] = None
+    """Per-category fractional start (0.0–1.0).
+
+    When set, each category is sliced proportionally rather than with
+    fixed indices, so categories with different item counts each
+    contribute the correct fraction of their items."""
+
+    slice_frac_end: Optional[float] = None
+    """Per-category fractional end (0.0–1.0).
+
+    ``None`` means take all remaining elements after ``slice_frac_start``."""
 
     download_size_mb: float = 0
     """Estimated download size in megabytes for this demo dataset's raw data.
@@ -664,6 +678,16 @@ class DemoDataset:
     Used by the frontend to display the expected download size before the
     user starts loading.  Set to ``0`` for datasets that don't require a
     network download (e.g. scikit-learn datasets that download automatically)."""
+
+
+def demo_slice(items, slice_start, slice_end, slice_frac_start=None, slice_frac_end=None):
+    """Slice a per-category item list using either absolute or fractional bounds."""
+    if slice_frac_start is not None:
+        n = len(items)
+        start = int(n * slice_frac_start)
+        end = int(n * slice_frac_end) if slice_frac_end is not None else n
+        return items[start:end]
+    return items[slice_start:slice_end]
 
 
 class MediaType(ABC):
@@ -865,6 +889,7 @@ class MediaType(ABC):
         slice_end: int | None,
         clips: dict[int, dict],
         on_progress: "ProgressCallback | None" = None,
+        **kwargs,
     ) -> str | None:
         """Download and embed a demo dataset source, populating *clips* in-place.
 
