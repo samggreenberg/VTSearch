@@ -61,7 +61,7 @@ VTSearch/
 │   │   ├── audio/speech_extractor.py  SpeechExtractor processor
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
 │   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
-│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d)
+│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d, default)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
 │   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
 │   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)

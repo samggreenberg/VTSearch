@@ -4,5 +4,5 @@ from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 from vtsearch.media.image.media_type import ImageMediaType
 
 MEDIA_TYPE = ImageMediaType()
-EMBEDDERS = [ImageClipEmbedder(), ImageSiglipEmbedder()]
+EMBEDDERS = [ImageSiglipEmbedder(), ImageClipEmbedder()]
 CLIPPERS = [ImageDefaultClipper(), ImageTilingClipper()]
