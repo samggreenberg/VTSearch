@@ -1426,8 +1426,8 @@ type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
 |----------|------|------------|-------|------------|
 | `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
-| `ImageClipEmbedder` | `clip` | `image` | OpenAI CLIP (openai/clip-vit-base-patch32) | 768 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
+| `ImageClipEmbedder` | `clip` | `image` | OpenAI CLIP (openai/clip-vit-base-patch32) | 768 |
 | `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
