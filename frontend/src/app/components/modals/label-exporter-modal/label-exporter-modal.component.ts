@@ -16,6 +16,7 @@ import { ExporterInfo } from '../../../models/api.models';
 })
 export class LabelExporterModalComponent implements OnInit, OnDestroy {
   @Input() goodsOnly = false;
+  @Input() customTitle = '';
   @Output() closed = new EventEmitter<void>();
   @Output() exportComplete = new EventEmitter<void>();
 
@@ -31,6 +32,7 @@ export class LabelExporterModalComponent implements OnInit, OnDestroy {
   ) {}
 
   get title(): string {
+    if (this.customTitle) return this.customTitle;
     return this.goodsOnly ? 'Export Labels (Goods)' : 'Export Labels';
   }
 

@@ -214,10 +214,10 @@
 }
 
 @if (exportModalOpen) {
-  <vt-detector-export-modal
-    [detectorName]="exportModelName"
+  <vt-label-exporter-modal
+    [customTitle]="'Export Labelset: ' + exportModelName"
     (closed)="closeExportModal()"
-    (exported)="closeExportModal()"
+    (exportComplete)="closeExportModal()"
   />
 }
 
