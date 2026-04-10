@@ -31,7 +31,7 @@ class TestDownloadHmdb51:
 
         def fake_extract_rar(rar_path, extract_to):
             call_log.append(rar_path.name)
-            if rar_path.name == "hmdb51_org.rar":
+            if "hmdb51_org" in rar_path.name:
                 # Outer RAR: create inner .rar stubs
                 extract_to.mkdir(parents=True, exist_ok=True)
                 for cat in ("brush_hair", "cartwheel", "catch"):
@@ -294,14 +294,19 @@ class TestDownloadKth:
             assert len(avi_files) == 6, f"Expected 6 .avi files for {action}, got {len(avi_files)}"
 
     def test_skips_if_already_present(self, tmp_path):
-        """If kth/ already has videos, skip download entirely."""
+        """If kth/ already has all action videos, skip download entirely."""
         from vtsearch.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         video_dir = data_dir / "video"
-        kth_dir = video_dir / "kth" / "walking"
-        kth_dir.mkdir(parents=True)
-        (kth_dir / "person01_walking_d1_uncomp.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
+
+        # Populate ALL 6 actions so the early-exit check passes.
+        for action in ("walking", "jogging", "running", "boxing", "handwaving", "handclapping"):
+            cat_dir = video_dir / "kth" / action
+            cat_dir.mkdir(parents=True)
+            (cat_dir / f"person01_{action}_d1_uncomp.avi").write_bytes(
+                b"RIFF" + b"\x00" * 20 + b"AVI "
+            )
 
         download_called = []
 
@@ -442,14 +447,14 @@ class TestVideoDemoDatasetRegistration:
 
     def test_source_dirs_registered(self):
         """New video sources should appear in the demo importer source dirs."""
-        from vtsearch.datasets.importers.demo import _source_directory, _SOURCE_DIRS
+        from vtsearch.datasets.importers import demo as demo_module
 
         # Force lazy init
-        _source_directory("hmdb51")
+        demo_module._source_directory("hmdb51")
 
-        assert "hmdb51" in _SOURCE_DIRS
-        assert "ucf101_full" in _SOURCE_DIRS
-        assert "kth" in _SOURCE_DIRS
+        assert "hmdb51" in demo_module._SOURCE_DIRS
+        assert "ucf101_full" in demo_module._SOURCE_DIRS
+        assert "kth" in demo_module._SOURCE_DIRS
 
 
 # ---------------------------------------------------------------------------

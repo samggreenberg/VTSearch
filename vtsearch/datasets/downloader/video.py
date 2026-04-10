@@ -231,12 +231,15 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
     video_dir = _core.VIDEO_DIR / "kth"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
 
-    # Already downloaded and extracted.
-    if video_dir.exists() and any(video_dir.glob("*/*.avi")):
+    # Already downloaded and extracted (all actions present).
+    actions = _core.KTH_ACTIONS
+    if video_dir.exists() and all(
+        (video_dir / action).exists() and any((video_dir / action).glob("*.avi"))
+        for action in actions
+    ):
         return video_dir
 
     video_dir.mkdir(parents=True, exist_ok=True)
-    actions = _core.KTH_ACTIONS
     total = len(actions)
 
     for i, action in enumerate(actions):
