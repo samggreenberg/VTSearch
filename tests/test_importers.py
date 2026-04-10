@@ -1388,6 +1388,104 @@ class TestSymlinkedImporterDiscovery:
                     del sys.modules[key]
 
 
+    def test_symlinked_package_sets_module_attributes(self, tmp_path):
+        """A symlinked package should have correct __name__, __package__,
+        and __path__ attributes after being loaded via spec_from_file_location."""
+        import os
+        import sys
+
+        from vtsearch.utils.registry import PluginRegistry
+
+        ext_pkg = tmp_path / "attr_check_importer"
+        ext_pkg.mkdir()
+        (ext_pkg / "__init__.py").write_text(
+            "from vtsearch.datasets.importers.base import DatasetImporter\n"
+            "from vtsearch.utils.registry import PluginField\n"
+            "\n"
+            "class _Imp(DatasetImporter):\n"
+            '    name = "attr_check_imp"\n'
+            '    display_name = "Attr Check"\n'
+            '    description = "Test module attributes"\n'
+            "    fields = [PluginField(key='path', label='Path', field_type='folder')]\n"
+            "    def run(self, field_values, medias): return []\n"
+            "\n"
+            "IMPORTER = _Imp()\n"
+        )
+
+        import importlib
+
+        parent = importlib.import_module("vtsearch.datasets.importers")
+        pkg_dir = os.path.dirname(parent.__file__)
+        link = os.path.join(pkg_dir, "attr_check_pkg")
+        os.symlink(str(ext_pkg), link)
+
+        try:
+            reg = PluginRegistry(
+                package="vtsearch.datasets.importers",
+                sentinel="IMPORTER",
+                label="dataset importer",
+            )
+            names = [p.name for p in reg.list()]
+            assert "attr_check_imp" in names
+
+            mod = sys.modules["vtsearch.datasets.importers.attr_check_pkg"]
+            assert mod.__name__ == "vtsearch.datasets.importers.attr_check_pkg"
+            # __path__ should be set (it's a package)
+            assert hasattr(mod, "__path__")
+            assert len(mod.__path__) == 1
+        finally:
+            os.unlink(link)
+            for key in list(sys.modules):
+                if "attr_check_pkg" in key:
+                    del sys.modules[key]
+
+    def test_symlinked_flat_module_is_discovered(self, tmp_path):
+        """A symlink to a .py file should be discovered when
+        discover_modules=True."""
+        import os
+        import sys
+
+        from vtsearch.utils.registry import PluginRegistry
+
+        # Create an external .py module with a sentinel.
+        ext_module = tmp_path / "my_flat_source.py"
+        ext_module.write_text(
+            "class _Src:\n"
+            '    name = "symlinked_flat_mod"\n'
+            "\n"
+            "FAKE_SENTINEL = _Src()\n"
+        )
+
+        # We need a real package dir with __init__.py for the registry.
+        pkg_dir = tmp_path / "fake_pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "__init__.py").write_text("")
+
+        # Symlink the .py file into the package.
+        link = pkg_dir / "linked_source.py"
+        os.symlink(str(ext_module), str(link))
+
+        # Register the fake package so importlib can find it.
+        sys.modules["_test_flat_pkg"] = type(sys)("_test_flat_pkg")
+        sys.modules["_test_flat_pkg"].__file__ = str(pkg_dir / "__init__.py")
+        sys.modules["_test_flat_pkg"].__path__ = [str(pkg_dir)]
+        sys.modules["_test_flat_pkg"].__package__ = "_test_flat_pkg"
+
+        try:
+            reg = PluginRegistry(
+                package="_test_flat_pkg",
+                sentinel="FAKE_SENTINEL",
+                label="test source",
+                discover_modules=True,
+            )
+            names = [p.name for p in reg.list()]
+            assert "symlinked_flat_mod" in names
+        finally:
+            for key in list(sys.modules):
+                if "_test_flat_pkg" in key:
+                    del sys.modules[key]
+
+
 class TestRglobFollowSymlinks:
     """rglob_follow_symlinks should descend into symlinked directories."""
 
