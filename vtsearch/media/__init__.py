@@ -146,6 +146,8 @@ def all_demo_datasets() -> dict:
                 "media_type": mt.type_id,
                 "slice_start": ds.slice_start,
                 "slice_end": ds.slice_end,
+                "slice_frac_start": ds.slice_frac_start,
+                "slice_frac_end": ds.slice_frac_end,
                 "download_size_mb": ds.download_size_mb,
             }
             if ds.source:
