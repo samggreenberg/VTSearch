@@ -232,17 +232,6 @@
     </div>
   </div>
 
-  <!-- Detector Export (Labeling mode only) -->
-  @if (showDetectorSection) {
-    <div class="export-section">
-      <h3 title="Save the trained neural network weights so the model can be reloaded later">Export Detector Weights</h3>
-      <div class="export-buttons">
-        <button class="btn btn--primary" (click)="exportDetectorBrowser()" title="Download the detector weights file to your local machine via the browser">Browser Download</button>
-        <button class="btn btn--secondary" (click)="exportDetectorServer()" title="Save the detector weights file to the server's detectors directory">Save to Server</button>
-      </div>
-    </div>
-  }
-
   @if (status) {
     <p class="status-text">{{ status }}</p>
   }
