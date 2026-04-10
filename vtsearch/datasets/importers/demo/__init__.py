@@ -206,6 +206,9 @@ def _source_directory(source: str) -> Path | None:
             "urbansound8k": DATA_DIR / "UrbanSound8K" / "audio",
             # Video sources
             "ucf101": video_dir / "ucf101",
+            "hmdb51": video_dir / "hmdb51",
+            "ucf101_full": video_dir / "ucf101_full",
+            "kth": video_dir / "kth",
         }
     return _SOURCE_DIRS.get(source)
 

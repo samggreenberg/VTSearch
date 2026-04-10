@@ -44,6 +44,16 @@ STANFORD_DOGS_URL = "https://huggingface.co/datasets/Alanox/stanford-dogs/resolv
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
+# HMDB51
+HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
+
+# UCF101 full (ZIP mirror on HuggingFace — no auth required)
+UCF101_FULL_URL = "https://huggingface.co/datasets/quchenyuan/UCF101-ZIP/resolve/main/UCF-101.zip"
+
+# KTH Actions
+KTH_BASE_URL = "https://www.csc.kth.se/cvap/actions/"
+KTH_ACTIONS = ("walking", "jogging", "running", "boxing", "handwaving", "handclapping")
+
 # Demo dataset download size estimates (MB)
 ESC50_DOWNLOAD_SIZE_MB = 600
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150
@@ -62,6 +72,9 @@ FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
 STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
+HMDB51_DOWNLOAD_SIZE_MB = 2000
+UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
+KTH_DOWNLOAD_SIZE_MB = 1150
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
