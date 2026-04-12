@@ -20,10 +20,10 @@
       <table class="results-table">
         <thead>
           <tr>
-            <th>Origin</th>
-            <th>Name</th>
-            <th>MD5</th>
-            <th>Filename</th>
+            <th title="Source origin of the media item">Origin</th>
+            <th title="Display name of the media item">Name</th>
+            <th title="MD5 content hash of the media file">MD5</th>
+            <th title="Original filename on disk">Filename</th>
           </tr>
         </thead>
         <tbody>
@@ -43,13 +43,13 @@
   <!-- Export controls -->
   <div class="export-controls">
     <div class="export-sides">
-      <label><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
-      <label><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
-      <label><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
+      <label title="Show only items predicted as good"><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
+      <label title="Show only items predicted as bad"><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
+      <label title="Show both good and bad predictions"><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
     </div>
 
     <div class="export-row">
-      <select class="form-select" [(ngModel)]="selectedExporter" (ngModelChange)="onExporterChange()">
+      <select class="form-select" [(ngModel)]="selectedExporter" (ngModelChange)="onExporterChange()" title="Choose export destination">
         @for (exp of exporters; track exp.name) {
           <option [value]="exp.name">{{ exp['label'] || exp.name }}</option>
         }
@@ -72,20 +72,20 @@
     }
 
     <div class="copy-row">
-      <select class="form-select" [(ngModel)]="copyColumn">
+      <select class="form-select" [(ngModel)]="copyColumn" title="Column to copy to clipboard">
         <option value="origin+name">Origin + Name</option>
         <option value="name">Name</option>
         <option value="md5">MD5</option>
         <option value="filename">Filename</option>
         <option value="origin">Origin</option>
       </select>
-      <select class="form-select" [(ngModel)]="copySeparator">
+      <select class="form-select" [(ngModel)]="copySeparator" title="Separator between copied values">
         <option value="newline">Newline</option>
         <option value=",">Comma</option>
         <option value="tab">Tab</option>
         <option value="space">Space</option>
       </select>
-      <button class="btn btn--secondary" (click)="copyToClipboard()">{{ copyButtonText }}</button>
+      <button class="btn btn--secondary" (click)="copyToClipboard()" title="Copy selected column values to clipboard">{{ copyButtonText }}</button>
     </div>
   </div>
 

@@ -3,7 +3,7 @@
   <cdk-virtual-scroll-viewport [itemSize]="listItemHeight" class="media-list virtual-scroll-viewport">
     <ng-container *cdkVirtualFor="let item of cachedOrderedItems; trackBy: trackByMediaId">
       @if (item.showThreshold) {
-        <div class="media-threshold-line" aria-label="Good/Bad threshold">
+        <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
           <span class="threshold-label">threshold</span>
         </div>
       }
@@ -24,7 +24,7 @@
   <div class="media-list" [class.grid-layout]="viewMode === 'grid'" [style.--grid-goal-width]="gridGoalWidth + 'px'" role="listbox" aria-label="Media items" #listContainer>
     @for (item of cachedOrderedItems; track trackByMediaId($index, item)) {
       @if (item.showThreshold) {
-        <div class="media-threshold-line" aria-label="Good/Bad threshold">
+        <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
           <span class="threshold-label">threshold</span>
         </div>
       }

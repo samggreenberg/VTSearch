@@ -3,7 +3,7 @@
     <p class="empty-state">Loading...</p>
   } @else if (showMediaPicker) {
     <div class="media-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="closeMediaPicker()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="closeMediaPicker()" title="Return to sort options">&larr; Back</button>
 
       <!-- Source selection -->
       @if (mediaPickerView === 'sources') {
@@ -98,7 +98,7 @@
         @if (serverDetectors.length > 0) {
           <div class="file-list">
             @for (det of serverDetectors; track det.name) {
-              <button class="file-item" (click)="loadServerDetector(det.name)">{{ det.name }}</button>
+              <button class="file-item" (click)="loadServerDetector(det.name)" [title]="'Load detector: ' + det.name">{{ det.name }}</button>
             }
           </div>
         } @else {
@@ -108,7 +108,7 @@
         @if (registryModels.length > 0) {
           <div class="file-list">
             @for (model of registryModels; track model.id) {
-              <button class="file-item" (click)="loadRegistryModel(model)">
+              <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load model: ' + model.name">
                 {{ model.name }}
                 @if (model.num_training) {
                   <span class="item-meta">{{ model.num_training }} labels</span>
@@ -133,7 +133,7 @@
           <h4 title="Example media files available on the server">Server Example Media</h4>
           <div class="file-list">
             @for (file of serverMediaFiles; track file.name) {
-              <button class="file-item" (click)="loadServerMedia(file.filename || file.name)">{{ file.filename || file.name }}</button>
+              <button class="file-item" (click)="loadServerMedia(file.filename || file.name)" [title]="'Sort by example: ' + (file.filename || file.name)">{{ file.filename || file.name }}</button>
             }
           </div>
         }
