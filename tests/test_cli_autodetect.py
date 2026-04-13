@@ -1036,6 +1036,22 @@ class TestRunExporter:
         with pytest.raises(ValueError, match="Missing required argument"):
             _run_exporter("email_smtp", {}, {})
 
+    def test_exporter_oserror_propagates(self, client, tmp_path):
+        """Non-ValueError exceptions from exporters should propagate, not be swallowed."""
+        from unittest.mock import patch
+
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        hits = run_autodetect(str(dataset_path), str(detector_path))
+        results = _build_results_dict(hits, str(detector_path), "audio")
+
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=PermissionError("Permission denied: /readonly/path.json"),
+        ):
+            with pytest.raises(PermissionError, match="Permission denied"):
+                _run_exporter("server_json_file", {"filepath": "/readonly/path.json"}, results)
+
 
 # ---------------------------------------------------------------------------
 # Tests for autodetect_main with --exporter (settings-based)
@@ -1102,6 +1118,59 @@ class TestAutodetectMainWithExporter:
         assert len(saved["results"]) == 2
 
 
+    def test_exporter_oserror_exits_cleanly(self, client, tmp_path, capsys):
+        """An OSError from an exporter should exit(1) with a clean error message, not a traceback."""
+        from unittest.mock import patch
+
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        settings_path = _make_settings_file(tmp_path, [detector_path])
+
+        from vtsearch.cli import autodetect_main
+
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=OSError("No space left on device"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                autodetect_main(
+                    str(dataset_path),
+                    settings_path=str(settings_path),
+                    exporter_name="server_json_file",
+                    exporter_field_values={"filepath": "/some/path.json"},
+                )
+
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "No space left on device" in captured.err
+
+    def test_exporter_permission_error_exits_cleanly(self, client, tmp_path, capsys):
+        """A PermissionError from an exporter should exit(1) with a clean error message."""
+        from unittest.mock import patch
+
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        settings_path = _make_settings_file(tmp_path, [detector_path])
+
+        from vtsearch.cli import autodetect_main
+
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=PermissionError("Permission denied: /readonly/path.json"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                autodetect_main(
+                    str(dataset_path),
+                    settings_path=str(settings_path),
+                    exporter_name="server_json_file",
+                    exporter_field_values={"filepath": "/readonly/path.json"},
+                )
+
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "Permission denied" in captured.err
+
+
 class TestAutodetectImporterMainWithExporter:
     """Tests for the autodetect_importer_main function with exporter support."""
 
@@ -1125,6 +1194,33 @@ class TestAutodetectImporterMainWithExporter:
         saved = json.loads(output_file.read_text())
         assert "results" in saved
         assert saved["media_type"] == "audio"
+
+    def test_importer_exporter_oserror_exits_cleanly(self, client, tmp_path, capsys):
+        """An OSError from an exporter in the importer path should exit(1) cleanly."""
+        from unittest.mock import patch
+
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        settings_path = _make_settings_file(tmp_path, [detector_path])
+
+        from vtsearch.cli import autodetect_importer_main
+
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=OSError("Disk quota exceeded"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                autodetect_importer_main(
+                    "pickle",
+                    {"file": str(dataset_path)},
+                    settings_path=str(settings_path),
+                    exporter_name="server_json_file",
+                    exporter_field_values={"filepath": "/some/path.json"},
+                )
+
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "Disk quota exceeded" in captured.err
 
 
 # ---------------------------------------------------------------------------

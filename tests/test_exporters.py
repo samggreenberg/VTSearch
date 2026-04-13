@@ -623,3 +623,37 @@ class TestExportEndpoint:
             },
         )
         assert res.status_code == 400
+
+    def test_export_oserror_returns_500(self, client):
+        """An OSError from an exporter should return a 500 with the error message."""
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=OSError("No space left on device"),
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": "data/test_output.json"},
+                    "results": SAMPLE_RESULTS,
+                },
+            )
+            assert res.status_code == 500
+            assert "No space left on device" in res.get_json()["error"]
+
+    def test_export_permission_error_returns_500(self, client):
+        """A PermissionError from an exporter should return a 500 with the error message."""
+        with patch(
+            "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+            side_effect=PermissionError("Permission denied"),
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": "data/test_output.json"},
+                    "results": SAMPLE_RESULTS,
+                },
+            )
+            assert res.status_code == 500
+            assert "Permission denied" in res.get_json()["error"]
