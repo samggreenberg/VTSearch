@@ -28,7 +28,7 @@
 
   @if (view === 'demo') {
     <div class="demo-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
 
       @if (demoLoading) {
         <p class="empty-state">Loading demo datasets...</p>
@@ -41,6 +41,7 @@
               class="demo-tab"
               [class.active]="activeTab === tab"
               (click)="selectDemoTabWithEmbedder(tab)"
+              [title]="'Filter demos by media type: ' + getTabText(tab)"
             >@if (getTabIcon(tab)) {<vt-icon [icon]="getTabIcon(tab)" [size]="14"></vt-icon>}{{ getTabText(tab) }}</button>
           }
         </div>
@@ -107,7 +108,7 @@
 
   @if (view === 'form' && selectedImporter) {
     <div class="importer-form">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
 
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
@@ -216,7 +217,7 @@
 
   @if (view === 'server_folder') {
     <div class="server-folder-browser">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
 
       <div class="form-group">
         <label class="form-label" for="sf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
@@ -251,13 +252,13 @@
             <p class="sf-empty-dir">No subdirectories. This folder will be imported.</p>
           }
           @if (sfBrowsePath) {
-            <button class="sf-dir-item" (click)="sfGoUp()">
+            <button class="sf-dir-item" (click)="sfGoUp()" title="Go to parent directory">
               <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
               <span class="sf-dir-name">..</span>
             </button>
           }
           @for (dir of sfBrowseDirs; track dir.path) {
-            <button class="sf-dir-item" (click)="sfEnterDirectory(dir)">
+            <button class="sf-dir-item" (click)="sfEnterDirectory(dir)" [title]="dir.path">
               <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
               <span class="sf-dir-name">{{ dir.name }}</span>
               @if (dir.modified_at) {

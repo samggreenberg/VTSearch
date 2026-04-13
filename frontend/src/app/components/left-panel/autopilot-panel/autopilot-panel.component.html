@@ -37,11 +37,11 @@
           >
             <div class="ap-step-marker">
               @if (step.state === 'done') {
-                <span class="ap-check" aria-label="Complete">&#10003;</span>
+                <span class="ap-check" title="Complete" aria-label="Complete">&#10003;</span>
               } @else if (step.state === 'active') {
-                <span class="ap-dot active-dot" aria-label="Current step"></span>
+                <span class="ap-dot active-dot" title="Current step" aria-label="Current step"></span>
               } @else {
-                <span class="ap-dot" aria-label="Upcoming step"></span>
+                <span class="ap-dot" title="Upcoming step" aria-label="Upcoming step"></span>
               }
             </div>
             <div class="ap-step-content">
@@ -56,6 +56,7 @@
                       class="ap-status-icon"
                       [attr.data-color]="icon.color"
                       [attr.aria-label]="icon.ariaLabel"
+                      [title]="icon.ariaLabel"
                       role="img"
                     ></span>
                   }

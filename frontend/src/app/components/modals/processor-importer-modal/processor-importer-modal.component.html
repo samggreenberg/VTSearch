@@ -20,7 +20,7 @@
 
   @if (view === 'form' && selectedImporter) {
     <div class="importer-form">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
 
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
