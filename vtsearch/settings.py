@@ -798,7 +798,7 @@ def sync_from_settings_source() -> dict[str, Any] | None:
     try:
         imported = source.load(field_values)
     except Exception as exc:
-        logger.warning("Failed to load from settings source: %s", exc)
+        logger.exception("Failed to load from settings source: %s", exc)
         return None
 
     if not imported:
@@ -836,4 +836,4 @@ def _sync_to_source(data: dict[str, Any]) -> None:
     try:
         source.save(export_data, field_values)
     except Exception as exc:
-        logger.warning("Failed to sync settings to source: %s", exc)
+        logger.exception("Failed to sync settings to source: %s", exc)

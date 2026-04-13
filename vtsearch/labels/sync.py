@@ -57,7 +57,7 @@ def sync_to_labelset_source() -> None:
         labelset = LabelSet.from_clips_and_votes(dict(medias), dict(good_votes), dict(bad_votes))
         source.save(labelset, field_values)
     except Exception as exc:
-        logger.warning("Failed to sync labels to source: %s", exc)
+        logger.exception("Failed to sync labels to source: %s", exc)
 
 
 def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, str]] | None:
@@ -97,7 +97,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     try:
         labels = source.load(field_values)
     except Exception as exc:
-        logger.warning("Failed to load from labelset source: %s", exc)
+        logger.exception("Failed to load from labelset source: %s", exc)
         return None
 
     if not labels:

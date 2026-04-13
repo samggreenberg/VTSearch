@@ -22,10 +22,14 @@ POST /api/exporters/export
 
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, jsonify
 
 from vtsearch.exporters import get_exporter, list_exporters
 from vtsearch.routes.helpers import get_json_safe, get_plugin_or_404, validate_filepath_field
+
+logger = logging.getLogger(__name__)
 
 exporters_bp = Blueprint("exporters", __name__)
 
@@ -101,7 +105,8 @@ def run_export():
         outcome = exporter.export(results, field_values)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
+        logger.exception("Export failed (%s): %s", exporter_name, exc)
         return jsonify({"error": f"Export failed: {exc}"}), 500
 
     return jsonify({"success": True, **outcome})
