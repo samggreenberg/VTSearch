@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from flask import jsonify, request
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
     from vtsearch.utils.registry import PluginBase
 
 import vtsearch.utils.paths as _paths
+
+logger = logging.getLogger(__name__)
 
 
 def get_json_safe() -> dict:
@@ -142,7 +145,8 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
         result = getattr(plugin, method)(*args)
     except ValueError as exc:
         return None, (jsonify({"error": str(exc)}), 400)
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
+        logger.exception("%s.%s() failed: %s", type(plugin).__name__, method, exc)
         verb = method.replace("_", " ").capitalize()
         return None, (jsonify({"error": f"{verb} failed: {exc}"}), 500)
     return result, None

@@ -17,9 +17,13 @@ POST /api/settings-exporters/export
 
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, jsonify
 
 from vtsearch import settings
+
+logger = logging.getLogger(__name__)
 from vtsearch.routes.helpers import (
     extract_plugin_fields,
     get_json_safe,
@@ -138,7 +142,8 @@ def run_settings_export():
         outcome = exporter.export(settings_data, field_values)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
+        logger.exception("Settings export failed (%s): %s", exporter_name, exc)
         return jsonify({"error": f"Export failed: {exc}"}), 500
 
     return jsonify({"success": True, **outcome})

@@ -493,7 +493,7 @@ def autodetect_main(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded from dataset: {dataset_path}",
         )
-    except (FileNotFoundError, ValueError) as e:
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -533,7 +533,7 @@ def autodetect_importer_main(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded by importer '{importer_name}'",
         )
-    except (FileNotFoundError, ValueError, NotADirectoryError) as e:
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -566,7 +566,7 @@ def autodetect_main_chunked(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded from dataset: {dataset_path}",
         )
-    except (FileNotFoundError, ValueError) as e:
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -602,6 +602,6 @@ def autodetect_importer_main_chunked(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded by importer '{importer_name}'",
         )
-    except (FileNotFoundError, ValueError, NotADirectoryError) as e:
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
