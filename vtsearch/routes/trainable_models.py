@@ -722,7 +722,7 @@ def load_model_route():
                             "loading", "Training model…", 0, 0,
                             step=3, total_steps=_LOAD_STEPS,
                         )
-                        from vtsearch.routes.detectors_helpers import train_and_threshold
+                        from vtsearch.models.detector_training import train_and_threshold
 
                         snap = _snap_medias()
                         X_list = []

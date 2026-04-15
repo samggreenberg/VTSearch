@@ -14,27 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import io
-import struct
-import wave
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _make_wav_bytes() -> bytes:
-    """Create a minimal valid WAV file in memory."""
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(44100)
-        samples = struct.pack("<" + "h" * 100, *([0] * 100))
-        wf.writeframes(samples)
-    return buf.getvalue()
 
 
 def _make_png_bytes(width: int = 4, height: int = 4) -> bytes:

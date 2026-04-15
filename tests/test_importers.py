@@ -15,24 +15,12 @@ These tests verify:
 from __future__ import annotations
 
 import io
-import struct
 import tarfile
-import wave
 import zipfile
 
 import pytest
 
-
-def _make_wav_bytes() -> bytes:
-    """Create a minimal valid WAV file in memory."""
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(44100)
-        samples = struct.pack("<" + "h" * 100, *([0] * 100))
-        wf.writeframes(samples)
-    return buf.getvalue()
+from helpers import make_raw_wav_bytes as _make_wav_bytes
 
 
 # ---------------------------------------------------------------------------

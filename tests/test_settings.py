@@ -19,13 +19,6 @@ import app as app_module  # noqa: F401 — triggers conftest media init
 from vtsearch import settings as settings_mod
 
 
-@pytest.fixture
-def client():
-    app_module.app.config["TESTING"] = True
-    with app_module.app.test_client() as c:
-        yield c
-
-
 # ---------------------------------------------------------------------------
 # Settings module unit tests
 # ---------------------------------------------------------------------------
