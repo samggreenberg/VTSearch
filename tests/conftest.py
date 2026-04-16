@@ -19,6 +19,8 @@ _TEST_GROUPS = {
         "test_votes",
         "test_inclusion",
         "test_settings",
+        "test_settings_api_routes",
+        "test_settings_directories",
         "test_frontend",
     ],
     "api": [
@@ -60,6 +62,8 @@ _TEST_GROUPS = {
         "test_csv_webhook_exporters",
         "test_export_options",
         "test_importers",
+        "test_importer_loading",
+        "test_importer_symlinks",
         "test_dataset_importer_media",
         "test_label_importers",
         "test_label_import_endpoint",
@@ -73,6 +77,8 @@ _TEST_GROUPS = {
     ],
     "models": [
         "test_detectors",
+        "test_detector_find",
+        "test_detector_export",
         "test_extractors",
         "test_processors",
         "test_trainable_models",
