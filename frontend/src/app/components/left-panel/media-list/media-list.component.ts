@@ -18,6 +18,7 @@ import { MediaItemComponent } from '../media-item/media-item.component';
 import { MediaItem } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SortedItem } from '../left-panel.component';
+import { prefersReducedMotion } from '../../../utils/reduced-motion';
 
 /** Threshold above which we switch from plain DOM to CDK virtual scrolling (list mode only). */
 const VIRTUAL_SCROLL_THRESHOLD = 500;
@@ -152,16 +153,17 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
       scrollEl.scrollTop = pct * maxScroll;
     } else if (this.pendingScrollToSelected) {
       this.pendingScrollToSelected = false;
+      const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
       if (this.useVirtualScroll && this.virtualViewport) {
         // In virtual-scroll mode, find the index and scroll to it.
         const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId);
         if (idx >= 0) {
-          this.virtualViewport.scrollToIndex(idx, 'smooth');
+          this.virtualViewport.scrollToIndex(idx, behavior);
         }
       } else if (this.listContainer) {
         const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
         if (activeEl) {
-          activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          activeEl.scrollIntoView({ block: 'nearest', behavior });
         }
       }
     }
@@ -176,8 +178,9 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
   }
 
   scrollToIndex(index: number): void {
+    const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
     if (this.useVirtualScroll && this.virtualViewport) {
-      this.virtualViewport.scrollToIndex(index, 'smooth');
+      this.virtualViewport.scrollToIndex(index, behavior);
       // After scrolling, select the item at this index.
       const item = this.cachedOrderedItems[index];
       if (item) {
@@ -195,7 +198,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
     const offset = targetRect.top - containerRect.top + container.scrollTop;
     container.scrollTo({
       top: offset - containerRect.height / 2 + targetRect.height / 2,
-      behavior: 'smooth',
+      behavior,
     });
   }
 
