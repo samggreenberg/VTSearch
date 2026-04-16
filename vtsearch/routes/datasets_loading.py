@@ -684,13 +684,18 @@ def _run_origin_load_in_background(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtsearch.utils.state_core import _contexts
+    from vtsearch.utils.state_core import _contexts, _state_lock
 
-    ctx = _contexts.pop(old_id, None)
-    if ctx is None:
-        return
-    ctx.dataset_id = new_id
-    _contexts[new_id] = ctx
+    with _state_lock:
+        ctx = _contexts.get(old_id)
+        if ctx is None:
+            return
+        ctx.dataset_id = new_id
+        # Insert under the new key before removing the old, so the context
+        # is never briefly invisible to concurrent lookups.
+        _contexts[new_id] = ctx
+        if old_id != new_id:
+            _contexts.pop(old_id, None)
 
 
 def _run_importer_in_background(importer, field_values: dict) -> str:
