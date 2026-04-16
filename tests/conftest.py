@@ -98,6 +98,7 @@ _TEST_GROUPS = {
         "test_integration",
         "test_slow_integration",
         "test_thread_safety",
+        "test_multi_media_coverage",
     ],
     "cli": [
         "test_cli_autodetect",
