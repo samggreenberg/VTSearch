@@ -140,23 +140,33 @@ class TestLoadDemoSourceBbcNews:
         from vtsearch.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
-        # Provide a stub embedding model so we never hit the real network.
         stub_model = MagicMock()
         stub_model.encode.return_value = [0.1] * 768
         mt._model = stub_model
         return mt
 
+    def _make_fake_embedder(self):
+        import numpy as np
+
+        emb = MagicMock()
+        emb.name = "e5"
+        emb.media_type_id = "text"
+        emb._model = True
+        emb._on_progress = lambda *a: None
+        emb.embed_text_passage.return_value = np.zeros(768)
+        return emb
+
     def test_bbc_news_source_populates_clips(self, tmp_path):
         """load_demo_source with source='bbc_news' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
 
-        # Provide fake categories_articles directly.
         fake_articles = {
             "business": ["Business article one.", "Business article two."],
             "sport": ["Sport article one.", "Sport article two."],
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_bbc_news", return_value=fake_articles):
@@ -167,6 +177,7 @@ class TestLoadDemoSourceBbcNews:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         assert len(clips) == 4
@@ -182,6 +193,7 @@ class TestLoadDemoSourceBbcNews:
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_bbc_news", return_value=fake_articles):
@@ -192,6 +204,7 @@ class TestLoadDemoSourceBbcNews:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # Only articles[2:5] = 3 articles.

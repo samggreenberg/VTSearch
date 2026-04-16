@@ -24,6 +24,7 @@ torch>=2.0.0
 
 # ── Dev tools ────────────────────────────────────────────────────────
 pytest
+pytest-xdist
 ruff
 
 # ── Plugin dependencies (auto-discovered) ────────────────────────────

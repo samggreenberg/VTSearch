@@ -227,6 +227,16 @@ class TestLoadDemoSourceUcsfDocuments:
         mt._processor = MagicMock()
         return mt
 
+    def _make_fake_embedder(self):
+        emb = MagicMock()
+        emb.name = "clip"
+        emb.media_type_id = "image"
+        emb._model = True
+        emb._on_progress = lambda *a: None
+        emb.embed_media.return_value = np.zeros(768)
+        emb.embed_pil_image.return_value = np.zeros(768)
+        return emb
+
     def _fake_render(self, page_count: int = 1, width: int = 100, height: int = 80):
         """Return a render_pdf_pages replacement that yields tiny PIL images."""
 
@@ -248,7 +258,7 @@ class TestLoadDemoSourceUcsfDocuments:
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco", "Food"], docs_per_cat=2)
 
         mt = self._make_image_media_type()
-        mt.embed_pil_image = MagicMock(return_value=np.zeros(768))
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with (
@@ -262,6 +272,7 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         assert len(clips) == 4  # 2 docs × 2 categories
@@ -276,7 +287,7 @@ class TestLoadDemoSourceUcsfDocuments:
         docs_dir = _make_ucsf_fixture(tmp_path, ["Drug"], docs_per_cat=1)
 
         mt = self._make_image_media_type()
-        mt.embed_pil_image = MagicMock(return_value=np.zeros(768))
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with (
@@ -290,6 +301,7 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         assert len(clips) == 1
@@ -310,7 +322,7 @@ class TestLoadDemoSourceUcsfDocuments:
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco"], docs_per_cat=10)
 
         mt = self._make_image_media_type()
-        mt.embed_pil_image = MagicMock(return_value=np.zeros(768))
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with (
@@ -324,6 +336,7 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # Only docs[2:5] = 3 pages.
@@ -337,7 +350,7 @@ class TestLoadDemoSourceUcsfDocuments:
         docs_dir = _make_ucsf_fixture(tmp_path, ["Chemical"], docs_per_cat=2)
 
         mt = self._make_image_media_type()
-        mt.embed_pil_image = MagicMock(return_value=np.zeros(768))
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         # Each PDF has 5 pages, but only page 1 should be used per doc.
@@ -352,6 +365,7 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # 2 docs × 1 page each = 2 clips.
@@ -365,7 +379,7 @@ class TestLoadDemoSourceUcsfDocuments:
         docs_dir = _make_ucsf_fixture(tmp_path, ["Opioids"], docs_per_cat=3)
 
         mt = self._make_image_media_type()
-        mt.embed_pil_image = MagicMock(return_value=np.zeros(768))
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         call_count = [0]
@@ -388,6 +402,7 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # 3 docs, 1 fails → 2 clips.

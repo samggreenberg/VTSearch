@@ -19,6 +19,8 @@ _TEST_GROUPS = {
         "test_votes",
         "test_inclusion",
         "test_settings",
+        "test_settings_api_routes",
+        "test_settings_directories",
         "test_frontend",
     ],
     "api": [
@@ -60,6 +62,8 @@ _TEST_GROUPS = {
         "test_csv_webhook_exporters",
         "test_export_options",
         "test_importers",
+        "test_importer_loading",
+        "test_importer_symlinks",
         "test_dataset_importer_media",
         "test_label_importers",
         "test_label_import_endpoint",
@@ -73,6 +77,8 @@ _TEST_GROUPS = {
     ],
     "models": [
         "test_detectors",
+        "test_detector_find",
+        "test_detector_export",
         "test_extractors",
         "test_processors",
         "test_trainable_models",
@@ -98,6 +104,7 @@ _TEST_GROUPS = {
         "test_integration",
         "test_slow_integration",
         "test_thread_safety",
+        "test_multi_media_coverage",
     ],
     "cli": [
         "test_cli_autodetect",
@@ -224,10 +231,17 @@ _patch_embed_audio.stop()
 # Grab the audio media-type singleton and the audio embedder so the per-test
 # fixture can patch embed_text/embed_media/load_models on both, preventing
 # CLAP from loading during /api/sort and similar calls.
-from vtsearch.media import get as _media_get, embedders_for_type as _embedders_for_type
+from vtsearch.media import all_embedders as _all_embedders, all_types as _all_types, get as _media_get, embedders_for_type as _embedders_for_type
 
 _audio_mt = _media_get("audio")
 _audio_emb = _embedders_for_type("audio")[0]
+
+# Every registered media type and embedder gets stubbed below — not just
+# audio.  Tests that accidentally touch image/video/text/document embedders
+# (e.g. via ``/api/sort`` on an image dataset) would otherwise try to
+# download real CLIP / X-CLIP / E5 / SigLIP weights.
+_ALL_EMBEDDERS = _all_embedders()
+_ALL_MEDIA_TYPES = _all_types()
 
 
 @pytest.fixture(autouse=True)
@@ -260,79 +274,66 @@ def _allow_test_tmp_paths(monkeypatch):
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _stub_embedding_models():
-    """Prevent CLAP (and librosa) from loading during individual tests.
+    """Prevent any embedder from loading real model weights during tests.
 
-    Patches ``embed_audio_file``, the audio media-type's ``embed_text``,
-    ``embed_media``, and ``load_models`` so that any test-time calls
-    (e.g. via ``/api/sort``) return cheap deterministic fake vectors
-    instead of loading a ~600 MB model.
+    Session-scoped: the 40 patches are applied once and held for the entire
+    run instead of being torn down and re-applied for each of the ~2900 tests.
+    Tests that need different stub behavior can layer their own ``patch.object``
+    on top — it will override the session-level patch and restore it on exit.
     """
-    with (
-        patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio),
-        patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
-        patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
-        patch.object(_audio_mt, "load_models"),
-        patch.object(_audio_emb, "embed_media", side_effect=_fake_embed_audio),
-        patch.object(_audio_emb, "embed_text", side_effect=_fake_embed_text),
-        patch.object(_audio_emb, "load_models"),
-    ):
-        yield
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
+    for mt in _ALL_MEDIA_TYPES:
+        stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
+        stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
+        stack.enter_context(patch.object(mt, "load_models"))
+    for emb in _ALL_EMBEDDERS:
+        stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
+        stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
+        stack.enter_context(patch.object(emb, "load_models"))
+    yield
+    stack.close()
+
+
+import vtsearch.utils.state_core as _core
+from vtsearch.utils.progress import dataset_progress as _dataset_progress, eval_progress as _eval_progress, find_progress as _find_progress, loading_tasks as _loading_tasks, model_loading_tasks as _model_loading_tasks, sort_progress as _sort_progress
+from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
+from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
+from vtsearch.models.registry import reset_for_tests as _reset_model_reg
 
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """Reset all mutable global state before each test.
-
-    This fixture prevents cross-test contamination by clearing votes,
-    autorun entries, and all other mutable state that lives in
-    ``vtsearch.utils.state``.  It runs automatically before every test.
-    """
-    import vtsearch.utils.state_core as _core
-
-    # Clear all dataset contexts and create a fresh default context so that
-    # tests that just write to ``medias`` etc. still work.
+    """Reset all mutable global state before each test."""
     _core.clear_all_contexts()
     default_ctx = _core.DatasetContext("_test_default")
     _core.register_context(default_ctx)
     _core.set_thread_dataset_context(default_ctx)
 
-    # Clear all detector contexts and create a fresh default context so that
-    # tests that just write to ``good_votes`` / ``bad_votes`` etc. still work.
     _core.clear_all_detector_contexts()
     default_det = _core.DetectorContext("_test_default_det")
     _core.register_detector_context(default_det)
     _core.set_thread_detector_context(default_det)
 
-    # Replay the test medias into the fresh context (medias is intentionally
-    # NOT reset between tests to avoid expensive re-generation).
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
-    # Clear global (non-per-dataset) state.
     _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
 
-    # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, eval_progress, find_progress, loading_tasks, model_loading_tasks, sort_progress
+    _dataset_progress.reset_cancel()
+    _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+    _sort_progress.update("idle", "", 0, 0)
+    _eval_progress.update("idle", "", 0, 0)
+    _loading_tasks.reset_for_tests()
+    _model_loading_tasks.reset_for_tests()
 
-    dataset_progress.reset_cancel()
-    find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    sort_progress.update("idle", "", 0, 0)
-    eval_progress.update("idle", "", 0, 0)
-    loading_tasks.reset_for_tests()
-    model_loading_tasks.reset_for_tests()
-
-    # Reset the login provider to DefaultLoginProvider
-    from vtsearch.auth import DefaultLoginProvider, set_login_provider
-
-    set_login_provider(DefaultLoginProvider())
-
-    # Reset the dataset and model registries
-    from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
-    from vtsearch.models.registry import reset_for_tests as _reset_model_reg
+    _set_login_provider(_DefaultLoginProvider())
 
     _reset_ds_reg()
     _reset_model_reg()
@@ -401,34 +402,36 @@ def pytest_unconfigure(config):
     """
     import sys
 
-    # Grab stats from the terminal reporter (if available)
+    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
+
     reporter = config.pluginmanager.getplugin("terminalreporter")
+    print("", flush=True)
+    print("=" * 60, flush=True)
     if reporter:
         passed = len(reporter.stats.get("passed", []))
         failed = len(reporter.stats.get("failed", []))
         errors = len(reporter.stats.get("error", []))
         skipped = len(reporter.stats.get("skipped", []))
+        xfailed = len(reporter.stats.get("xfailed", []))
         total = passed + failed + errors + skipped
 
-        print("", flush=True)
-        print("=" * 60, flush=True)
         if failed or errors:
-            print(
-                f"TESTS FAILED: {failed} failed, {errors} errors, {passed} passed, {skipped} skipped (total: {total})",
-                flush=True,
-            )
+            parts = [f"{failed} failed", f"{errors} errors", f"{passed} passed", f"{skipped} skipped"]
+            if xfailed:
+                parts.append(f"{xfailed} xfailed")
+            print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
         else:
-            print(
-                f"ALL {passed} TESTS PASSED ({skipped} skipped, total: {total})",
-                flush=True,
-            )
-        print("=" * 60, flush=True)
+            extra = f"{skipped} skipped"
+            if xfailed:
+                extra += f", {xfailed} xfailed"
+            print(f"ALL {passed} TESTS PASSED ({extra}, total: {total})", flush=True)
+    else:
+        status = "PASSED" if exitstatus == 0 else "FAILED"
+        print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
+    print("=" * 60, flush=True)
 
     sys.stdout.flush()
     sys.stderr.flush()
-
-    # Retrieve the exit status stashed by pytest_sessionfinish.
-    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
     os._exit(exitstatus)
 
 

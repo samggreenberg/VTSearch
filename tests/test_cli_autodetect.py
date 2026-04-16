@@ -10,7 +10,11 @@ import numpy as np
 import pytest
 
 import app as app_module
-from helpers import build_results_dict as _build_results_dict, make_detector_file as _make_detector_file
+from helpers import (
+    build_results_dict as _build_results_dict,
+    make_dataset_file as _make_dataset_file,
+    make_detector_file as _make_detector_file,
+)
 from vtsearch.cli import (
     _build_multi_results_dict,
     _detect_media_type,
@@ -19,20 +23,11 @@ from vtsearch.cli import (
     run_autodetect,
     run_autodetect_with_importer,
 )
-from vtsearch.datasets.loader import export_dataset_to_file
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_dataset_file(tmp_path, clips_dict):
-    """Export a medias dict to a pickle file and return the path."""
-    pkl_bytes = export_dataset_to_file(clips_dict)
-    dataset_path = tmp_path / "dataset.pkl"
-    dataset_path.write_bytes(pkl_bytes)
-    return dataset_path
 
 
 def _make_settings_file(tmp_path, detector_paths, name="settings.json"):

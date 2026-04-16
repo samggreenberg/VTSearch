@@ -95,11 +95,21 @@ class TestLoadDemoSourceImdb:
         from vtsearch.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
-        # Provide a stub embedding model so we never hit the real network.
         stub_model = MagicMock()
         stub_model.encode.return_value = [0.1] * 768
         mt._model = stub_model
         return mt
+
+    def _make_fake_embedder(self):
+        import numpy as np
+
+        emb = MagicMock()
+        emb.name = "e5"
+        emb.media_type_id = "text"
+        emb._model = True
+        emb._on_progress = lambda *a: None
+        emb.embed_text_passage.return_value = np.zeros(768)
+        return emb
 
     def test_imdb_source_populates_clips(self):
         """load_demo_source with source='imdb' fills the clips dict."""
@@ -111,6 +121,7 @@ class TestLoadDemoSourceImdb:
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_imdb", return_value=fake_reviews):
@@ -121,6 +132,7 @@ class TestLoadDemoSourceImdb:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         assert len(clips) == 4
@@ -136,6 +148,7 @@ class TestLoadDemoSourceImdb:
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_imdb", return_value=fake_reviews):
@@ -146,6 +159,7 @@ class TestLoadDemoSourceImdb:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # Only reviews[2:5] = 3 reviews.
