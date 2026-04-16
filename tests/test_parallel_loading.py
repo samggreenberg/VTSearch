@@ -593,6 +593,125 @@ class TestConcurrentModelLoading:
         assert emb._model == "loaded"
 
 
+class TestLoadingSemaphore:
+    """Verify that _loading_semaphore serialises concurrent dataset loads."""
+
+    def test_second_load_waits_for_first(self):
+        """When one load is running, a second load should show 'Waiting…'
+        and only proceed after the first finishes."""
+        from vtsearch.routes.datasets_loading import (
+            _loading_semaphore,
+            _run_origin_load_in_background,
+        )
+
+        first_started = threading.Event()
+        first_proceed = threading.Event()
+        second_started = threading.Event()
+        load_order = []
+
+        def first_load(medias):
+            load_order.append("first_start")
+            first_started.set()
+            first_proceed.wait(timeout=10)
+            load_order.append("first_end")
+
+        def second_load(medias):
+            load_order.append("second_start")
+            second_started.set()
+
+        task1 = _run_origin_load_in_background(
+            first_load,
+            {"importer": "test1", "params": {}},
+            name="First",
+        )
+
+        # Wait for first load to actually start running.
+        assert first_started.wait(timeout=10)
+
+        task2 = _run_origin_load_in_background(
+            second_load,
+            {"importer": "test2", "params": {}},
+            name="Second",
+        )
+
+        # Second load should be waiting — give it a moment to start its
+        # thread and hit the semaphore wait.
+        time.sleep(0.3)
+        assert not second_started.is_set(), "Second load should be queued, not running"
+
+        # Check that the second task shows a "Waiting" message.
+        task2_info = loading_tasks.get_tracker(task2)
+        assert task2_info is not None
+        status = task2_info.get()
+        assert "Waiting" in status.get("message", "")
+
+        # Let the first load finish.
+        first_proceed.set()
+
+        # Now the second should proceed.
+        assert second_started.wait(timeout=10), "Second load never started after first finished"
+        assert load_order[:2] == ["first_start", "first_end"]
+        assert "second_start" in load_order
+
+        # Clean up — wait for tasks to finish.
+        deadline = time.time() + 10
+        while loading_tasks.has_active_tasks() and time.time() < deadline:
+            time.sleep(0.1)
+        loading_tasks.remove_task(task1)
+        loading_tasks.remove_task(task2)
+
+    def test_cancel_while_waiting_does_not_corrupt_semaphore(self):
+        """Cancelling a queued task must not release the semaphore it never
+        acquired, which would let extra loads through."""
+        from vtsearch.routes.datasets_loading import (
+            _loading_semaphore,
+            _run_origin_load_in_background,
+        )
+
+        first_started = threading.Event()
+        first_proceed = threading.Event()
+
+        def first_load(medias):
+            first_started.set()
+            first_proceed.wait(timeout=10)
+
+        task1 = _run_origin_load_in_background(
+            first_load,
+            {"importer": "test1", "params": {}},
+            name="First",
+        )
+        assert first_started.wait(timeout=10)
+
+        # Start a second load — it will be queued.
+        task2 = _run_origin_load_in_background(
+            lambda medias: None,
+            {"importer": "test2", "params": {}},
+            name="Second",
+        )
+        time.sleep(0.3)
+
+        # Cancel the queued task before it acquires the semaphore.
+        loading_tasks.cancel_task(task2)
+        time.sleep(0.5)
+
+        # The semaphore should still be held (value == 0) because only
+        # the first load has it and the cancelled task never acquired it.
+        # Verify by trying a non-blocking acquire (should fail).
+        acquired = _loading_semaphore.acquire(blocking=False)
+        if acquired:
+            _loading_semaphore.release()
+            # If we could acquire it, the cancel wrongly released.
+            pytest.fail("Semaphore was released by cancelled task that never held it")
+
+        # Clean up.
+        first_proceed.set()
+        deadline = time.time() + 10
+        while loading_tasks.has_active_tasks() and time.time() < deadline:
+            time.sleep(0.1)
+        loading_tasks.remove_task(task1)
+        loading_tasks.remove_task(task2)
+
+
 class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 

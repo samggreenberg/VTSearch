@@ -9,6 +9,10 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
 - If your feature branch was forked from `main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
 
+## Auto-PR After Successful Tests
+
+After pushing code changes and successfully running tests, **automatically create a PR targeting `dev`**. Do not ask — just create it. This applies whenever Claude both pushes and verifies tests pass in the same session.
+
 ## Backwards Compatibility
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.

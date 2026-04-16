@@ -8,6 +8,13 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
+# Limits how many dataset loads (download + embed) can run concurrently.
+# Each load can consume gigabytes of RAM (raw media bytes + model weights +
+# PyTorch tensors), so running several in parallel on a memory-constrained
+# machine pushes the system into swap-thrash and freezes the process.
+# Queued loads show a "Waiting for other datasets to finish loading…" message.
+_loading_semaphore = threading.Semaphore(1)
+
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
@@ -499,7 +506,25 @@ def _run_origin_load_in_background(
         ctx = DatasetContext(task_id)
         context_id = task_id  # tracks the current context key (may change after migration)
         stepped = _make_stepped_progress(tracker)
+        semaphore_held = False
         try:
+            # Wait for a loading slot.  Only one dataset loads at a time to
+            # avoid exhausting RAM (each load pulls raw media bytes + model
+            # weights into memory).  The task is already visible in the UI so
+            # the user sees "Waiting…" while queued.
+            if _loading_semaphore.acquire(blocking=False):
+                semaphore_held = True
+            else:
+                tracker.update(
+                    "loading",
+                    "Waiting for other datasets to finish loading…",
+                    0, 0,
+                    step=1, total_steps=_TOTAL_LOAD_STEPS,
+                )
+                while not _loading_semaphore.acquire(timeout=0.5):
+                    tracker.check_cancelled()
+                semaphore_held = True
+
             tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
             register_context(ctx)
             gc.collect()
@@ -648,6 +673,8 @@ def _run_origin_load_in_background(
             error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
             tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
+            if semaphore_held:
+                _loading_semaphore.release()
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
 
