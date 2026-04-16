@@ -352,7 +352,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configurat
 
 ## Next steps
 
-- **Load a dataset**: Click the hamburger menu in the top-left corner to browse demo datasets or import your own data.
+- **Use the app**: See [USER_GUIDE.md](USER_GUIDE.md) for a walkthrough
+  of loading a dataset, labeling with Autopilot, and exporting results.
 - **Run tests**: See [Running the tests](#running-the-tests) above.
-- **CLI workflows**: See [CLI.md](CLI.md) for running detectors and exporters from the command line.
-- **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media types, importers, or exporters.
+- **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
+  exporters from the command line.
+- **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media
+  types, importers, or exporters.

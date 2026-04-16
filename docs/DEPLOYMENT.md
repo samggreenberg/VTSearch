@@ -37,7 +37,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 VTSearch downloads four embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for the
-first time (or at startup if `autoload_media_types` is configured in
+first time (or at startup if `autoload_media_embedders` is configured in
 settings).
 
 | Model | Media type | HuggingFace ID | Approx. size |
@@ -239,7 +239,6 @@ and auto-saved on every change. Schema:
   "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
-  "autoload_media_types": [],
   "autoload_media_embedders": [],
   "autorun_processors": [],
   "autopilot_enabled": true,
@@ -257,10 +256,9 @@ and auto-saved on every change. Schema:
 
 Notable fields:
 
-- `autoload_media_types` — media types to preload at startup (triggers
-  model downloads if models aren't cached)
-- `autoload_media_embedders` — specific embedders to preload (e.g.
-  `["clap_music", "siglip"]`)
+- `autoload_media_embedders` — embedders to preload at startup (e.g.
+  `["clap", "siglip"]`); triggers model downloads if not yet cached.
+  Leave empty to defer loading until each media type is first used.
 - `autorun_processors` — saved detector/extractor configurations with
   importer name, processor name, and field values
 - `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
@@ -397,8 +395,8 @@ pre-download models with `./download_models.sh` and set
 **Symptom**: Process killed or `torch.cuda.OutOfMemoryError`.
 
 **Fix**: Load fewer media types simultaneously. Set
-`autoload_media_types` in settings to only the types you need, so unused
-models aren't preloaded. For GPU, ensure adequate VRAM (4+ GB
+`autoload_media_embedders` in settings to only the embedders you need,
+so unused models aren't preloaded. For GPU, ensure adequate VRAM (4+ GB
 recommended).
 
 ### Docker build fails on pip install

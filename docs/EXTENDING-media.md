@@ -1,0 +1,768 @@
+# Extending VTSearch — Media System
+
+How to add new content types, embedders, clippers, converters, and media
+sources. Media plugins are auto-discovered via sentinel attributes on
+sub-packages of `vtsearch/media/`.
+
+**Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
+dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
+exporters, sources for datasets/labels/settings) ·
+[EXTENDING-processors.md](EXTENDING-processors.md) (detectors, localizers,
+extractors).
+
+## Contents
+
+- [Media System](#media-system) — discovery, sentinels, registration
+- [Adding a Media Type](#adding-a-media-type) — e.g. a new content kind
+- [Adding a Media Embedder](#adding-a-media-embedder) — alternative or new
+  embedding model
+- [Adding a Media Clipper](#adding-a-media-clipper) — cut clips out of a
+  longer source file
+- [Adding a Media Converter](#adding-a-media-converter) — transform
+  between media types (e.g. document → image)
+- [Adding a Media Source](#adding-a-media-source) — resolve media bytes
+  from an origin (local, HTTP archive, custom backend)
+
+---
+
+## Media System
+
+Media types, embedders, and clippers are **auto-discovered** at import
+time. The `_discover_media_plugins()` function in
+`vtsearch/media/__init__.py` scans sub-packages of `vtsearch/media/` for
+module-level sentinel attributes:
+
+| Sentinel     | Type                  | Description                          |
+|--------------|-----------------------|--------------------------------------|
+| `MEDIA_TYPE` | `MediaType`           | A single media type instance         |
+| `EMBEDDERS`  | `list[MediaEmbedder]` | Embedder instances (may be empty)    |
+| `CLIPPERS`   | `list[MediaClipper]`  | Clipper instances (may be empty)     |
+
+To add a new built-in media type, create a sub-package under
+`vtsearch/media/` with an `__init__.py` that exposes the relevant
+sentinels. Symlinked directories are supported.
+
+Third-party or project-specific types can still be registered manually
+via `register()`, `register_embedder()`, and `register_clipper()`.
+
+---
+
+## Adding a Media Type
+
+Media types define how VTSearch handles a particular kind of content: how
+to serve clips over HTTP, what file extensions to scan for, what demo
+datasets are available, and how to load media-specific fields from files.
+
+### File structure
+
+```
+vtsearch/media/<your_type>/
+├── __init__.py       # Must expose MEDIA_TYPE, EMBEDDERS, CLIPPERS sentinels
+└── media_type.py     # Your MediaType subclass (required)
+```
+
+### What to implement
+
+Subclass `MediaType` from `vtsearch.media.base` and implement all abstract
+properties and methods.
+
+```python
+# vtsearch/media/code/media_type.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from vtsearch.media.base import DemoDataset, MediaResponse, MediaType
+
+
+class CodeMediaType(MediaType):
+    """Source code files."""
+
+    # --- Identity (required abstract properties) ---
+
+    @property
+    def type_id(self) -> str:
+        return "code"
+
+    @property
+    def name(self) -> str:
+        return "Source Code"
+
+    @property
+    def icon(self) -> str:
+        return "code"  # SVG icon type name for the UI
+
+    # --- File import (required abstract property) ---
+
+    @property
+    def file_extensions(self) -> list:
+        return ["*.py", "*.js", "*.ts", "*.go", "*.rs"]
+
+    # --- Viewer behaviour (required abstract property) ---
+
+    @property
+    def loops(self) -> bool:
+        return False
+
+    # --- Demo datasets (required abstract property) ---
+
+    @property
+    def demo_datasets(self) -> list:
+        return []  # No demos yet
+
+    # --- Media data (required abstract method) ---
+
+    def load_media_data(self, file_path: Path) -> dict:
+        """Return media-specific fields to merge into the media dict.
+
+        The base media dict already contains: id, type, file_size, md5,
+        embedding, filename, category.  You MUST include a "duration" key
+        (use 0 for non-temporal media).
+        """
+        content = file_path.read_text(errors="replace")
+        return {
+            "media_string": content,
+            "duration": 0,
+            "line_count": content.count("\n") + 1,
+        }
+
+    # --- HTTP serving (required abstract method) ---
+
+    def media_response(self, media: dict) -> MediaResponse:
+        """Return a MediaResponse for HTTP serving.
+
+        Use _resolve_media_bytes() for binary media or
+        _resolve_media_string() for text media to support both
+        preloaded and thin (lazy-loaded) modes.
+        """
+        content = self._resolve_media_string(media)
+        return MediaResponse(
+            data={"content": content, "line_count": media.get("line_count", 0)},
+            mimetype="application/json",
+        )
+```
+
+### Register the new type
+
+Expose the sentinels in your sub-package's `__init__.py`:
+
+```python
+# vtsearch/media/code/__init__.py
+
+from vtsearch.media.code.media_type import CodeMediaType
+from vtsearch.media.code.embedder import CodeBertEmbedder
+
+MEDIA_TYPE = CodeMediaType()
+EMBEDDERS = [CodeBertEmbedder()]
+CLIPPERS = []  # No clippers yet — add when needed
+```
+
+The auto-discovery system finds these sentinels at import time. No
+changes to `vtsearch/media/__init__.py` are needed.
+
+### MediaType abstract interface reference
+
+**Required abstract properties:**
+
+| Property          | Returns     | Example                              |
+|-------------------|-------------|--------------------------------------|
+| `type_id`         | `str`       | `"audio"`, `"image"`, `"code"`       |
+| `name`            | `str`       | `"Audio"`, `"Source Code"`           |
+| `icon`            | `str`       | `"audio"`, `"code"` (SVG icon type name) |
+| `file_extensions` | `list[str]` | `["*.wav", "*.mp3"]`                 |
+| `loops`           | `bool`      | `True` for audio/video, else `False` |
+| `demo_datasets`   | `list[DemoDataset]` | See example above              |
+
+**Required abstract methods:**
+
+| Method                      | Signature                      | Description                              |
+|-----------------------------|--------------------------------|------------------------------------------|
+| `load_media_data(file_path)`| `(Path) -> dict`               | Must include `"duration"` key            |
+| `media_response(media)`     | `(dict) -> MediaResponse`      | HTTP response for a media item           |
+
+**Optional overridable properties (with defaults):**
+
+| Property             | Returns     | Default            | Purpose                                   |
+|----------------------|-------------|--------------------|-------------------------------------------|
+| `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
+| `tab_title`          | `str`       | `name + "s"`       | Plural name for UI tabs                    |
+| `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
+| `legacy_bytes_keys`  | `list[str]` | `[]`               | Legacy keys for inline bytes in old pickles |
+| `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
+
+**Optional overridable methods:**
+
+| Method                        | Signature                          | Description                        |
+|-------------------------------|------------------------------------|------------------------------------|
+| `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
+| `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
+| `embed_media(file_path)`      | `(Path) -> Optional[np.ndarray]`   | Inline embedding (legacy, prefer MediaEmbedder) |
+| `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
+| `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
+
+### What happens automatically after registration
+
+| Subsystem              | What happens                                                  |
+|------------------------|---------------------------------------------------------------|
+| **Folder import**      | Files matching your `file_extensions` are found and embedded  |
+| **Generic media route**| `GET /api/medias/<id>/media` delegates to your `media_response()`|
+| **Demo listing**       | Your `demo_datasets` appear in `GET /api/dataset/demo-list`   |
+| **Dataset export**     | Clip data is serialized to pickle (including custom fields)   |
+| **Media types API**    | `GET /api/media-types` includes your type's metadata          |
+
+### Making dataset export aware of custom clip fields
+
+If your media type stores clip data under non-standard keys, override
+`pickle_extra_fields` to return those key names so they survive pickle
+export/import. For example:
+
+```python
+@property
+def pickle_extra_fields(self) -> list[str]:
+    return ["line_count"]
+```
+
+---
+
+## Adding a Media Embedder
+
+Media embedders produce fixed-size vector embeddings from media files and
+text queries. Each embedder is associated with exactly one media type but a
+media type may have multiple embedders.
+
+### File structure
+
+```
+vtsearch/media/<type>/
+├── embedder.py              # Default embedder (required for new media types)
+└── embedder_<variant>.py    # Alternative embedder (optional, e.g. embedder_siglip.py)
+```
+
+Each media type has one default embedder in `embedder.py`. To add an
+**alternative** embedder for an existing media type, create a new file named
+`embedder_<variant>.py` (e.g. `embedder_clap_music.py`, `embedder_siglip.py`,
+`embedder_bge.py`) and register it the same way. Existing alternatives:
+
+| File | Embedder | Media type |
+|------|----------|-----------|
+| `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio |
+| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image |
+| `text/embedder_bge.py` | `TextBGEEmbedder` | text |
+
+### What to implement
+
+Subclass `MediaEmbedder` from `vtsearch.media.base`.
+
+```python
+# vtsearch/media/code/embedder.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+
+from vtsearch.media.embedder import MediaEmbedder
+
+
+class CodeBertEmbedder(MediaEmbedder):
+    """Embeds source code using CodeBERT."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._model = None
+
+    # --- Identity (required abstract properties) ---
+
+    @property
+    def name(self) -> str:
+        """Unique identifier — also the registry key."""
+        return "codebert"
+
+    @property
+    def media_type_id(self) -> str:
+        """The type_id of the media type this embedder works with."""
+        return "code"
+
+    # --- Model lifecycle (required abstract method) ---
+
+    def _load_models_impl(self) -> None:
+        """Load the embedding model. Must be idempotent.
+
+        Override ``_load_models_impl`` (not ``load_models``).
+        The public ``load_models()`` wrapper handles locking and
+        ImportError wrapping automatically.
+        """
+        if self._model is not None:
+            return
+        from sentence_transformers import SentenceTransformer
+        self._on_progress("loading", "Loading CodeBERT…", 0, 0)
+        self._model = SentenceTransformer("microsoft/codebert-base")
+
+    # --- Embedding (required abstract method) ---
+
+    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for the file.
+
+        Override ``_embed_media_impl`` (not ``embed_media``).
+        The public ``embed_media()`` wrapper acquires a global lock
+        so that only one forward pass runs at a time.
+
+        Returns None if embedding fails. The vector dimensionality
+        must be consistent and must match embed_text().
+        """
+        if self._model is None:
+            self.load_models()
+        try:
+            text = file_path.read_text(errors="replace")[:8000]
+            return self._model.encode(text, normalize_embeddings=True)
+        except Exception:
+            return None
+
+    # --- Optional: text embedding ---
+
+    def embed_text(self, text: str) -> Optional[np.ndarray]:
+        """Embed a text query into the SAME vector space as embed_media().
+
+        Used for text-query sorting. Default returns None (no text sort).
+        """
+        if self._model is None:
+            self.load_models()
+        try:
+            return self._model.encode(text, normalize_embeddings=True)
+        except Exception:
+            return None
+```
+
+### Register the embedder
+
+Add the embedder to the `EMBEDDERS` sentinel list in your media type's
+`__init__.py`:
+
+```python
+# vtsearch/media/code/__init__.py
+
+from vtsearch.media.code.embedder import CodeBertEmbedder
+# ...
+EMBEDDERS = [CodeBertEmbedder()]
+```
+
+For an alternative embedder on an **existing** media type, add it to that
+type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
+
+### MediaEmbedder abstract interface reference
+
+**Required abstract properties:**
+
+| Property        | Returns | Description                              |
+|-----------------|---------|------------------------------------------|
+| `name`          | `str`   | Unique identifier (e.g. `"clap"`, `"clip"`) |
+| `media_type_id` | `str`  | Which media type this embedder works with |
+
+**Required abstract methods:**
+
+| Method                      | Signature                        | Description                    |
+|-----------------------------|----------------------------------|--------------------------------|
+| `_load_models_impl()`       | `() -> None`                     | Load model; must be idempotent. Override this, not `load_models()` |
+| `embed_media(file_path)`    | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
+
+**Optional overridable methods:**
+
+| Method                          | Signature                         | Description                          |
+|---------------------------------|-----------------------------------|--------------------------------------|
+| `embed_text(text)`              | `(str) -> Optional[np.ndarray]`   | Embed a text query (default: `None`) |
+| `embed_text_enriched(text)`     | `(str) -> Optional[np.ndarray]`   | Average over `description_wrappers`  |
+
+**Optional overridable properties:**
+
+| Property               | Returns     | Description                                |
+|------------------------|-------------|--------------------------------------------|
+| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`) |
+
+**Instance attributes:**
+
+| Attribute       | Type               | Description                         |
+|-----------------|--------------------|-------------------------------------|
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Set via `set_progress_callback()` |
+
+### Built-in embedders
+
+| Embedder | Name | Media Type | Model | Dimensions |
+|----------|------|------------|-------|------------|
+| `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
+| `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
+| `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
+| `ImageClipEmbedder` | `clip` | `image` | OpenAI CLIP (openai/clip-vit-base-patch32) | 768 |
+| `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
+| `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
+| `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
+
+---
+
+## Adding a Media Clipper
+
+Media clippers split a single media item into one or more items of the
+**same** type. Unlike processors which return metadata about media,
+clippers return **new media dicts** that can replace the original.
+
+### Built-in clippers
+
+| Clipper | Name | Media Type | Description |
+|---------|------|------------|-------------|
+| `SoundDefaultClipper` | `sound_default` | `audio` | Import each audio file as-is, without splitting |
+| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Split each audio file into fixed-length overlapping segments |
+| `ImageDefaultClipper` | `image_default` | `image` | Import each image as-is, without splitting |
+| `ImageTilingClipper` | `image_tiling` | `image` | Tile each image into equidistant square crops along the longer axis |
+| `TextDefaultClipper` | `text_default` | `text` | Import each text entry as-is, without splitting |
+| `TextSentenceClipper` | `text_sentence` | `text` | Split each text entry into individual sentences |
+| `VideoDefaultClipper` | `video_default` | `video` | Import each video as-is, without splitting |
+| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Split each video into fixed-length overlapping segments |
+| `VideoSceneClipper` | `video_scene` | `video` | Automatically split each video at detected scene changes |
+| `DocumentDefaultClipper` | `document_default` | `document` | Import each document as-is, without splitting |
+
+### What to implement
+
+Subclass `MediaClipper` from `vtsearch.media.base`.
+
+```python
+# vtsearch/media/audio/clipper.py  (or a new file)
+
+from vtsearch.media.clipper import MediaClipper
+from typing import Any
+
+
+class SoundOverlapClipper(MediaClipper):
+    """Tile audio with 50% overlap between segments."""
+
+    def __init__(self, duration: float) -> None:
+        self._duration = duration
+
+    @property
+    def name(self) -> str:
+        """Unique identifier for this clipper."""
+        return f"sound_overlap_{self._duration}s"
+
+    @property
+    def media_type(self) -> str:
+        """The type_id this clipper operates on."""
+        return "audio"
+
+    @property
+    def description(self) -> str:
+        """Short tooltip shown on hover in the clipper chooser UI."""
+        return "Tile audio with 50% overlap between consecutive segments."
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Split media into one or more media dicts of the same type.
+
+        Each returned dict preserves the original structure (id, type,
+        category, origin, etc.) but with updated content.
+        Returns a list with at least one element.
+        """
+        wav_bytes = media.get("media_bytes")
+        if wav_bytes is None:
+            return [media]
+
+        # ... implement overlapping tiling logic ...
+        # Return list of new media dicts with updated media_bytes, duration, etc.
+        return [media]  # placeholder
+```
+
+### Register the clipper
+
+Add the clipper to the `CLIPPERS` sentinel list in your media type's
+`__init__.py`:
+
+```python
+# vtsearch/media/audio/__init__.py
+
+from vtsearch.media.audio.clipper import SoundOverlapClipper
+# ...
+CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(2.0)]
+```
+
+### MediaClipper abstract interface reference
+
+**Required abstract properties:**
+
+| Property     | Returns | Description                                    |
+|--------------|---------|------------------------------------------------|
+| `name`       | `str`   | Unique identifier (e.g. `"sound_tiling_2.0s"`) |
+| `media_type` | `str`   | The `type_id` this clipper operates on          |
+
+**Required abstract methods:**
+
+| Method          | Signature              | Description                        |
+|-----------------|------------------------|------------------------------------|
+| `clip(media)`   | `(dict) -> list[dict]` | Split one media into one or more   |
+
+**Optional overridable methods/properties:**
+
+| Method/Property      | Signature / Returns      | Description                                                       |
+|----------------------|--------------------------|-------------------------------------------------------------------|
+| `display_name`       | `str`                    | Human-readable name for UI tabs (default: title-cased `name`)     |
+| `description`        | `str`                    | Short tooltip text shown on hover in the clipper chooser UI       |
+| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)           |
+| `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
+| `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
+| `with_params(p)`     | `(dict) -> MediaClipper` | Return new clipper with overridden parameters                     |
+
+Parameter dicts support an optional `description` key alongside `label`
+— this is shown as a tooltip when the user hovers over the setting in
+the clipper chooser dialog.
+
+### Clip method contract
+
+Each dict in the returned list must:
+- Preserve the structure of the original (`id`, `type`, `category`,
+  `origin`, `origin_name`, etc.)
+- Contain the clipped content (updated `media_bytes`/`media_string`,
+  `duration`, and any type-specific fields)
+- Default clippers return `[media]` unchanged
+
+---
+
+## Adding a Media Converter
+
+Media converters transform content from one media type to another (e.g.
+document pages to images, video to audio). Converters are
+**auto-discovered** via `PluginRegistry` with the `CONVERTER` sentinel,
+just like other plugin families.
+
+### Built-in converters
+
+| Converter | Source → Target | Description |
+|-----------|----------------|-------------|
+| `Document2ImageMediaConverter` | document → image | Render document pages as images |
+| `Document2TextMediaConverter` | document → text | Extract embedded text from documents |
+| `Video2AudioMediaConverter` | video → audio | Extract the audio track from a video |
+| `Video2ImageMediaConverter` | video → image | Sample frames from a video as images |
+
+### File structure
+
+```
+vtsearch/converters/<source>2<target>.py   # Your converter class
+```
+
+### What to implement
+
+Subclass `MediaConverter` from `vtsearch.converters.base`.
+
+```python
+# vtsearch/converters/audio2text.py
+
+from vtsearch.converters.base import MediaConverter
+from typing import Any
+
+
+class Audio2TextMediaConverter(MediaConverter):
+
+    display_name = "Audio → Text"
+    converter_description = "Transcribe audio to text using a speech model."
+
+    @property
+    def source_type(self) -> str:
+        """The type_id of the input media type."""
+        return "audio"
+
+    @property
+    def target_type(self) -> str:
+        """The type_id of the output media type."""
+        return "text"
+
+    def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        """Convert one media dict into one or more target-type media dicts.
+
+        Each returned dict must include:
+        - "filename": a descriptive filename
+        - Data fields expected by the target type (e.g. "media_string"
+          for text, "media_bytes" for images)
+
+        Returns empty list if conversion fails.
+        Does NOT include "id", "embedding", or "md5" — caller handles those.
+        """
+        # ... transcription logic ...
+        return [{"filename": "transcript.txt", "media_string": transcript}]
+```
+
+### Register the converter
+
+Expose a `CONVERTER` sentinel at module level in your converter file:
+
+```python
+# At the bottom of vtsearch/converters/audio2text.py
+
+CONVERTER = Audio2TextMediaConverter()
+```
+
+The `PluginRegistry` auto-discovers `.py` files in `vtsearch/converters/`
+that expose a `CONVERTER` attribute. No manual registration in
+`__init__.py` is needed.
+
+<!--
+   Old explicit registration (no longer needed):
+   ```python
+   __all__ = [
+       # ... existing entries ...
+       "Audio2TextMediaConverter",
+   ]
+   ```
+-->
+
+### MediaConverter abstract interface reference
+
+**Required abstract properties:**
+
+| Property      | Returns | Description                                |
+|---------------|---------|--------------------------------------------|
+| `source_type` | `str`   | The `type_id` of the input media type      |
+| `target_type` | `str`   | The `type_id` of the output media type     |
+
+**Required abstract methods:**
+
+| Method             | Signature              | Description                              |
+|--------------------|------------------------|------------------------------------------|
+| `convert(media)`   | `(dict) -> list[dict]` | Convert one media into target-type dicts  |
+
+**Optional class attributes:**
+
+| Attribute               | Type  | Default | Description                              |
+|-------------------------|-------|---------|------------------------------------------|
+| `display_name`          | `str` | `""`    | Human-readable label (auto-derived if empty) |
+| `converter_description` | `str` | `""`    | Short description of the conversion      |
+
+**Derived property (not overridable):**
+
+| Property | Returns | Description |
+|----------|---------|-------------|
+| `name`   | `str`   | Auto-generated as `"{source_type}2{target_type}"` |
+
+---
+
+## Adding a Media Source
+
+Media sources provide low-level access to media files at a location
+(local folder, HTTP archive, S3 bucket, etc.). They sit *below* dataset
+importers — importers that access file-like storage compose a
+`MediaSource` for single-file resolution and cross-dataset label
+re-ingestion.
+
+Sources are **stateful** (e.g. an archive source may download and extract
+on first access), so each call to `get_source_for_origin()` returns a
+fresh instance. Callers should call `cleanup()` when done.
+
+### File structure
+
+```
+vtsearch/datasets/sources/<your_source>/
+└── __init__.py       # Source factory + SOURCE instance (required)
+```
+
+### What to implement
+
+Unlike other plugin families, media sources use a **factory pattern**.
+The `SOURCE` sentinel is a factory object with a `create_from_origin()`
+method that returns a `MediaSource` instance.
+
+```python
+# vtsearch/datasets/sources/s3/__init__.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Iterator
+
+from vtsearch.datasets.sources.base import MediaItem, MediaSource
+
+
+class S3MediaSource(MediaSource):
+    """Access media files in an S3 bucket."""
+
+    name = "s3"
+
+    def __init__(self, bucket: str, prefix: str = "") -> None:
+        self._bucket = bucket
+        self._prefix = prefix
+
+    def list_items(self, extensions: list[str] | None = None) -> Iterator[MediaItem]:
+        """Yield all media items in the bucket (optionally filtered by extension)."""
+        import boto3
+        s3 = boto3.client("s3")
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=self._prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                filename = key.rsplit("/", 1)[-1]
+                if extensions and not any(filename.lower().endswith(e) for e in extensions):
+                    continue
+                yield MediaItem(key=key, filename=filename, source_name=self.name)
+
+    def fetch_item(self, key: str) -> Path | None:
+        """Download an item to a temp directory and return the local path."""
+        import boto3, tempfile
+        local = Path(tempfile.gettempdir()) / "vtsearch_s3" / key
+        local.parent.mkdir(parents=True, exist_ok=True)
+        if not local.exists():
+            boto3.client("s3").download_file(self._bucket, key, str(local))
+        return local
+
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
+        """Resolve a media file by origin_name or filename."""
+        for candidate in (origin_name, filename):
+            if candidate:
+                key = f"{self._prefix}{candidate}" if self._prefix else candidate
+                path = self.fetch_item(key)
+                if path and path.exists():
+                    return path
+        return None
+
+
+class _S3SourceFactory:
+    """Factory that creates S3MediaSource instances from origin dicts."""
+
+    name = "s3"
+
+    def create_from_origin(self, origin: dict[str, Any]) -> S3MediaSource | None:
+        params = origin.get("params", {})
+        bucket = params.get("bucket", "")
+        if not bucket:
+            return None
+        return S3MediaSource(bucket, params.get("prefix", ""))
+
+
+SOURCE = _S3SourceFactory()
+```
+
+### MediaSource abstract interface reference
+
+**Required abstract methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `list_items()` | `(extensions: list[str] \| None) -> Iterator[MediaItem]` | Yield all media items, optionally filtered |
+| `fetch_item()` | `(key: str) -> Path \| None` | Return local path for item (may download on demand) |
+| `resolve_path()` | `(origin_name: str, filename: str) -> Path \| None` | Find a file by origin_name or filename |
+
+**Optional methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `cleanup()` | `() -> None` | Release temporary resources (default: no-op) |
+
+**Data types:**
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `MediaItem` | `key`, `filename`, `source_name` | A discoverable file within a source |
+
+### How it gets invoked
+
+`get_source_for_origin(origin_dict)` looks up the factory by matching
+`origin["importer"]` to the factory's `name`, then calls
+`factory.create_from_origin(origin)`.
+
+---
+
