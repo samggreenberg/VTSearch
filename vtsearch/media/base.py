@@ -1,4 +1,4 @@
-"""Abstract base classes for media types and processors.
+"""Core media type abstractions: MediaType, MediaResponse, DemoDataset.
 
 To add a new media type:
 
@@ -18,12 +18,7 @@ the registry.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import logging
-import os
-import threading
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,20 +33,10 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 __all__ = [
     "DemoDataset",
-    "Detector",
-    "Extractor",
-    "MediaClipper",
-    "MediaEmbedder",
     "MediaResponse",
     "MediaType",
-    "Processor",
     "ProgressCallback",
-    "embedder_load_setup",
-    "extract_tensor",
-    "intercept_tqdm_progress",
-    "intercept_weight_loading_progress",
-    "load_pretrained_local_first",
-    "timed_progress",
+    "demo_slice",
 ]
 
 
@@ -76,524 +61,6 @@ def _fetch_media_url(url: str) -> bytes | None:
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
-
-
-# ---------------------------------------------------------------------------
-# Shared embedder helpers
-# ---------------------------------------------------------------------------
-
-
-def extract_tensor(output: object):
-    """Extract a plain tensor from a model output.
-
-    Depending on the ``transformers`` version, methods like
-    ``get_image_features()`` / ``get_text_features()`` /
-    ``get_video_features()`` may return either a raw :class:`torch.Tensor`
-    or a ``BaseModelOutputWithPooling`` dataclass.  This helper handles
-    both cases transparently.
-    """
-    import torch  # noqa: PLC0415
-
-    if isinstance(output, torch.Tensor):
-        return output
-    for attr in ("image_embeds", "text_embeds", "video_embeds", "pooler_output"):
-        val = getattr(output, attr, None)
-        if isinstance(val, torch.Tensor):
-            return val
-    # Final fallback: treat as tuple-like and return first element
-    return output[0]  # type: ignore[index]
-
-
-@contextlib.contextmanager
-def timed_progress(
-    on_progress: ProgressCallback,
-    status: str,
-    message: str,
-    current: int = 0,
-    total: int = 0,
-) -> Any:
-    """Show elapsed time in the progress message while a block executes.
-
-    Wraps a long-running blocking operation (typically a heavy ``import``)
-    so that the progress callback is updated every second with an elapsed-
-    time suffix, e.g. ``"Importing torch… (3s)"``.  This prevents the UI
-    from appearing frozen during operations that cannot report incremental
-    progress themselves.
-
-    The initial progress update is sent immediately (without a time suffix).
-    After the first second the background ticker appends ``(1s)``, ``(2s)``,
-    etc. until the ``with`` block exits.
-    """
-    stop = threading.Event()
-
-    def _ticker() -> None:
-        start = time.monotonic()
-        while not stop.wait(timeout=1.0):
-            elapsed = int(time.monotonic() - start)
-            on_progress(status, f"{message} ({elapsed}s)", current, total)
-
-    on_progress(status, message, current, total)
-    t = threading.Thread(target=_ticker, daemon=True)
-    t.start()
-    try:
-        yield
-    finally:
-        stop.set()
-        t.join(timeout=2)
-
-
-def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
-    """Common setup ceremony shared by all embedder ``_load_models_impl()`` methods.
-
-    1. Calls :func:`ensure_torch_configured`.
-    2. Runs ``gc.collect()`` to free memory before loading a large model.
-    3. Reports initial progress via *on_progress*.
-    4. Returns the model cache directory as a string.
-    """
-    import gc  # noqa: PLC0415
-
-    from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
-    from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
-
-    ensure_torch_configured()
-    gc.collect()
-    on_progress("loading", message, 0, 0)
-    return str(MODELS_CACHE_DIR)
-
-
-_log = logging.getLogger(__name__)
-
-# Retry settings for transient HuggingFace Hub HTTP errors.
-_HF_RETRY_COUNT = 3
-_HF_RETRY_BACKOFF_BASE = 2  # seconds; delays will be 2, 4, 8, …
-
-
-def _is_transient_hf_error(exc: Exception) -> bool:
-    """Return True if *exc* looks like a retryable HuggingFace Hub HTTP error.
-
-    We check for ``HfHubHTTPError`` by class name (rather than importing it)
-    so this module stays importable even when ``huggingface_hub`` is not
-    installed.  The heuristic matches 5xx status codes and common transient
-    failure messages (timeouts, connection resets).
-    """
-    cls_names = {type(exc).__name__} | {c.__name__ for c in type(exc).__mro__}
-    if "HfHubHTTPError" in cls_names or "HTTPStatusError" in cls_names:
-        msg = str(exc)
-        # 5xx server errors are always transient.
-        if any(f"{code}" in msg for code in range(500, 600)):
-            return True
-        # Catch generic timeout / connection phrasing.
-        lower = msg.lower()
-        if any(kw in lower for kw in ("timeout", "timed out", "connection reset", "connection aborted")):
-            return True
-    # Also catch lower-level connection errors that bubble up.
-    if isinstance(exc, (ConnectionError, TimeoutError)):
-        return True
-    return False
-
-
-def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Call *load_fn* preferring cached model files, falling back to download.
-
-    HuggingFace ``from_pretrained`` (and ``SentenceTransformer()``) contact the
-    Hub to check for updates **even when model files are already cached**.  If
-    the network is unreachable or slow this HTTP request hangs indefinitely,
-    making the UI appear frozen on "Loading … model weights".
-
-    This helper tries ``local_files_only=True`` first.  If that raises
-    ``OSError`` (model not yet cached), it retries without the flag so the
-    model can be downloaded normally.  Transient HTTP errors from the
-    HuggingFace Hub (5xx, timeouts) are retried up to ``_HF_RETRY_COUNT``
-    times with exponential backoff.
-    """
-    try:
-        return load_fn(*args, local_files_only=True, **kwargs)
-    except (OSError, TypeError, ValueError):
-        # Model not in local cache — allow network download (with retries).
-        # OSError: model files missing entirely.
-        # TypeError/ValueError: partial cache where a resolved path is None
-        # or invalid (e.g. sentencepiece receives None instead of a string).
-        last_exc: Exception | None = None
-        for attempt in range(_HF_RETRY_COUNT):
-            try:
-                return load_fn(*args, **kwargs)
-            except Exception as exc:
-                if not _is_transient_hf_error(exc):
-                    raise
-                last_exc = exc
-                delay = _HF_RETRY_BACKOFF_BASE * (2 ** attempt)
-                _log.warning(
-                    "Transient HuggingFace Hub error (attempt %d/%d), "
-                    "retrying in %ds: %s",
-                    attempt + 1, _HF_RETRY_COUNT, delay, exc,
-                )
-                time.sleep(delay)
-        # All retries exhausted — re-raise the last transient error.
-        raise last_exc  # type: ignore[misc]
-
-
-@contextlib.contextmanager
-def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
-    """Temporarily hook tqdm progress bars to forward updates to *callback*.
-
-    HuggingFace ``transformers`` and ``huggingface_hub`` use :mod:`tqdm` for
-    download and weight-loading progress bars.  Those bars write to stderr,
-    which the GUI never sees.  This context manager monkey-patches the base
-    ``tqdm.std.tqdm`` class so that every ``update()`` call also pushes
-    ``(status, message, current, total)`` to *callback*.
-
-    All tqdm subclasses (``tqdm.auto.tqdm``, ``huggingface_hub.utils.tqdm``,
-    etc.) resolve ``update`` through MRO to ``tqdm.std.tqdm.update``, so a
-    single patch covers the entire hierarchy.
-
-    Only bars with a known *total* are forwarded; indeterminate spinners are
-    silently ignored.
-    """
-    import tqdm.std
-
-    _orig_init = tqdm.std.tqdm.__init__
-    _orig_update = tqdm.std.tqdm.update
-    _orig_close = tqdm.std.tqdm.close
-
-    # Track all active bars.  We report progress from the bar with the
-    # largest ``total`` (typically the model weight file download).
-    _bars: list[tqdm.std.tqdm] = []
-
-    def _primary_bar() -> tqdm.std.tqdm | None:
-        if not _bars:
-            return None
-        return max(_bars, key=lambda b: getattr(b, "total", 0) or 0)
-
-    def _report(bar: tqdm.std.tqdm) -> None:
-        total = getattr(bar, "total", None)
-        if not total or total <= 0:
-            return
-        current = int(getattr(bar, "n", 0))
-        desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
-        callback("loading", desc, current, int(total))
-
-    # Redirect intercepted bars' output to a StringIO sink so they don't
-    # print to the console.  The callback receives all progress updates
-    # instead.  We use StringIO rather than open(os.devnull) because tqdm
-    # bars can outlive this context (held by transformers/huggingface_hub
-    # internals).  A closed devnull file causes "I/O operation on closed
-    # file" when those zombie bars attempt writes later.
-    _sink = io.StringIO()
-
-    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        # Force file=_sink so tqdm never writes to the console.
-        # huggingface_hub's tqdm wrapper passes file=sys.stderr explicitly,
-        # so we must override unconditionally (not just when absent).
-        kwargs["file"] = _sink
-        _orig_init(self, *args, **kwargs)
-        total = getattr(self, "total", None)
-        if total and total > 0 and not getattr(self, "disable", False):
-            _bars.append(self)
-            if _primary_bar() is self:
-                _report(self)
-
-    def _patched_update(self: Any, n: int = 1) -> None:
-        _orig_update(self, n)
-        if _primary_bar() is self:
-            _report(self)
-
-    def _patched_close(self: Any) -> None:
-        _orig_close(self)
-        if self in _bars:
-            _bars.remove(self)
-
-    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
-    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
-    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
-    try:
-        yield
-    finally:
-        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
-        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
-        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
-
-
-@contextlib.contextmanager
-def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:
-    """Track tensor-level progress during model weight loading.
-
-    HuggingFace ``transformers`` with ``low_cpu_mem_usage=True`` dispatches
-    tensors one-by-one via ``set_module_tensor_to_device`` from ``accelerate``.
-    PyTorch's ``load_state_dict`` (used by ``sentence-transformers``) loads
-    tensors via ``__getitem__`` on the state dict.
-
-    This context manager monkey-patches both paths to count tensor operations
-    and report ``(current, total)`` progress via *callback*.  The total is
-    discovered by also intercepting ``safetensors.torch.load_file`` and
-    ``torch.load`` to count keys in loaded state dicts.
-    """
-    _counter = [0]
-    _total = [0]
-    _patches: list[tuple] = []
-
-    def _report() -> None:
-        if _total[0] > 0:
-            callback("loading", label, min(_counter[0], _total[0]), _total[0])
-
-    # --- Intercept safetensors.torch.load_file to learn total tensor count ---
-    try:
-        import safetensors.torch as _st  # noqa: PLC0415
-
-        _orig_lf = _st.load_file
-
-        def _tracked_lf(*a: Any, **kw: Any) -> Any:
-            r = _orig_lf(*a, **kw)
-            _total[0] += len(r)
-            return r
-
-        _st.load_file = _tracked_lf
-        _patches.append((_st, "load_file", _orig_lf))
-    except ImportError:
-        pass
-
-    # --- Intercept torch.load for .bin weight files ---
-    try:
-        import torch as _torch  # noqa: PLC0415
-
-        _orig_tl = _torch.load
-
-        def _tracked_tl(*a: Any, **kw: Any) -> Any:
-            r = _orig_tl(*a, **kw)
-            if isinstance(r, dict) and r:
-                sample = next(iter(r.values()))
-                if isinstance(sample, _torch.Tensor):
-                    _total[0] += len(r)
-            return r
-
-        _torch.load = _tracked_tl
-        _patches.append((_torch, "load", _orig_tl))
-    except ImportError:
-        pass
-
-    # --- Intercept set_module_tensor_to_device (HF with low_cpu_mem_usage) ---
-    try:
-        import transformers.modeling_utils as _tm  # noqa: PLC0415
-
-        _orig_smttd = _tm.set_module_tensor_to_device
-
-        def _tracked_smttd(*a: Any, **kw: Any) -> Any:
-            r = _orig_smttd(*a, **kw)
-            _counter[0] += 1
-            _report()
-            return r
-
-        _tm.set_module_tensor_to_device = _tracked_smttd
-        _patches.append((_tm, "set_module_tensor_to_device", _orig_smttd))
-    except (ImportError, AttributeError):
-        pass
-
-    # --- Intercept Module.load_state_dict (PyTorch / SentenceTransformers) ---
-    try:
-        import torch.nn as _nn  # noqa: PLC0415
-
-        _orig_lsd = _nn.Module.load_state_dict
-
-        class _CountingStateDict(dict):
-            """Dict wrapper that counts unique key accesses for progress."""
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                super().__init__(*args, **kwargs)
-                self._seen: set = set()
-
-            def __getitem__(self, key: Any) -> Any:
-                val = super().__getitem__(key)
-                if key not in self._seen:
-                    self._seen.add(key)
-                    _counter[0] += 1
-                    _report()
-                return val
-
-        def _tracked_lsd(self_model: Any, state_dict: Any, *a: Any, **kw: Any) -> Any:
-            if isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
-                if _total[0] == 0:
-                    _total[0] = len(state_dict)
-                state_dict = _CountingStateDict(state_dict)
-            return _orig_lsd(self_model, state_dict, *a, **kw)
-
-        _nn.Module.load_state_dict = _tracked_lsd  # type: ignore[assignment]
-        _patches.append((_nn.Module, "load_state_dict", _orig_lsd))
-    except ImportError:
-        pass
-
-    try:
-        yield
-    finally:
-        for obj, attr, orig in _patches:
-            setattr(obj, attr, orig)
-
-
-class MediaEmbedder(ABC):
-    """Abstract base class for media embedders.
-
-    A *media embedder* takes a media file (or a text description) and produces
-    a fixed-size vector embedding.  Each embedder is associated with exactly one
-    :class:`MediaType` (via :attr:`media_type_id`), but a single media type may
-    have multiple embedders (e.g. different CLIP variants for images).
-
-    Subclasses must implement:
-
-    * :attr:`name` — unique human-readable identifier (also used as the
-      registry key).
-    * :attr:`media_type_id` — which media type this embedder works with.
-    * :meth:`load_models` — load (and cache) the embedding model.
-    * :meth:`embed_media` — embed a media file from disk.
-    * :meth:`embed_text` — embed a text query in the same vector space.
-    """
-
-    _model_load_lock: threading.Lock
-
-    # Global lock that serialises all ``embed_media`` calls across every
-    # embedder type.  Without this, concurrent dataset imports each run
-    # PyTorch forward passes in parallel on the same (singleton) model,
-    # which is not thread-safe and causes massive memory spikes — enough
-    # to push a 16 GB machine into swap-thrash and freeze the entire
-    # process (including Flask and signal handling).
-    _embed_lock = threading.Lock()
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        # Each concrete embedder class gets its own lock so that concurrent
-        # callers serialise model loading per embedder type.
-        cls._model_load_lock = threading.Lock()
-
-    def __init__(self) -> None:
-        self._on_progress: ProgressCallback = _noop_progress
-
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for this embedder, e.g. ``"clap"``, ``"clip"``."""
-
-    @property
-    @abstractmethod
-    def media_type_id(self) -> str:
-        """The ``type_id`` of the media type this embedder works with."""
-
-    # ------------------------------------------------------------------
-    # Model lifecycle
-    # ------------------------------------------------------------------
-
-    def load_models(self) -> None:
-        """Load (and cache) the embedding model.
-
-        Called lazily the first time this embedder needs to produce a vector.
-        Implementations must be idempotent — a second call should be a no-op.
-
-        Subclasses should override :meth:`_load_models_impl` (not this method).
-        This wrapper catches :class:`ImportError` and re-raises with an
-        actionable message so that missing dependencies surface clearly.
-
-        A per-class lock serialises concurrent callers so that only one
-        thread performs the actual load; others wait and then return
-        immediately (the subclass ``_load_models_impl`` checks
-        ``self._model is not None``).
-        """
-        # Fast path: if the model was already loaded (e.g. by startup
-        # preloading), skip the lock entirely.  This avoids blocking on
-        # _model_load_lock when another thread has already completed the
-        # load, preventing the UI from appearing frozen on
-        # "Loading embedding model…" with no progress updates.
-        if getattr(self, "_model", None) is not None:
-            return
-        with self._model_load_lock:
-            try:
-                self._load_models_impl()
-            except ImportError as exc:
-                raise ImportError(
-                    f"{exc} — required by the '{self.name}' embedder. "
-                    f"Install dependencies with: pip install -e '.[cpu,dev]'"
-                ) from exc
-
-    @abstractmethod
-    def _load_models_impl(self) -> None:
-        """Subclass hook: load the embedding model.
-
-        Override this instead of :meth:`load_models`.
-        """
-
-    # ------------------------------------------------------------------
-    # Embedding
-    # ------------------------------------------------------------------
-
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the media file at *file_path*.
-
-        Acquires :attr:`_embed_lock` so that only one forward pass runs at a
-        time across all embedder types.  Subclasses must override
-        :meth:`_embed_media_impl` (not this method).
-
-        Returns ``None`` if the file cannot be embedded.
-        """
-        with self._embed_lock:
-            return self._embed_media_impl(file_path)
-
-    @abstractmethod
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
-        """Subclass hook: embed a single media file.
-
-        Override this instead of :meth:`embed_media`.
-        """
-
-    def embed_text(self, text: str) -> Optional[np.ndarray]:
-        """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
-
-        The default implementation returns ``None`` (text sorting unavailable).
-        """
-        return None
-
-    @property
-    def description_wrappers(self) -> list[str]:
-        """Wrapper templates for enriching sort descriptions.
-
-        Each template is a format string containing ``{text}``.  Override in
-        subclasses to provide media-specific wrappers that improve embedding quality.
-        """
-        return []
-
-    def embed_text_enriched(self, text: str) -> Optional[np.ndarray]:
-        """Embed *text* using the average over all description wrappers.
-
-        Falls back to :meth:`embed_text` if no wrappers are defined or all fail.
-        """
-        wrappers = self.description_wrappers
-        if not wrappers:
-            return self.embed_text(text)
-
-        embeddings = []
-        for wrapper in wrappers:
-            wrapped = wrapper.format(text=text)
-            vec = self.embed_text(wrapped)
-            if vec is not None:
-                embeddings.append(vec)
-
-        if not embeddings:
-            return self.embed_text(text)
-
-        avg = np.mean(embeddings, axis=0)
-        norm = np.linalg.norm(avg)
-        if norm > 0:
-            avg = avg / norm
-        return avg
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
-    def to_dict(self) -> dict:
-        """Return a JSON-serialisable summary of this embedder."""
-        return {
-            "name": self.name,
-            "media_type_id": self.media_type_id,
-        }
 
 
 @dataclass
@@ -651,12 +118,35 @@ class DemoDataset:
     """Per-category start index for element slicing (inclusive).
 
     When multiple datasets share the same categories, this allows them to
-    use disjoint subsets of elements within each category."""
+    use disjoint subsets of elements within each category.  Ignored when
+    ``slice_frac_start``/``slice_frac_end`` are set."""
 
     slice_end: Optional[int] = None
     """Per-category end index for element slicing (exclusive).
 
-    ``None`` means take all remaining elements after ``slice_start``."""
+    ``None`` means take all remaining elements after ``slice_start``.
+    Ignored when ``slice_frac_start``/``slice_frac_end`` are set."""
+
+    slice_frac_start: Optional[float] = None
+    """Per-category fractional start (0.0–1.0).
+
+    When set, each category is sliced proportionally rather than with
+    fixed indices, so categories with different item counts each
+    contribute the correct fraction of their items."""
+
+    slice_frac_end: Optional[float] = None
+    """Per-category fractional end (0.0–1.0).
+
+    ``None`` means take all remaining elements after ``slice_frac_start``."""
+
+    items_per_category: int = 0
+    """Approximate per-category item count of the raw source dataset.
+
+    Used by the UI to estimate how many files the user will be loading
+    *before* the dataset is downloaded.  The actual count after loading
+    will match ``int(items_per_category * (slice_frac_end - slice_frac_start))``
+    for fractionally sliced datasets.  Leave at ``0`` for datasets where
+    the count is unknown or the full dataset is always loaded."""
 
     download_size_mb: float = 0
     """Estimated download size in megabytes for this demo dataset's raw data.
@@ -664,6 +154,16 @@ class DemoDataset:
     Used by the frontend to display the expected download size before the
     user starts loading.  Set to ``0`` for datasets that don't require a
     network download (e.g. scikit-learn datasets that download automatically)."""
+
+
+def demo_slice(items, slice_start, slice_end, slice_frac_start=None, slice_frac_end=None):
+    """Slice a per-category item list using either absolute or fractional bounds."""
+    if slice_frac_start is not None:
+        n = len(items)
+        start = int(n * slice_frac_start)
+        end = int(n * slice_frac_end) if slice_frac_end is not None else n
+        return items[start:end]
+    return items[slice_start:slice_end]
 
 
 class MediaType(ABC):
@@ -681,8 +181,9 @@ class MediaType(ABC):
     * An optional folder-import alias (:attr:`folder_import_name`) for the
       ``/api/dataset/load-folder`` endpoint.
 
-    Embedding is handled by :class:`MediaEmbedder` objects, which are registered
-    separately.  A media type may have zero, one, or many embedders.
+    Embedding is handled by :class:`~vtsearch.media.embedder.MediaEmbedder`
+    objects, which are registered separately.  A media type may have zero,
+    one, or many embedders.
 
     Adding a new media type
     -----------------------
@@ -865,6 +366,7 @@ class MediaType(ABC):
         slice_end: int | None,
         clips: dict[int, dict],
         on_progress: "ProgressCallback | None" = None,
+        **kwargs,
     ) -> str | None:
         """Download and embed a demo dataset source, populating *clips* in-place.
 
@@ -995,400 +497,3 @@ class MediaType(ABC):
         :meth:`_resolve_media_string` to transparently support both preloaded
         medias and thin (lazy-loaded) medias.
         """
-
-
-class Processor(ABC):
-    """Abstract base class for all processors (detectors, localizers, extractors, etc.).
-
-    A *Processor* takes a single media media and produces an answer.  The
-    exact type of the answer depends on the subclass:
-
-    * A :class:`Detector` returns ``bool`` — "does this media match?"
-    * A :class:`Localizer` returns ``list[dict]`` — "where in this media
-      is the item of interest?" (bounding boxes with confidence scores).
-    * An :class:`Extractor` returns ``list[dict]`` — "what details are
-      inside this media?" (bounding boxes, labels, and other metadata).
-
-    Every processor knows its :attr:`name` (a unique human-readable
-    identifier) and the :attr:`media_type` it operates on (e.g.
-    ``"audio"``, ``"image"``).
-
-    Subclasses must implement:
-
-    * :attr:`name`
-    * :attr:`media_type`
-    * :meth:`process` — run the processor on a single media dict.
-
-    Subclasses *may* override:
-
-    * :meth:`load_model` — called once before first use to load heavy
-      resources (model weights, etc.).  Default is a no-op.
-    """
-
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for this processor, e.g. ``"dog_barks"``."""
-
-    @property
-    @abstractmethod
-    def media_type(self) -> str:
-        """The media ``type_id`` this processor operates on (e.g. ``"image"``)."""
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
-    def load_model(self) -> None:
-        """Load any heavyweight resources (model weights, etc.).
-
-        Called lazily before the first :meth:`process` call.  The default
-        implementation is a no-op — override in subclasses that need
-        one-time model loading.
-        """
-
-    # ------------------------------------------------------------------
-    # Processing
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def process(self, media: dict[str, Any]) -> Any:
-        """Run this processor on *media* and return the result.
-
-        The return type depends on the subclass:
-
-        * :class:`Detector` → ``bool``
-        * :class:`Localizer` → ``list[dict[str, Any]]``
-        * :class:`Extractor` → ``list[dict[str, Any]]``
-        """
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serialisable summary of this processor's metadata."""
-        return {
-            "name": self.name,
-            "media_type": self.media_type,
-        }
-
-
-class Detector(Processor):
-    """Abstract base class for detectors.
-
-    A *Detector* answers "is this media Good?" with a boolean.  Each
-    concrete ``Detector`` operates on exactly **one** media type (declared
-    via :attr:`media_type`).
-
-    Subclasses must implement:
-
-    * :attr:`name` — unique identifier for this detector.
-    * :attr:`media_type` — which media type it works on.
-    * :meth:`detect` — run detection on a single media dict and return
-      ``True`` if the media matches, ``False`` otherwise.
-
-    The generic :meth:`process` method delegates to :meth:`detect`.
-    """
-
-    # ------------------------------------------------------------------
-    # Detection
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def detect(self, media: dict[str, Any]) -> bool:
-        """Run detection on *media* and return whether it matches.
-
-        Returns ``True`` if the media is a positive match for this detector,
-        ``False`` otherwise.
-        """
-
-    def process(self, media: dict[str, Any]) -> bool:
-        """Run detection on *media* (delegates to :meth:`detect`)."""
-        return self.detect(media)
-
-
-class Localizer(Processor):
-    """Abstract base class for localizers.
-
-    A *Localizer* sits between a :class:`Detector` and an :class:`Extractor`
-    in the processor hierarchy.  While a Detector answers "does this media
-    match?" (bool) and an Extractor answers "what details are inside this
-    media?" (bounding boxes, labels, metadata, etc.), a Localizer answers
-    "**where** in this media is the item of interest?" by returning bounding
-    boxes with confidence scores — but no further classification or
-    extraction metadata.
-
-    For example an image localizer might return bounding boxes around
-    regions of interest without identifying what class each region belongs
-    to; a video localizer might return temporal intervals where something
-    noteworthy happens.
-
-    A Localizer can be composed with other processors: one could build a
-    Localizer by running a Detector and then a follow-up localization step,
-    or build an Extractor by running a Localizer followed by a
-    classification/extraction step.  However, none of these compositions
-    are required — each processor type can be implemented independently.
-
-    Each concrete ``Localizer`` operates on exactly **one** media type
-    (declared via :attr:`media_type`), just like Detectors and Extractors.
-
-    Subclasses must implement:
-
-    * :attr:`name` — unique identifier for this localizer.
-    * :attr:`media_type` — which media type it works on.
-    * :meth:`localize` — run localization on a single media dict and return
-      a list of bounding-box dicts.
-
-    The generic :meth:`process` method delegates to :meth:`localize`.
-    """
-
-    # ------------------------------------------------------------------
-    # Localization
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def localize(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run localization on *media* and return a list of bounding-box dicts.
-
-        Each dict in the returned list describes **one region** where the
-        item of interest was found.  Every dict **must** include:
-
-        * ``"confidence"`` — a float in ``[0, 1]``.
-        * ``"bbox"`` — the bounding box (format is media-specific, e.g.
-          ``[x1, y1, x2, y2]`` for images).
-
-        Returns an empty list when nothing is found.
-
-        Example return value for an image localizer::
-
-            [
-                {"confidence": 0.95, "bbox": [10, 20, 200, 300]},
-                {"confidence": 0.73, "bbox": [400, 50, 600, 250]},
-            ]
-
-        Example return value for a video temporal localizer::
-
-            [
-                {"confidence": 0.88, "bbox": [1.2, 3.4]},
-            ]
-        """
-
-    def process(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run localization on *media* (delegates to :meth:`localize`)."""
-        return self.localize(media)
-
-
-class Extractor(Processor):
-    """Abstract base class for extractors.
-
-    While a *Detector* answers "is this media Good?" (True/False), an
-    *Extractor* answers "what Good things are inside this media, and where?"
-    by returning structured details for each occurrence found.
-
-    For example an image extractor might return bounding boxes and class
-    labels; a video extractor might return start/stop timestamps of events.
-
-    Each concrete ``Extractor`` operates on exactly **one** media type
-    (declared via :attr:`media_type`), just like Detectors.
-
-    Subclasses must implement:
-
-    * :attr:`name` — unique identifier for this extractor.
-    * :attr:`media_type` — which media type it works on.
-    * :meth:`extract` — run extraction on a single media dict and return a
-      list of result dicts.
-
-    The generic :meth:`process` method delegates to :meth:`extract`.
-    """
-
-    # ------------------------------------------------------------------
-    # Extraction
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def extract(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run extraction on *media* and return a list of result dicts.
-
-        Each dict in the returned list describes **one occurrence** of the
-        thing the extractor is looking for.  The schema of these dicts is
-        extractor-specific, but every dict **must** include a ``"confidence"``
-        key with a float in ``[0, 1]``.
-
-        Returns an empty list when nothing is found.
-
-        Example return value for an image bounding-box extractor::
-
-            [
-                {"confidence": 0.92, "bbox": [x1, y1, x2, y2], "label": "car"},
-                {"confidence": 0.87, "bbox": [x1, y1, x2, y2], "label": "car"},
-            ]
-
-        Example return value for a video timestamp extractor::
-
-            [
-                {"confidence": 0.85, "start": 1.2, "end": 3.4, "label": "explosion"},
-            ]
-        """
-
-    def process(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        """Run extraction on *media* (delegates to :meth:`extract`)."""
-        return self.extract(media)
-
-
-class MediaClipper(ABC):
-    """Abstract base class for media clippers.
-
-    A *MediaClipper* takes a single media item and returns one or more media
-    items of the **same** type.  Each concrete clipper operates on exactly one
-    media type (declared via :attr:`media_type`).
-
-    Unlike :class:`Processor` subclasses which return metadata *about* a media
-    (booleans, bounding boxes, labels), a ``MediaClipper`` returns **new media
-    dicts** that can be used directly in place of the original.
-
-    Examples:
-
-    * ``SoundTilingClipper(2)`` — tiles a 9.5 s audio clip into five 2 s
-      clips equally spaced across the original duration.
-    * ``ImageTilingClipper()`` — covers a tall image with equidistant square
-      tiles using the shorter dimension as the tile size.
-    * ``TextSentenceClipper()`` — splits a paragraph into individual sentences.
-    * Any ``*DefaultClipper`` — returns the media unchanged (single-element
-      list).
-
-    Subclasses must implement:
-
-    * :attr:`name` — unique identifier for this clipper.
-    * :attr:`media_type` — which media ``type_id`` it works on.
-    * :meth:`clip` — split a single media dict into a list of media dicts.
-    """
-
-    # ------------------------------------------------------------------
-    # Identity
-    # ------------------------------------------------------------------
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for this clipper, e.g. ``"video_tiling"``."""
-
-    @property
-    @abstractmethod
-    def media_type(self) -> str:
-        """The media ``type_id`` this clipper operates on (e.g. ``"audio"``)."""
-
-    @property
-    def display_name(self) -> str:
-        """Human-readable name for UI dropdowns.
-
-        Strips the media-type prefix before the first underscore and
-        title-cases the remainder (e.g. ``"sound_tiling"`` → ``"Tiling"``).
-        Subclasses may override for a custom label.
-        """
-        _, _, suffix = self.name.partition("_")
-        return suffix.replace("_", " ").title() if suffix else self.name.title()
-
-    @property
-    def description(self) -> str:
-        """Short tooltip description shown on hover in the clipper chooser.
-
-        Subclasses should override to provide a brief explanation of what
-        the clipper does.  Defaults to an empty string.
-        """
-        return ""
-
-    # ------------------------------------------------------------------
-    # Parameters
-    # ------------------------------------------------------------------
-
-    @property
-    def parameters(self) -> list[dict[str, Any]]:
-        """Return a list of user-configurable parameter descriptors.
-
-        Each descriptor is a dict with keys:
-
-        * ``key`` — parameter name (used in :meth:`with_params`).
-        * ``label`` — human-readable label for the UI.
-        * ``type`` — ``"number"`` or ``"string"``.
-        * ``default`` — current/default value.
-        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
-
-        Clippers with no configurable parameters return ``[]`` (the default).
-        """
-        return []
-
-    @property
-    def creation_questions(self) -> list[dict[str, Any]]:
-        """Return a list of questions to present when the user chooses this clipper.
-
-        Each question is a dict with the same schema as :attr:`parameters`
-        descriptors:
-
-        * ``key`` — parameter name (used in :meth:`with_params`).
-        * ``label`` — human-readable label / question for the UI.
-        * ``type`` — ``"number"`` or ``"string"``.
-        * ``default`` — current/default value.
-        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
-
-        By default this returns :attr:`parameters`, so any clipper that
-        already declares parameters automatically exposes them as creation
-        questions.  Subclasses may override to present a different (richer
-        or reduced) set of questions at creation time.
-        """
-        return self.parameters
-
-    def with_params(self, params: dict[str, Any]) -> "MediaClipper":
-        """Return a **new** clipper of the same type with overridden parameters.
-
-        *params* is a dict mapping parameter keys (as declared by
-        :attr:`parameters`) to their new values.  Unknown keys are ignored.
-
-        The default implementation returns ``self`` unchanged (suitable for
-        clippers that have no parameters).
-        """
-        return self
-
-    # ------------------------------------------------------------------
-    # Clipping
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        """Split *media* into one or more media dicts of the same type.
-
-        Each dict in the returned list is a **new** media dict that preserves
-        the structure of the original (``id``, ``type``, ``category``,
-        ``origin``, ``origin_name``, etc.) but contains the clipped content
-        (updated ``media_bytes`` / ``media_string``, ``duration``, and any
-        type-specific fields).
-
-        Returns a list with at least one element.  Default clippers return
-        ``[media]`` unchanged.
-        """
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serialisable summary of this clipper's metadata."""
-        d: dict[str, Any] = {
-            "name": self.name,
-            "display_name": self.display_name,
-            "media_type": self.media_type,
-        }
-        desc = self.description
-        if desc:
-            d["description"] = desc
-        params = self.parameters
-        if params:
-            d["parameters"] = params
-        cq = self.creation_questions
-        if cq:
-            d["creation_questions"] = cq
-        return d

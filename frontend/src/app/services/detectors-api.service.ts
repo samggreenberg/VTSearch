@@ -48,10 +48,6 @@ export class DetectorsApiService {
     return this.http.get(`/api/autorun-detectors/${name}/export`);
   }
 
-  exportDetectorToServer(name: string): Observable<unknown> {
-    return this.http.post(`/api/autorun-detectors/${name}/export-server`, {});
-  }
-
   getServerFiles(): Observable<DetectorServerFilesResponse> {
     return this.http.get<DetectorServerFilesResponse>('/api/detector/server-files');
   }

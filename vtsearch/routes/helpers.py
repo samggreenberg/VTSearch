@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from flask import jsonify, request
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
     from vtsearch.utils.registry import PluginBase
 
 import vtsearch.utils.paths as _paths
+
+logger = logging.getLogger(__name__)
 
 
 def get_json_safe() -> dict:
@@ -142,10 +145,35 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
         result = getattr(plugin, method)(*args)
     except ValueError as exc:
         return None, (jsonify({"error": str(exc)}), 400)
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
+        logger.exception("%s.%s() failed: %s", type(plugin).__name__, method, exc)
         verb = method.replace("_", " ").capitalize()
         return None, (jsonify({"error": f"{verb} failed: {exc}"}), 500)
     return result, None
+
+
+def get_embedder_for_medias(media_dict: dict):
+    """Return the appropriate embedder for the given medias, or ``None``.
+
+    Looks up the ``"embedder"`` name stored on the first media entry; falls
+    back to the default embedder for the detected ``"type"``.
+    """
+    if not media_dict:
+        return None
+    first = next(iter(media_dict.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("type", "audio")
+
+    from vtsearch.media import embedders_for_type, get_embedder  # noqa: PLC0415
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
 
 
 def get_request_field(key: str, has_file_fields: bool) -> str:

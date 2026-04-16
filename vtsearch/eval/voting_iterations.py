@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
-import pandas as pd
-import torch
+if TYPE_CHECKING:
+    import numpy as np
+    import pandas as pd
+    import torch
 
 from vtsearch.models.training import (
     calculate_cross_calibration_threshold,
@@ -78,6 +79,9 @@ def _evaluate_on_test(
     inclusion: int,
 ) -> dict[str, float]:
     """Score *test_ids* with *model* and return inclusion-weighted cost, FPR, FNR."""
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
     if not test_ids:
         return {"cost": float("nan"), "fpr": float("nan"), "fnr": float("nan")}
 
@@ -145,6 +149,9 @@ def simulate_voting_iterations(
         List of row dicts with keys
         ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
     """
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
     rng = np.random.RandomState(seed)
     # Note: no torch.manual_seed() here — train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
@@ -268,6 +275,8 @@ def run_voting_iterations_eval(
         A :class:`~pandas.DataFrame` with columns
         ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
     """
+    import pandas as pd  # noqa: PLC0415
+
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():

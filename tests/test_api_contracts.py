@@ -12,60 +12,55 @@ These tests complement the existing functional tests by focusing on the
 
 from __future__ import annotations
 
-import app as app_module
 from vtsearch.utils import good_votes, bad_votes
 
 
 class TestMediasContract:
     """GET /api/medias response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_json_array(self):
-        resp = self.client.get("/api/medias")
+    def test_returns_json_array(self, client):
+        resp = client.get("/api/medias")
         assert resp.status_code == 200
         assert resp.content_type.startswith("application/json")
         data = resp.get_json()
         assert isinstance(data, list)
 
-    def test_each_media_has_required_fields(self):
-        resp = self.client.get("/api/medias")
+    def test_each_media_has_required_fields(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         required = {"id", "type", "filename", "md5", "custom_metadata"}
         for item in data:
             assert required.issubset(item.keys()), f"Missing keys: {required - item.keys()}"
 
-    def test_custom_metadata_is_dict(self):
-        resp = self.client.get("/api/medias")
+    def test_custom_metadata_is_dict(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         for item in data:
             assert isinstance(item["custom_metadata"], dict)
 
-    def test_id_is_integer(self):
-        resp = self.client.get("/api/medias")
+    def test_id_is_integer(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         for item in data:
             assert isinstance(item["id"], int)
 
-    def test_file_size_in_custom_metadata(self):
-        resp = self.client.get("/api/medias")
+    def test_file_size_in_custom_metadata(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         for item in data:
             assert "File Size" in item["custom_metadata"]
             assert isinstance(item["custom_metadata"]["File Size"], int)
             assert item["custom_metadata"]["File Size"] > 0
 
-    def test_md5_is_32_char_hex_string(self):
-        resp = self.client.get("/api/medias")
+    def test_md5_is_32_char_hex_string(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         for item in data:
             assert isinstance(item["md5"], str)
             assert len(item["md5"]) == 32
 
-    def test_excludes_embedding_and_media_bytes(self):
-        resp = self.client.get("/api/medias")
+    def test_excludes_embedding_and_media_bytes(self, client):
+        resp = client.get("/api/medias")
         data = resp.get_json()
         for item in data:
             assert "embedding" not in item
@@ -76,12 +71,8 @@ class TestMediasContract:
 class TestVotesContract:
     """GET /api/votes response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_json_with_required_keys(self):
-        resp = self.client.get("/api/votes")
+    def test_returns_json_with_required_keys(self, client):
+        resp = client.get("/api/votes")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "good" in data
@@ -89,24 +80,24 @@ class TestVotesContract:
         assert "click_times" in data
         assert "learned_scores" in data
 
-    def test_good_and_bad_are_lists(self):
-        resp = self.client.get("/api/votes")
+    def test_good_and_bad_are_lists(self, client):
+        resp = client.get("/api/votes")
         data = resp.get_json()
         assert isinstance(data["good"], list)
         assert isinstance(data["bad"], list)
 
-    def test_click_times_is_dict(self):
-        resp = self.client.get("/api/votes")
+    def test_click_times_is_dict(self, client):
+        resp = client.get("/api/votes")
         data = resp.get_json()
         assert isinstance(data["click_times"], dict)
 
-    def test_learned_scores_is_dict(self):
-        resp = self.client.get("/api/votes")
+    def test_learned_scores_is_dict(self, client):
+        resp = client.get("/api/votes")
         data = resp.get_json()
         assert isinstance(data["learned_scores"], dict)
 
-    def test_vote_response_shape(self):
-        resp = self.client.post("/api/medias/1/vote", json={"vote": "good"})
+    def test_vote_response_shape(self, client):
+        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
@@ -115,29 +106,25 @@ class TestVotesContract:
 class TestSortContract:
     """POST /api/sort response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_response_has_results_and_threshold(self):
-        resp = self.client.post("/api/sort", json={"text": "test query"})
+    def test_response_has_results_and_threshold(self, client):
+        resp = client.post("/api/sort", json={"text": "test query"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
 
-    def test_results_are_list(self):
-        resp = self.client.post("/api/sort", json={"text": "test"})
+    def test_results_are_list(self, client):
+        resp = client.post("/api/sort", json={"text": "test"})
         data = resp.get_json()
         assert isinstance(data["results"], list)
 
-    def test_threshold_is_number(self):
-        resp = self.client.post("/api/sort", json={"text": "test"})
+    def test_threshold_is_number(self, client):
+        resp = client.post("/api/sort", json={"text": "test"})
         data = resp.get_json()
         assert isinstance(data["threshold"], (int, float))
 
-    def test_each_result_has_id_and_similarity(self):
-        resp = self.client.post("/api/sort", json={"text": "test"})
+    def test_each_result_has_id_and_similarity(self, client):
+        resp = client.post("/api/sort", json={"text": "test"})
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -149,23 +136,19 @@ class TestSortContract:
 class TestLearnedSortContract:
     """POST /api/learned-sort response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_response_has_results_and_threshold(self):
+    def test_response_has_results_and_threshold(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = self.client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
 
-    def test_each_result_has_id_and_score(self):
+    def test_each_result_has_id_and_score(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = self.client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort")
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -177,19 +160,15 @@ class TestLearnedSortContract:
 class TestInclusionContract:
     """GET/POST /api/inclusion response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_inclusion_key(self):
-        resp = self.client.get("/api/inclusion")
+    def test_get_returns_inclusion_key(self, client):
+        resp = client.get("/api/inclusion")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "inclusion" in data
         assert isinstance(data["inclusion"], (int, float))
 
-    def test_post_returns_inclusion_key(self):
-        resp = self.client.post("/api/inclusion", json={"inclusion": 3})
+    def test_post_returns_inclusion_key(self, client):
+        resp = client.post("/api/inclusion", json={"inclusion": 3})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "inclusion" in data
@@ -199,19 +178,15 @@ class TestInclusionContract:
 class TestSafeThresholdsContract:
     """GET/POST /api/safe-thresholds response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_boolean(self):
-        resp = self.client.get("/api/safe-thresholds")
+    def test_get_returns_boolean(self, client):
+        resp = client.get("/api/safe-thresholds")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "safe_thresholds" in data
         assert isinstance(data["safe_thresholds"], bool)
 
-    def test_post_returns_boolean(self):
-        resp = self.client.post("/api/safe-thresholds", json={"safe_thresholds": True})
+    def test_post_returns_boolean(self, client):
+        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": True})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["safe_thresholds"] is True
@@ -220,21 +195,17 @@ class TestSafeThresholdsContract:
 class TestLabelsExportContract:
     """GET /api/labels/export response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_json_with_labels_key(self):
-        resp = self.client.get("/api/labels/export")
+    def test_returns_json_with_labels_key(self, client):
+        resp = client.get("/api/labels/export")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "labels" in data
         assert isinstance(data["labels"], list)
 
-    def test_with_votes_labels_contain_required_fields(self):
+    def test_with_votes_labels_contain_required_fields(self, client):
         good_votes[1] = None
         bad_votes[2] = None
-        resp = self.client.get("/api/labels/export")
+        resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) >= 2
         for label in data["labels"]:
@@ -246,13 +217,9 @@ class TestLabelsExportContract:
 class TestLabelsImportContract:
     """POST /api/labels/import response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_applied_and_skipped(self):
+    def test_returns_applied_and_skipped(self, client):
         labels = [{"md5": "nonexistent", "label": "good"}]
-        resp = self.client.post("/api/labels/import", json={"labels": labels})
+        resp = client.post("/api/labels/import", json={"labels": labels})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "applied" in data
@@ -264,12 +231,8 @@ class TestLabelsImportContract:
 class TestDatasetStatusContract:
     """GET /api/dataset/status response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_required_fields(self):
-        resp = self.client.get("/api/dataset/status")
+    def test_returns_required_fields(self, client):
+        resp = client.get("/api/dataset/status")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "loaded" in data
@@ -277,8 +240,8 @@ class TestDatasetStatusContract:
         assert isinstance(data["loaded"], bool)
         assert isinstance(data["num_medias"], int)
 
-    def test_has_votes_field(self):
-        resp = self.client.get("/api/dataset/status")
+    def test_has_votes_field(self, client):
+        resp = client.get("/api/dataset/status")
         data = resp.get_json()
         assert "has_votes" in data
         assert isinstance(data["has_votes"], bool)
@@ -287,20 +250,16 @@ class TestDatasetStatusContract:
 class TestMediaTypesContract:
     """GET /api/media-types response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_media_types_list(self):
-        resp = self.client.get("/api/media-types")
+    def test_returns_media_types_list(self, client):
+        resp = client.get("/api/media-types")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "media_types" in data
         assert isinstance(data["media_types"], list)
         assert len(data["media_types"]) > 0
 
-    def test_each_type_has_required_fields(self):
-        resp = self.client.get("/api/media-types")
+    def test_each_type_has_required_fields(self, client):
+        resp = client.get("/api/media-types")
         data = resp.get_json()
         for mt in data["media_types"]:
             assert "type_id" in mt
@@ -312,12 +271,8 @@ class TestMediaTypesContract:
 class TestSettingsContract:
     """GET/PUT /api/settings response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_all_settings(self):
-        resp = self.client.get("/api/settings")
+    def test_get_returns_all_settings(self, client):
+        resp = client.get("/api/settings")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "volume" in data
@@ -325,21 +280,21 @@ class TestSettingsContract:
         assert isinstance(data["volume"], (int, float))
         assert isinstance(data["autorun_processors"], list)
 
-    def test_get_defaults_returns_dict(self):
-        resp = self.client.get("/api/settings/defaults")
+    def test_get_defaults_returns_dict(self, client):
+        resp = client.get("/api/settings/defaults")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, dict)
         assert "volume" in data
 
-    def test_put_returns_updated_settings(self):
-        resp = self.client.put("/api/settings", json={"volume": 0.5})
+    def test_put_returns_updated_settings(self, client):
+        resp = client.put("/api/settings", json={"volume": 0.5})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "volume" in data
 
-    def test_autorun_processors_list(self):
-        resp = self.client.get("/api/settings/autorun-processors")
+    def test_autorun_processors_list(self, client):
+        resp = client.get("/api/settings/autorun-processors")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "autorun_processors" in data
@@ -349,18 +304,14 @@ class TestSettingsContract:
 class TestExportersContract:
     """GET /api/exporters response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_list(self):
-        resp = self.client.get("/api/exporters")
+    def test_returns_list(self, client):
+        resp = client.get("/api/exporters")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, list)
 
-    def test_each_exporter_has_name(self):
-        resp = self.client.get("/api/exporters")
+    def test_each_exporter_has_name(self, client):
+        resp = client.get("/api/exporters")
         data = resp.get_json()
         for exp in data:
             assert "name" in exp
@@ -370,27 +321,23 @@ class TestExportersContract:
 class TestImportersContract:
     """GET /api/dataset/importers response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_importers_dict(self):
-        resp = self.client.get("/api/dataset/importers")
+    def test_returns_importers_dict(self, client):
+        resp = client.get("/api/dataset/importers")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "importers" in data
         assert isinstance(data["importers"], list)
 
-    def test_all_importers_returns_importers_dict(self):
-        resp = self.client.get("/api/dataset/all-importers")
+    def test_all_importers_returns_importers_dict(self, client):
+        resp = client.get("/api/dataset/all-importers")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "importers" in data
         assert isinstance(data["importers"], list)
 
-    def test_all_importers_is_superset(self):
-        resp1 = self.client.get("/api/dataset/importers")
-        resp2 = self.client.get("/api/dataset/all-importers")
+    def test_all_importers_is_superset(self, client):
+        resp1 = client.get("/api/dataset/importers")
+        resp2 = client.get("/api/dataset/all-importers")
         names1 = {i["name"] for i in resp1.get_json()["importers"]}
         names2 = {i["name"] for i in resp2.get_json()["importers"]}
         assert names1.issubset(names2)
@@ -399,18 +346,14 @@ class TestImportersContract:
 class TestLabelImportersContract:
     """GET /api/label-importers response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_list(self):
-        resp = self.client.get("/api/label-importers")
+    def test_returns_list(self, client):
+        resp = client.get("/api/label-importers")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, list)
 
-    def test_each_importer_has_name(self):
-        resp = self.client.get("/api/label-importers")
+    def test_each_importer_has_name(self, client):
+        resp = client.get("/api/label-importers")
         data = resp.get_json()
         for imp in data:
             assert "name" in imp
@@ -419,12 +362,8 @@ class TestLabelImportersContract:
 class TestProcessorImportersContract:
     """GET /api/processor-importers response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_list(self):
-        resp = self.client.get("/api/processor-importers")
+    def test_returns_list(self, client):
+        resp = client.get("/api/processor-importers")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, list)
@@ -433,19 +372,15 @@ class TestProcessorImportersContract:
 class TestAutorunDetectorsContract:
     """GET/POST/DELETE /api/autorun-detectors response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_detectors_dict(self):
-        resp = self.client.get("/api/autorun-detectors")
+    def test_get_returns_detectors_dict(self, client):
+        resp = client.get("/api/autorun-detectors")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "detectors" in data
         assert isinstance(data["detectors"], list)
 
-    def test_create_returns_success(self):
-        resp = self.client.post("/api/autorun-detectors", json={
+    def test_create_returns_success(self, client):
+        resp = client.post("/api/autorun-detectors", json={
             "name": "test_det",
             "media_type": "audio",
         })
@@ -454,22 +389,22 @@ class TestAutorunDetectorsContract:
         assert data["success"] is True
         assert data["name"] == "test_det"
 
-    def test_delete_returns_success(self):
-        self.client.post("/api/autorun-detectors", json={
+    def test_delete_returns_success(self, client):
+        client.post("/api/autorun-detectors", json={
             "name": "to_delete",
             "media_type": "audio",
         })
-        resp = self.client.delete("/api/autorun-detectors/to_delete")
+        resp = client.delete("/api/autorun-detectors/to_delete")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
 
-    def test_rename_returns_success(self):
-        self.client.post("/api/autorun-detectors", json={
+    def test_rename_returns_success(self, client):
+        client.post("/api/autorun-detectors", json={
             "name": "old_name",
             "media_type": "audio",
         })
-        resp = self.client.put("/api/autorun-detectors/old_name/rename", json={
+        resp = client.put("/api/autorun-detectors/old_name/rename", json={
             "new_name": "new_name",
         })
         assert resp.status_code == 200
@@ -481,26 +416,22 @@ class TestAutorunDetectorsContract:
 class TestTextsortSuggestionsContract:
     """GET/POST /api/textsort-suggestions response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_suggestions_list(self):
-        resp = self.client.get("/api/textsort-suggestions")
+    def test_get_returns_suggestions_list(self, client):
+        resp = client.get("/api/textsort-suggestions")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "suggestions" in data
         assert isinstance(data["suggestions"], list)
 
-    def test_post_returns_ok(self):
-        resp = self.client.post("/api/textsort-suggestions", json={"text": "test query"})
+    def test_post_returns_ok(self, client):
+        resp = client.post("/api/textsort-suggestions", json={"text": "test query"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
 
-    def test_stored_suggestion_appears_in_list(self):
-        self.client.post("/api/textsort-suggestions", json={"text": "my suggestion"})
-        resp = self.client.get("/api/textsort-suggestions")
+    def test_stored_suggestion_appears_in_list(self, client):
+        client.post("/api/textsort-suggestions", json={"text": "my suggestion"})
+        resp = client.get("/api/textsort-suggestions")
         data = resp.get_json()
         assert "my suggestion" in data["suggestions"]
 
@@ -508,12 +439,8 @@ class TestTextsortSuggestionsContract:
 class TestSortProgressContract:
     """GET /api/sort/progress response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_json(self):
-        resp = self.client.get("/api/sort/progress")
+    def test_returns_json(self, client):
+        resp = client.get("/api/sort/progress")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, dict)
@@ -522,20 +449,16 @@ class TestSortProgressContract:
 class TestDiversityTreeContract:
     """GET/POST /api/diversity-tree/next response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_get_returns_required_fields(self):
-        resp = self.client.get("/api/diversity-tree/next")
+    def test_get_returns_required_fields(self, client):
+        resp = client.get("/api/diversity-tree/next")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "id" in data
         assert "diversity_level" in data
         assert "exhausted" in data
 
-    def test_post_returns_required_fields(self):
-        resp = self.client.post("/api/diversity-tree/next", json={"scores": {}})
+    def test_post_returns_required_fields(self, client):
+        resp = client.post("/api/diversity-tree/next", json={"scores": {}})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "id" in data
@@ -546,23 +469,19 @@ class TestDiversityTreeContract:
 class TestLabelingStatusContract:
     """GET /api/labeling-status response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_json(self):
-        resp = self.client.get("/api/labeling-status")
+    def test_returns_json(self, client):
+        resp = client.get("/api/labeling-status")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, dict)
 
-    def test_with_votes_returns_indicator_fields(self):
+    def test_with_votes_returns_indicator_fields(self, client):
         """With sufficient votes, response should have labeling status indicators."""
         for i in range(1, 4):
-            self.client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
         for i in range(4, 7):
-            self.client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
-        resp = self.client.get("/api/labeling-status")
+            client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
+        resp = client.get("/api/labeling-status")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "error" not in data
@@ -577,13 +496,9 @@ class TestLabelingStatusContract:
 class TestFillFromSortContract:
     """POST /api/labels/fill-from-sort response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_dry_run_returns_counts(self):
+    def test_dry_run_returns_counts(self, client):
         sort_results = [{"id": i, "score": 0.9 if i <= 5 else 0.1} for i in range(1, 11)]
-        resp = self.client.post("/api/labels/fill-from-sort", json={
+        resp = client.post("/api/labels/fill-from-sort", json={
             "sort_results": sort_results,
             "threshold": 0.5,
             "sides": "both",
@@ -594,9 +509,9 @@ class TestFillFromSortContract:
         assert "good_count" in data
         assert "bad_count" in data
 
-    def test_confirm_returns_applied_and_results(self):
+    def test_confirm_returns_applied_and_results(self, client):
         sort_results = [{"id": i, "score": 0.9 if i <= 3 else 0.1} for i in range(1, 11)]
-        resp = self.client.post("/api/labels/fill-from-sort", json={
+        resp = client.post("/api/labels/fill-from-sort", json={
             "sort_results": sort_results,
             "threshold": 0.5,
             "sides": "both",
@@ -612,12 +527,8 @@ class TestFillFromSortContract:
 class TestDatasetRegistryContract:
     """GET /api/datasets/registry response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_datasets_dict(self):
-        resp = self.client.get("/api/datasets/registry")
+    def test_returns_datasets_dict(self, client):
+        resp = client.get("/api/datasets/registry")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "datasets" in data
@@ -627,12 +538,8 @@ class TestDatasetRegistryContract:
 class TestModelsRegistryContract:
     """GET /api/models/registry response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_returns_models_dict(self):
-        resp = self.client.get("/api/models/registry")
+    def test_returns_models_dict(self, client):
+        resp = client.get("/api/models/registry")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "models" in data
@@ -642,12 +549,8 @@ class TestModelsRegistryContract:
 class TestTrainableModelsContract:
     """GET/POST /api/trainable-models response shape."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_list_returns_models_dict(self):
-        resp = self.client.get("/api/trainable-models")
+    def test_list_returns_models_dict(self, client):
+        resp = client.get("/api/trainable-models")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "models" in data
@@ -657,68 +560,64 @@ class TestTrainableModelsContract:
 class TestErrorResponseFormat:
     """All error responses should use consistent JSON format."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_404_media_error_is_json(self):
-        resp = self.client.get("/api/medias/99999/audio")
+    def test_404_media_error_is_json(self, client):
+        resp = client.get("/api/medias/99999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_sort_error_is_json(self):
-        resp = self.client.post("/api/sort", json={"text": ""})
+    def test_400_sort_error_is_json(self, client):
+        resp = client.post("/api/sort", json={"text": ""})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_vote_error_is_json(self):
-        resp = self.client.post("/api/medias/1/vote", json={"vote": "invalid"})
+    def test_400_vote_error_is_json(self, client):
+        resp = client.post("/api/medias/1/vote", json={"vote": "invalid"})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_inclusion_error_is_json(self):
-        resp = self.client.post("/api/inclusion", json={"inclusion": "not_a_number"})
+    def test_400_inclusion_error_is_json(self, client):
+        resp = client.post("/api/inclusion", json={"inclusion": "not_a_number"})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_safe_thresholds_error_is_json(self):
-        resp = self.client.post("/api/safe-thresholds", json={"safe_thresholds": "not_a_bool"})
+    def test_400_safe_thresholds_error_is_json(self, client):
+        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "not_a_bool"})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_labels_import_error_is_json(self):
-        resp = self.client.post("/api/labels/import", json={"labels": "not_a_list"})
+    def test_400_labels_import_error_is_json(self, client):
+        resp = client.post("/api/labels/import", json={"labels": "not_a_list"})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_settings_error_is_json(self):
-        resp = self.client.put("/api/settings", json={"volume": "not_a_number"})
+    def test_400_settings_error_is_json(self, client):
+        resp = client.put("/api/settings", json={"volume": "not_a_number"})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_learned_sort_no_votes_is_json(self):
-        resp = self.client.post("/api/learned-sort")
+    def test_400_learned_sort_no_votes_is_json(self, client):
+        resp = client.post("/api/learned-sort")
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
 
-    def test_404_unknown_exporter_is_json(self):
-        resp = self.client.post("/api/exporters/export", json={
+    def test_404_unknown_exporter_is_json(self, client):
+        resp = client.post("/api/exporters/export", json={
             "exporter_name": "nonexistent_exporter",
         })
         assert resp.status_code == 404
         data = resp.get_json()
         assert "error" in data
 
-    def test_400_missing_exporter_name_is_json(self):
-        resp = self.client.post("/api/exporters/export", json={})
+    def test_400_missing_exporter_name_is_json(self, client):
+        resp = client.post("/api/exporters/export", json={})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
@@ -727,22 +626,18 @@ class TestErrorResponseFormat:
 class TestApiCacheControl:
     """API responses should prevent browser caching of mutable data."""
 
-    def setup_method(self):
-        app_module.app.config["TESTING"] = True
-        self.client = app_module.app.test_client()
-
-    def test_datasets_registry_no_store(self):
-        resp = self.client.get("/api/datasets/registry")
+    def test_datasets_registry_no_store(self, client):
+        resp = client.get("/api/datasets/registry")
         assert resp.headers.get("Cache-Control") == "no-store"
 
-    def test_loading_tasks_no_store(self):
-        resp = self.client.get("/api/dataset/loading-tasks")
+    def test_loading_tasks_no_store(self, client):
+        resp = client.get("/api/dataset/loading-tasks")
         assert resp.headers.get("Cache-Control") == "no-store"
 
-    def test_dataset_status_no_store(self):
-        resp = self.client.get("/api/dataset/status")
+    def test_dataset_status_no_store(self, client):
+        resp = client.get("/api/dataset/status")
         assert resp.headers.get("Cache-Control") == "no-store"
 
-    def test_medias_no_store(self):
-        resp = self.client.get("/api/medias")
+    def test_medias_no_store(self, client):
+        resp = client.get("/api/medias")
         assert resp.headers.get("Cache-Control") == "no-store"

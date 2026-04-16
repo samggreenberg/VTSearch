@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import BGE_MODEL_ID
-from vtsearch.media.base import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
+from vtsearch.media.embedder import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer

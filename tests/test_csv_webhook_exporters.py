@@ -3,63 +3,25 @@
 import argparse
 import csv
 import json
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-import app as app_module
-from helpers import train_detector_from_votes
+import app as app_module  # noqa: F401
+from helpers import (
+    build_results_dict as _build_results_dict,
+    make_dataset_file as _make_dataset_file,
+    make_detector_file as _make_detector_file,
+)
 from vtsearch.cli import (
     _run_exporter,
     run_autodetect,
 )
-from vtsearch.datasets.loader import export_dataset_to_file
 
 
 # ---------------------------------------------------------------------------
-# Helpers (same pattern as test_cli_autodetect.py)
+# Helpers
 # ---------------------------------------------------------------------------
-
-
-def _build_results_dict(hits, detector_path, media_type="unknown"):
-    """Build a single-detector results dict for testing (same shape as exporter input)."""
-    detector_data = json.loads(Path(detector_path).read_text())
-    detector_name = detector_data.get("name", Path(detector_path).stem)
-    threshold = detector_data.get("threshold", 0.5)
-    return {
-        "media_type": media_type,
-        "detectors_run": 1,
-        "results": {
-            detector_name: {
-                "detector_name": detector_name,
-                "threshold": threshold,
-                "total_hits": len(hits),
-                "hits": hits,
-            }
-        },
-    }
-
-
-def _make_dataset_file(tmp_path, clips_dict):
-    """Export a medias dict to a pickle file and return the path."""
-    pkl_bytes = export_dataset_to_file(clips_dict)
-    dataset_path = tmp_path / "dataset.pkl"
-    dataset_path.write_bytes(pkl_bytes)
-    return dataset_path
-
-
-def _make_detector_file(tmp_path, client, good_ids, bad_ids, name="detector.json"):
-    """Train a detector and write its JSON to a file."""
-    app_module.good_votes.update({k: None for k in good_ids})
-    app_module.bad_votes.update({k: None for k in bad_ids})
-    detector = train_detector_from_votes()
-    app_module.good_votes.clear()
-    app_module.bad_votes.clear()
-
-    detector_path = tmp_path / name
-    detector_path.write_text(json.dumps(detector))
-    return detector_path, detector
 
 
 def _make_sample_results():
@@ -571,7 +533,7 @@ class TestCsvExporterIntegration:
 
     def test_csv_via_run_exporter(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
@@ -813,7 +775,7 @@ class TestWebhookExporterIntegration:
 
     def test_webhook_via_run_exporter(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path, client, [1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")

@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from PIL import Image
 
-from vtsearch.media.base import Extractor
+from vtsearch.media.processors import Extractor
 
 
 class OCRExtractor(Extractor):

@@ -13,25 +13,12 @@ Usage::
         print(src.name, src.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.settings_io.sources.base import SettingsSource
-
-_registry: PluginRegistry[SettingsSource] = PluginRegistry(
-    package="vtsearch.settings_io.sources",
+get_settings_source, list_settings_sources = make_plugin_registry(
+    package=__name__,
     sentinel="SETTINGS_SOURCE",
     label="settings source",
 )
 
-get_settings_source = _registry.get
-list_settings_sources = _registry.list
-
-__all__ = [
-    "get_settings_source",
-    "list_settings_sources",
-]
+__all__ = ["get_settings_source", "list_settings_sources"]

@@ -370,16 +370,17 @@ class TestDynamicImporterDispatch:
         custom = CustomImporter()
 
         # Temporarily register it in the importer registry
-        from vtsearch.datasets.importers import _registry
+        from vtsearch.datasets.importers import get_importer
 
-        _registry._ensure_discovered()
-        _registry._items[custom.name] = custom
+        registry = get_importer.__self__
+        registry._ensure_discovered()
+        registry._items[custom.name] = custom
         try:
             origin = {"importer": "test_custom", "params": {"path": str(tmp_path)}}
             result = resolve_file_from_origin(origin, origin_name="custom_media.wav")
             assert result == marker_file
         finally:
-            _registry._items.pop(custom.name, None)
+            registry._items.pop(custom.name, None)
 
 
 class TestResolveLabelEmbeddings:
@@ -499,7 +500,7 @@ class TestMultiFindCrossDatasetFallback:
 
         # Create a trainable model with labels from label_folder
         label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_cross_detector"
         tm_path = _model_path(tm_name)
@@ -608,7 +609,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.wav").write_bytes(b"bad_content")
 
         label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_mt_detector"
         tm_data = {
@@ -687,7 +688,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.jpg").write_bytes(b"bad_content")
 
         label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_nr_detector"
         tm_data = {
@@ -761,7 +762,7 @@ class TestFindCheckLabels:
 
         from vtsearch.datasets.registry import register_dataset
         from vtsearch.models.registry import register_model
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         # Create a dataset where labels match by md5
         medias = {}
@@ -822,7 +823,7 @@ class TestFindCheckLabels:
 
         from vtsearch.datasets.registry import register_dataset
         from vtsearch.models.registry import register_model
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -892,7 +893,7 @@ class TestFindCheckLabels:
 
         from vtsearch.datasets.registry import register_dataset
         from vtsearch.models.registry import register_model
-        from vtsearch.routes.trainable_models import _model_path, _write_model
+        from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         # Create a target dataset (no overlap with labels)
         medias = {}

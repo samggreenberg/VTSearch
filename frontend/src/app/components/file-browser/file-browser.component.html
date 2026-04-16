@@ -41,20 +41,20 @@
           <div class="file-browser-error">{{ error }}</div>
         } @else {
           @if (currentPath) {
-            <button class="file-browser-item file-browser-dir" (click)="goUp()">
+            <button class="file-browser-item file-browser-dir" (click)="goUp()" title="Go to parent directory">
               <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 2l5 6H9v6H7V8H3z"/></svg></span>
               <span class="file-browser-name">..</span>
             </button>
           }
           @for (dir of directories; track dir.path) {
-            <button class="file-browser-item file-browser-dir" (click)="enterDirectory(dir)">
+            <button class="file-browser-item file-browser-dir" (click)="enterDirectory(dir)" [title]="dir.path">
               <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1 3h5l1.5 1.5H15v9.5H1V3zm1 1v8.5h12V5.5H7.1L5.6 4H2z"/></svg></span>
               <span class="file-browser-name">{{ dir.name }}</span>
               <span class="file-browser-date">{{ dir.modified_at }}</span>
             </button>
           }
           @for (file of files; track file.path) {
-            <button class="file-browser-item file-browser-file" (click)="selectFile(file)">
+            <button class="file-browser-item file-browser-file" (click)="selectFile(file)" [title]="file.path">
               <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M3 1h7l4 4v10H3V1zm1 1v12h9V5.5L9.5 2H4zm6 0v3.5h3.5"/></svg></span>
               <span class="file-browser-name">{{ file.name }}</span>
               <span class="file-browser-date">{{ file.modified_at }}</span>

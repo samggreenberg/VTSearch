@@ -6,7 +6,6 @@ without downloading model weights.
 
 import threading
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -303,6 +302,119 @@ class TestTextBGEEmbedderProperties:
         mock_model.encode.assert_called_once_with("some passage text", normalize_embeddings=True)
 
 
+class TestVideoLanguageBindEmbedderProperties:
+    """Verify VideoLanguageBindEmbedder class properties and registration."""
+
+    def test_name(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        assert emb.name == "languagebind"
+
+    def test_media_type_id(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        assert emb.media_type_id == "video"
+
+    def test_description_wrappers_non_empty(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        wrappers = emb.description_wrappers
+        assert len(wrappers) > 0
+        assert all("{text}" in w for w in wrappers)
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("languagebind")
+        assert emb.name == "languagebind"
+        assert emb.media_type_id == "video"
+
+    def test_listed_in_embedders_for_type(self):
+        from vtsearch.media import embedders_for_type
+
+        embedders = embedders_for_type("video")
+        names = [e.name for e in embedders]
+        assert "languagebind" in names
+
+    def test_to_dict(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        d = emb.to_dict()
+        assert d == {"name": "languagebind", "media_type_id": "video"}
+
+    def test_load_models_idempotent(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        # Simulate already-loaded model
+        emb._model = MagicMock()
+        emb._tokenizer = MagicMock()
+        # Calling load_models again should be a no-op (not re-download)
+        emb.load_models()
+        # Model should be the same mock
+        assert isinstance(emb._model, MagicMock)
+
+    def test_embed_media_returns_none_when_not_loaded(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_media(Path("/nonexistent.mp4"))
+        assert result is None
+
+    def test_embed_text_returns_none_when_not_loaded(self):
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        emb = VideoLanguageBindEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_text("a cat playing")
+        assert result is None
+
+    def test_uses_correct_model_id(self):
+        from vtsearch.config import LANGUAGEBIND_VIDEO_MODEL_ID
+
+        assert LANGUAGEBIND_VIDEO_MODEL_ID == "LanguageBind/LanguageBind_Video_V1.5_FT"
+
+
+class TestPreprocessFrames:
+    """Verify the _preprocess_frames helper produces correct shapes and values."""
+
+    def test_output_shape(self):
+        from PIL import Image
+
+        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+
+        # Create 8 dummy RGB frames of varying sizes.
+        rng = np.random.default_rng(42)
+        frames = [Image.fromarray(rng.integers(0, 255, (320, 240, 3), dtype=np.uint8)) for _ in range(8)]
+        result = _preprocess_frames(frames)
+        # Expected shape: (C, T, H, W) = (3, 8, 224, 224).
+        assert result.shape == (3, 8, 224, 224)
+
+    def test_output_dtype(self):
+        from PIL import Image
+
+        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+
+        rng = np.random.default_rng(42)
+        frames = [Image.fromarray(rng.integers(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(4)]
+        result = _preprocess_frames(frames)
+        assert result.dtype == np.float32
+
+    def test_single_frame(self):
+        from PIL import Image
+
+        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+
+        frame = Image.fromarray(np.zeros((300, 400, 3), dtype=np.uint8))
+        result = _preprocess_frames([frame])
+        assert result.shape == (3, 1, 224, 224)
+
+
 class TestAllEmbeddersRegistration:
     """Verify all expected embedders are registered."""
 
@@ -310,13 +422,13 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders
 
         embedders = all_embedders()
-        assert len(embedders) == 7
+        assert len(embedders) == 8
 
     def test_all_expected_names_present(self):
         from vtsearch.media import all_embedders
 
         names = {e.name for e in all_embedders()}
-        expected = {"clap", "clap_music", "clip", "siglip", "e5", "bge", "xclip"}
+        expected = {"clap", "clap_music", "clip", "siglip", "e5", "bge", "xclip", "languagebind"}
         assert names == expected
 
     def test_embedders_for_audio(self):
@@ -341,13 +453,13 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("video")}
-        assert names == {"xclip"}
+        assert names == {"xclip", "languagebind"}
 
     def test_all_embedders_dict(self):
         from vtsearch.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        assert len(dicts) == 7
+        assert len(dicts) == 8
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
@@ -357,22 +469,28 @@ class TestNewEmbeddersInheritance:
     """Verify new embedders correctly extend MediaEmbedder."""
 
     def test_siglip_is_media_embedder(self):
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 
         assert issubclass(ImageSiglipEmbedder, MediaEmbedder)
 
     def test_clap_music_is_media_embedder(self):
         from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         assert issubclass(AudioClapMusicEmbedder, MediaEmbedder)
 
     def test_bge_is_media_embedder(self):
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
 
         assert issubclass(TextBGEEmbedder, MediaEmbedder)
+
+    def test_languagebind_is_media_embedder(self):
+        from vtsearch.media.embedder import MediaEmbedder
+        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+
+        assert issubclass(VideoLanguageBindEmbedder, MediaEmbedder)
 
     def test_embed_text_enriched_works(self):
         """embed_text_enriched (inherited from base) should work with mocked embed_text."""
@@ -391,7 +509,7 @@ class TestEmbedMediaLock:
 
     def test_concurrent_embed_media_serialised(self):
         """Two threads calling embed_media must not overlap (global lock)."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         inside = threading.Event()
         proceed = threading.Event()
@@ -460,7 +578,7 @@ class TestEmbedMediaLock:
 
     def test_embed_media_delegates_to_impl(self):
         """embed_media() should call _embed_media_impl() and return its result."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         class SimpleEmbedder(MediaEmbedder):
             @property

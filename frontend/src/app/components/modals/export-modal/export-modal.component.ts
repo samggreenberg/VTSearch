@@ -7,7 +7,6 @@ import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { FindSessionService } from '../../../services/find-session.service';
 import { LabelSessionService } from '../../../services/label-session.service';
@@ -30,8 +29,6 @@ export interface ColumnDef {
 })
 export class ExportModalComponent implements OnInit, OnDestroy {
   @Input() detectorName = '';
-  /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
-  @Input() mode: 'label' | 'find' = 'label';
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
@@ -88,7 +85,6 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
   constructor(
     private datasetsApi: DatasetsApiService,
-    private detectorsApi: DetectorsApiService,
     private exportersApi: ExportersApiService,
     private findSession: FindSessionService,
     private labelSession: LabelSessionService,
@@ -185,10 +181,6 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
   get hasLabels(): boolean {
     return this.filteredLabels.length > 0;
-  }
-
-  get showDetectorSection(): boolean {
-    return this.mode === 'label';
   }
 
   get hasExporterForm(): boolean {
@@ -371,49 +363,6 @@ export class ExportModalComponent implements OnInit, OnDestroy {
           this.submitting = false;
         },
       });
-  }
-
-  exportDetectorBrowser(): void {
-    this.status = 'Exporting...';
-    this.error = '';
-    this.detectorsApi.exportDetector(this.detectorName).subscribe({
-      next: (data: any) => {
-        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const parts: string[] = [];
-        const detName = this.effectiveDetectorName;
-        if (detName) parts.push(detName);
-        if (this.datasetName) parts.push(this.datasetName);
-        if (parts.length === 0) parts.push('detector');
-        const stem = parts.join('-').replace(/[\\/:*?"<>|]+/g, '-');
-        a.download = `${stem}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        this.status = 'Downloaded.';
-        this.exported.emit();
-      },
-      error: () => {
-        this.error = 'Export failed';
-        this.status = '';
-      },
-    });
-  }
-
-  exportDetectorServer(): void {
-    this.status = 'Saving to server...';
-    this.error = '';
-    this.detectorsApi.exportDetectorToServer(this.detectorName).subscribe({
-      next: () => {
-        this.status = 'Saved to server.';
-        this.exported.emit();
-      },
-      error: () => {
-        this.error = 'Failed to save to server';
-        this.status = '';
-      },
-    });
   }
 
   /** Map an exporter's emoji icon to an SVG icon type. */

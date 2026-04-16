@@ -98,13 +98,26 @@ def demo_dataset_list():
 
         # Calculate number of files from slice parameters
         num_categories = len(dataset_info["categories"])
-        slice_start = dataset_info.get("slice_start", 0)
-        slice_end = dataset_info.get("slice_end")
-        if slice_end is not None:
-            per_cat = slice_end - slice_start
+        items_per_category = dataset_info.get("items_per_category") or 0
+        slice_frac_start = dataset_info.get("slice_frac_start")
+        slice_frac_end = dataset_info.get("slice_frac_end")
+        if slice_frac_start is not None:
+            frac_start = slice_frac_start
+            frac_end = slice_frac_end if slice_frac_end is not None else 1.0
+            # Fall back to 40 only when the dataset didn't declare its size.
+            base_per_cat = items_per_category if items_per_category > 0 else 40
+            per_cat = int(base_per_cat * (frac_end - frac_start))
+            num_files = num_categories * per_cat
         else:
-            per_cat = 40  # generic fallback
-        num_files = num_categories * per_cat
+            slice_start = dataset_info.get("slice_start", 0)
+            slice_end = dataset_info.get("slice_end")
+            if slice_end is not None:
+                per_cat = slice_end - slice_start
+            elif items_per_category > 0:
+                per_cat = items_per_category - slice_start
+            else:
+                per_cat = 40  # generic fallback
+            num_files = num_categories * per_cat
 
         # Calculate download size from the DemoDataset metadata
         if status == "ready":

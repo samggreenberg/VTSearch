@@ -13,20 +13,12 @@ Usage::
         print(imp.name, imp.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.processors.importers.base import ProcessorImporter
-
-_registry: PluginRegistry[ProcessorImporter] = PluginRegistry(
-    package="vtsearch.processors.importers",
+get_processor_importer, list_processor_importers = make_plugin_registry(
+    package=__name__,
     sentinel="PROCESSOR_IMPORTER",
     label="processor importer",
 )
 
-get_processor_importer = _registry.get
-list_processor_importers = _registry.list
+__all__ = ["get_processor_importer", "list_processor_importers"]

@@ -25,7 +25,13 @@ from __future__ import annotations
 from flask import Blueprint, jsonify
 
 from vtsearch.exporters import get_exporter, list_exporters
-from vtsearch.routes.helpers import get_json_safe, get_plugin_or_404, validate_filepath_field
+from vtsearch.routes.helpers import (
+    get_json_safe,
+    get_plugin_or_404,
+    run_plugin_or_error,
+    validate_filepath_field,
+    validate_required_fields,
+)
 
 exporters_bp = Blueprint("exporters", __name__)
 
@@ -76,32 +82,16 @@ def run_export():
     field_values: dict = data.get("field_values", {}) or {}
     results: dict = data.get("results", {}) or {}
 
-    # Validate required fields
-    missing = [
-        f.key
-        for f in exporter.fields
-        if f.required and (field_values.get(f.key) is None or not str(field_values.get(f.key, "")).strip())
-    ]
-    if missing:
-        return (
-            jsonify(
-                {
-                    "error": f"Missing required field(s): {missing}",
-                    "missing_fields": missing,
-                }
-            ),
-            400,
-        )
+    err = validate_required_fields(exporter, field_values)
+    if err:
+        return err
 
     err = validate_filepath_field(field_values)
     if err:
         return err
 
-    try:
-        outcome = exporter.export(results, field_values)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:  # pragma: no cover
-        return jsonify({"error": f"Export failed: {exc}"}), 500
+    outcome, err = run_plugin_or_error(exporter, "export", results, field_values)
+    if err:
+        return err
 
     return jsonify({"success": True, **outcome})

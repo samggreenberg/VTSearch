@@ -143,7 +143,7 @@ def add_autorun_detector_route():
         # model file so that labels and examples persist across restarts.
         trainable_model_name = ""
         if not weights:
-            from vtsearch.routes.trainable_models import _model_path, _write_model
+            from vtsearch.models.trainable_model_store import _model_path, _write_model
             import time as _time
 
             trainable_model_name = name
@@ -247,55 +247,6 @@ def export_autorun_detector_route(name):
             "threshold": det.get("threshold", 0.5),
             "media_type": det.get("media_type", ""),
             "name": det["name"],
-        }
-    )
-
-
-@detectors_crud_bp.route("/api/autorun-detectors/<name>/export-server", methods=["POST"])
-def export_autorun_detector_server_route(name):
-    """Save a named autorun detector to a file on the server filesystem.
-
-    Stores the origin information and inclusion setting, not MLP weights.
-    When re-loaded, the weights are re-derived from the original media.
-
-    Expects JSON body with optional ``filename`` (defaults to detector name)
-    and ``overwrite`` (bool, default false).
-    """
-    detectors = get_autorun_detectors()
-    det = detectors.get(name)
-    if det is None:
-        return jsonify({"error": "Detector not found"}), 404
-    if not det.get("good_origins") or not det.get("bad_origins"):
-        return jsonify({"error": "Detector has no origin information and cannot be exported to file"}), 400
-
-    data = request.get_json(force=True) or {}
-    filename = (data.get("filename") or name).strip()
-    overwrite = data.get("overwrite", False)
-
-    safe_name = "".join(c for c in filename if c.isalnum() or c in "-_ ")
-    if not safe_name:
-        return jsonify({"error": "name contains no valid characters"}), 400
-
-    det_dir = get_detectors_dir()
-    det_dir.mkdir(parents=True, exist_ok=True)
-    filepath = det_dir / f"{safe_name}.json"
-
-    if filepath.exists() and not overwrite:
-        return jsonify({"exists": True, "name": safe_name}), 409
-
-    detector_data = {
-        "good_origins": det["good_origins"],
-        "bad_origins": det["bad_origins"],
-        "inclusion": det.get("inclusion", 0),
-        "media_type": det.get("media_type", ""),
-        "name": safe_name,
-    }
-    filepath.write_text(json.dumps(detector_data, indent=2), encoding="utf-8")
-
-    return jsonify(
-        {
-            "success": True,
-            "name": safe_name,
         }
     )
 

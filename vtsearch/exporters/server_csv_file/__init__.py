@@ -11,11 +11,29 @@ No additional pip packages are required; uses only Python's ``csv`` and
 from __future__ import annotations
 
 import csv
+import io
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+
+def _atomic_write_csv(path: Path, write_rows) -> None:
+    """Build CSV content in memory then write atomically.
+
+    *write_rows* is invoked with a ``csv.writer`` and is expected to emit
+    every row.  Buffering in memory keeps the destination file untouched
+    until the write succeeds, so a process crash mid-write cannot leave
+    a half-written CSV behind.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    write_rows(writer)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(buf.getvalue(), encoding="utf-8", newline="")
+    os.replace(tmp, path)
 
 # Characters that trigger formula execution in spreadsheet applications.
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -89,10 +107,10 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         columns.append("origin")
 
         total_rows = 0
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(columns)
 
+        def _write(writer: "csv.writer") -> None:  # type: ignore[name-defined]
+            nonlocal total_rows
+            writer.writerow(columns)
             for entry in labels:
                 meta = entry.get("custom_metadata") or {}
                 row = []
@@ -113,6 +131,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                         row.append("")
                 writer.writerow(row)
                 total_rows += 1
+
+        _atomic_write_csv(filepath, _write)
 
         return {
             "message": f"Saved {total_rows} label(s) to {filepath.resolve()}.",
@@ -143,10 +163,10 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         base_cols.extend(["origin", "origin_name"])
 
         total_hits = 0
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(base_cols)
 
+        def _write(writer: "csv.writer") -> None:  # type: ignore[name-defined]
+            nonlocal total_hits
+            writer.writerow(base_cols)
             for detector_name, threshold, hit in all_hits:
                 origin = hit.get("origin")
                 origin_str = ""
@@ -174,6 +194,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 ])
                 writer.writerow(row)
                 total_hits += 1
+
+        _atomic_write_csv(filepath, _write)
 
         return {
             "message": (

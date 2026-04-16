@@ -15,21 +15,22 @@
               class="form-input"
               [(ngModel)]="pendingText"
               placeholder="e.g. dog barking sounds"
+              title="Enter a text description to sort by"
               (keydown.enter)="$event.preventDefault(); submitText()"
             />
-            <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()">Use</button>
+            <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()" title="Use this text as the new sort example">Use</button>
           </div>
         </div>
         <div class="example-col">
           <label class="col-label">New Media Example</label>
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()">Browse Media...</button>
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media...</button>
           <input
             #fileInput
             type="file"
             class="hidden-file-input"
             (change)="onLocalFileSelected($event)"
           />
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()">Upload File...</button>
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File...</button>
         </div>
       </div>
 
@@ -41,13 +42,13 @@
 
   @if (view === 'prompt') {
     <div modal-footer>
-      <button class="btn btn--secondary" (click)="onKeep()">Keep Current{{ keepLabelsCount ? ' for ' + keepLabelsCount + ' more labels' : '' }}</button>
+      <button class="btn btn--secondary" (click)="onKeep()" title="Continue sorting with the current example">Keep Current{{ keepLabelsCount ? ' for ' + keepLabelsCount + ' more labels' : '' }}</button>
     </div>
   }
 
   @if (view === 'media-picker') {
     <div class="media-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="backToPrompt()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="backToPrompt()" title="Return to the example prompt">&larr; Back</button>
 
       @if (!selectedSource) {
         <p class="picker-instructions">Choose a source to browse media from:</p>

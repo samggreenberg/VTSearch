@@ -17,7 +17,7 @@
       <div class="form-group">
         <label title="The type of media this model will process">Media Type</label>
         <div class="custom-select" [class.open]="mediaTypeDropdownOpen" title="The type of media this model will process">
-          <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen">
+          <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen" title="Select the media type for this model">
             <span class="select-option-content">
               @if (getMediaTypeIcon(mediaType)) {
                 <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
@@ -47,7 +47,7 @@
           <div class="example-row">
             <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
             <span class="example-label" [title]="exampleDisplay">{{ exampleDisplay }}</span>
-            <button type="button" class="btn btn--secondary btn--sm" (click)="clearExample()">Change</button>
+            <button type="button" class="btn btn--secondary btn--sm" (click)="clearExample()" title="Remove this example and choose a different one">Change</button>
           </div>
         </div>
       } @else {
@@ -67,14 +67,14 @@
           </div>
           <div class="example-col">
             <label class="col-label">Media Example</label>
-            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText">Browse Media...</button>
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse loaded media to pick an example">Browse Media...</button>
             <input
               #fileInput
               type="file"
               class="hidden-file-input"
               (change)="onLocalFileSelected($event)"
             />
-            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" [disabled]="hasPendingText">Upload File...</button>
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" [disabled]="hasPendingText" title="Upload a media file from your computer">Upload File...</button>
           </div>
         </div>
       }
@@ -96,7 +96,7 @@
 
   @if (view === 'media-picker') {
     <div class="media-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()" title="Return to the model creation form">&larr; Back</button>
 
       <!-- Source selection (top level) -->
       @if (!selectedSource) {

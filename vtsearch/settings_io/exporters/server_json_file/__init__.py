@@ -7,6 +7,7 @@ filesystem.  The user supplies a destination path via the file browser.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,12 @@ class ServerFileSettingsExporter(SettingsExporter):
 
         filepath = Path(filepath_str)
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        filepath.write_text(json.dumps(settings_data, indent=2), encoding="utf-8")
+
+        # Atomic write: tmp + rename. A direct write_text leaves the file
+        # truncated if the process is killed mid-write.
+        tmp = filepath.with_name(filepath.name + ".tmp")
+        tmp.write_text(json.dumps(settings_data, indent=2), encoding="utf-8")
+        os.replace(tmp, filepath)
 
         return {
             "message": f"Settings saved to {filepath.resolve()}.",

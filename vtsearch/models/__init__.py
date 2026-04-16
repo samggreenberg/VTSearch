@@ -25,6 +25,11 @@ from vtsearch.models.progress import (
     compute_labeling_status,
     inject_live_model,
 )
+from vtsearch.models.detector_training import (
+    serialize_weights,
+    train_and_threshold,
+    validate_good_bad_split,
+)
 from vtsearch.models.training import (
     build_model,
     build_model_from_weights,
@@ -54,6 +59,10 @@ __all__ = [
     "get_xclip_model",
     "get_clip_model",
     "get_e5_model",
+    # Detector training helpers
+    "serialize_weights",
+    "train_and_threshold",
+    "validate_good_bad_split",
     # Training
     "build_model",
     "build_model_from_weights",

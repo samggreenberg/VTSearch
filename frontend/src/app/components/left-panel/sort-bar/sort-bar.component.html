@@ -43,6 +43,7 @@
           placeholder="Describe what you're looking for..."
           [value]="textQuery"
           (input)="onTextInput($any($event.target).value)"
+          title="Enter a text description to rank items by semantic similarity"
           aria-label="Text sort query"
         />
       </div>

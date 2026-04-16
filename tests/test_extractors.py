@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from PIL import Image
 
-from vtsearch.media.base import Extractor
+from vtsearch.media.processors import Extractor
 
 
 # ---------------------------------------------------------------------------

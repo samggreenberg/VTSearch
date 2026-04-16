@@ -16,3 +16,17 @@ html, body {
   background: var(--bg-body);
   color: var(--text-primary);
 }
+
+// Honor OS-level "reduce motion" requests (also a useful escape hatch for
+// thin clients with no GPU compositing — long CSS animations can pin a
+// software-rendered browser).
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

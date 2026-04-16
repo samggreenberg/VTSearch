@@ -182,7 +182,7 @@ class TestLabelImportEndpoint:
         """Importing labels should update the loaded model's num_training in the registry."""
         from vtsearch.models.registry import add_loaded_model_id, get_model, register_model, reset_for_tests
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
 
         reset_for_tests()
         set_trainable_models_dir(str(tmp_path / "models"))

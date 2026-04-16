@@ -67,6 +67,8 @@ _DEFAULTS: dict[str, Any] = {
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
     "detectors_dir": str(DATA_DIR / "detectors"),
     "trainable_models_dir": str(DATA_DIR / "trainable_models"),
+    "max_concurrent_dataset_downloads": 1,
+    "max_concurrent_dataset_embeddings": 1,
 }
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -93,9 +95,13 @@ _settings: dict[str, Any] | None = None
 # public functions that also acquire the lock.
 _settings_lock = threading.RLock()
 
-# Thread-local guard to prevent re-exporting to the source during an
-# import-from-source pass.
-_syncing = threading.local()
+# Module-level (NOT thread-local) guard that prevents re-exporting to the
+# source during an import-from-source pass.  A thread-local flag would not
+# block a concurrent ``set_*()`` call running on a different thread from
+# triggering a ``_sync_to_source(...)`` while we are mid-import — racing
+# with and potentially overwriting the data we just imported.  Always
+# read/written while holding ``_settings_lock``.
+_syncing: bool = False
 
 
 def _load() -> dict[str, Any]:
@@ -127,7 +133,9 @@ def _save(data: dict[str, Any]) -> None:
     os.replace(tmp, SETTINGS_PATH)
 
     # Auto-export to active settings source (skip during import-from-source).
-    if not getattr(_syncing, "active", False):
+    # ``_syncing`` is process-wide, so a parallel set_*() on another thread
+    # correctly skips the export while sync_from_settings_source() is running.
+    if not _syncing:
         _sync_to_source(data)
 
 
@@ -257,6 +265,8 @@ _SETTING_SPECS: list[tuple] = [
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
     ("autopilot_resort_interval", int, _clamp_min(int, 1)),
     ("autopilot_goal_diversity", int, _clamp_min(int, 1)),
+    ("max_concurrent_dataset_downloads", int, _clamp(int, 1, 16)),
+    ("max_concurrent_dataset_embeddings", int, _clamp(int, 1, 16)),
 ]
 
 for _key, _cast, _coerce in _SETTING_SPECS:
@@ -798,18 +808,24 @@ def sync_from_settings_source() -> dict[str, Any] | None:
     try:
         imported = source.load(field_values)
     except Exception as exc:
-        logger.warning("Failed to load from settings source: %s", exc)
+        logger.exception("Failed to load from settings source: %s", exc)
         return None
 
     if not imported:
         return None
 
-    # Apply under sync guard to prevent re-exporting back to source.
-    _syncing.active = True
-    try:
-        _apply_settings(imported)
-    finally:
-        _syncing.active = False
+    # Hold _settings_lock for the entire apply pass so that:
+    #   * concurrent set_*() calls on other threads block until we finish,
+    #     instead of racing and re-exporting partially-imported state
+    #   * the _syncing flag (also guarded by _settings_lock) is observed
+    #     consistently by every _save() that runs during the import
+    global _syncing
+    with _settings_lock:
+        _syncing = True
+        try:
+            _apply_settings(imported)
+        finally:
+            _syncing = False
 
     return imported
 
@@ -836,4 +852,4 @@ def _sync_to_source(data: dict[str, Any]) -> None:
     try:
         source.save(export_data, field_values)
     except Exception as exc:
-        logger.warning("Failed to sync settings to source: %s", exc)
+        logger.exception("Failed to sync settings to source: %s", exc)

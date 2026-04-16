@@ -32,11 +32,13 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
+import sys
 import threading
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Callable, Generic, Literal, TypeVar
 
 FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path"]
 
@@ -45,6 +47,7 @@ __all__ = [
     "PluginBase",
     "PluginField",
     "PluginRegistry",
+    "make_plugin_registry",
 ]
 
 
@@ -222,10 +225,9 @@ class PluginRegistry(Generic[T]):
     def _discover(self) -> None:
         """Scan sub-packages (and optionally flat modules) for sentinel objects.
 
-        Uses direct filesystem scanning instead of :func:`pkgutil.iter_modules`
-        so that symlinked directories are reliably discovered.  A symlink to a
-        package directory (containing ``__init__.py``) is treated identically to
-        a regular sub-package.
+        Uses direct filesystem scanning so that symlinked directories are
+        reliably discovered.  A symlink to a package directory (containing
+        ``__init__.py``) is treated identically to a regular sub-package.
 
         When :attr:`_discover_modules` is ``True``, also scans ``.py`` files
         (excluding ``__init__.py`` and ``base.py``) for the sentinel.
@@ -245,23 +247,48 @@ class PluginRegistry(Generic[T]):
                 # symlinks whose names include an extension or suffix.
                 if "." in entry.name:
                     continue
-                if not (entry / "__init__.py").exists():
+                init_path = entry / "__init__.py"
+                if not init_path.exists():
                     continue
-                self._try_load(entry.name)
+                self._try_load(entry.name, file_path=init_path if entry.is_symlink() else None)
             # Flat modules (.py files)
             elif self._discover_modules and entry.is_file() and entry.suffix == ".py":
                 if entry.name in ("__init__.py", "base.py"):
                     continue
-                self._try_load(entry.stem)
+                self._try_load(entry.stem, file_path=entry if entry.is_symlink() else None)
 
-    def _try_load(self, module_name: str) -> None:
-        """Import *module_name* under this registry's package and register its sentinel."""
+    def _try_load(self, module_name: str, *, file_path: Path | None = None) -> None:
+        """Import *module_name* under this registry's package and register its sentinel.
+
+        When *file_path* is given (symlinked entries), uses
+        :func:`importlib.util.spec_from_file_location` to load the module
+        directly from the resolved path.  Python's default ``FileFinder`` can
+        miss symlinked packages on some platforms because its directory cache
+        may not follow symlinks consistently.
+        """
+        full_name = f"{self._package}.{module_name}"
         try:
-            mod = importlib.import_module(f"{self._package}.{module_name}")
+            if file_path is not None:
+                resolved = file_path.resolve()
+                is_package = resolved.name == "__init__.py"
+                spec = importlib.util.spec_from_file_location(
+                    full_name,
+                    str(resolved),
+                    submodule_search_locations=[str(resolved.parent)] if is_package else None,
+                )
+                if spec is None or spec.loader is None:  # pragma: no cover
+                    return
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[full_name] = mod
+                spec.loader.exec_module(mod)
+            else:
+                mod = importlib.import_module(full_name)
             plugin = getattr(mod, self._sentinel, None)
             if plugin is not None:
                 self._items[plugin.name] = plugin
         except Exception as exc:  # pragma: no cover
+            # Clean up partially-registered module on failure.
+            sys.modules.pop(full_name, None)
             warnings.warn(
                 f"Failed to load {self._label} '{module_name}': {exc}",
                 stacklevel=2,
@@ -298,3 +325,38 @@ class PluginRegistry(Generic[T]):
         """Return all registered plugins in discovery order."""
         self._ensure_discovered()
         return list(self._items.values())
+
+
+# ---------------------------------------------------------------------------
+# Factory helper — collapses the per-package boilerplate into one call
+# ---------------------------------------------------------------------------
+
+
+def make_plugin_registry(
+    package: str,
+    sentinel: str,
+    label: str,
+    *,
+    discover_modules: bool = False,
+) -> tuple[Callable[[str], Any], Callable[[], list[Any]]]:
+    """Create a :class:`PluginRegistry` and return its ``(get, list)`` accessors.
+
+    Shorthand for the boilerplate repeated across every plugin ``__init__.py``::
+
+        from vtsearch.utils.registry import make_plugin_registry
+
+        get_importer, list_importers = make_plugin_registry(
+            package=__name__,
+            sentinel="IMPORTER",
+            label="dataset importer",
+        )
+
+    Parameters are forwarded to :class:`PluginRegistry`.
+    """
+    registry: PluginRegistry = PluginRegistry(
+        package=package,
+        sentinel=sentinel,
+        label=label,
+        discover_modules=discover_modules,
+    )
+    return registry.get, registry.list

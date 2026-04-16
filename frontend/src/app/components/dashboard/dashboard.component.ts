@@ -21,7 +21,7 @@ import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
-import { DetectorExportModalComponent } from '../modals/detector-export-modal/detector-export-modal.component';
+import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
@@ -37,7 +37,7 @@ import { IconComponent } from '../icon/icon.component';
     ModelCardComponent,
     DatasetImporterModalComponent,
     NewModelModalComponent,
-    DetectorExportModalComponent,
+    LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     IconComponent,

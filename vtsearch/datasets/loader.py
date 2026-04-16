@@ -1122,6 +1122,8 @@ def load_demo_dataset(
     categories = dataset_info["categories"]
     slice_start = dataset_info.get("slice_start", 0)
     slice_end = dataset_info.get("slice_end")
+    slice_frac_start = dataset_info.get("slice_frac_start")
+    slice_frac_end = dataset_info.get("slice_frac_end")
 
     medias.clear()
     external_dir = mt.load_demo_source(
@@ -1132,6 +1134,8 @@ def load_demo_dataset(
         clips=medias,
         on_progress=on_progress,
         embedder=embedder,
+        slice_frac_start=slice_frac_start,
+        slice_frac_end=slice_frac_end,
     )
 
     # Stamp the demo origin on all medias

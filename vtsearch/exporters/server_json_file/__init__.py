@@ -11,10 +11,22 @@ No additional pip packages are required; uses only Python's ``json`` and
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write *text* to *path* atomically (tmp file + rename).
+
+    A direct ``write_text`` call leaves the destination truncated if the
+    process is killed mid-write.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class ServerJsonLabelsetExporter(LabelsetExporter):
@@ -57,7 +69,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             return self._export_labels(results, filepath)
 
         # Autodetect results format (from CLI / fill-from-sort)
-        filepath.write_text(json.dumps(results, indent=2), encoding="utf-8")
+        _atomic_write_text(filepath, json.dumps(results, indent=2))
 
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {
@@ -89,7 +101,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         else:
             output = {"labels": labels}
 
-        filepath.write_text(json.dumps(output, indent=2), encoding="utf-8")
+        _atomic_write_text(filepath, json.dumps(output, indent=2))
         return {
             "message": f"Saved {len(labels)} label(s) to {filepath.resolve()}.",
             "filepath": str(filepath.resolve()),

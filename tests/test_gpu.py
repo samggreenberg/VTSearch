@@ -551,7 +551,7 @@ class TestCLIPEmbeddingGPU:
         inputs = processor(text=["a photo of a cat"], return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            from vtsearch.media.base import extract_tensor as _extract_tensor
+            from vtsearch.media.embedder import extract_tensor as _extract_tensor
 
             vec = _extract_tensor(model.get_text_features(**inputs)).detach().cpu().numpy()[0]
 
@@ -574,7 +574,7 @@ class TestCLIPEmbeddingGPU:
         inputs = processor(images=img, return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            from vtsearch.media.base import extract_tensor as _extract_tensor
+            from vtsearch.media.embedder import extract_tensor as _extract_tensor
 
             vec = _extract_tensor(model.get_image_features(**inputs)).detach().cpu().numpy()[0]
 
@@ -607,7 +607,7 @@ class TestXCLIPEmbeddingGPU:
         inputs = processor(text=["a person walking"], return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            from vtsearch.media.base import extract_tensor as _extract_tensor
+            from vtsearch.media.embedder import extract_tensor as _extract_tensor
 
             vec = _extract_tensor(model.get_text_features(**inputs)).detach().cpu().numpy()[0]
 
@@ -629,7 +629,7 @@ class TestXCLIPEmbeddingGPU:
         inputs = processor(images=[list(frames)], return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            from vtsearch.media.base import extract_tensor as _extract_tensor
+            from vtsearch.media.embedder import extract_tensor as _extract_tensor
 
             vec = _extract_tensor(model.get_video_features(**inputs)).detach().cpu().numpy()[0]
 
@@ -699,7 +699,7 @@ class TestEmbeddingEquivalence:
         # CPU
         model.eval()
         with torch.no_grad():
-            from vtsearch.media.base import extract_tensor as _extract_tensor
+            from vtsearch.media.embedder import extract_tensor as _extract_tensor
 
             cpu_vec = _extract_tensor(model.get_text_features(**inputs)).numpy()[0]
 

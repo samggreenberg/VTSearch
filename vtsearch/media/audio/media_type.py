@@ -13,6 +13,7 @@ from vtsearch.media.base import (
     MediaType,
     ProgressCallback,
     _noop_progress,
+    demo_slice,
 )
 
 # Thumbnail dimensions (square)
@@ -208,78 +209,100 @@ class AudioMediaType(MediaType):
 
         cats = self._DEMO_CATEGORIES
         folder = DATA_DIR / "ESC-50-master" / "audio"
+        esc_desc = "Real-world environmental recordings — animals, nature, cities, homes, and people."
+        sc_desc = "One-second keyword utterances from crowd-sourced speakers."
+        us_desc = "Real urban field recordings, pre-segmented into labeled sounds."
         return [
             DemoDataset(
                 id="esc50_s", label="ESC-50 (S)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
+                description=esc_desc,
                 categories=cats, source="esc50", required_folder=folder,
-                slice_start=0, slice_end=7, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=1 / 7,
+                items_per_category=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_m", label="ESC-50 (M)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
+                description=esc_desc,
                 categories=cats, source="esc50", required_folder=folder,
-                slice_start=7, slice_end=20, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
+                items_per_category=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="esc50_l", label="ESC-50 (L)",
-                description="Real-world environmental recordings — animals, nature, cities, homes, and people.",
+                description=esc_desc,
                 categories=cats, source="esc50", required_folder=folder,
-                slice_start=20, slice_end=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+                slice_frac_start=3 / 7, slice_frac_end=None,
+                items_per_category=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="esc50_a", label="ESC-50 (A)",
+                description=esc_desc,
+                categories=cats, source="esc50", required_folder=folder,
+                slice_frac_start=0.0, slice_frac_end=None,
+                items_per_category=40, download_size_mb=ESC50_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="gtzan_a", label="GTZAN Music Genre (A)",
                 description="30-second music excerpts, one per genre.",
                 categories=self._GTZAN_CATEGORIES, source="gtzan",
-                slice_start=0, slice_end=100, download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None,
+                items_per_category=100, download_size_mb=GTZAN_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_s", label="Speech Commands v2 (S)",
-                description="One-second keyword utterances from crowd-sourced speakers.",
+                description=sc_desc,
                 categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
-                slice_start=0, slice_end=429, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=1 / 7,
+                items_per_category=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_m", label="Speech Commands v2 (M)",
-                description="One-second keyword utterances from crowd-sourced speakers.",
+                description=sc_desc,
                 categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
-                slice_start=429, slice_end=1287, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
+                items_per_category=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_l", label="Speech Commands v2 (L)",
-                description="One-second keyword utterances from crowd-sourced speakers.",
+                description=sc_desc,
                 categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
-                slice_start=1287, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+                slice_frac_start=3 / 7, slice_frac_end=None,
+                items_per_category=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="speech_commands_v2_a", label="Speech Commands v2 (A)",
-                description="One-second keyword utterances from crowd-sourced speakers.",
+                description=sc_desc,
                 categories=self._SPEECH_COMMANDS_CATEGORIES, source="speech_commands_v2",
-                slice_start=0, slice_end=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None,
+                items_per_category=3000, download_size_mb=SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_s", label="UrbanSound8K (S)",
-                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                description=us_desc,
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
-                slice_start=0, slice_end=125, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=1 / 7,
+                items_per_category=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_m", label="UrbanSound8K (M)",
-                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                description=us_desc,
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
-                slice_start=125, slice_end=374, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
+                items_per_category=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_l", label="UrbanSound8K (L)",
-                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                description=us_desc,
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
-                slice_start=374, slice_end=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+                slice_frac_start=3 / 7, slice_frac_end=None,
+                items_per_category=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
                 id="urbansound8k_a", label="UrbanSound8K (A)",
-                description="Real urban field recordings, pre-segmented into labeled sounds.",
+                description=us_desc,
                 categories=self._URBANSOUND8K_CATEGORIES, source="urbansound8k",
-                slice_start=0, slice_end=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
+                slice_frac_start=0.0, slice_frac_end=None,
+                items_per_category=873, download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
         ]
 
@@ -287,7 +310,10 @@ class AudioMediaType(MediaType):
     # Demo dataset loading
     # ------------------------------------------------------------------
 
-    def load_demo_source(self, source, categories, slice_start, slice_end, clips, on_progress=None, embedder=None):
+    def load_demo_source(
+        self, source, categories, slice_start, slice_end, clips,
+        on_progress=None, embedder=None, slice_frac_start=None, slice_frac_end=None, **kwargs,
+    ):
         import hashlib  # noqa: PLC0415
 
         if on_progress is None:
@@ -317,7 +343,9 @@ class AudioMediaType(MediaType):
 
             audio_files: list = []
             for cat in categories:
-                audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                audio_files.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             audio_dir = genres_dir
 
@@ -335,7 +363,9 @@ class AudioMediaType(MediaType):
 
             audio_files = []
             for cat in categories:
-                audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                audio_files.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             audio_dir = sc_dir
 
@@ -354,7 +384,9 @@ class AudioMediaType(MediaType):
 
             audio_files = []
             for cat in categories:
-                audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                audio_files.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
             audio_dir = us8k_dir / "audio"
 
@@ -374,7 +406,9 @@ class AudioMediaType(MediaType):
 
             audio_files = []
             for cat in categories:
-                audio_files.extend(by_cat.get(cat, [])[slice_start:slice_end])
+                audio_files.extend(demo_slice(
+                    by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end,
+                ))
 
         else:
             raise ValueError(f"Unsupported audio source: {source!r}")

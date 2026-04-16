@@ -1,6 +1,6 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, CLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
+A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, SigLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
 ## Setup and running tests
 
@@ -21,6 +21,8 @@ You should see output like:
 Open that URL in your browser. The app starts with no clips loaded — use the menu to load a demo dataset (see below).
 
 Press **Ctrl+C** in the terminal to stop the server.
+
+> **New to VTSearch?** Read **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — a walkthrough of loading a dataset, using Autopilot to label, and exporting results. Most users never need anything else.
 
 ## Command-line interface
 
@@ -63,14 +65,17 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
 │   ├── ARCHITECTURE.md             # Architecture deep-dive
 │   ├── API.md                      # HTTP API reference (all REST endpoints)
-│   ├── EXTENDING.md                # Plugin authoring guide
+│   ├── EXTENDING.md                # Plugin authoring index (auth, deps, checklists)
+│   ├── EXTENDING-plugins.md        # Data/results/label/processor/settings importers & sources
+│   ├── EXTENDING-media.md          # Media types, embedders, clippers, converters, sources
+│   ├── EXTENDING-processors.md     # Detectors, localizers, extractors
 │   ├── EVAL.md                     # Evaluation framework guide
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
+│   ├── USER_GUIDE.md               # End-user walkthrough (Autopilot, voting, sorting)
 │   ├── demos.md                    # Demo dataset listing
-│   ├── REFACTORING.md              # Refactoring plan and progress tracking
-│   ├── plan-sync-sources.md        # Sync sources design document
+│   ├── plan-sync-sources.md        # Sync sources design document (implemented)
 │   └── design/                     # Architecture design documents
 └── pyproject.toml                  # Project metadata and dependencies
 ```
@@ -106,13 +111,9 @@ This runs text-sort and learned-sort evaluations across all demo datasets, print
 
 ## Extending with plugins
 
-VTSearch has a plugin architecture for media types, data importers, results exporters, label importers, processor importers, and sync sources. See [docs/EXTENDING.md](docs/EXTENDING.md) for full documentation, including:
+VTSearch has a plugin architecture for media types, data importers, results exporters, label importers, processor importers, and sync sources. The extending guide is split into three topic-specific docs plus an index:
 
-- **[Adding a Data Importer](docs/EXTENDING.md#adding-a-data-importer)** — Auto-discovered plugins that load datasets from new sources (S3, databases, APIs, etc.). Subclass `DatasetImporter`, expose an `IMPORTER` instance, and the system wires up API routes and UI forms automatically.
-- **[Adding a Results Exporter](docs/EXTENDING.md#adding-a-results-exporter)** — Auto-discovered plugins that export autodetect results to new destinations (files, webhooks, email, etc.). Subclass `LabelsetExporter` and expose an `EXPORTER` instance.
-- **[Adding a Label Importer](docs/EXTENDING.md#adding-a-label-importer)** — Auto-discovered plugins that import pre-existing labels from external sources (JSON, CSV, databases). Subclass `LabelImporter` and expose a `LABEL_IMPORTER` instance.
-- **[Adding a Processor Importer](docs/EXTENDING.md#adding-a-processor-importer)** — Auto-discovered plugins that import processors (detectors/extractors) from external sources. Subclass `ProcessorImporter` and expose a `PROCESSOR_IMPORTER` instance.
-- **[Adding a Settings Source](docs/EXTENDING.md#adding-a-settings-source)** — Bidirectional sync plugins for settings. Subclass `SettingsSource` and expose a `SETTINGS_SOURCE` instance. Auto-exports on change, imports on sync.
-- **[Adding a Labelset Source](docs/EXTENDING.md#adding-a-labelset-source)** — Bidirectional sync plugins for detector labels. Subclass `LabelsetSource` and expose a `LABELSET_SOURCE` instance. Linked per-detector; auto-exports on vote/label change.
-- **[Adding a Media Type](docs/EXTENDING.md#adding-a-media-type)** — Support new content types (code, 3D models, etc.) by subclassing `MediaType` with embedding, serving, and clip-loading methods.
-- **[Dependency Management](docs/EXTENDING.md#dependency-management)** — How the layered requirements file structure works and where to add new dependencies.
+- **[docs/EXTENDING.md](docs/EXTENDING.md)** — index, authentication providers, dependency management, and a one-stop checklist for every extension type.
+- **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)** — data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources (eight auto-discovered plugin families).
+- **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)** — media types, embedders, clippers, converters, media sources.
+- **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)** — detectors, localizers, extractors.

@@ -146,6 +146,18 @@ def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Respons
             start, end = 0, total - 1
 
         end = min(end, total - 1)
+
+        # Reject unsatisfiable ranges (start past EOF, negative, or
+        # inverted). RFC 7233 requires 416 with Content-Range: bytes */N.
+        if start < 0 or start >= total or start > end:
+            resp = make_response(b"")
+            resp.status_code = 416
+            resp.headers["Content-Range"] = f"bytes */{total}"
+            resp.headers["Content-Length"] = "0"
+            resp.headers["Content-Type"] = mimetype
+            resp.headers["Accept-Ranges"] = "bytes"
+            return resp
+
         length = end - start + 1
 
         resp = make_response(data[start : end + 1])
@@ -537,7 +549,7 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
 
     toggle_vote(media_id, vote)
 
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
     sync_labels_to_loaded_model()
 
@@ -631,12 +643,16 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
     if embedding is None:
         return jsonify({"error": "Failed to embed the uploaded file."}), 400
 
-    # Generate thumbnail for audio media
+    # Generate thumbnail for non-image media
     thumb = None
     if dataset_media_type == "audio":
         from vtsearch.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail(file_bytes)
+    elif dataset_media_type == "video":
+        from vtsearch.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
+
+        thumb = generate_video_thumbnail(file_bytes)
 
     with _state_lock:
         new_id = next_media_id(medias)

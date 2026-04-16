@@ -53,7 +53,7 @@
           <thead>
             <tr>
               @for (col of enabledColumns; track col.key) {
-                <th>{{ col.label }}</th>
+                <th [title]="col.label">{{ col.label }}</th>
               }
             </tr>
           </thead>
@@ -113,6 +113,7 @@
           class="export-tab"
           [class.active]="activeTab === exp.name"
           (click)="selectExporterTab(exp)"
+          [title]="exp.description || exp.display_name || exp.name"
         >
           <svg class="tab-icon-svg" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             @switch (getExporterIconType(exp)) {
@@ -142,6 +143,7 @@
             class="btn btn--primary"
             (click)="copyToClipboard()"
             [disabled]="!hasLabels || enabledColumns.length === 0"
+            title="Copy exported data to clipboard"
           >
             @if (copySuccess) {
               <vt-icon type="check"></vt-icon> Copied!
@@ -220,6 +222,7 @@
             class="btn btn--primary"
             (click)="submitExporterTab()"
             [disabled]="!hasLabels || submitting"
+            title="Send exported data to the selected destination"
           >
             @if (submitting) {
               Exporting...
@@ -231,17 +234,6 @@
       }
     </div>
   </div>
-
-  <!-- Detector Export (Labeling mode only) -->
-  @if (showDetectorSection) {
-    <div class="export-section">
-      <h3 title="Save the trained neural network weights so the model can be reloaded later">Export Detector Weights</h3>
-      <div class="export-buttons">
-        <button class="btn btn--primary" (click)="exportDetectorBrowser()" title="Download the detector weights file to your local machine via the browser">Browser Download</button>
-        <button class="btn btn--secondary" (click)="exportDetectorServer()" title="Save the detector weights file to the server's detectors directory">Save to Server</button>
-      </div>
-    </div>
-  }
 
   @if (status) {
     <p class="status-text">{{ status }}</p>

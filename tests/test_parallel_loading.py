@@ -544,7 +544,7 @@ class TestConcurrentModelLoading:
         """Two threads calling load_models() on the same embedder must not
         both execute _load_models_impl() concurrently — the lock should
         serialise them so the second caller sees the model already loaded."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         call_count = 0
         started = threading.Event()
@@ -591,6 +591,295 @@ class TestConcurrentModelLoading:
 
         assert call_count == 1, f"_load_models_impl ran {call_count} times, expected 1"
         assert emb._model == "loaded"
+
+
+class TestLoadingGates:
+    """Verify the download/embed gates serialise (or pipeline) concurrent loads."""
+
+    def test_second_load_waits_for_first(self):
+        """With the default limit of 1, a second load should show 'Waiting…'
+        for the download gate and only proceed after the first releases it."""
+        from vtsearch.routes.datasets_loading import (
+            _download_gate,
+            _run_origin_load_in_background,
+        )
+
+        first_started = threading.Event()
+        first_proceed = threading.Event()
+        second_started = threading.Event()
+        load_order = []
+
+        def first_load(medias):
+            load_order.append("first_start")
+            first_started.set()
+            first_proceed.wait(timeout=10)
+            load_order.append("first_end")
+
+        def second_load(medias):
+            load_order.append("second_start")
+            second_started.set()
+
+        task1 = _run_origin_load_in_background(
+            first_load,
+            {"importer": "test1", "params": {}},
+            name="First",
+        )
+
+        # Wait for first load to actually start running.
+        assert first_started.wait(timeout=10)
+
+        task2 = _run_origin_load_in_background(
+            second_load,
+            {"importer": "test2", "params": {}},
+            name="Second",
+        )
+
+        # Second load should be waiting — give it a moment to start its
+        # thread and hit the gate wait.
+        time.sleep(0.3)
+        assert not second_started.is_set(), "Second load should be queued, not running"
+
+        # Check that the second task shows a "Waiting" message.
+        task2_info = loading_tasks.get_tracker(task2)
+        assert task2_info is not None
+        status = task2_info.get()
+        assert "Waiting" in status.get("message", "")
+
+        # Let the first load finish.
+        first_proceed.set()
+
+        # Now the second should proceed.
+        assert second_started.wait(timeout=10), "Second load never started after first finished"
+        assert load_order[:2] == ["first_start", "first_end"]
+        assert "second_start" in load_order
+
+        # Clean up — wait for tasks to finish.
+        deadline = time.time() + 10
+        while loading_tasks.has_active_tasks() and time.time() < deadline:
+            time.sleep(0.1)
+        loading_tasks.remove_task(task1)
+        loading_tasks.remove_task(task2)
+        # Sanity: gates fully released after both tasks finish.
+        assert _download_gate.active == 0
+
+    def test_cancel_while_waiting_does_not_corrupt_gate(self):
+        """Cancelling a queued task must not release the gate it never
+        acquired, which would let extra loads through."""
+        from vtsearch.routes.datasets_loading import (
+            _download_gate,
+            _run_origin_load_in_background,
+        )
+
+        first_started = threading.Event()
+        first_proceed = threading.Event()
+
+        def first_load(medias):
+            first_started.set()
+            first_proceed.wait(timeout=10)
+
+        task1 = _run_origin_load_in_background(
+            first_load,
+            {"importer": "test1", "params": {}},
+            name="First",
+        )
+        assert first_started.wait(timeout=10)
+
+        # Start a second load — it will be queued on the download gate.
+        task2 = _run_origin_load_in_background(
+            lambda medias: None,
+            {"importer": "test2", "params": {}},
+            name="Second",
+        )
+        time.sleep(0.3)
+
+        # Cancel the queued task before it acquires the gate.
+        loading_tasks.cancel_task(task2)
+        time.sleep(0.5)
+
+        # The gate should still show exactly one holder (the first load).
+        # If the cancel wrongly released, active would drop to 0.
+        assert _download_gate.active == 1, (
+            "Cancelled task that never held the gate must not release it"
+        )
+
+        # Clean up.
+        first_proceed.set()
+        deadline = time.time() + 10
+        while loading_tasks.has_active_tasks() and time.time() < deadline:
+            time.sleep(0.1)
+        loading_tasks.remove_task(task1)
+        loading_tasks.remove_task(task2)
+        assert _download_gate.active == 0
+
+    def test_download_and_embed_can_overlap(self):
+        """When the importer signals the embedding phase, the download gate
+        is released so a second dataset can start downloading in parallel
+        even though the first hasn't finished embedding."""
+        from vtsearch.routes.datasets_loading import (
+            _download_gate,
+            _embed_gate,
+            _run_origin_load_in_background,
+        )
+
+        first_in_embed = threading.Event()
+        first_proceed = threading.Event()
+        second_started = threading.Event()
+        second_proceed = threading.Event()
+
+        def first_load(medias):
+            cb = get_thread_progress()
+            assert cb is not None
+            # Signal the importer's per-file embedding phase.  This must
+            # cause the orchestrator to swap from the download gate to the
+            # embed gate, freeing the download slot for task 2.
+            cb("embedding", "Embedding…", 0, 1)
+            first_in_embed.set()
+            first_proceed.wait(timeout=10)
+
+        def second_load(medias):
+            second_started.set()
+            second_proceed.wait(timeout=10)
+
+        task1 = _run_origin_load_in_background(
+            first_load,
+            {"importer": "first", "params": {}},
+            name="First",
+        )
+        assert first_in_embed.wait(timeout=10)
+
+        # Task 1 should now be holding the embed gate, not the download gate.
+        assert _embed_gate.active == 1
+        assert _download_gate.active == 0
+
+        # Task 2 should be able to acquire the download gate immediately and
+        # start running its load_fn in parallel with task 1's embedding.
+        task2 = _run_origin_load_in_background(
+            second_load,
+            {"importer": "second", "params": {}},
+            name="Second",
+        )
+        assert second_started.wait(timeout=10), (
+            "Second load never started — download gate was not released after the swap"
+        )
+        assert _download_gate.active == 1
+
+        # Let both finish.
+        first_proceed.set()
+        second_proceed.set()
+        deadline = time.time() + 10
+        while loading_tasks.has_active_tasks() and time.time() < deadline:
+            time.sleep(0.1)
+        loading_tasks.remove_task(task1)
+        loading_tasks.remove_task(task2)
+        assert _download_gate.active == 0
+        assert _embed_gate.active == 0
+
+    def test_download_limit_is_user_configurable(self):
+        """Bumping ``max_concurrent_dataset_downloads`` should let the second
+        load start its download phase in parallel with the first."""
+        from vtsearch import settings as settings_mod
+        from vtsearch.routes.datasets_loading import (
+            _download_gate,
+            _run_origin_load_in_background,
+        )
+
+        original = settings_mod.get_max_concurrent_dataset_downloads()
+        settings_mod.set_max_concurrent_dataset_downloads(2)
+        try:
+            first_started = threading.Event()
+            first_proceed = threading.Event()
+            second_started = threading.Event()
+            second_proceed = threading.Event()
+
+            def first_load(medias):
+                first_started.set()
+                first_proceed.wait(timeout=10)
+
+            def second_load(medias):
+                second_started.set()
+                second_proceed.wait(timeout=10)
+
+            task1 = _run_origin_load_in_background(
+                first_load,
+                {"importer": "first", "params": {}},
+                name="First",
+            )
+            assert first_started.wait(timeout=10)
+
+            task2 = _run_origin_load_in_background(
+                second_load,
+                {"importer": "second", "params": {}},
+                name="Second",
+            )
+            assert second_started.wait(timeout=10), (
+                "Second load did not start in parallel — limit change did not take effect"
+            )
+            assert _download_gate.active == 2
+
+            first_proceed.set()
+            second_proceed.set()
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.1)
+            loading_tasks.remove_task(task1)
+            loading_tasks.remove_task(task2)
+        finally:
+            settings_mod.set_max_concurrent_dataset_downloads(original)
+
+
+class TestConcurrencyGate:
+    """Unit tests for the dynamic-limit ConcurrencyGate."""
+
+    def test_blocking_acquire_when_limit_changes(self):
+        """A waiter blocked at limit=1 must wake up when limit grows to 2."""
+        from vtsearch.routes.datasets_loading import ConcurrencyGate
+
+        limit = [1]
+        gate = ConcurrencyGate(lambda: limit[0])
+        assert gate.acquire(blocking=False)
+
+        # Second acquisition should block.
+        acquired = threading.Event()
+
+        def second():
+            gate.acquire()
+            acquired.set()
+
+        t = threading.Thread(target=second, daemon=True)
+        t.start()
+        # Confirm it's actually blocked.
+        assert not acquired.wait(timeout=0.3)
+
+        # Raise the limit and notify — the waiter should wake up.
+        with gate._cv:  # type: ignore[attr-defined]
+            limit[0] = 2
+            gate._cv.notify_all()  # type: ignore[attr-defined]
+        assert acquired.wait(timeout=2)
+
+        gate.release()
+        gate.release()
+        assert gate.active == 0
+
+    def test_non_blocking_acquire_respects_limit(self):
+        from vtsearch.routes.datasets_loading import ConcurrencyGate
+
+        gate = ConcurrencyGate(lambda: 2)
+        assert gate.acquire(blocking=False)
+        assert gate.acquire(blocking=False)
+        assert not gate.acquire(blocking=False)
+        gate.release()
+        assert gate.acquire(blocking=False)
+        gate.release()
+        gate.release()
+
+    def test_zero_limit_is_clamped_to_one(self):
+        """A configured limit of 0 should still allow one acquisition."""
+        from vtsearch.routes.datasets_loading import ConcurrencyGate
+
+        gate = ConcurrencyGate(lambda: 0)
+        assert gate.acquire(blocking=False)
+        assert not gate.acquire(blocking=False)
+        gate.release()
 
 
 class TestBuildDiversityTreeForContext:

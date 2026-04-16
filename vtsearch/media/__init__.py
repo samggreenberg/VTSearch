@@ -27,15 +27,17 @@ from pathlib import Path
 
 from vtsearch.media.base import (
     DemoDataset,
+    MediaResponse,
+    MediaType,
+    ProgressCallback,
+)
+from vtsearch.media.clipper import MediaClipper
+from vtsearch.media.embedder import MediaEmbedder
+from vtsearch.media.processors import (
     Detector,
     Extractor,
     Localizer,
-    MediaClipper,
-    MediaEmbedder,
-    MediaResponse,
-    MediaType,
     Processor,
-    ProgressCallback,
 )
 
 # ------------------------------------------------------------------
@@ -146,6 +148,9 @@ def all_demo_datasets() -> dict:
                 "media_type": mt.type_id,
                 "slice_start": ds.slice_start,
                 "slice_end": ds.slice_end,
+                "slice_frac_start": ds.slice_frac_start,
+                "slice_frac_end": ds.slice_frac_end,
+                "items_per_category": ds.items_per_category,
                 "download_size_mb": ds.download_size_mb,
             }
             if ds.source:

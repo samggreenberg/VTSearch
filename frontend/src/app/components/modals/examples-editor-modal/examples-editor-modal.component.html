@@ -10,7 +10,7 @@
             @if (ex.type === 'good') {
               <div class="example-card">
                 <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
-                <button class="remove-btn" (click)="removeExample(i)" aria-label="Remove">&times;</button>
+                <button class="remove-btn" (click)="removeExample(i)" title="Remove this example" aria-label="Remove">&times;</button>
               </div>
             }
           }
@@ -28,7 +28,7 @@
             @if (ex.type === 'bad') {
               <div class="example-card">
                 <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
-                <button class="remove-btn" (click)="removeExample(i)" aria-label="Remove">&times;</button>
+                <button class="remove-btn" (click)="removeExample(i)" title="Remove this example" aria-label="Remove">&times;</button>
               </div>
             }
           }

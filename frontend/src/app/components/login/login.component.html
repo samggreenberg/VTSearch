@@ -11,6 +11,7 @@
         [(ngModel)]="username"
         name="username"
         placeholder="Username"
+        title="Enter your username to log in"
         aria-label="Username"
         autofocus
         autocomplete="username"
@@ -20,7 +21,7 @@
       @if (error) {
         <p class="login-error">{{ error }}</p>
       }
-      <button type="submit" [disabled]="busy">
+      <button type="submit" [disabled]="busy" title="Log in to VTSearch">
         {{ busy ? 'Logging in...' : 'Log in' }}
       </button>
     </form>

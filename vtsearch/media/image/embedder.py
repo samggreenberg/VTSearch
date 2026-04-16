@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLIP_MODEL_ID
-from vtsearch.media.base import (
+from vtsearch.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
     extract_tensor as _extract_tensor,

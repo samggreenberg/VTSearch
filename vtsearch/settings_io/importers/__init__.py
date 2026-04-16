@@ -13,25 +13,12 @@ Usage::
         print(imp.name, imp.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.settings_io.importers.base import SettingsImporter
-
-_registry: PluginRegistry[SettingsImporter] = PluginRegistry(
-    package="vtsearch.settings_io.importers",
+get_settings_importer, list_settings_importers = make_plugin_registry(
+    package=__name__,
     sentinel="SETTINGS_IMPORTER",
     label="settings importer",
 )
 
-get_settings_importer = _registry.get
-list_settings_importers = _registry.list
-
-__all__ = [
-    "get_settings_importer",
-    "list_settings_importers",
-]
+__all__ = ["get_settings_importer", "list_settings_importers"]

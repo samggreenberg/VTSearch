@@ -7,7 +7,7 @@ import math
 import wave
 from typing import Any
 
-from vtsearch.media.base import MediaClipper
+from vtsearch.media.clipper import MediaClipper
 
 
 def _wav_duration(wav_bytes: bytes) -> float:

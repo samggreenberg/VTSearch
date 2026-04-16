@@ -19,24 +19,13 @@ from vtsearch.datasets.loader import (
 )
 
 
-def _make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
-    """Generate a minimal WAV file for testing."""
-    from vtsearch.audio import generate_wav
-
-    return generate_wav(frequency, duration)
+from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
 
 
 def _make_text_file(tmp_dir: Path, name: str, content: str) -> Path:
     """Write a text file and return its path."""
     p = tmp_dir / name
     p.write_text(content, encoding="utf-8")
-    return p
-
-
-def _make_wav_file(tmp_dir: Path, name: str) -> Path:
-    """Write a WAV file and return its path."""
-    p = tmp_dir / name
-    p.write_bytes(_make_wav_bytes())
     return p
 
 

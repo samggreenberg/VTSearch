@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from PIL import Image
 
-from vtsearch.media.base import Localizer
+from vtsearch.media.processors import Localizer
 
 
 class FaceLocalizer(Localizer):

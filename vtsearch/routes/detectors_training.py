@@ -9,8 +9,14 @@ import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
-from vtsearch.routes.detectors_helpers import serialize_weights, train_and_threshold, validate_good_bad_split
-from vtsearch.routes.helpers import extract_plugin_fields, get_json_or_400, get_json_safe, validate_filepath_field
+from vtsearch.models.detector_training import serialize_weights, train_and_threshold, validate_good_bad_split
+from vtsearch.routes.helpers import (
+    extract_plugin_fields,
+    get_json_or_400,
+    get_json_safe,
+    run_plugin_or_error,
+    validate_filepath_field,
+)
 from vtsearch.models import (
     build_model_from_weights,
     collect_media_origins,
@@ -287,12 +293,9 @@ def train_from_label_import(importer_name: str):
     if err:
         return err
 
-    try:
-        label_entries = importer.run(field_values)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:
-        return jsonify({"error": f"Import failed: {exc}"}), 500
+    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
 
     if not isinstance(label_entries, list) or not label_entries:
         return jsonify({"error": "Label importer returned no entries."}), 400
@@ -420,7 +423,7 @@ def find_check_labels():
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
@@ -531,7 +534,7 @@ def multi_find():
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
