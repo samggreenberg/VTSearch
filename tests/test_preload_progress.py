@@ -483,7 +483,7 @@ class TestLoadPretrainedLocalFirst:
         except ConnectionError:
             pass
 
-    @patch("vtsearch.media.base.time.sleep")
+    @patch("vtsearch.media.embedder.time.sleep")
     def test_retries_on_transient_hf_hub_error(self, mock_sleep):
         """Transient HfHubHTTPError (5xx) should be retried with backoff."""
         network_calls = [0]
@@ -510,7 +510,7 @@ class TestLoadPretrainedLocalFirst:
         assert mock_sleep.call_args_list[0][0][0] == 2
         assert mock_sleep.call_args_list[1][0][0] == 4
 
-    @patch("vtsearch.media.base.time.sleep")
+    @patch("vtsearch.media.embedder.time.sleep")
     def test_retries_exhausted_raises_last_error(self, mock_sleep):
         """When all retries are exhausted, the last transient error is raised."""
         errors = []
@@ -533,7 +533,7 @@ class TestLoadPretrainedLocalFirst:
             assert exc is errors[-1]
             assert "attempt 3" in str(exc)
 
-    @patch("vtsearch.media.base.time.sleep")
+    @patch("vtsearch.media.embedder.time.sleep")
     def test_non_transient_error_not_retried(self, mock_sleep):
         """Non-transient errors (e.g. 404) should not be retried."""
 
@@ -552,7 +552,7 @@ class TestLoadPretrainedLocalFirst:
             pass
         mock_sleep.assert_not_called()
 
-    @patch("vtsearch.media.base.time.sleep")
+    @patch("vtsearch.media.embedder.time.sleep")
     def test_retries_on_connection_error(self, mock_sleep):
         """ConnectionError should be retried as transient."""
         network_calls = [0]
@@ -570,7 +570,7 @@ class TestLoadPretrainedLocalFirst:
         assert result is sentinel
         assert mock_sleep.call_count == 2
 
-    @patch("vtsearch.media.base.time.sleep")
+    @patch("vtsearch.media.embedder.time.sleep")
     def test_retries_on_timeout_error(self, mock_sleep):
         """TimeoutError should be retried as transient."""
         network_calls = [0]
