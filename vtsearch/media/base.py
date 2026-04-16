@@ -139,6 +139,15 @@ class DemoDataset:
 
     ``None`` means take all remaining elements after ``slice_frac_start``."""
 
+    items_per_category: int = 0
+    """Approximate per-category item count of the raw source dataset.
+
+    Used by the UI to estimate how many files the user will be loading
+    *before* the dataset is downloaded.  The actual count after loading
+    will match ``int(items_per_category * (slice_frac_end - slice_frac_start))``
+    for fractionally sliced datasets.  Leave at ``0`` for datasets where
+    the count is unknown or the full dataset is always loaded."""
+
     download_size_mb: float = 0
     """Estimated download size in megabytes for this demo dataset's raw data.
 
