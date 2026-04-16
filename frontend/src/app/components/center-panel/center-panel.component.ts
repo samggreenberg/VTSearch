@@ -12,6 +12,7 @@ import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
 import { VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
+import { prefersReducedMotion } from '../../utils/reduced-motion';
 
 @Component({
   selector: 'vt-center-panel',
@@ -153,7 +154,8 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
     this.mediasApi.vote(this.media.id, vote).subscribe({
       next: () => {
-        if (this.swipeAnimation && this.media) {
+        const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
+        if (animate) {
           this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
           this.spinningVote = vote;
           if (this.spinTimer) clearTimeout(this.spinTimer);
