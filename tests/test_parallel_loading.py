@@ -544,7 +544,7 @@ class TestConcurrentModelLoading:
         """Two threads calling load_models() on the same embedder must not
         both execute _load_models_impl() concurrently — the lock should
         serialise them so the second caller sees the model already loaded."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         call_count = 0
         started = threading.Event()

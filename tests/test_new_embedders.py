@@ -469,25 +469,25 @@ class TestNewEmbeddersInheritance:
     """Verify new embedders correctly extend MediaEmbedder."""
 
     def test_siglip_is_media_embedder(self):
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 
         assert issubclass(ImageSiglipEmbedder, MediaEmbedder)
 
     def test_clap_music_is_media_embedder(self):
         from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         assert issubclass(AudioClapMusicEmbedder, MediaEmbedder)
 
     def test_bge_is_media_embedder(self):
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
 
         assert issubclass(TextBGEEmbedder, MediaEmbedder)
 
     def test_languagebind_is_media_embedder(self):
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
         from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         assert issubclass(VideoLanguageBindEmbedder, MediaEmbedder)
@@ -509,7 +509,7 @@ class TestEmbedMediaLock:
 
     def test_concurrent_embed_media_serialised(self):
         """Two threads calling embed_media must not overlap (global lock)."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         inside = threading.Event()
         proceed = threading.Event()
@@ -578,7 +578,7 @@ class TestEmbedMediaLock:
 
     def test_embed_media_delegates_to_impl(self):
         """embed_media() should call _embed_media_impl() and return its result."""
-        from vtsearch.media.base import MediaEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
 
         class SimpleEmbedder(MediaEmbedder):
             @property

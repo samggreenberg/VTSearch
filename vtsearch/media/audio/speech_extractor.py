@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
-from vtsearch.media.base import Extractor
+from vtsearch.media.processors import Extractor
 
 
 class SpeechExtractor(Extractor):

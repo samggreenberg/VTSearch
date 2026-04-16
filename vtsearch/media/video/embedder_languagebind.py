@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 
 from vtsearch.config import LANGUAGEBIND_VIDEO_MODEL_ID
-from vtsearch.media.base import (
+from vtsearch.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
     intercept_tqdm_progress,

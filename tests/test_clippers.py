@@ -6,7 +6,7 @@ import wave
 import pytest
 
 from vtsearch.audio import generate_wav
-from vtsearch.media.base import MediaClipper
+from vtsearch.media.clipper import MediaClipper
 
 
 # ---------------------------------------------------------------------------
