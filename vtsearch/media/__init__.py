@@ -150,6 +150,7 @@ def all_demo_datasets() -> dict:
                 "slice_end": ds.slice_end,
                 "slice_frac_start": ds.slice_frac_start,
                 "slice_frac_end": ds.slice_frac_end,
+                "items_per_category": ds.items_per_category,
                 "download_size_mb": ds.download_size_mb,
             }
             if ds.source:
