@@ -47,10 +47,7 @@ pytestmark = pytest.mark.slow
 # ---------------------------------------------------------------------------
 
 
-def _make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
-    from vtsearch.audio import generate_wav
-
-    return generate_wav(frequency, duration)
+from helpers import make_wav_bytes as _make_wav_bytes
 
 
 def _make_pickle_dataset(

@@ -80,30 +80,12 @@ def clear_dataset():
     clear_all()
 
 
-def _get_embedder_for_medias(media_dict: dict):
-    """Return the embedder for the given medias dict, or None."""
-    if not media_dict:
-        return None
-    first = next(iter(media_dict.values()))
-    embedder_name = first.get("embedder", "")
-    media_type = first.get("type", "audio")
-
-    from vtsearch.media import embedders_for_type, get_embedder
-
-    if embedder_name:
-        try:
-            return get_embedder(embedder_name)
-        except KeyError:
-            pass
-
-    avail = embedders_for_type(media_type)
-    return avail[0] if avail else None
+from vtsearch.routes.helpers import get_embedder_for_medias as _get_embedder_for_medias
 
 
 def _get_embedder_for_clips():
     """Return the embedder for the current dataset, or None."""
-    snap = snapshot_medias()
-    return _get_embedder_for_medias(snap)
+    return _get_embedder_for_medias(snapshot_medias())
 
 
 def _load_embedder_with_progress(

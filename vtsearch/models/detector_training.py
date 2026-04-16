@@ -1,8 +1,7 @@
-"""Shared helpers for detector training routes.
+"""Detector training helpers: validate, train, threshold, serialise.
 
 Consolidates the repeated train → calibrate → safe-threshold → serialise
-pipeline that appears in ``import_detector_labels``,
-``train_from_label_import``, and ``multi_find``.
+pipeline used by detector route handlers and test helpers.
 """
 
 from __future__ import annotations

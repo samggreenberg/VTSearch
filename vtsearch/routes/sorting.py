@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400, get_json_safe
+from vtsearch.routes.helpers import get_embedder_for_medias, get_json_or_400, get_json_safe
 
 from vtsearch.config import DATA_DIR
 import vtsearch.utils.paths as _paths
@@ -76,23 +76,7 @@ _embedder_load_lock = threading.Lock()
 
 def _get_embedder_for_loaded_data():
     """Return the appropriate embedder for the currently loaded dataset."""
-    snap = snapshot_medias()
-    if not snap:
-        return None
-    first = next(iter(snap.values()))
-    embedder_name = first.get("embedder", "")
-    media_type = first.get("type", "audio")
-
-    from vtsearch.media import embedders_for_type, get_embedder
-
-    if embedder_name:
-        try:
-            return get_embedder(embedder_name)
-        except KeyError:
-            pass
-
-    avail = embedders_for_type(media_type)
-    return avail[0] if avail else None
+    return get_embedder_for_medias(snapshot_medias())
 
 
 def _load_embedder_with_progress(media_type, total_steps):
@@ -484,7 +468,7 @@ def label_file_sort():
             )
 
         # Check if we have both good and bad examples
-        from vtsearch.routes.detectors_helpers import validate_good_bad_split
+        from vtsearch.models.detector_training import validate_good_bad_split
 
         try:
             validate_good_bad_split(y_list)
@@ -497,7 +481,7 @@ def label_file_sort():
         # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
 
-        from vtsearch.routes.detectors_helpers import train_and_threshold
+        from vtsearch.models.detector_training import train_and_threshold
 
         snap = snapshot_medias()
         model, threshold = train_and_threshold(X_list, y_list, snap=snap)

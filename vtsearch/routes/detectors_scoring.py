@@ -172,7 +172,7 @@ def find_label():
     # trained on Dataset A and then switched to Dataset B, the model is
     # still available without expensive label-origin resolution.
     if weights is None:
-        from vtsearch.routes.detectors_helpers import serialize_weights as _ser_weights
+        from vtsearch.models.detector_training import serialize_weights as _ser_weights
         from vtsearch.utils.state_core import get_detector_context
 
         det_ctx = get_detector_context(model_id)
@@ -193,7 +193,7 @@ def find_label():
 
             _find_log = _logging.getLogger("vtsearch.routes.detectors_scoring")
 
-            from vtsearch.routes.detectors_helpers import serialize_weights as _serialize_weights, train_and_threshold
+            from vtsearch.models.detector_training import serialize_weights as _serialize_weights, train_and_threshold
 
             update_find_progress(
                 "running", "Training model from labels…",
