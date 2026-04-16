@@ -41,17 +41,18 @@ deployments. Runs locally or in Docker.
 | Document | Purpose |
 |----------|---------|
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
+| [USER_GUIDE.md](USER_GUIDE.md) | End-user walkthrough — Autopilot labeling, manual mode, sort modes, dashboard, exporting |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
 | [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
-| [EXTENDING.md](EXTENDING.md) | Plugin authoring guide (importers, exporters, media types) |
+| [EXTENDING.md](EXTENDING.md) | Plugin authoring index — splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
-| [REFACTORING.md](REFACTORING.md) | Structural refactoring plan with completion status |
-| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (implemented, two enhancements pending) |
-| [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (design proposal, not yet implemented) |
+| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (**Implemented**, two enhancements pending) |
+| [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
+| [RCDatasetImporter.plan.md](RCDatasetImporter.plan.md) | ReCaller dataset-importer scaffolding plan (**Planning**) |
 
 ---
 
@@ -124,28 +125,13 @@ of **processors** and can be exported/imported as JSON files.
 
 ### Plugin systems
 
-Ten auto-discovered plugin systems share the same `PluginRegistry`
-architecture:
+Ten auto-discovered plugin families share a common `PluginRegistry`
+architecture: dataset importers, results exporters, label importers,
+processor importers, settings importers/exporters, settings sources,
+labelset sources, media converters, and media sources.
 
-- **Dataset importers** — load data from folders, pickles, HTTP archives,
-  combined datasets, or demo catalogues.
-- **Results exporters** — write autodetect results to server files (JSON/CSV),
-  email, webhooks, or the GUI.
-- **Label importers** — import labels from server-side JSON or CSV files.
-- **Processor importers** — import detectors from server-side JSON files.
-- **Settings importers** — one-shot settings import from JSON files.
-- **Settings exporters** — one-shot settings export to JSON files.
-- **Settings sources** — bidirectional sync for settings (auto-export on
-  change, import on sync). Supports `{username}` template for per-user files.
-- **Labelset sources** — bidirectional sync for detector labels (auto-export
-  on vote/import, import on sync). Supports `{detector_id}`/`{detector_name}`
-  templates. Linked per-detector via `DetectorContext.labelset_source`.
-- **Media converters** — transform content between media types (e.g.
-  document pages to images, video to audio).
-- **Media sources** — resolve individual media files from dataset origins
-  (local folders, HTTP archives).
-
-See [EXTENDING.md](EXTENDING.md) for how to add new plugins.
+See [EXTENDING.md](EXTENDING.md) (and its split child docs) for how
+each family works and how to add new plugins.
 
 ### Origin tracking
 
@@ -165,26 +151,23 @@ argument parsing. Key startup sequence:
 1. Create `data/` directory structure
 2. Initialize model cache directory
 3. Load persistent settings from `data/settings.json`
-4. Preload models for `autoload_media_types` (if configured)
+4. Preload embedders listed in `autoload_media_embedders` (if configured)
 5. Start Flask server (or run CLI autodetect workflow)
 
-### Where things live
+### Where things live (quick lookup)
 
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
-| Authentication | `vtsearch/auth/` (LoginProvider ABC, DefaultLoginProvider) |
-| Global state (medias, votes) | `vtsearch/utils/state_core.py` (re-exported via `state.py`) |
+| Global state (medias, votes) | `vtsearch/utils/state_core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
-| ML training and inference | `vtsearch/models/training.py` |
-| Embedding models | `vtsearch/media/{audio,image,text,video}/embedder.py` |
-| Media converters | `vtsearch/converters/` |
-| Trainable model definitions | `vtsearch/routes/trainable_models.py` → `data/trainable_models/` |
-| Dataset loading and downloading | `vtsearch/datasets/` |
-| Plugin registries | `vtsearch/datasets/importers/`, `vtsearch/exporters/`, `vtsearch/labels/importers/`, `vtsearch/processors/importers/`, `vtsearch/settings_io/sources/`, `vtsearch/labels/sources/` |
-| Constants and model IDs | `vtsearch/config.py` |
-| Frontend | `static/index.html`, `static/main.js`, `static/polyfills.js`, `static/styles.css` (Angular build output) |
-| Tests | `tests/` (see test list in CLAUDE.md) |
+| ML training, embedding models | `vtsearch/models/`, `vtsearch/media/*/embedder.py` |
+| Dataset loading, demo downloads | `vtsearch/datasets/` |
+| Frontend (Angular source / build output) | `frontend/` → `static/` |
+
+For the full module-by-module map — extractability matrix, dependency
+graph, plugin directories — see
+[ARCHITECTURE.md](ARCHITECTURE.md#directory-map).
 
 ### Architectural boundaries
 

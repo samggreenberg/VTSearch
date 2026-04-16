@@ -182,7 +182,6 @@ VTSearch/
 │   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
 │   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
 │   │   ├── detectors_training.py   Detector training from votes
-│   │   ├── detectors_helpers.py    Shared helpers for detector routes
 │   │   ├── datasets.py             Dataset loading, demos, dashboard
 │   │   ├── datasets_loading.py     Dataset loading and import orchestration
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
@@ -508,8 +507,8 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*` (per-media-type layout), `autoload_media_types`,
-`autoload_media_embedders`, `autopilot_enabled`, `hide_autopilot`,
+`panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
+`autopilot_enabled`, `hide_autopilot`,
 `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_goal_diversity`,
 autorun processor recipes, and infrastructure directories
 `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir`.
