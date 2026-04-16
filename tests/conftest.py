@@ -402,34 +402,36 @@ def pytest_unconfigure(config):
     """
     import sys
 
-    # Grab stats from the terminal reporter (if available)
+    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
+
     reporter = config.pluginmanager.getplugin("terminalreporter")
+    print("", flush=True)
+    print("=" * 60, flush=True)
     if reporter:
         passed = len(reporter.stats.get("passed", []))
         failed = len(reporter.stats.get("failed", []))
         errors = len(reporter.stats.get("error", []))
         skipped = len(reporter.stats.get("skipped", []))
+        xfailed = len(reporter.stats.get("xfailed", []))
         total = passed + failed + errors + skipped
 
-        print("", flush=True)
-        print("=" * 60, flush=True)
         if failed or errors:
-            print(
-                f"TESTS FAILED: {failed} failed, {errors} errors, {passed} passed, {skipped} skipped (total: {total})",
-                flush=True,
-            )
+            parts = [f"{failed} failed", f"{errors} errors", f"{passed} passed", f"{skipped} skipped"]
+            if xfailed:
+                parts.append(f"{xfailed} xfailed")
+            print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
         else:
-            print(
-                f"ALL {passed} TESTS PASSED ({skipped} skipped, total: {total})",
-                flush=True,
-            )
-        print("=" * 60, flush=True)
+            extra = f"{skipped} skipped"
+            if xfailed:
+                extra += f", {xfailed} xfailed"
+            print(f"ALL {passed} TESTS PASSED ({extra}, total: {total})", flush=True)
+    else:
+        status = "PASSED" if exitstatus == 0 else "FAILED"
+        print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
+    print("=" * 60, flush=True)
 
     sys.stdout.flush()
     sys.stderr.flush()
-
-    # Retrieve the exit status stashed by pytest_sessionfinish.
-    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
     os._exit(exitstatus)
 
 

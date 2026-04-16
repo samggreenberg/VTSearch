@@ -126,6 +126,17 @@ class TestLoadDemoSourceAgNews:
         mt._model = stub_model
         return mt
 
+    def _make_fake_embedder(self):
+        import numpy as np
+
+        emb = MagicMock()
+        emb.name = "e5"
+        emb.media_type_id = "text"
+        emb._model = True
+        emb._on_progress = lambda *a: None
+        emb.embed_text_passage.return_value = np.zeros(768)
+        return emb
+
     def test_ag_news_source_populates_clips(self):
         """load_demo_source with source='ag_news' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
@@ -136,6 +147,7 @@ class TestLoadDemoSourceAgNews:
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_ag_news", return_value=fake_articles):
@@ -146,6 +158,7 @@ class TestLoadDemoSourceAgNews:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         assert len(clips) == 4
@@ -161,6 +174,7 @@ class TestLoadDemoSourceAgNews:
         }
 
         mt = self._make_text_media_type()
+        emb = self._make_fake_embedder()
         clips: dict = {}
 
         with patch.object(dl_module, "download_ag_news", return_value=fake_articles):
@@ -171,6 +185,7 @@ class TestLoadDemoSourceAgNews:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
+                embedder=emb,
             )
 
         # Only articles[2:5] = 3 articles.

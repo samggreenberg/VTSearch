@@ -57,9 +57,9 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
         # Treat Angular compiler warnings (e.g. NG8107) as errors
         if grep -q '▲ \[WARNING\]' "$_fe_log"; then
             echo ""
-            echo "======================================================================"
-            echo "FRONTEND BUILD HAS WARNINGS (treated as errors)"
-            echo "======================================================================"
+            echo "============================================================"
+            echo "TESTS BLOCKED: Frontend build has warnings (treated as errors)"
+            echo "============================================================"
             grep -A 10 '▲ \[WARNING\]' "$_fe_log"
             rm -f "$_fe_log"
             exit 1
@@ -67,9 +67,9 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
         echo "Frontend build OK"
     else
         echo ""
-        echo "======================================================================"
-        echo "FRONTEND BUILD FAILED"
-        echo "======================================================================"
+        echo "============================================================"
+        echo "TESTS BLOCKED: Frontend build failed"
+        echo "============================================================"
         cat "$_fe_log"
         rm -f "$_fe_log"
         exit 1
@@ -82,9 +82,9 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
         echo "Frontend audit OK (0 vulnerabilities)"
     else
         echo ""
-        echo "======================================================================"
-        echo "FRONTEND AUDIT FAILED — npm dependencies have known vulnerabilities"
-        echo "======================================================================"
+        echo "============================================================"
+        echo "TESTS BLOCKED: npm audit found known vulnerabilities"
+        echo "============================================================"
         cat "$_audit_log"
         rm -f "$_audit_log"
         exit 1
