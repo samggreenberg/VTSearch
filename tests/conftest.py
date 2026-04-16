@@ -224,10 +224,17 @@ _patch_embed_audio.stop()
 # Grab the audio media-type singleton and the audio embedder so the per-test
 # fixture can patch embed_text/embed_media/load_models on both, preventing
 # CLAP from loading during /api/sort and similar calls.
-from vtsearch.media import get as _media_get, embedders_for_type as _embedders_for_type
+from vtsearch.media import all_embedders as _all_embedders, all_types as _all_types, get as _media_get, embedders_for_type as _embedders_for_type
 
 _audio_mt = _media_get("audio")
 _audio_emb = _embedders_for_type("audio")[0]
+
+# Every registered media type and embedder gets stubbed below — not just
+# audio.  Tests that accidentally touch image/video/text/document embedders
+# (e.g. via ``/api/sort`` on an image dataset) would otherwise try to
+# download real CLIP / X-CLIP / E5 / SigLIP weights.
+_ALL_EMBEDDERS = _all_embedders()
+_ALL_MEDIA_TYPES = _all_types()
 
 
 @pytest.fixture(autouse=True)
@@ -262,22 +269,26 @@ def _allow_test_tmp_paths(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _stub_embedding_models():
-    """Prevent CLAP (and librosa) from loading during individual tests.
+    """Prevent any embedder from loading real model weights during tests.
 
-    Patches ``embed_audio_file``, the audio media-type's ``embed_text``,
-    ``embed_media``, and ``load_models`` so that any test-time calls
-    (e.g. via ``/api/sort``) return cheap deterministic fake vectors
-    instead of loading a ~600 MB model.
+    Patches ``embed_audio_file`` and the ``embed_text`` / ``embed_media`` /
+    ``load_models`` methods on every registered media type and embedder, so
+    that test-time calls (e.g. via ``/api/sort``) return cheap deterministic
+    fake vectors instead of loading ~100-800 MB of CLAP / CLIP / SigLIP /
+    X-CLIP / E5 / BGE / LanguageBind weights.
     """
-    with (
-        patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio),
-        patch.object(_audio_mt, "embed_text", side_effect=_fake_embed_text),
-        patch.object(_audio_mt, "embed_media", side_effect=_fake_embed_audio),
-        patch.object(_audio_mt, "load_models"),
-        patch.object(_audio_emb, "embed_media", side_effect=_fake_embed_audio),
-        patch.object(_audio_emb, "embed_text", side_effect=_fake_embed_text),
-        patch.object(_audio_emb, "load_models"),
-    ):
+    from contextlib import ExitStack
+
+    with ExitStack() as stack:
+        stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
+        for mt in _ALL_MEDIA_TYPES:
+            stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
+            stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
+            stack.enter_context(patch.object(mt, "load_models"))
+        for emb in _ALL_EMBEDDERS:
+            stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
+            stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
+            stack.enter_context(patch.object(emb, "load_models"))
         yield
 
 
