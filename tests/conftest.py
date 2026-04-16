@@ -274,83 +274,66 @@ def _allow_test_tmp_paths(monkeypatch):
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _stub_embedding_models():
     """Prevent any embedder from loading real model weights during tests.
 
-    Patches ``embed_audio_file`` and the ``embed_text`` / ``embed_media`` /
-    ``load_models`` methods on every registered media type and embedder, so
-    that test-time calls (e.g. via ``/api/sort``) return cheap deterministic
-    fake vectors instead of loading ~100-800 MB of CLAP / CLIP / SigLIP /
-    X-CLIP / E5 / BGE / LanguageBind weights.
+    Session-scoped: the 40 patches are applied once and held for the entire
+    run instead of being torn down and re-applied for each of the ~2900 tests.
+    Tests that need different stub behavior can layer their own ``patch.object``
+    on top — it will override the session-level patch and restore it on exit.
     """
     from contextlib import ExitStack
 
-    with ExitStack() as stack:
-        stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
-        for mt in _ALL_MEDIA_TYPES:
-            stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
-            stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
-            stack.enter_context(patch.object(mt, "load_models"))
-        for emb in _ALL_EMBEDDERS:
-            stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
-            stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
-            stack.enter_context(patch.object(emb, "load_models"))
-        yield
+    stack = ExitStack()
+    stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
+    for mt in _ALL_MEDIA_TYPES:
+        stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
+        stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
+        stack.enter_context(patch.object(mt, "load_models"))
+    for emb in _ALL_EMBEDDERS:
+        stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
+        stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
+        stack.enter_context(patch.object(emb, "load_models"))
+    yield
+    stack.close()
+
+
+import vtsearch.utils.state_core as _core
+from vtsearch.utils.progress import dataset_progress as _dataset_progress, eval_progress as _eval_progress, find_progress as _find_progress, loading_tasks as _loading_tasks, model_loading_tasks as _model_loading_tasks, sort_progress as _sort_progress
+from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
+from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
+from vtsearch.models.registry import reset_for_tests as _reset_model_reg
 
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """Reset all mutable global state before each test.
-
-    This fixture prevents cross-test contamination by clearing votes,
-    autorun entries, and all other mutable state that lives in
-    ``vtsearch.utils.state``.  It runs automatically before every test.
-    """
-    import vtsearch.utils.state_core as _core
-
-    # Clear all dataset contexts and create a fresh default context so that
-    # tests that just write to ``medias`` etc. still work.
+    """Reset all mutable global state before each test."""
     _core.clear_all_contexts()
     default_ctx = _core.DatasetContext("_test_default")
     _core.register_context(default_ctx)
     _core.set_thread_dataset_context(default_ctx)
 
-    # Clear all detector contexts and create a fresh default context so that
-    # tests that just write to ``good_votes`` / ``bad_votes`` etc. still work.
     _core.clear_all_detector_contexts()
     default_det = _core.DetectorContext("_test_default_det")
     _core.register_detector_context(default_det)
     _core.set_thread_detector_context(default_det)
 
-    # Replay the test medias into the fresh context (medias is intentionally
-    # NOT reset between tests to avoid expensive re-generation).
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
-    # Clear global (non-per-dataset) state.
     _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
 
-    # Reset progress trackers
-    from vtsearch.utils.progress import dataset_progress, eval_progress, find_progress, loading_tasks, model_loading_tasks, sort_progress
+    _dataset_progress.reset_cancel()
+    _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+    _sort_progress.update("idle", "", 0, 0)
+    _eval_progress.update("idle", "", 0, 0)
+    _loading_tasks.reset_for_tests()
+    _model_loading_tasks.reset_for_tests()
 
-    dataset_progress.reset_cancel()
-    find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    sort_progress.update("idle", "", 0, 0)
-    eval_progress.update("idle", "", 0, 0)
-    loading_tasks.reset_for_tests()
-    model_loading_tasks.reset_for_tests()
-
-    # Reset the login provider to DefaultLoginProvider
-    from vtsearch.auth import DefaultLoginProvider, set_login_provider
-
-    set_login_provider(DefaultLoginProvider())
-
-    # Reset the dataset and model registries
-    from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
-    from vtsearch.models.registry import reset_for_tests as _reset_model_reg
+    _set_login_provider(_DefaultLoginProvider())
 
     _reset_ds_reg()
     _reset_model_reg()
