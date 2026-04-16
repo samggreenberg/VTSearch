@@ -423,7 +423,7 @@ def find_check_labels():
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
@@ -534,7 +534,7 @@ def multi_find():
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
     from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])

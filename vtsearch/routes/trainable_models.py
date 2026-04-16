@@ -27,96 +27,24 @@ POST /api/trainable-models/<name>/labels
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 import threading
 import time
-from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
-from vtsearch.config import DATA_DIR
+from vtsearch.models.label_sync import sync_labels_to_loaded_model
+from vtsearch.models.trainable_model_store import (
+    _model_path,
+    _read_model,
+    _write_model,
+    get_trainable_models_dir,
+)
 
 logger = logging.getLogger(__name__)
 
 trainable_models_bp = Blueprint("trainable_models", __name__)
-
-
-def get_trainable_models_dir() -> Path:
-    """Return the configured trainable-models directory from settings."""
-    from vtsearch.settings import get_trainable_models_dir as _get
-
-    return _get()
-
-
-#: Backward-compat alias — prefer :func:`get_trainable_models_dir` for live value.
-TRAINABLE_MODELS_DIR = DATA_DIR / "trainable_models"
-
-
-def _slug(name: str) -> str:
-    """Turn a human-readable name into a filesystem-safe slug."""
-    return re.sub(r"[^a-z0-9_-]+", "_", name.lower()).strip("_") or "model"
-
-
-def _model_path(name: str) -> Path:
-    return get_trainable_models_dir() / f"{_slug(name)}.json"
-
-
-def _read_model(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _write_model(path: Path, data: dict) -> None:
-    get_trainable_models_dir().mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-
-def sync_labels_to_loaded_model() -> None:
-    """Persist the current votes into the loaded model's labelset (if any).
-
-    Called automatically after each vote so the dashboard's "# Training"
-    and "Last Trained" columns stay up to date without an explicit save.
-
-    Skipped when the model is in "find mode" (after ``/api/find-label``),
-    because the global votes reflect scoring results on a different dataset,
-    not the model's original training labels.
-    """
-    from vtsearch.models.registry import get_model, is_find_mode, update_model
-    from vtsearch.utils import get_active_detector_context
-
-    if is_find_mode():
-        return
-
-    det_ctx = get_active_detector_context()
-    loaded_id = det_ctx.detector_id if det_ctx.detector_id else None
-    if not loaded_id:
-        return
-
-    entry = get_model(loaded_id)
-    if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
-        return
-
-    tm_name = entry["trainable_model_name"]
-    path = _model_path(tm_name)
-    data = _read_model(path)
-    if data is None:
-        return
-
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
-
-    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
-    data["labelset"] = labelset.to_dict()
-    _write_model(path, data)
-
-    import time as _time
-
-    update_model(entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
 
 # Canonical location: vtsearch.models.media_seeding

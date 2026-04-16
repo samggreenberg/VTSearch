@@ -24,7 +24,7 @@ def apply_and_retrain(
     """
     from flask import g
 
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_model
     from vtsearch.utils import (
         apply_label,
         build_media_lookup,

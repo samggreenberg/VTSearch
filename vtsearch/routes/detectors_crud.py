@@ -143,7 +143,7 @@ def add_autorun_detector_route():
         # model file so that labels and examples persist across restarts.
         trainable_model_name = ""
         if not weights:
-            from vtsearch.routes.trainable_models import _model_path, _write_model
+            from vtsearch.models.trainable_model_store import _model_path, _write_model
             import time as _time
 
             trainable_model_name = name

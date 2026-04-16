@@ -163,7 +163,7 @@ def run_label_import(importer_name: str):
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count (num_training) immediately.
     if applied > 0:
-        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
         sync_labels_to_loaded_model()
 
@@ -227,7 +227,7 @@ def ingest_missing():
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count immediately.
     if applied > 0:
-        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
         sync_labels_to_loaded_model()
 

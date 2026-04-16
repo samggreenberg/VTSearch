@@ -1062,7 +1062,7 @@ class TestLoadModelCrossDatasetResolution:
         import numpy as np
 
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import good_votes, bad_votes, medias
 
@@ -1163,7 +1163,7 @@ class TestLoadModelCrossDatasetResolution:
         import numpy as np
 
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import good_votes, medias
 
