@@ -390,6 +390,7 @@ class TestPdfSymlinkDiscovery:
 
         with ExitStack() as stack:
             stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+            stack.enter_context(mock.patch("vtsearch.media.get_embedder", return_value=emb))
             stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
             _load_pdf_images(root, medias, embedder_name="clip")
 
