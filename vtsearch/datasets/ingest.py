@@ -21,6 +21,7 @@ import json
 from typing import Any, Callable, Optional
 
 from vtsearch.utils.state import next_media_id
+from vtsearch.utils.state_core import _state_lock
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -111,7 +112,6 @@ def _ingest_via_source(
     from vtsearch.models.resolver import embed_file
 
     ingested = 0
-    cid = next_media_id(medias)
 
     try:
         for entry in entries:
@@ -133,19 +133,20 @@ def _ingest_via_source(
             file_bytes = file_path.read_bytes()
             md5 = hashlib.md5(file_bytes).hexdigest()
 
-            media_data: dict[str, Any] = {
-                "id": cid,
-                "filename": origin_name or file_path.name,
-                "origin": origin_dict,
-                "origin_name": origin_name or file_path.name,
-                "md5": md5,
-                "embedding": embedding,
-                "media_bytes": file_bytes,
-                "media_path": str(file_path),
-            }
-
-            medias[cid] = media_data
-            cid += 1
+            # Allocate the ID and insert atomically, so two concurrent
+            # ingests cannot collide on the same next_media_id.
+            with _state_lock:
+                cid = next_media_id(medias)
+                medias[cid] = {
+                    "id": cid,
+                    "filename": origin_name or file_path.name,
+                    "origin": origin_dict,
+                    "origin_name": origin_name or file_path.name,
+                    "md5": md5,
+                    "embedding": embedding,
+                    "media_bytes": file_bytes,
+                    "media_path": str(file_path),
+                }
             ingested += 1
 
             on_progress(
@@ -183,7 +184,6 @@ def _ingest_via_resolver(
     from vtsearch.models.resolver import embed_file, resolve_file_from_origin
 
     ingested = 0
-    cid = next_media_id(medias)
 
     for entry in entries:
         origin_name = entry.get("origin_name", "")
@@ -207,19 +207,19 @@ def _ingest_via_resolver(
         file_bytes = file_path.read_bytes()
         md5 = hashlib.md5(file_bytes).hexdigest()
 
-        media_data: dict[str, Any] = {
-            "id": cid,
-            "filename": origin_name or file_path.name,
-            "origin": origin_dict,
-            "origin_name": origin_name or file_path.name,
-            "md5": md5,
-            "embedding": embedding,
-            "media_bytes": file_bytes,
-            "media_path": str(file_path),
-        }
-
-        medias[cid] = media_data
-        cid += 1
+        # Atomic id allocation + insert, see _ingest_via_source above.
+        with _state_lock:
+            cid = next_media_id(medias)
+            medias[cid] = {
+                "id": cid,
+                "filename": origin_name or file_path.name,
+                "origin": origin_dict,
+                "origin_name": origin_name or file_path.name,
+                "md5": md5,
+                "embedding": embedding,
+                "media_bytes": file_bytes,
+                "media_path": str(file_path),
+            }
         ingested += 1
 
         on_progress(
@@ -326,15 +326,16 @@ def ingest_missing_medias(
             if not media.get("origin_name"):
                 media["origin_name"] = media.get("filename", "")
 
-        # Cherry-pick matching medias
-        cid = next_media_id(medias)
+        # Cherry-pick matching medias.  Allocate IDs and insert atomically
+        # under _state_lock so a concurrent ingest can't reuse the same ID.
         for temp_clip in temp_medias.values():
             clip_origin_name = temp_clip.get("origin_name", "")
             clip_md5 = temp_clip.get("md5", "")
             if clip_origin_name in wanted_names or clip_md5 in wanted_md5s:
-                temp_clip["id"] = cid
-                medias[cid] = temp_clip
-                cid += 1
+                with _state_lock:
+                    cid = next_media_id(medias)
+                    temp_clip["id"] = cid
+                    medias[cid] = temp_clip
                 total_ingested += 1
 
     on_progress("idle", f"Ingested {total_ingested} media(s) from origins.", 0, 0)

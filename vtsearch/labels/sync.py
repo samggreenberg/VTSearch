@@ -4,7 +4,9 @@ Provides :func:`sync_to_labelset_source` which exports the current
 detector's labels to its linked labelset source (if any), and
 :func:`sync_from_labelset_source` which imports labels from the source.
 
-A thread-local guard prevents re-exporting during an import pass.
+A module-level (NOT thread-local) flag, coordinated by ``_sync_lock``,
+prevents re-exporting during an import pass — including from concurrent
+``sync_to`` calls running on other threads.
 """
 
 from __future__ import annotations
@@ -15,9 +17,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Thread-local guard to prevent re-exporting to the source during an
-# import-from-source pass.
-_syncing = threading.local()
+# Serializes label sync operations and protects ``_syncing``.  A
+# thread-local guard cannot stop a parallel ``sync_to`` on another
+# thread from racing with a ``sync_from`` import.
+_sync_lock = threading.RLock()
+_syncing: bool = False
 
 
 def sync_to_labelset_source() -> None:
@@ -27,9 +31,6 @@ def sync_to_labelset_source() -> None:
     a labelset source attached.  Skips silently if no source is configured
     or if we are already inside a sync-from-source import.
     """
-    if getattr(_syncing, "active", False):
-        return
-
     from vtsearch.utils.state_core import get_active_detector_context
 
     ctx = get_active_detector_context()
@@ -53,11 +54,17 @@ def sync_to_labelset_source() -> None:
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.utils.state_core import good_votes, bad_votes, medias
 
-    try:
-        labelset = LabelSet.from_clips_and_votes(dict(medias), dict(good_votes), dict(bad_votes))
-        source.save(labelset, field_values)
-    except Exception as exc:
-        logger.exception("Failed to sync labels to source: %s", exc)
+    # Serialize against any in-progress sync_from on another thread.
+    # Re-check the flag inside the lock so we never push partial state
+    # back to the source during an import.
+    with _sync_lock:
+        if _syncing:
+            return
+        try:
+            labelset = LabelSet.from_clips_and_votes(dict(medias), dict(good_votes), dict(bad_votes))
+            source.save(labelset, field_values)
+        except Exception as exc:
+            logger.exception("Failed to sync labels to source: %s", exc)
 
 
 def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, str]] | None:
@@ -103,25 +110,30 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     if not labels:
         return None
 
-    # Apply under sync guard to prevent re-exporting back to source.
-    _syncing.active = True
-    try:
-        from vtsearch.utils.state_votes import apply_label
+    # Hold _sync_lock for the entire apply pass so that any concurrent
+    # sync_to_labelset_source() on another thread blocks (or skips, on
+    # re-entry from this same thread) instead of pushing the pre-import
+    # state back to the source.
+    global _syncing
+    with _sync_lock:
+        _syncing = True
+        try:
+            from vtsearch.utils.state_votes import apply_label
 
-        for entry in labels:
-            label = entry.get("label")
-            md5 = entry.get("md5")
-            if label not in ("good", "bad") or not md5:
-                continue
+            for entry in labels:
+                label = entry.get("label")
+                md5 = entry.get("md5")
+                if label not in ("good", "bad") or not md5:
+                    continue
 
-            # Find media by md5
-            from vtsearch.utils.state_core import medias
+                # Find media by md5
+                from vtsearch.utils.state_core import medias
 
-            for mid, media in medias.items():
-                if media.get("md5") == md5:
-                    apply_label(mid, label)
-                    break
-    finally:
-        _syncing.active = False
+                for mid, media in medias.items():
+                    if media.get("md5") == md5:
+                        apply_label(mid, label)
+                        break
+        finally:
+            _syncing = False
 
     return labels
