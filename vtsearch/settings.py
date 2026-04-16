@@ -67,6 +67,8 @@ _DEFAULTS: dict[str, Any] = {
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
     "detectors_dir": str(DATA_DIR / "detectors"),
     "trainable_models_dir": str(DATA_DIR / "trainable_models"),
+    "max_concurrent_dataset_downloads": 1,
+    "max_concurrent_dataset_embeddings": 1,
 }
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -263,6 +265,8 @@ _SETTING_SPECS: list[tuple] = [
     ("autopilot_hard_reds", int, _clamp_min(int, 1)),
     ("autopilot_resort_interval", int, _clamp_min(int, 1)),
     ("autopilot_goal_diversity", int, _clamp_min(int, 1)),
+    ("max_concurrent_dataset_downloads", int, _clamp(int, 1, 16)),
+    ("max_concurrent_dataset_embeddings", int, _clamp(int, 1, 16)),
 ]
 
 for _key, _cast, _coerce in _SETTING_SPECS:

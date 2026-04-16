@@ -3,17 +3,79 @@
 from __future__ import annotations
 
 import gc
+import time
 import traceback
 import threading
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
-# Limits how many dataset loads (download + embed) can run concurrently.
-# Each load can consume gigabytes of RAM (raw media bytes + model weights +
-# PyTorch tensors), so running several in parallel on a memory-constrained
-# machine pushes the system into swap-thrash and freezes the process.
-# Queued loads show a "Waiting for other datasets to finish loading…" message.
-_loading_semaphore = threading.Semaphore(1)
+from vtsearch.settings import (
+    get_max_concurrent_dataset_downloads,
+    get_max_concurrent_dataset_embeddings,
+)
+
+
+class ConcurrencyGate:
+    """A semaphore-like gate whose limit is read fresh on every acquisition.
+
+    Unlike :class:`threading.Semaphore`, the cap is a callable evaluated at
+    each ``acquire()`` attempt, so changes to the underlying setting take
+    effect immediately for queued and future tasks (already-running tasks
+    are never preempted).
+    """
+
+    def __init__(self, get_limit: Callable[[], int]) -> None:
+        self._get_limit = get_limit
+        self._cv = threading.Condition()
+        self._active = 0
+
+    def _limit(self) -> int:
+        return max(1, int(self._get_limit()))
+
+    def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
+        with self._cv:
+            if not blocking:
+                if self._active >= self._limit():
+                    return False
+                self._active += 1
+                return True
+
+            if timeout is None:
+                while self._active >= self._limit():
+                    self._cv.wait()
+                self._active += 1
+                return True
+
+            deadline = time.monotonic() + timeout
+            while self._active >= self._limit():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._cv.wait(timeout=remaining)
+            self._active += 1
+            return True
+
+    def release(self) -> None:
+        with self._cv:
+            self._active -= 1
+            self._cv.notify_all()
+
+    @property
+    def active(self) -> int:
+        with self._cv:
+            return self._active
+
+
+# Two independent gates control how many dataset loads can run concurrently
+# in each phase.  The download/import phase is bandwidth- and disk-bound;
+# the embedding phase is CPU/GPU- and RAM-bound.  Splitting the gates lets
+# one dataset download while another is still embedding, instead of forcing
+# strict end-to-end serialisation.  Limits are user-configurable via the
+# ``max_concurrent_dataset_downloads`` and ``max_concurrent_dataset_embeddings``
+# settings (defaults: 1 each, matching the previous behaviour).
+_download_gate = ConcurrencyGate(get_max_concurrent_dataset_downloads)
+_embed_gate = ConcurrencyGate(get_max_concurrent_dataset_embeddings)
 
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
@@ -35,7 +97,6 @@ from vtsearch.utils import (
 )
 from vtsearch.utils.progress import (
     CancelledError,
-    ProgressTracker,
     clear_thread_progress,
     dataset_progress,
     loading_tasks,
@@ -57,28 +118,6 @@ _STATUS_TO_STEP = {
     "embedding": 3,
 }
 _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
-
-
-def _make_stepped_progress(tracker: ProgressTracker):
-    """Return a stepped-progress callback bound to *tracker*.
-
-    The returned callable maps status strings emitted by inner functions
-    (downloader, media-type ``load_demo_source``, etc.) into step numbers
-    and updates the per-task *tracker* rather than the global singleton.
-
-    ``"idle"`` signals are silently dropped because the outer loading
-    wrapper is responsible for emitting the final ``"idle"`` after
-    registration and embedder warm-up are complete.
-    """
-
-    def _stepped_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        tracker.check_cancelled()
-        if status == "idle":
-            return
-        step = _STATUS_TO_STEP.get(status)
-        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
-
-    return _stepped_progress
 
 
 
@@ -505,25 +544,53 @@ def _run_origin_load_in_background(
     def task():
         ctx = DatasetContext(task_id)
         context_id = task_id  # tracks the current context key (may change after migration)
-        stepped = _make_stepped_progress(tracker)
-        semaphore_held = False
+
+        # Tracks which gate (if any) we currently hold.  The download gate
+        # covers the import/download phase; the embed gate covers all
+        # CPU/GPU-bound embedding work (importer-side embedding plus the
+        # post-load clipper, dedup, diversity-tree, and embedder warm-up).
+        # We swap from download → embed when the importer first signals an
+        # "embedding" status, freeing the download slot so another dataset
+        # can start downloading in parallel.
+        held_gate: dict[str, str | None] = {"name": None}
+
+        def _acquire(gate: ConcurrencyGate, name: str, wait_msg: str) -> None:
+            if gate.acquire(blocking=False):
+                held_gate["name"] = name
+                return
+            tracker.update("loading", wait_msg, 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+            while not gate.acquire(timeout=0.5):
+                tracker.check_cancelled()
+            held_gate["name"] = name
+
+        def _swap_to_embed() -> None:
+            if held_gate["name"] == "embed":
+                return
+            if held_gate["name"] == "download":
+                _download_gate.release()
+                held_gate["name"] = None
+            _acquire(_embed_gate, "embed", "Waiting for other datasets to finish embedding…")
+
+        def stepped(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+            tracker.check_cancelled()
+            if status == "idle":
+                return
+            # Importer transitioned into per-file embedding — swap gates so
+            # another download can start while we do the GPU-bound work.
+            if status == "embedding" and held_gate["name"] != "embed":
+                _swap_to_embed()
+            step = _STATUS_TO_STEP.get(status)
+            tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+
         try:
-            # Wait for a loading slot.  Only one dataset loads at a time to
-            # avoid exhausting RAM (each load pulls raw media bytes + model
-            # weights into memory).  The task is already visible in the UI so
-            # the user sees "Waiting…" while queued.
-            if _loading_semaphore.acquire(blocking=False):
-                semaphore_held = True
-            else:
-                tracker.update(
-                    "loading",
-                    "Waiting for other datasets to finish loading…",
-                    0, 0,
-                    step=1, total_steps=_TOTAL_LOAD_STEPS,
-                )
-                while not _loading_semaphore.acquire(timeout=0.5):
-                    tracker.check_cancelled()
-                semaphore_held = True
+            # Acquire the download gate up front: every load starts with the
+            # importer's download/import phase.  The task is already visible
+            # in the UI, so the user sees the wait message while queued.
+            _acquire(
+                _download_gate,
+                "download",
+                "Waiting for other datasets to finish downloading…",
+            )
 
             tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
             register_context(ctx)
@@ -544,6 +611,13 @@ def _run_origin_load_in_background(
                 clear_thread_progress()
 
             tracker.check_cancelled()
+
+            # Post-load steps (apply_md5, clipping, dedup, diversity tree,
+            # registry save, embedder warm-up) are all CPU/GPU-bound and
+            # touch embeddings — gate them on the embed semaphore.  This is
+            # a no-op if the importer already swapped mid-load.
+            _swap_to_embed()
+
             apply_custom_metadata_md5(ctx.medias)
 
             # Tag medias that don't already have an origin.
@@ -673,8 +747,11 @@ def _run_origin_load_in_background(
             error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
             tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
-            if semaphore_held:
-                _loading_semaphore.release()
+            if held_gate["name"] == "download":
+                _download_gate.release()
+            elif held_gate["name"] == "embed":
+                _embed_gate.release()
+            held_gate["name"] = None
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
 
