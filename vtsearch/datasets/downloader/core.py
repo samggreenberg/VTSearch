@@ -117,7 +117,9 @@ def download_file_with_progress(
     if on_progress is None:
         on_progress = _default_progress()
 
-    response = requests.get(url, stream=True)
+    # (connect_timeout, read_timeout): fail fast on unresponsive hosts
+    # and abort if the server stops streaming bytes for 60s mid-download.
+    response = requests.get(url, stream=True, timeout=(10, 60))
     response.raise_for_status()
     total_size = int(response.headers.get("content-length", 0))
     if total_size == 0:

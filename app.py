@@ -82,11 +82,20 @@ app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-
 
 @app.before_request
 def _set_user_context():
-    """Populate ``g.user`` from the active LoginProvider on every request."""
+    """Populate ``g.user`` from the active LoginProvider on every request.
+
+    A misbehaving provider must not be able to take down the server by
+    raising from ``get_user``; swallow exceptions and fall back to
+    ``"default"``.
+    """
     from flask import request
 
-    provider = get_login_provider()
-    g.user = provider.get_user(request)
+    try:
+        provider = get_login_provider()
+        g.user = provider.get_user(request)
+    except Exception:
+        logging.getLogger(__name__).exception("Login provider get_user failed")
+        g.user = "default"
 
 
 @app.before_request
@@ -100,6 +109,9 @@ def _set_request_context():
 
     When the headers are absent the proxies fall back to the global
     active pointers, preserving backward compatibility.
+
+    Any failure here must not 500 every subsequent request — fall back
+    to the default (empty) context.
     """
     from flask import request
     from vtsearch.utils.state_core import (
@@ -107,20 +119,23 @@ def _set_request_context():
         get_detector_context,
     )
 
-    # Headers (Angular HttpClient interceptor) take priority, with query
-    # params as fallback for browser-native requests (<img src>, <audio src>,
-    # <video src>, etc.) that bypass Angular's interceptor.
-    ds_id = request.headers.get("X-Dataset-Id") or request.args.get("dataset_id")
-    if ds_id:
-        ctx = get_context(ds_id)
-        if ctx is not None:
-            g._dataset_context = ctx
+    try:
+        # Headers (Angular HttpClient interceptor) take priority, with query
+        # params as fallback for browser-native requests (<img src>,
+        # <audio src>, <video src>) that bypass Angular's interceptor.
+        ds_id = request.headers.get("X-Dataset-Id") or request.args.get("dataset_id")
+        if ds_id:
+            ctx = get_context(ds_id)
+            if ctx is not None:
+                g._dataset_context = ctx
 
-    model_id = request.headers.get("X-Model-Id") or request.args.get("model_id")
-    if model_id:
-        det_ctx = get_detector_context(model_id)
-        if det_ctx is not None:
-            g._detector_context = det_ctx
+        model_id = request.headers.get("X-Model-Id") or request.args.get("model_id")
+        if model_id:
+            det_ctx = get_detector_context(model_id)
+            if det_ctx is not None:
+                g._detector_context = det_ctx
+    except Exception:
+        logging.getLogger(__name__).exception("Request context resolution failed")
 
 
 # ---------------------------------------------------------------------------

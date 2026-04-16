@@ -146,6 +146,18 @@ def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Respons
             start, end = 0, total - 1
 
         end = min(end, total - 1)
+
+        # Reject unsatisfiable ranges (start past EOF, negative, or
+        # inverted). RFC 7233 requires 416 with Content-Range: bytes */N.
+        if start < 0 or start >= total or start > end:
+            resp = make_response(b"")
+            resp.status_code = 416
+            resp.headers["Content-Range"] = f"bytes */{total}"
+            resp.headers["Content-Length"] = "0"
+            resp.headers["Content-Type"] = mimetype
+            resp.headers["Accept-Ranges"] = "bytes"
+            return resp
+
         length = end - start + 1
 
         resp = make_response(data[start : end + 1])

@@ -13,7 +13,7 @@ def _extract_rar(rar_path: Path, extract_to: Path) -> None:
     """Extract a RAR archive using the system ``unrar`` command.
 
     Raises ``RuntimeError`` with installation instructions when ``unrar``
-    is not found on the system PATH.
+    is not found on the system PATH, or if extraction hangs / fails.
     """
     extract_to.mkdir(parents=True, exist_ok=True)
     try:
@@ -21,12 +21,20 @@ def _extract_rar(rar_path: Path, extract_to: Path) -> None:
             ["unrar", "x", "-o+", "-y", str(rar_path), str(extract_to) + "/"],
             check=True,
             capture_output=True,
+            # Cap at 30 minutes. A malformed RAR could otherwise hang the
+            # loader thread indefinitely.
+            timeout=1800,
         )
     except FileNotFoundError:
         raise RuntimeError(
             "The 'unrar' command is required to extract HMDB51 but was not found. "
             "Install it with: apt-get install unrar (Debian/Ubuntu) or "
             "brew install unrar (macOS)."
+        ) from None
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"unrar timed out after {e.timeout}s while extracting {rar_path.name}. "
+            "The archive may be corrupt."
         ) from None
 
 

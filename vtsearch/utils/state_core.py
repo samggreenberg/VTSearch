@@ -207,35 +207,40 @@ def get_thread_dataset_context() -> DatasetContext | None:
 
 def register_context(ctx: DatasetContext) -> None:
     """Add *ctx* to the context store, keyed by its ``dataset_id``."""
-    _contexts[ctx.dataset_id] = ctx
+    with _state_lock:
+        _contexts[ctx.dataset_id] = ctx
 
 
 def unregister_context(dataset_id: str) -> DatasetContext | None:
     """Remove and return the context for *dataset_id*, or ``None``."""
-    ctx = _contexts.pop(dataset_id, None)
-    # Clear thread-local if it was pointing to the removed context.
-    tl_ctx = getattr(_thread_local, "dataset_context", None)
-    if tl_ctx is not None and tl_ctx.dataset_id == dataset_id:
-        _thread_local.dataset_context = None
-    return ctx
+    with _state_lock:
+        ctx = _contexts.pop(dataset_id, None)
+        # Clear thread-local if it was pointing to the removed context.
+        tl_ctx = getattr(_thread_local, "dataset_context", None)
+        if tl_ctx is not None and tl_ctx.dataset_id == dataset_id:
+            _thread_local.dataset_context = None
+        return ctx
 
 
 def get_context(dataset_id: str) -> DatasetContext | None:
     """Return the context for *dataset_id*, or ``None`` if not loaded."""
-    return _contexts.get(dataset_id)
+    with _state_lock:
+        return _contexts.get(dataset_id)
 
 
 def list_loaded_dataset_ids() -> list[str]:
     """Return all dataset IDs that have an in-memory context."""
-    return list(_contexts.keys())
+    with _state_lock:
+        return list(_contexts.keys())
 
 
 def clear_all_contexts() -> None:
     """Remove all dataset contexts and clear the thread-local.  For tests."""
-    _contexts.clear()
-    _thread_local.dataset_context = None
-    # Also reset the empty context's state
-    _empty_dataset_context.__init__("")  # type: ignore[misc]
+    with _state_lock:
+        _contexts.clear()
+        _thread_local.dataset_context = None
+        # Also reset the empty context's state
+        _empty_dataset_context.__init__("")  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +293,10 @@ def register_detector_context(ctx: DetectorContext) -> None:
     """
     from vtsearch.models.progress import clear_progress_cache
 
-    _detector_contexts[ctx.detector_id] = ctx
+    with _state_lock:
+        _detector_contexts[ctx.detector_id] = ctx
+    # clear_progress_cache acquires its own lock; call outside _state_lock
+    # to avoid lock-ordering concerns.
     clear_progress_cache()
 
 
@@ -300,29 +308,33 @@ def unregister_detector_context(detector_id: str) -> DetectorContext | None:
     """
     from vtsearch.models.progress import clear_progress_cache
 
-    ctx = _detector_contexts.pop(detector_id, None)
-    tl_ctx = getattr(_thread_local, "detector_context", None)
-    if tl_ctx is not None and tl_ctx.detector_id == detector_id:
-        _thread_local.detector_context = None
+    with _state_lock:
+        ctx = _detector_contexts.pop(detector_id, None)
+        tl_ctx = getattr(_thread_local, "detector_context", None)
+        if tl_ctx is not None and tl_ctx.detector_id == detector_id:
+            _thread_local.detector_context = None
     clear_progress_cache()
     return ctx
 
 
 def get_detector_context(detector_id: str) -> DetectorContext | None:
     """Return the detector context for *detector_id*, or ``None`` if not loaded."""
-    return _detector_contexts.get(detector_id)
+    with _state_lock:
+        return _detector_contexts.get(detector_id)
 
 
 def list_loaded_detector_ids() -> list[str]:
     """Return all detector IDs that have an in-memory context."""
-    return list(_detector_contexts.keys())
+    with _state_lock:
+        return list(_detector_contexts.keys())
 
 
 def clear_all_detector_contexts() -> None:
     """Remove all detector contexts and clear the thread-local.  For tests."""
-    _detector_contexts.clear()
-    _thread_local.detector_context = None
-    _empty_detector_context.__init__("")  # type: ignore[misc]
+    with _state_lock:
+        _detector_contexts.clear()
+        _thread_local.detector_context = None
+        _empty_detector_context.__init__("")  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +380,9 @@ class _ProxyDict(dict):
         return self._target().__contains__(key)
 
     def __iter__(self):
-        return self._target().__iter__()
+        # Snapshot keys so `for k in proxy` is safe against concurrent
+        # mutation of the underlying dict by another thread.
+        return iter(list(self._target()))
 
     def __len__(self):
         return self._target().__len__()
@@ -421,7 +435,8 @@ class _ProxyDict(dict):
         return self
 
     def __reversed__(self):
-        return self._target().__reversed__()
+        # Snapshot to avoid RuntimeError under concurrent mutation.
+        return reversed(list(self._target()))
 
 
 class _ProxyList(list):
@@ -449,7 +464,8 @@ class _ProxyList(list):
         return self._target().__contains__(item)
 
     def __iter__(self):
-        return self._target().__iter__()
+        # Snapshot elements so iteration is safe against concurrent mutation.
+        return iter(list(self._target()))
 
     def __len__(self):
         return self._target().__len__()
