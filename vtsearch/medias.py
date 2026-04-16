@@ -1,6 +1,7 @@
 """Test media generation and embedding cache management."""
 
 import hashlib
+import os
 
 import numpy as np
 
@@ -13,9 +14,19 @@ from vtsearch.models import embed_audio_file
 from vtsearch.utils import medias
 
 
+def _worker_suffix():
+    """Return a suffix unique to the current xdist worker (or empty if not running under xdist).
+
+    Avoids races when pytest-xdist spawns multiple worker processes that all
+    call :func:`init_medias` simultaneously.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    return f".{worker}" if worker else ""
+
+
 def _embedding_cache_path():
-    """Path to the cached test-media embeddings file."""
-    return DATA_DIR / "media_embedding_cache.npz"
+    """Path to the cached test-media embeddings file (worker-specific under xdist)."""
+    return DATA_DIR / f"media_embedding_cache{_worker_suffix()}.npz"
 
 
 def _embedding_cache_key():
@@ -32,7 +43,8 @@ def _embedding_cache_key():
 def init_medias():
     """Generate test medias with embeddings, using a cache for speed."""
     DATA_DIR.mkdir(exist_ok=True)
-    temp_path = DATA_DIR / "temp_embed.wav"
+    suffix = _worker_suffix()
+    temp_path = DATA_DIR / f"temp_embed{suffix}.wav"
     cache_path = _embedding_cache_path()
     cache_key = _embedding_cache_key()
 

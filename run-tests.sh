@@ -114,8 +114,9 @@ fi
 #   --tb=short  — brief tracebacks (enough to diagnose, not overwhelming)
 #   --no-header — skip the platform/plugin header noise
 #   -q          — quiet mode (dots instead of full test names)
+#   -n auto     — parallel execution via pytest-xdist (one worker per CPU)
 if [[ -n "$MARKER_EXPR" ]]; then
-    python -m pytest tests/ -q --tb=short --no-header -m "$MARKER_EXPR" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${EXTRA_ARGS[@]}"
 else
-    python -m pytest tests/ -q --tb=short --no-header "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ -q --tb=short --no-header -n auto "${EXTRA_ARGS[@]}"
 fi
