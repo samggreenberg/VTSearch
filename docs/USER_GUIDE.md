@@ -237,24 +237,34 @@ with the same controls.
 
 ## Dashboard — managing datasets and models
 
-The Dashboard (house icon in the top toolbar) is your inventory
-view. Two tables:
+The Dashboard is your inventory view. Two tables stacked vertically
+and a pair of action buttons underneath.
 
-- **Datasets** — every dataset loaded on this server. Each row
-  shows the media type, item count, duplicate count, creation
-  date, and owner. Buttons let you **Load** (bring into memory),
-  **Unload** (free RAM without deleting), **Label** (enter the
-  three-panel view), **Rename**, and **Delete**.
-- **Models** — every trained detector. Each row shows the media
-  type, training count, and whether the model is an **autorun**
-  (scored automatically on every new dataset load). Buttons let
-  you **Train** (enter the Label view to refine), **Find** (score
-  the entire loaded dataset and open a results modal), **Rename**,
-  and **Delete**.
+- **Datasets** — every dataset on the server. Each row shows
+  media type, item count, duplicate count, creation date, origin,
+  clipper, and embedder. The **Loaded** column is a toggle:
+  click the **×** to load into memory (a checkmark appears when
+  it's in). Per-row icon buttons: **Rename** (pencil), **Stats**
+  (pie chart), and **Delete** (trash).
+- **Models** — every trained detector. Each row shows media type,
+  training count, whether the model is **trainable**, whether it's
+  an **autorun** (scored automatically during CLI autodetect),
+  last-trained / created dates, and loaded state. Per-row icon
+  buttons: **Rename**, **Add Labels** (import labels into this
+  model), **Export**, and **Delete**.
+
+**Starting a labeling session:** click a dataset row and a model
+row to select them, then click the **Train** button in the action
+bar below the two tables. That opens the three-panel labeling view
+against your selection.
+
+**Scoring a dataset:** select a dataset and a model, then click
+**Find** in the action bar. VTSearch scores every item in the
+dataset with the model and opens a ranked results modal.
 
 You can keep multiple datasets and multiple models loaded at once.
-The top-toolbar picker switches which dataset/model the three-panel
-view is acting on.
+Loading just pulls them into memory; the Train / Find buttons work
+on whichever rows you currently have selected.
 
 ---
 
