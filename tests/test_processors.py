@@ -2,7 +2,7 @@
 
 import pytest
 
-from vtsearch.media.base import Detector, Extractor, Localizer, Processor
+from vtsearch.media.processors import Detector, Extractor, Localizer, Processor
 
 
 # ---------------------------------------------------------------------------

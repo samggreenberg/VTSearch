@@ -8,7 +8,7 @@ after the context manager exits.
 import tqdm.auto
 import tqdm.std
 
-from vtsearch.media.base import intercept_tqdm_progress
+from vtsearch.media.embedder import intercept_tqdm_progress
 
 
 class TestInterceptTqdmProgress:

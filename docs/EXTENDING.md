@@ -1297,7 +1297,7 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.media.base import MediaEmbedder
+from vtsearch.media.embedder import MediaEmbedder
 
 
 class CodeBertEmbedder(MediaEmbedder):
@@ -1462,7 +1462,7 @@ Subclass `MediaClipper` from `vtsearch.media.base`.
 ```python
 # vtsearch/media/audio/clipper.py  (or a new file)
 
-from vtsearch.media.base import MediaClipper
+from vtsearch.media.clipper import MediaClipper
 from typing import Any
 
 
@@ -1818,7 +1818,7 @@ Each processor operates on exactly one media type.
 A Detector answers "is this media Good?" with a boolean.
 
 ```python
-from vtsearch.media.base import Detector
+from vtsearch.media.processors import Detector
 from typing import Any
 
 
@@ -1846,7 +1846,7 @@ class LoudnessDetector(Detector):
 A Localizer returns bounding boxes with confidence scores.
 
 ```python
-from vtsearch.media.base import Localizer
+from vtsearch.media.processors import Localizer
 from typing import Any
 
 
@@ -1879,7 +1879,7 @@ class FaceLocalizer(Localizer):
 An Extractor returns structured details for each occurrence found.
 
 ```python
-from vtsearch.media.base import Extractor
+from vtsearch.media.processors import Extractor
 from typing import Any
 
 

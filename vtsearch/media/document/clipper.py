@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.media.base import MediaClipper
+from vtsearch.media.clipper import MediaClipper
 
 
 class DocumentDefaultClipper(MediaClipper):

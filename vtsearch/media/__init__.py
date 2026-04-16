@@ -27,15 +27,17 @@ from pathlib import Path
 
 from vtsearch.media.base import (
     DemoDataset,
+    MediaResponse,
+    MediaType,
+    ProgressCallback,
+)
+from vtsearch.media.clipper import MediaClipper
+from vtsearch.media.embedder import MediaEmbedder
+from vtsearch.media.processors import (
     Detector,
     Extractor,
     Localizer,
-    MediaClipper,
-    MediaEmbedder,
-    MediaResponse,
-    MediaType,
     Processor,
-    ProgressCallback,
 )
 
 # ------------------------------------------------------------------

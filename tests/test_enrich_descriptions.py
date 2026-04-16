@@ -19,7 +19,7 @@ import pytest
 from vtsearch.eval.config import EvalQuery
 from vtsearch.eval.runner import eval_text_sort
 from vtsearch.media.audio.embedder import AudioClapEmbedder
-from vtsearch.media.base import MediaEmbedder
+from vtsearch.media.embedder import MediaEmbedder
 from vtsearch.media.image.embedder import ImageClipEmbedder
 from vtsearch.media.text.embedder import TextE5Embedder
 from vtsearch.media.video.embedder import VideoXClipEmbedder

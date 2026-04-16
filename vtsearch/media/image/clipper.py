@@ -6,7 +6,7 @@ import io
 import math
 from typing import Any
 
-from vtsearch.media.base import MediaClipper
+from vtsearch.media.clipper import MediaClipper
 
 
 class ImageDefaultClipper(MediaClipper):
