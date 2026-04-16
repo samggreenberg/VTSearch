@@ -438,7 +438,7 @@ class TestFindLabel:
         Previously returned 400 because no pre-trained weights existed.
         """
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.datasets.labelset import LabelSet
         from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
@@ -505,7 +505,7 @@ class TestFindLabel:
         from unittest.mock import patch
 
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import medias
 
@@ -612,7 +612,7 @@ class TestFindLabel:
     def test_find_label_cross_dataset_error_includes_diagnostics(self, client, tmp_path):
         """When origin resolution fails, the error response should include diagnostics."""
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import medias
 
@@ -698,7 +698,8 @@ class TestFindLabel:
         """
         from vtsearch.datasets.labelset import LabelSet
         from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_model
+        from vtsearch.models.trainable_model_store import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
@@ -873,7 +874,7 @@ class TestFindLabelDemoOrigin:
         from unittest.mock import patch
 
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import medias
 
@@ -982,7 +983,7 @@ class TestFindLabelDemoOrigin:
         Simulates old pickles that stored demo origins without the dataset name.
         """
         from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _write_model
+        from vtsearch.models.trainable_model_store import _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import medias
 

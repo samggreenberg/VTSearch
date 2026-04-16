@@ -253,7 +253,7 @@ def seed_votes_from_examples():
     skipped = len(examples) - seeded
 
     if seeded > 0:
-        from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
         sync_labels_to_loaded_model()
 

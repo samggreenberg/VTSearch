@@ -108,7 +108,7 @@ def find_label():
     import torch  # noqa: PLC0415
 
     from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.routes.trainable_models import _model_path, _read_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
     from vtsearch.utils import (
         apply_labels_bulk_with_click_time,
         get_autorun_detectors,

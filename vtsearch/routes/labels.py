@@ -153,7 +153,7 @@ def import_labels():
             apply_label(cid, label)
         applied += 1
 
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
     sync_labels_to_loaded_model()
 
@@ -269,7 +269,7 @@ def fill_labels_from_sort():
         },
     }
 
-    from vtsearch.routes.trainable_models import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_model
 
     sync_labels_to_loaded_model()
 
