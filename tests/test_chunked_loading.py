@@ -20,14 +20,7 @@ from vtsearch.datasets.loader import (
 )
 
 
-from helpers import make_wav_bytes as _make_wav_bytes
-
-
-def _make_wav_file(tmp_dir: Path, name: str, frequency: float = 440.0) -> Path:
-    """Write a WAV file and return its path."""
-    p = tmp_dir / name
-    p.write_bytes(_make_wav_bytes(frequency))
-    return p
+from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file
 
 
 def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float = 440.0) -> Path:

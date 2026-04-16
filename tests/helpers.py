@@ -41,6 +41,28 @@ def make_raw_wav_bytes() -> bytes:
     return buf.getvalue()
 
 
+def make_wav_file(tmp_dir: Path, name: str, frequency: float = 440.0) -> Path:
+    """Write a WAV file to ``tmp_dir / name`` and return its path."""
+    p = tmp_dir / name
+    p.write_bytes(make_wav_bytes(frequency))
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Dataset pickle helpers
+# ---------------------------------------------------------------------------
+
+
+def make_dataset_file(tmp_path, clips_dict, name: str = "dataset.pkl") -> Path:
+    """Export a medias dict to a pickle file and return the path."""
+    from vtsearch.datasets.loader import export_dataset_to_file  # noqa: PLC0415
+
+    pkl_bytes = export_dataset_to_file(clips_dict)
+    dataset_path = tmp_path / name
+    dataset_path.write_bytes(pkl_bytes)
+    return dataset_path
+
+
 # ---------------------------------------------------------------------------
 # Detector / results helpers
 # ---------------------------------------------------------------------------
