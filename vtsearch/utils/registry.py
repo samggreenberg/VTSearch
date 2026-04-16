@@ -38,7 +38,7 @@ import threading
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Callable, Generic, Literal, TypeVar
 
 FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path"]
 
@@ -47,6 +47,7 @@ __all__ = [
     "PluginBase",
     "PluginField",
     "PluginRegistry",
+    "make_plugin_registry",
 ]
 
 
@@ -324,3 +325,38 @@ class PluginRegistry(Generic[T]):
         """Return all registered plugins in discovery order."""
         self._ensure_discovered()
         return list(self._items.values())
+
+
+# ---------------------------------------------------------------------------
+# Factory helper — collapses the per-package boilerplate into one call
+# ---------------------------------------------------------------------------
+
+
+def make_plugin_registry(
+    package: str,
+    sentinel: str,
+    label: str,
+    *,
+    discover_modules: bool = False,
+) -> tuple[Callable[[str], Any], Callable[[], list[Any]]]:
+    """Create a :class:`PluginRegistry` and return its ``(get, list)`` accessors.
+
+    Shorthand for the boilerplate repeated across every plugin ``__init__.py``::
+
+        from vtsearch.utils.registry import make_plugin_registry
+
+        get_importer, list_importers = make_plugin_registry(
+            package=__name__,
+            sentinel="IMPORTER",
+            label="dataset importer",
+        )
+
+    Parameters are forwarded to :class:`PluginRegistry`.
+    """
+    registry: PluginRegistry = PluginRegistry(
+        package=package,
+        sentinel=sentinel,
+        label=label,
+        discover_modules=discover_modules,
+    )
+    return registry.get, registry.list

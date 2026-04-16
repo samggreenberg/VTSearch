@@ -13,25 +13,12 @@ Usage::
         print(exp.name, exp.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.settings_io.exporters.base import SettingsExporter
-
-_registry: PluginRegistry[SettingsExporter] = PluginRegistry(
-    package="vtsearch.settings_io.exporters",
+get_settings_exporter, list_settings_exporters = make_plugin_registry(
+    package=__name__,
     sentinel="SETTINGS_EXPORTER",
     label="settings exporter",
 )
 
-get_settings_exporter = _registry.get
-list_settings_exporters = _registry.list
-
-__all__ = [
-    "get_settings_exporter",
-    "list_settings_exporters",
-]
+__all__ = ["get_settings_exporter", "list_settings_exporters"]

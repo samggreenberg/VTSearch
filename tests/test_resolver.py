@@ -370,16 +370,17 @@ class TestDynamicImporterDispatch:
         custom = CustomImporter()
 
         # Temporarily register it in the importer registry
-        from vtsearch.datasets.importers import _registry
+        from vtsearch.datasets.importers import get_importer
 
-        _registry._ensure_discovered()
-        _registry._items[custom.name] = custom
+        registry = get_importer.__self__
+        registry._ensure_discovered()
+        registry._items[custom.name] = custom
         try:
             origin = {"importer": "test_custom", "params": {"path": str(tmp_path)}}
             result = resolve_file_from_origin(origin, origin_name="custom_media.wav")
             assert result == marker_file
         finally:
-            _registry._items.pop(custom.name, None)
+            registry._items.pop(custom.name, None)
 
 
 class TestResolveLabelEmbeddings:
