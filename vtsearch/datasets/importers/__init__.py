@@ -13,25 +13,12 @@ Usage::
         print(imp.name, imp.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.datasets.importers.base import DatasetImporter
-
-_registry: PluginRegistry[DatasetImporter] = PluginRegistry(
-    package="vtsearch.datasets.importers",
+get_importer, list_importers = make_plugin_registry(
+    package=__name__,
     sentinel="IMPORTER",
     label="dataset importer",
 )
 
-get_importer = _registry.get
-list_importers = _registry.list
-
-__all__ = [
-    "get_importer",
-    "list_importers",
-]
+__all__ = ["get_importer", "list_importers"]

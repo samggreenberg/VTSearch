@@ -13,25 +13,12 @@ Usage::
         print(src.name, src.display_name)
 """
 
-from __future__ import annotations
+from vtsearch.utils.registry import make_plugin_registry
 
-from typing import TYPE_CHECKING
-
-from vtsearch.utils.registry import PluginRegistry
-
-if TYPE_CHECKING:
-    from vtsearch.labels.sources.base import LabelsetSource
-
-_registry: PluginRegistry[LabelsetSource] = PluginRegistry(
-    package="vtsearch.labels.sources",
+get_labelset_source, list_labelset_sources = make_plugin_registry(
+    package=__name__,
     sentinel="LABELSET_SOURCE",
     label="labelset source",
 )
 
-get_labelset_source = _registry.get
-list_labelset_sources = _registry.list
-
-__all__ = [
-    "get_labelset_source",
-    "list_labelset_sources",
-]
+__all__ = ["get_labelset_source", "list_labelset_sources"]
