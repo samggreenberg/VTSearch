@@ -32,15 +32,18 @@ time. The `_discover_media_plugins()` function in
 `vtsearch/media/__init__.py` scans sub-packages of `vtsearch/media/` for
 module-level sentinel attributes:
 
-| Sentinel     | Type                  | Description                          |
-|--------------|-----------------------|--------------------------------------|
-| `MEDIA_TYPE` | `MediaType`           | A single media type instance         |
-| `EMBEDDERS`  | `list[MediaEmbedder]` | Embedder instances (may be empty)    |
-| `CLIPPERS`   | `list[MediaClipper]`  | Clipper instances (may be empty)     |
+| Sentinel     | Location                         | Type                 | Description                          |
+|--------------|----------------------------------|----------------------|--------------------------------------|
+| `MEDIA_TYPE` | media-type package `__init__.py` | `MediaType`          | A single media type instance         |
+| `CLIPPERS`   | media-type package `__init__.py` | `list[MediaClipper]` | Clipper instances (may be empty)     |
+| `EMBEDDER`   | an `embedder*.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
 
-To add a new built-in media type, create a sub-package under
-`vtsearch/media/` with an `__init__.py` that exposes the relevant
-sentinels. Symlinked directories are supported.
+Embedders use **one module per embedder**: any `embedder*.py` file inside
+a media-type package is auto-loaded and its module-level `EMBEDDER`
+sentinel is registered. Symlinked directories **and** symlinked embedder
+files are both supported, so a custom embedder can live outside the
+VTSearch tree and be wired in by symlinking a single file into the
+appropriate media-type package — no edits to any `__init__.py` required.
 
 Third-party or project-specific types can still be registered manually
 via `register()`, `register_embedder()`, and `register_clipper()`.
@@ -57,8 +60,9 @@ datasets are available, and how to load media-specific fields from files.
 
 ```
 vtsearch/media/<your_type>/
-├── __init__.py       # Must expose MEDIA_TYPE, EMBEDDERS, CLIPPERS sentinels
-└── media_type.py     # Your MediaType subclass (required)
+├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
+├── media_type.py     # Your MediaType subclass (required)
+└── embedder*.py      # Optional — one file per embedder, each exposing EMBEDDER
 ```
 
 ### What to implement
@@ -152,11 +156,20 @@ Expose the sentinels in your sub-package's `__init__.py`:
 # vtsearch/media/code/__init__.py
 
 from vtsearch.media.code.media_type import CodeMediaType
-from vtsearch.media.code.embedder import CodeBertEmbedder
 
 MEDIA_TYPE = CodeMediaType()
-EMBEDDERS = [CodeBertEmbedder()]
 CLIPPERS = []  # No clippers yet — add when needed
+```
+
+Each embedder lives in its own `embedder*.py` file with an `EMBEDDER`
+sentinel at the bottom:
+
+```python
+# vtsearch/media/code/embedder_codebert.py
+
+# ... class definition ...
+
+EMBEDDER = CodeBertEmbedder()
 ```
 
 The auto-discovery system finds these sentinels at import time. No
@@ -362,19 +375,25 @@ For bulk APIs, also override `supports_batch` / `batch_size` and
 
 ### Register the embedder
 
-Add the embedder to the `EMBEDDERS` sentinel list in your media type's
-`__init__.py`:
+Drop the embedder into an `embedder*.py` file inside the media-type
+package and expose an `EMBEDDER` sentinel at the bottom. Discovery is
+automatic — no edits to `__init__.py` are needed:
 
 ```python
-# vtsearch/media/code/__init__.py
+# vtsearch/media/code/embedder_codebert.py
 
-from vtsearch.media.code.embedder import CodeBertEmbedder
-# ...
-EMBEDDERS = [CodeBertEmbedder()]
+class CodeBertEmbedder(MediaEmbedder):
+    ...
+
+EMBEDDER = CodeBertEmbedder()
 ```
 
-For an alternative embedder on an **existing** media type, add it to that
-type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
+For an alternative embedder on an **existing** media type, drop a new
+`embedder_<name>.py` file into that type's package (e.g.
+`vtsearch/media/image/embedder_myclip.py`) with its own `EMBEDDER`
+sentinel. To wire in a custom embedder living outside the VTSearch
+source tree, symlink the file in — symlinked embedder modules are
+loaded via `spec_from_file_location` so discovery still works.
 
 ### MediaEmbedder abstract interface reference
 
