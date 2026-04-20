@@ -127,6 +127,33 @@ def _has_override(
     return False
 
 
+def _make_embed_input(
+    file_path: Path,
+    folder_path: Path,
+    origin: dict[str, Any] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Build a minimal media dict suitable for :meth:`MediaEmbedder.embed_media`.
+
+    File-based embedders pull ``media["media_path"]`` from this dict;
+    service-based embedders can use ``media["origin"]``, ``media["origin_name"]``,
+    and ``media.get("custom_metadata")`` to resolve the content without
+    touching local disk.  The full media dict (with bytes, md5, duration,
+    type-specific fields) is constructed after the embedding succeeds.
+    """
+    rel_path = file_path.relative_to(folder_path).as_posix()
+    file_cm: dict[str, Any] | None = None
+    if custom_metadata_map:
+        file_cm = custom_metadata_map.get(rel_path) or custom_metadata_map.get(file_path.name)
+    return {
+        "media_path": str(file_path.resolve()),
+        "origin": origin,
+        "origin_name": rel_path,
+        "filename": rel_path,
+        "custom_metadata": file_cm,
+    }
+
+
 def _batch_embed_files(
     emb: Any,
     media_files: list[Path],
@@ -135,42 +162,47 @@ def _batch_embed_files(
     custom_metadata_map: dict[str, dict[str, Any]] | None,
     on_progress: ProgressCallback,
     media_type: str,
+    origin: dict[str, Any] | None = None,
 ) -> dict[Path, Any]:
     """Pre-compute embeddings for *media_files* via :meth:`embed_media_batch`.
 
     Files whose embedding is already resolved by ``custom_metadata`` or
     ``content_vectors`` are skipped (they don't need to be sent to the
-    model).  Remaining files are grouped into batches of ``emb.batch_size``
+    model).  Remaining files are packaged into minimal media dicts (via
+    :func:`_make_embed_input`), grouped into batches of ``emb.batch_size``,
     and flushed via :meth:`MediaEmbedder.embed_media_batch`.
 
     Returns a dict mapping ``Path`` → embedding vector.  Paths whose
     batch call returned ``None`` are omitted, matching the per-file
     behaviour of skipping files that fail to embed.
     """
-    pending: list[Path] = []
+    pending_paths: list[Path] = []
+    pending_medias: list[dict[str, Any]] = []
     for file_path in media_files:
         rel_path = file_path.relative_to(folder_path).as_posix()
         if _has_override(rel_path, file_path.name, content_vectors, custom_metadata_map):
             continue
-        pending.append(file_path)
+        pending_paths.append(file_path)
+        pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
 
     results: dict[Path, Any] = {}
-    if not pending:
+    if not pending_paths:
         return results
 
     bsize = max(1, emb.batch_size)
-    total = len(pending)
+    total = len(pending_paths)
     for start in range(0, total, bsize):
-        batch = pending[start : start + bsize]
+        batch_paths = pending_paths[start : start + bsize]
+        batch_medias = pending_medias[start : start + bsize]
         batch_idx = start // bsize + 1
         on_progress(
             "embedding",
-            f"Embedding {media_type} batch {batch_idx} ({len(batch)} files)...",
-            min(start + len(batch), total),
+            f"Embedding {media_type} batch {batch_idx} ({len(batch_paths)} files)...",
+            min(start + len(batch_paths), total),
             total,
         )
-        vectors = emb.embed_media_batch(batch)
-        for fp, vec in zip(batch, vectors):
+        vectors = emb.embed_media_batch(batch_medias)
+        for fp, vec in zip(batch_paths, vectors):
             if vec is not None:
                 results[fp] = vec
     return results
@@ -312,7 +344,8 @@ def load_dataset_from_folder(
     batch_embeddings: dict[Path, Any] = {}
     if use_batch:
         batch_embeddings = _batch_embed_files(
-            emb, media_files, folder_path, content_vectors, custom_metadata_map, on_progress, media_type
+            emb, media_files, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
+            origin=origin,
         )
 
     try:
@@ -354,7 +387,9 @@ def load_dataset_from_folder(
                 if use_batch:
                     embedding = batch_embeddings.get(file_path)
                 else:
-                    embedding = emb.embed_media(file_path)
+                    embedding = emb.embed_media(
+                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
+                    )
                 if embedding is None:
                     continue
 
@@ -577,7 +612,8 @@ def load_dataset_from_folder_chunked(
         chunk_batch_embeddings: dict[Path, Any] = {}
         if use_batch:
             chunk_batch_embeddings = _batch_embed_files(
-                emb, batch, folder_path, content_vectors, custom_metadata_map, on_progress, media_type
+                emb, batch, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
+                origin=origin,
             )
 
         for i, file_path in enumerate(batch):
@@ -616,7 +652,9 @@ def load_dataset_from_folder_chunked(
                 if use_batch:
                     embedding = chunk_batch_embeddings.get(file_path)
                 else:
-                    embedding = emb.embed_media(file_path)
+                    embedding = emb.embed_media(
+                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
+                    )
                 if embedding is None:
                     continue
 

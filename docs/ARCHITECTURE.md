@@ -361,16 +361,25 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 Each embedder is a self-contained class (separate from the `MediaType`).
 Instantiate it, call `load_models()`, then use `embed_media()` /
-`embed_text()`:
+`embed_text()`.  `embed_media()` takes a **media dict** (the same shape the
+dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
 from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()
-embedder.load_models()                        # loads CLAP (cached)
-embedding = embedder.embed_media(Path("example.wav"))  # → numpy array
-text_vec  = embedder.embed_text("birdsong")            # same space
+embedder.load_models()                                            # loads CLAP (cached)
+embedding = embedder.embed_media(media_from_path("example.wav"))  # → numpy array
+text_vec  = embedder.embed_text("birdsong")                       # same space
 ```
+
+Because the embedder sees the whole media dict (not just a `Path`), a
+service-based embedder can resolve content via `media["origin"]` /
+`media.get("custom_metadata")` without touching local disk — e.g. a
+remote lookup by `origin["params"]["content_id"]`.  Bulk APIs can override
+`supports_batch = True` / `batch_size` and `_embed_media_batch_impl(medias)`
+to flush whole batches through the loader.
 
 No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:

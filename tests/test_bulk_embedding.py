@@ -34,8 +34,8 @@ def _make_batch_embedder(batch_size: int = 32, embed_return_dim: int = 3):
     emb.supports_batch = True
     emb.batch_size = batch_size
 
-    def _batch(paths):
-        return [np.full(embed_return_dim, float(i), dtype=np.float32) for i, _ in enumerate(paths)]
+    def _batch(medias):
+        return [np.full(embed_return_dim, float(i), dtype=np.float32) for i, _ in enumerate(medias)]
 
     emb.embed_media_batch.side_effect = _batch
     return emb
@@ -72,7 +72,7 @@ class TestEmbedderDefaults:
             )
 
     def test_default_batch_impl_loops_over_single(self, tmp_path):
-        """The default _embed_media_batch_impl dispatches to _embed_media_impl per file."""
+        """The default _embed_media_batch_impl dispatches to _embed_media_impl per item."""
         from vtsearch.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
@@ -87,18 +87,18 @@ class TestEmbedderDefaults:
             def _load_models_impl(self):
                 self._model = True
 
-            def _embed_media_impl(self, file_path):
-                return np.array([float(file_path.stat().st_size)], dtype=np.float32)
+            def _embed_media_impl(self, media):
+                return np.array([float(Path(media["media_path"]).stat().st_size)], dtype=np.float32)
 
         emb = _Stub()
         emb._model = True
-        files = []
+        medias = []
         for i, name in enumerate(["a.bin", "b.bin", "c.bin"]):
             p = tmp_path / name
             p.write_bytes(b"x" * (i + 1))
-            files.append(p)
+            medias.append({"media_path": str(p)})
 
-        vecs = emb.embed_media_batch(files)
+        vecs = emb.embed_media_batch(medias)
         assert len(vecs) == 3
         assert vecs[0][0] == 1.0
         assert vecs[1][0] == 2.0
@@ -120,7 +120,7 @@ class TestEmbedderDefaults:
             def _load_models_impl(self):
                 self._model = True
 
-            def _embed_media_impl(self, file_path):
+            def _embed_media_impl(self, media):
                 raise AssertionError("should not be called for empty batch")
 
         emb = _Stub()
@@ -153,8 +153,8 @@ class TestLoaderRoutesToBatch:
         assert len(medias) == 3
         # Exactly one batch call — all three files in one request.
         assert emb.embed_media_batch.call_count == 1
-        sent_paths = emb.embed_media_batch.call_args.args[0]
-        assert sorted(p.name for p in sent_paths) == ["a.wav", "b.wav", "c.wav"]
+        sent_medias = emb.embed_media_batch.call_args.args[0]
+        assert sorted(Path(m["media_path"]).name for m in sent_medias) == ["a.wav", "b.wav", "c.wav"]
         # Per-file embed_media must NOT have been called.
         emb.embed_media.assert_not_called()
 
@@ -209,7 +209,7 @@ class TestLoaderRoutesToBatch:
         # Only the non-overridden file should have been batched.
         assert emb.embed_media_batch.call_count == 1
         sent = emb.embed_media_batch.call_args.args[0]
-        assert [p.name for p in sent] == ["keep.wav"]
+        assert [Path(m["media_path"]).name for m in sent] == ["keep.wav"]
 
         # Verify overrides won
         by_name = {m["filename"]: m["embedding"] for m in medias.values()}
@@ -252,8 +252,11 @@ class TestLoaderRoutesToBatch:
         emb.supports_batch = True
         emb.batch_size = 32
 
-        def _batch(paths):
-            return [None if p.name == "bad.wav" else np.array([1.0, 2.0]) for p in paths]
+        def _batch(medias_in):
+            return [
+                None if Path(m["media_path"]).name == "bad.wav" else np.array([1.0, 2.0])
+                for m in medias_in
+            ]
 
         emb.embed_media_batch.side_effect = _batch
 

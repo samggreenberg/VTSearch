@@ -153,14 +153,17 @@ config.TRAIN_EPOCHS = 30
 _EMBEDDING_DIM = 512
 
 
-def _fake_embed_audio(path):
+def _fake_embed_audio(arg):
     """Deterministic fake audio embedding derived from the file contents.
 
-    Uses the first 1000 bytes of the file as a seed so that different audio
-    files (even when written to the same temp path) produce distinct vectors.
+    Accepts either a path (from the legacy ``embed_audio_file`` wrapper) or a
+    media dict (from ``MediaEmbedder.embed_media``).  Uses the first 1000
+    bytes of the resolved file as a seed so that different audio files
+    (even when written to the same temp path) produce distinct vectors.
     """
     import hashlib
 
+    path = arg["media_path"] if isinstance(arg, dict) else arg
     try:
         with open(path, "rb") as f:
             data = f.read(1000)
@@ -290,7 +293,6 @@ def _stub_embedding_models():
     stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
     for mt in _ALL_MEDIA_TYPES:
         stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
         stack.enter_context(patch.object(mt, "load_models"))
     for emb in _ALL_EMBEDDERS:
         stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))

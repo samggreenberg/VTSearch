@@ -436,10 +436,12 @@ class VideoMediaType(MediaType):
         on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}
 
+        from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
         for i, (video_path, meta) in enumerate(video_files):
             rel_name = f"{meta['category']}/{video_path.name}"
             on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
-            embedding = embedder.embed_media(video_path)
+            embedding = embedder.embed_media(media_from_path(video_path))
             if embedding is None:
                 continue
             with open(video_path, "rb") as f:

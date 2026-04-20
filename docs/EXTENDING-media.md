@@ -198,7 +198,6 @@ changes to `vtsearch/media/__init__.py` are needed.
 |-------------------------------|------------------------------------|------------------------------------|
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
-| `embed_media(file_path)`      | `(Path) -> Optional[np.ndarray]`   | Inline embedding (legacy, prefer MediaEmbedder) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
 
@@ -253,7 +252,7 @@ Each media type has one default embedder in `embedder.py`. To add an
 
 ### What to implement
 
-Subclass `MediaEmbedder` from `vtsearch.media.base`.
+Subclass `MediaEmbedder` from `vtsearch.media.embedder`.
 
 ```python
 # vtsearch/media/code/embedder.py
@@ -304,20 +303,26 @@ class CodeBertEmbedder(MediaEmbedder):
 
     # --- Embedding (required abstract method) ---
 
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the file.
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for a media item.
 
-        Override ``_embed_media_impl`` (not ``embed_media``).
-        The public ``embed_media()`` wrapper acquires a global lock
-        so that only one forward pass runs at a time.
+        *media* is a media dict.  File-based embedders read
+        ``Path(media["media_path"])``.  Service-based embedders can instead
+        use ``media["origin"]``, ``media["origin_name"]``, or
+        ``media.get("custom_metadata")`` to look up the content remotely
+        (e.g. by a ``content_id`` stashed in ``origin.params``).
 
-        Returns None if embedding fails. The vector dimensionality
-        must be consistent and must match embed_text().
+        Override ``_embed_media_impl`` (not ``embed_media``).  The public
+        ``embed_media()`` wrapper acquires a global lock so that only one
+        forward pass runs at a time.
+
+        Returns None if embedding fails.  The vector dimensionality must
+        be consistent and must match embed_text().
         """
         if self._model is None:
             self.load_models()
         try:
-            text = file_path.read_text(errors="replace")[:8000]
+            text = Path(media["media_path"]).read_text(errors="replace")[:8000]
             return self._model.encode(text, normalize_embeddings=True)
         except Exception:
             return None
@@ -336,6 +341,24 @@ class CodeBertEmbedder(MediaEmbedder):
         except Exception:
             return None
 ```
+
+### Service-based embedders
+
+Embedders are not required to read a local file.  Because `_embed_media_impl`
+receives the full media dict, a service-based embedder can resolve content
+remotely from whatever identifier its importer stashed in
+`origin["params"]` or `media["custom_metadata"]`:
+
+```python
+def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+    content_id = (media.get("origin") or {}).get("params", {}).get("content_id")
+    if not content_id:
+        return None  # no server identifier → cannot embed
+    return self._client.get_embedding(content_id)
+```
+
+For bulk APIs, also override `supports_batch` / `batch_size` and
+`_embed_media_batch_impl(medias)` to flush a whole list in one request.
 
 ### Register the embedder
 
@@ -364,17 +387,25 @@ type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
 
 **Required abstract methods:**
 
-| Method                      | Signature                        | Description                    |
-|-----------------------------|----------------------------------|--------------------------------|
-| `_load_models_impl()`       | `() -> None`                     | Load model; must be idempotent. Override this, not `load_models()` |
-| `embed_media(file_path)`    | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
+| Method                      | Signature                              | Description                    |
+|-----------------------------|----------------------------------------|--------------------------------|
+| `_load_models_impl()`       | `() -> None`                           | Load model; must be idempotent. Override this, not `load_models()` |
+| `_embed_media_impl(media)`  | `(dict) -> Optional[np.ndarray]`       | Embed a single media item. Override this, not `embed_media()`      |
 
 **Optional overridable methods:**
 
-| Method                          | Signature                         | Description                          |
-|---------------------------------|-----------------------------------|--------------------------------------|
-| `embed_text(text)`              | `(str) -> Optional[np.ndarray]`   | Embed a text query (default: `None`) |
-| `embed_text_enriched(text)`     | `(str) -> Optional[np.ndarray]`   | Average over `description_wrappers`  |
+| Method                                | Signature                                          | Description                          |
+|---------------------------------------|----------------------------------------------------|--------------------------------------|
+| `embed_text(text)`                    | `(str) -> Optional[np.ndarray]`                    | Embed a text query (default: `None`) |
+| `embed_text_enriched(text)`           | `(str) -> Optional[np.ndarray]`                    | Average over `description_wrappers`  |
+| `_embed_media_batch_impl(medias)`     | `(list[dict]) -> list[Optional[np.ndarray]]`       | Bulk embed; default loops over `_embed_media_impl`. Override with `supports_batch=True` for a remote bulk API |
+
+**Optional overridable properties:**
+
+| Property          | Returns | Description                                                                 |
+|-------------------|---------|-----------------------------------------------------------------------------|
+| `supports_batch`  | `bool`  | Set to `True` to route loader through `embed_media_batch` (default: `False`) |
+| `batch_size`      | `int`   | Max items per batch call when `supports_batch=True` (default: `32`)          |
 
 **Optional overridable properties:**
 

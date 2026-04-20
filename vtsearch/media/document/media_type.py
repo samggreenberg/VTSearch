@@ -96,9 +96,6 @@ class DocumentMediaType(MediaType):
     def load_models(self) -> None:
         pass
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        return None
-
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         return None
 
