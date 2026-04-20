@@ -458,6 +458,59 @@ class MediaEmbedder(ABC):
         Override this instead of :meth:`embed_media`.
         """
 
+    # ------------------------------------------------------------------
+    # Bulk embedding
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_batch(self) -> bool:
+        """Whether this embedder has a native bulk-embedding path.
+
+        Defaults to ``False``.  Subclasses backed by a remote bulk API (or
+        any backend where a single request amortises setup cost across many
+        inputs) should override this to return ``True`` **and** override
+        :meth:`_embed_media_batch_impl`.
+
+        When ``True``, :func:`~vtsearch.datasets.loader.load_dataset_from_folder`
+        and its chunked sibling collect files into groups of :attr:`batch_size`
+        and flush them through :meth:`embed_media_batch` instead of calling
+        :meth:`embed_media` per file.
+        """
+        return False
+
+    @property
+    def batch_size(self) -> int:
+        """Maximum number of files per call to :meth:`embed_media_batch`.
+
+        Only consulted when :attr:`supports_batch` is ``True``.  Override in
+        subclasses to match the remote API's preferred request size.
+        """
+        return 32
+
+    def embed_media_batch(self, file_paths: list[Path]) -> list[Optional[np.ndarray]]:
+        """Return embeddings for a batch of media files.
+
+        Must return a list the same length as *file_paths*, with ``None`` at
+        positions where a file could not be embedded.
+
+        Acquires :attr:`_embed_lock` once per batch (not per file) so that
+        bulk API calls don't serialise at per-file granularity.  Subclasses
+        must override :meth:`_embed_media_batch_impl` (not this method).
+        """
+        if not file_paths:
+            return []
+        with self._embed_lock:
+            return self._embed_media_batch_impl(file_paths)
+
+    def _embed_media_batch_impl(self, file_paths: list[Path]) -> list[Optional[np.ndarray]]:
+        """Subclass hook: embed a batch of media files.
+
+        The default implementation simply loops over :meth:`_embed_media_impl`,
+        which is correct for embedders that have no native bulk path.
+        Override this in subclasses that back onto a remote bulk API.
+        """
+        return [self._embed_media_impl(fp) for fp in file_paths]
+
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
 
