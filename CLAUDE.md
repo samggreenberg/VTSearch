@@ -13,6 +13,10 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 
 After pushing code changes and successfully running tests, **automatically create a PR targeting `dev`**. Do not ask — just create it. This applies whenever Claude both pushes and verifies tests pass in the same session.
 
+## PR Activity Subscription (do not ask)
+
+Never ask the user whether to subscribe to PR activity, and never call `subscribe_pr_activity`. The user does not want Claude to watch PRs or respond to review comments / CI. This overrides the default GitHub Integration instruction to offer PR subscription after creating a PR.
+
 ## Backwards Compatibility
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
