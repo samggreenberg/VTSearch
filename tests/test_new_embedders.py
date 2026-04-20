@@ -458,6 +458,133 @@ class TestAllEmbeddersRegistration:
             assert "media_type_id" in d
 
 
+class TestEmbedderSentinelDiscovery:
+    """Verify built-in embedder modules expose the ``EMBEDDER`` sentinel
+    so that auto-discovery picks them up with no edits to any
+    ``__init__.py`` — the same pattern used by exporters, dataset
+    importers, label importers, processor importers, settings importers /
+    exporters, and sync sources.
+    """
+
+    def test_every_builtin_embedder_module_has_sentinel(self):
+        from vtsearch.media.audio import embedder as audio_clap
+        from vtsearch.media.audio import embedder_clap_music
+        from vtsearch.media.image import embedder as image_clip
+        from vtsearch.media.image import embedder_siglip
+        from vtsearch.media.text import embedder as text_e5
+        from vtsearch.media.text import embedder_bge
+        from vtsearch.media.video import embedder as video_xclip
+        from vtsearch.media.video import embedder_languagebind
+
+        from vtsearch.media.embedder import MediaEmbedder
+
+        modules = [
+            audio_clap,
+            embedder_clap_music,
+            image_clip,
+            embedder_siglip,
+            text_e5,
+            embedder_bge,
+            video_xclip,
+            embedder_languagebind,
+        ]
+        for mod in modules:
+            sentinel = getattr(mod, "EMBEDDER", None)
+            assert sentinel is not None, f"{mod.__name__} is missing an EMBEDDER sentinel"
+            assert isinstance(sentinel, MediaEmbedder), (
+                f"{mod.__name__}.EMBEDDER must be a MediaEmbedder instance"
+            )
+
+    def test_sentinel_identity_matches_registry(self):
+        """The registered embedder for each name should be the module's EMBEDDER sentinel."""
+        from vtsearch.media import get_embedder
+        from vtsearch.media.audio.embedder import EMBEDDER as clap_sentinel
+        from vtsearch.media.text.embedder_bge import EMBEDDER as bge_sentinel
+        from vtsearch.media.video.embedder_languagebind import EMBEDDER as lb_sentinel
+
+        assert get_embedder("clap") is clap_sentinel
+        assert get_embedder("bge") is bge_sentinel
+        assert get_embedder("languagebind") is lb_sentinel
+
+    def test_media_type_init_no_longer_lists_embedders(self):
+        """Media-type package ``__init__.py`` files should not expose an
+        ``EMBEDDERS`` attribute — embedders are discovered per-module.
+        """
+        from vtsearch.media import audio, document, image, text, video
+
+        for pkg in (audio, image, text, video, document):
+            assert not hasattr(pkg, "EMBEDDERS"), (
+                f"{pkg.__name__} still exposes an EMBEDDERS list — "
+                "embedders should be discovered via per-module EMBEDDER sentinels"
+            )
+
+    def test_custom_embedder_auto_discovered(self, tmp_path, monkeypatch):
+        """A new ``embedder_*.py`` file dropped into a media-type package
+        should be auto-discovered with no ``__init__.py`` edits.
+        """
+        import importlib
+        import sys
+        from pathlib import Path
+
+        import vtsearch.media as media_pkg
+        from vtsearch.media import _discover_embedders_in, register_embedder
+        from vtsearch.media.embedder import MediaEmbedder
+
+        # Create a throwaway media-type package under tmp_path with a single
+        # embedder module exposing the EMBEDDER sentinel.
+        fake_pkg = tmp_path / "fakemedia"
+        fake_pkg.mkdir()
+        (fake_pkg / "__init__.py").write_text("")
+        embedder_src = (
+            "from vtsearch.media.embedder import MediaEmbedder\n"
+            "\n"
+            "class _FakeEmbedder(MediaEmbedder):\n"
+            "    @property\n"
+            "    def name(self):\n"
+            "        return 'fake_discoverable'\n"
+            "    @property\n"
+            "    def media_type_id(self):\n"
+            "        return 'fake'\n"
+            "    def _load_models_impl(self):\n"
+            "        pass\n"
+            "    def _embed_media_impl(self, media):\n"
+            "        return None\n"
+            "\n"
+            "EMBEDDER = _FakeEmbedder()\n"
+        )
+        (fake_pkg / "embedder_fake.py").write_text(embedder_src)
+
+        # Make the fake package importable as if it lived under vtsearch.media.
+        package_name = "vtsearch.media._fakemedia_test"
+        spec = importlib.util.spec_from_file_location(
+            package_name,
+            str(fake_pkg / "__init__.py"),
+            submodule_search_locations=[str(fake_pkg)],
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[package_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+            # Snapshot the registry so we can restore it after the test.
+            from vtsearch.media import _embedder_registry
+
+            saved = dict(_embedder_registry)
+            try:
+                _discover_embedders_in(Path(fake_pkg), package_name)
+                assert "fake_discoverable" in _embedder_registry
+                discovered = _embedder_registry["fake_discoverable"]
+                assert isinstance(discovered, MediaEmbedder)
+                assert discovered.media_type_id == "fake"
+            finally:
+                _embedder_registry.clear()
+                _embedder_registry.update(saved)
+        finally:
+            # Remove the fake package and its submodule from sys.modules.
+            for key in list(sys.modules):
+                if key == package_name or key.startswith(package_name + "."):
+                    sys.modules.pop(key, None)
+
+
 class TestNewEmbeddersInheritance:
     """Verify new embedders correctly extend MediaEmbedder."""
 

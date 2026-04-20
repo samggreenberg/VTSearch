@@ -166,3 +166,6 @@ class VideoXClipEmbedder(MediaEmbedder):
         if self._model is None:
             self.load_models()
         return self._model, self._processor
+
+
+EMBEDDER = VideoXClipEmbedder()
