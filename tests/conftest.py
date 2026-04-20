@@ -74,6 +74,7 @@ _TEST_GROUPS = {
         "test_corrections_export",
         "test_settings_io",
         "test_sync_sources",
+        "test_bulk_embedding",
     ],
     "models": [
         "test_detectors",
