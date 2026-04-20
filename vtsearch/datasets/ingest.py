@@ -89,6 +89,45 @@ def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
     return ""
 
 
+def _build_media_data(
+    *,
+    origin_dict: dict[str, Any],
+    entry: dict[str, Any],
+    media_type_id: str,
+    origin_name: str,
+    file_path: Any,
+    file_bytes: bytes,
+    md5: str,
+    embedding: Any,
+) -> dict[str, Any]:
+    """Build a media dict matching the shape produced by folder loading.
+
+    Mirrors the field set in ``loader.py`` so re-ingested medias carry
+    their media ``type`` (without it the frontend falls back to audio)
+    and any ``custom_metadata`` supplied by the label entry (via
+    :class:`~vtsearch.datasets.labelset.LabeledElement.metadata`).
+    """
+    name = origin_name or file_path.name
+    media_data: dict[str, Any] = {
+        "type": media_type_id,
+        "file_size": len(file_bytes),
+        "md5": md5,
+        "embedding": embedding,
+        "filename": entry.get("filename") or name,
+        "category": entry.get("category", ""),
+        "origin": origin_dict,
+        "origin_name": name,
+        "media_bytes": file_bytes,
+        "media_string": None,
+        "media_path": str(file_path),
+        "duration": 0,
+    }
+    custom_metadata = entry.get("metadata")
+    if custom_metadata:
+        media_data["custom_metadata"] = custom_metadata
+    return media_data
+
+
 def _ingest_via_source(
     origin_dict: dict[str, Any],
     entries: list[dict[str, Any]],
@@ -133,20 +172,23 @@ def _ingest_via_source(
             file_bytes = file_path.read_bytes()
             md5 = hashlib.md5(file_bytes).hexdigest()
 
+            media_data = _build_media_data(
+                origin_dict=origin_dict,
+                entry=entry,
+                media_type_id=media_type_id,
+                origin_name=origin_name,
+                file_path=file_path,
+                file_bytes=file_bytes,
+                md5=md5,
+                embedding=embedding,
+            )
+
             # Allocate the ID and insert atomically, so two concurrent
             # ingests cannot collide on the same next_media_id.
             with _state_lock:
                 cid = next_media_id(medias)
-                medias[cid] = {
-                    "id": cid,
-                    "filename": origin_name or file_path.name,
-                    "origin": origin_dict,
-                    "origin_name": origin_name or file_path.name,
-                    "md5": md5,
-                    "embedding": embedding,
-                    "media_bytes": file_bytes,
-                    "media_path": str(file_path),
-                }
+                media_data["id"] = cid
+                medias[cid] = media_data
             ingested += 1
 
             on_progress(
@@ -207,19 +249,22 @@ def _ingest_via_resolver(
         file_bytes = file_path.read_bytes()
         md5 = hashlib.md5(file_bytes).hexdigest()
 
+        media_data = _build_media_data(
+            origin_dict=origin_dict,
+            entry=entry,
+            media_type_id=media_type_id,
+            origin_name=origin_name,
+            file_path=file_path,
+            file_bytes=file_bytes,
+            md5=md5,
+            embedding=embedding,
+        )
+
         # Atomic id allocation + insert, see _ingest_via_source above.
         with _state_lock:
             cid = next_media_id(medias)
-            medias[cid] = {
-                "id": cid,
-                "filename": origin_name or file_path.name,
-                "origin": origin_dict,
-                "origin_name": origin_name or file_path.name,
-                "md5": md5,
-                "embedding": embedding,
-                "media_bytes": file_bytes,
-                "media_path": str(file_path),
-            }
+            media_data["id"] = cid
+            medias[cid] = media_data
         ingested += 1
 
         on_progress(
