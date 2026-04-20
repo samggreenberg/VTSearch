@@ -5,7 +5,6 @@ without downloading model weights.
 """
 
 import threading
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -68,14 +67,12 @@ class TestImageSiglipEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from pathlib import Path
-
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         # Patch load_models to not actually load anything
         with patch.object(emb, "load_models"):
-            result = emb.embed_media(Path("/nonexistent.jpg"))
+            result = emb.embed_media({"media_path": "/nonexistent.jpg"})
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
@@ -155,13 +152,11 @@ class TestAudioClapMusicEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from pathlib import Path
-
         from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         with patch.object(emb, "load_models"):
-            result = emb.embed_media(Path("/nonexistent.wav"))
+            result = emb.embed_media({"media_path": "/nonexistent.wav"})
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
@@ -231,13 +226,11 @@ class TestTextBGEEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from pathlib import Path
-
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         with patch.object(emb, "load_models"):
-            result = emb.embed_media(Path("/nonexistent.txt"))
+            result = emb.embed_media({"media_path": "/nonexistent.txt"})
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
@@ -285,7 +278,7 @@ class TestTextBGEEmbedderProperties:
         text_file = tmp_path / "test.txt"
         text_file.write_text("Hello world", encoding="utf-8")
 
-        result = emb.embed_media(text_file)
+        result = emb.embed_media({"media_path": str(text_file)})
         assert result is not None
         mock_model.encode.assert_called_once_with("Hello world", normalize_embeddings=True)
 
@@ -363,7 +356,7 @@ class TestVideoLanguageBindEmbedderProperties:
 
         emb = VideoLanguageBindEmbedder()
         with patch.object(emb, "load_models"):
-            result = emb.embed_media(Path("/nonexistent.mp4"))
+            result = emb.embed_media({"media_path": "/nonexistent.mp4"})
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
@@ -527,7 +520,7 @@ class TestEmbedMediaLock:
             def _load_models_impl(self):
                 pass
 
-            def _embed_media_impl(self, file_path):
+            def _embed_media_impl(self, media):
                 nonlocal overlap_detected
                 if inside.is_set():
                     overlap_detected = True
@@ -543,7 +536,7 @@ class TestEmbedMediaLock:
         results = [None, None]
 
         def call_embed(idx):
-            results[idx] = emb.embed_media(Path("/fake"))
+            results[idx] = emb.embed_media({"media_path": "/fake"})
 
         t1 = threading.Thread(target=call_embed, args=(0,))
         t2 = threading.Thread(target=call_embed, args=(1,))
@@ -592,13 +585,13 @@ class TestEmbedMediaLock:
             def _load_models_impl(self):
                 pass
 
-            def _embed_media_impl(self, file_path):
+            def _embed_media_impl(self, media):
                 return np.ones(4, dtype=np.float32)
 
             def embed_text(self, text):
                 return None
 
         emb = SimpleEmbedder()
-        result = emb.embed_media(Path("/fake"))
+        result = emb.embed_media({"media_path": "/fake"})
         assert result is not None
         np.testing.assert_array_equal(result, np.ones(4, dtype=np.float32))

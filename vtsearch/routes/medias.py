@@ -635,8 +635,10 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
         tmp.write(file_bytes)
         tmp_path = Path(tmp.name)
 
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     try:
-        embedding = embedder.embed_media(tmp_path)
+        embedding = embedder.embed_media(media_from_path(tmp_path))
     finally:
         tmp_path.unlink(missing_ok=True)
 

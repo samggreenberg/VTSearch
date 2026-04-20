@@ -232,6 +232,8 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
     media_bytes = output.get("media_bytes")
     media_string = output.get("media_string")
 
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     if media_bytes:
         # Binary media (image, audio, video) — write to temp file.
         suffix = Path(output.get("filename", "output")).suffix or ".bin"
@@ -239,7 +241,7 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
             tmp.write(media_bytes)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_emb.embed_media(tmp_path)
+            embedding = target_emb.embed_media(media_from_path(tmp_path))
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding
@@ -250,7 +252,7 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
             tmp.write(media_string)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_emb.embed_media(tmp_path)
+            embedding = target_emb.embed_media(media_from_path(tmp_path))
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding

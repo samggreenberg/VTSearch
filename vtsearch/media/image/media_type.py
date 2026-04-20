@@ -411,9 +411,11 @@ class ImageMediaType(MediaType):
             total = len(selected)
             on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
 
+            from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
             for i, (img_path, category) in enumerate(selected):
                 on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
-                embedding = embedder.embed_media(img_path)
+                embedding = embedder.embed_media(media_from_path(img_path))
                 if embedding is None:
                     continue
                 with open(img_path, "rb") as f:
