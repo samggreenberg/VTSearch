@@ -98,11 +98,12 @@ class ImageSiglipEmbedder(MediaEmbedder):
             "a picture of {text}",
         ]
 
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:
             return None
+        file_path = Path(media["media_path"])
         try:
             from PIL import Image  # noqa: PLC0415
 

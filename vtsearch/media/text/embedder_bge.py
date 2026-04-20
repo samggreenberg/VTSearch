@@ -77,11 +77,12 @@ class TextBGEEmbedder(MediaEmbedder):
             "writing on the topic of {text}",
         ]
 
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None:
             return None
+        file_path = Path(media["media_path"])
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 text_content = f.read().strip()

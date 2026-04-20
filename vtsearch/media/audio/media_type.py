@@ -428,10 +428,12 @@ class AudioMediaType(MediaType):
         on_progress("embedding", f"Starting embedding for {total} audio files...", 0, total)
         demo_origin: dict = {"importer": "demo", "params": {}}
 
+        from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
         for i, (audio_path, meta) in enumerate(audio_files):
             rel_name = f"{meta['category']}/{audio_path.name}"
             on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
-            embedding = embedder.embed_media(audio_path)
+            embedding = embedder.embed_media(media_from_path(audio_path))
             if embedding is None:
                 continue
 

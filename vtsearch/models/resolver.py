@@ -294,8 +294,10 @@ def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
         )
         return None
     embedder = avail[0]
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     try:
-        result = embedder.embed_media(file_path)
+        result = embedder.embed_media(media_from_path(file_path))
     except Exception:
         log.warning(
             "embed_file: %s.embed_media(%s) raised an exception",

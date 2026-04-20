@@ -8,7 +8,6 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -22,8 +21,29 @@ __all__ = [
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
     "load_pretrained_local_first",
+    "media_from_path",
     "timed_progress",
 ]
+
+
+def media_from_path(file_path: Any, origin: dict | None = None) -> dict:
+    """Build a minimal media dict suitable for :meth:`MediaEmbedder.embed_media`.
+
+    Convenience helper for callers that only have a local file path (uploaded
+    files, converter outputs, seed data, CLI utilities).  File-based embedders
+    read ``media["media_path"]``; service-based embedders can also inspect
+    *origin* when supplied.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    p = Path(file_path)
+    return {
+        "media_path": str(p.resolve()),
+        "origin": origin,
+        "origin_name": p.name,
+        "filename": p.name,
+        "custom_metadata": None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -439,24 +459,83 @@ class MediaEmbedder(ABC):
     # Embedding
     # ------------------------------------------------------------------
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the media file at *file_path*.
+    def embed_media(self, media: dict) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for *media*.
+
+        *media* is a media dict (the same shape produced by the dataset
+        loader).  File-based embedders pull ``Path(media["media_path"])``;
+        service-based embedders can use ``media["origin"]``,
+        ``media["origin_name"]``, ``media.get("custom_metadata")`` etc. to
+        look the content up remotely without touching disk.
 
         Acquires :attr:`_embed_lock` so that only one forward pass runs at a
         time across all embedder types.  Subclasses must override
         :meth:`_embed_media_impl` (not this method).
 
-        Returns ``None`` if the file cannot be embedded.
+        Returns ``None`` if the media cannot be embedded.
         """
         with self._embed_lock:
-            return self._embed_media_impl(file_path)
+            return self._embed_media_impl(media)
 
     @abstractmethod
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
-        """Subclass hook: embed a single media file.
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+        """Subclass hook: embed a single media item.
 
         Override this instead of :meth:`embed_media`.
         """
+
+    # ------------------------------------------------------------------
+    # Bulk embedding
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_batch(self) -> bool:
+        """Whether this embedder has a native bulk-embedding path.
+
+        Defaults to ``False``.  Subclasses backed by a remote bulk API (or
+        any backend where a single request amortises setup cost across many
+        inputs) should override this to return ``True`` **and** override
+        :meth:`_embed_media_batch_impl`.
+
+        When ``True``, :func:`~vtsearch.datasets.loader.load_dataset_from_folder`
+        and its chunked sibling collect medias into groups of :attr:`batch_size`
+        and flush them through :meth:`embed_media_batch` instead of calling
+        :meth:`embed_media` per item.
+        """
+        return False
+
+    @property
+    def batch_size(self) -> int:
+        """Maximum number of items per call to :meth:`embed_media_batch`.
+
+        Only consulted when :attr:`supports_batch` is ``True``.  Override in
+        subclasses to match the remote API's preferred request size.
+        """
+        return 32
+
+    def embed_media_batch(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Return embeddings for a batch of media items.
+
+        Must return a list the same length as *medias*, with ``None`` at
+        positions where an item could not be embedded.
+
+        Acquires :attr:`_embed_lock` once per batch (not per item) so that
+        bulk API calls don't serialise at per-item granularity.  Subclasses
+        must override :meth:`_embed_media_batch_impl` (not this method).
+        """
+        if not medias:
+            return []
+        with self._embed_lock:
+            return self._embed_media_batch_impl(medias)
+
+    def _embed_media_batch_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Subclass hook: embed a batch of media items.
+
+        The default implementation simply loops over :meth:`_embed_media_impl`,
+        which is correct for embedders that have no native bulk path.
+        Override this in subclasses that back onto a remote bulk API.
+        """
+        return [self._embed_media_impl(m) for m in medias]
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
