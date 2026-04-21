@@ -444,19 +444,20 @@ def list_registered_models():
     for entry in entries:
         mid = entry["id"]
         entry["loaded"] = mid in loaded_ids
-        det_name = entry.get("detector_name", "")
+        # Trainable models created through the UI have detector_name="", but their
+        # autorun key is the display name (matches the frontend's toggleAutorun fallback).
+        det_name = entry.get("detector_name", "") or entry.get("name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
             entry["autodetect"] = bool(det.get("autodetect"))
         else:
-            # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
         # detector_loaded: True when the model has inference data in RAM.
         # Either via a DetectorContext (multi-loaded) or via autorun_detectors weights.
         if mid in loaded_ids:
             entry["detector_loaded"] = True
-        elif det_name and det:
+        elif det:
             entry["detector_loaded"] = det.get("weights") is not None
         else:
             entry["detector_loaded"] = False

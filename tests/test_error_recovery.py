@@ -307,10 +307,13 @@ class TestNonexistentResources:
         assert resp.status_code == 400  # "not found or new name already exists"
 
     def test_autodetect_nonexistent_detector(self, client):
+        # autodetect=True on a name without an in-memory detector persists to
+        # settings (for model-registry entries that haven't been trained yet)
+        # and returns 200; disabling on a missing detector still returns 404.
         resp = client.put(
             "/api/autorun-detectors/does_not_exist/autodetect",
             json={
-                "autodetect": True,
+                "autodetect": False,
             },
         )
         assert resp.status_code == 404
