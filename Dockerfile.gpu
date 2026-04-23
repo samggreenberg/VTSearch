@@ -57,6 +57,7 @@ ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
     PYTHONUNBUFFERED=1 \
     NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    VTSEARCH_SERVER_INIT=1
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
