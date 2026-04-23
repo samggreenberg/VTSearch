@@ -331,9 +331,6 @@ if __name__ == "__main__":
         if imported is not None:
             print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
 
-        if args.local:
-            app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
-        else:
-            print("\u2705 VTSearch is ready!", flush=True)
-            print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
-            app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+        print("\u2705 VTSearch is ready!", flush=True)
+        print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
