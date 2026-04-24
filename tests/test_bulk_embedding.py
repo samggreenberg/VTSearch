@@ -465,12 +465,38 @@ class TestEmbedMediasDictWrapper:
 
     def test_delegates_to_embed_media_bulk(self):
         """The wrapper calls embed_media_bulk once with values in key order."""
-        emb = _make_bulk_embedder()
-        medias = {10: {"x": 1}, 20: {"x": 2}, 30: {"x": 3}}
+        from vtsearch.media.embedder import MediaEmbedder
 
+        captured: list[list[dict]] = []
+
+        class _Stub(MediaEmbedder):
+            @property
+            def name(self):
+                return "stub"
+
+            @property
+            def media_type_id(self):
+                return "audio"
+
+            def _load_models_impl(self):
+                self._model = True
+
+            def _embed_media_impl(self, media):
+                return np.array([float(media["x"])], dtype=np.float32)
+
+            def _embed_media_bulk_impl(self, medias):
+                captured.append(list(medias))
+                return [np.array([float(m["x"])], dtype=np.float32) for m in medias]
+
+        emb = _Stub()
+        emb._model = True
+
+        medias = {10: {"x": 1}, 20: {"x": 2}, 30: {"x": 3}}
         out = emb.embed_medias(medias)
 
-        assert emb.embed_media_bulk.call_count == 1
-        sent = emb.embed_media_bulk.call_args.args[0]
-        assert sent == [{"x": 1}, {"x": 2}, {"x": 3}]
+        assert len(captured) == 1
+        assert captured[0] == [{"x": 1}, {"x": 2}, {"x": 3}]
         assert set(out.keys()) == {10, 20, 30}
+        assert out[10][0] == 1.0
+        assert out[20][0] == 2.0
+        assert out[30][0] == 3.0
