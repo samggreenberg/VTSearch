@@ -254,6 +254,9 @@ class TestSymlinkedFolderImport:
         mt._mock_embedder.media_type_id = "audio"
         mt._mock_embedder._model = True
         mt._mock_embedder.embed_media.return_value = np.zeros(3)
+        mt._mock_embedder.embed_media_bulk.side_effect = lambda medias: [
+            mt._mock_embedder.embed_media(m) for m in medias
+        ]
         return mt
 
     def _patch_media_registry(self, mt):

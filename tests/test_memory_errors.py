@@ -142,6 +142,9 @@ class TestFolderMemoryError:
             return np.zeros(10)
 
         mock_emb.embed_media.side_effect = embed_then_oom
+        # Route the bulk entrypoint through embed_media so the per-file OOM
+        # simulator still fires under the loader's bulk dispatch.
+        mock_emb.embed_media_bulk.side_effect = lambda medias: [mock_emb.embed_media(m) for m in medias]
         mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
         with (

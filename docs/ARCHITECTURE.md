@@ -377,9 +377,11 @@ text_vec  = embedder.embed_text("birdsong")                       # same space
 Because the embedder sees the whole media dict (not just a `Path`), a
 service-based embedder can resolve content via `media["origin"]` /
 `media.get("custom_metadata")` without touching local disk — e.g. a
-remote lookup by `origin["params"]["content_id"]`.  Bulk APIs can override
-`supports_batch = True` / `batch_size` and `_embed_media_batch_impl(medias)`
-to flush whole batches through the loader.
+remote lookup by `origin["params"]["content_id"]`.  The loader always
+routes every pending file through `embed_media_bulk(medias)`; the ABC's
+default implementation loops per item (with progress).  Services that
+natively accept many items per request override `_embed_media_bulk_impl`
+and batch internally.
 
 No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:

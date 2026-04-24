@@ -35,6 +35,8 @@ def _make_mock_media_type():
     emb.media_type_id = "audio"
     emb._model = True  # already loaded
     emb.embed_media.return_value = np.zeros(8)
+    # Route the loader's bulk dispatch through the per-file mock.
+    emb.embed_media_bulk.side_effect = lambda medias: [emb.embed_media(m) for m in medias]
     return mt, emb
 
 
