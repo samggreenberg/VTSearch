@@ -688,6 +688,25 @@ class TestAutorunCheckboxPersistence:
         m = resp.get_json()["models"][0]
         assert m["autodetect"] is False
 
+    def test_autodetect_toggle_reflects_in_registry_for_trainable_model(self, client):
+        """Trainable models created via the UI have detector_name="".
+
+        Toggling autorun uses the display name, and the registry response must
+        reflect the toggle state by falling back to the name when detector_name
+        is empty — otherwise the Autorun button in the Models grid appears dead.
+        """
+        register_model(name="Dog Barks", media_type="audio", trainable=True)
+
+        resp = client.put(
+            "/api/autorun-detectors/Dog Barks/autodetect",
+            json={"autodetect": True},
+        )
+        assert resp.status_code == 200
+
+        resp = client.get("/api/models/registry")
+        m = next(m for m in resp.get_json()["models"] if m["name"] == "Dog Barks")
+        assert m["autodetect"] is True
+
     def test_autorun_not_in_settings_window(self, client):
         """autorun_detector_names should not appear in the defaults endpoint."""
         resp = client.get("/api/settings/defaults")

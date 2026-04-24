@@ -80,7 +80,7 @@
       </span>
     } @else {
       <button class="load-action" (click)="onLoad($event)" title="Click to load this dataset" aria-label="Load dataset">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
@@ -91,20 +91,20 @@
     <div class="actions-cell">
     @if (!isDefaultLogin) {
       <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
       </button>
     }
     <button class="edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
-      <svg aria-hidden="true" [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg aria-hidden="true" [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M16.5 2.5a2.828 2.828 0 0 1 4 4L7.5 19.5L3 20L3.5 15.5L16.5 2.5z"></path>
         <line x1="7.5" y1="19.5" x2="3.5" y2="15.5"></line>
         <line x1="14.5" y1="4.5" x2="18.5" y2="8.5"></line>
       </svg>
     </button>
     <button class="stats-btn" (click)="onStats($event)" aria-label="Dataset stats" title="Stats">
-      <svg aria-hidden="true" [class.pie-active]="statsOpen" [class.pie-inactive]="!statsOpen && wasStatsOpen" (animationend)="onPieAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg aria-hidden="true" [class.pie-active]="statsOpen" [class.pie-inactive]="!statsOpen && wasStatsOpen" (animationend)="onPieAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 2a10 10 0 0 1 0 20"/>
         <line x1="12" y1="12" x2="12" y2="2"/>
@@ -113,7 +113,7 @@
       </svg>
     </button>
     <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete dataset" title="Delete">
-      <svg aria-hidden="true" [class.trash-active]="deleteConfirmOpen" [class.trash-inactive]="!deleteConfirmOpen && wasDeleteOpen" (animationend)="onTrashAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg aria-hidden="true" [class.trash-active]="deleteConfirmOpen" [class.trash-inactive]="!deleteConfirmOpen && wasDeleteOpen" (animationend)="onTrashAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
         <path d="M10 11v6"></path>

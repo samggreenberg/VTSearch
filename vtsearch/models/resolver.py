@@ -281,19 +281,37 @@ def _resolve_converter(params: dict[str, str]) -> Path | None:
     return resolve_file_from_origin(parent_origin, origin_name=source_file)
 
 
-def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
-    """Embed a media file using the appropriate embedder for the media type."""
-    from vtsearch.media import embedders_for_type
+def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.ndarray | None:
+    """Embed a media file using the appropriate embedder for the media type.
 
-    avail = embedders_for_type(media_type)
-    if not avail:
-        log.warning(
-            "embed_file: no embedders registered for media_type=%r — "
-            "cannot embed %s",
-            media_type, file_path,
-        )
-        return None
-    embedder = avail[0]
+    If *embedder_name* is given, that specific embedder is used (matching by
+    name); if it is not found or not given, the first registered embedder for
+    the media type is used as a fallback.
+    """
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            embedder = get_embedder(embedder_name)
+        except (KeyError, ValueError):
+            log.warning(
+                "embed_file: embedder %r not found, falling back to default for media_type=%r",
+                embedder_name, media_type,
+            )
+            embedder = None
+    else:
+        embedder = None
+
+    if embedder is None:
+        avail = embedders_for_type(media_type)
+        if not avail:
+            log.warning(
+                "embed_file: no embedders registered for media_type=%r — "
+                "cannot embed %s",
+                media_type, file_path,
+            )
+            return None
+        embedder = avail[0]
     from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
 
     try:
@@ -322,6 +340,7 @@ def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
     origin: dict[str, Any],
+    embedder_name: str = "",
 ) -> np.ndarray | None:
     """Apply clip params from *origin* to a resolved file and embed the result.
 
@@ -337,7 +356,7 @@ def _apply_clip_and_embed(
     clipper_name = params.get("clipper", "")
 
     if not clipper_name:
-        return embed_file(file_path, media_type)
+        return embed_file(file_path, media_type, embedder_name)
 
     clip_start = params.get("clip_start")
     clip_end = params.get("clip_end")
@@ -354,7 +373,7 @@ def _apply_clip_and_embed(
             try:
                 os.write(fd, sliced)
                 os.close(fd)
-                return embed_file(Path(tmp), media_type)
+                return embed_file(Path(tmp), media_type, embedder_name)
             finally:
                 try:
                     os.unlink(tmp)
@@ -362,7 +381,7 @@ def _apply_clip_and_embed(
                     pass
         except Exception:
             log.debug("_apply_clip_and_embed: audio clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # --- Image clips: crop to clip_box ---
     if clip_box is not None and media_type == "image":
@@ -381,7 +400,7 @@ def _apply_clip_and_embed(
             try:
                 os.write(fd, crop_bytes)
                 os.close(fd)
-                return embed_file(Path(tmp), media_type)
+                return embed_file(Path(tmp), media_type, embedder_name)
             finally:
                 try:
                     os.unlink(tmp)
@@ -389,7 +408,7 @@ def _apply_clip_and_embed(
                     pass
         except Exception:
             log.debug("_apply_clip_and_embed: image clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # --- Text clips: extract the sentence by clip_index ---
     if media_type == "text":
@@ -407,7 +426,7 @@ def _apply_clip_and_embed(
                     try:
                         os.write(fd, sentences[idx].encode("utf-8"))
                         os.close(fd)
-                        return embed_file(Path(tmp), media_type)
+                        return embed_file(Path(tmp), media_type, embedder_name)
                     finally:
                         try:
                             os.unlink(tmp)
@@ -415,10 +434,10 @@ def _apply_clip_and_embed(
                             pass
         except Exception:
             log.debug("_apply_clip_and_embed: text clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # Video clips and unrecognised clippers: embed the full file.
-    return embed_file(file_path, media_type)
+    return embed_file(file_path, media_type, embedder_name)
 
 
 def resolve_label_embeddings(

@@ -122,3 +122,6 @@ class TextE5Embedder(MediaEmbedder):
         if self._model is None:
             self.load_models()
         return self._model
+
+
+EMBEDDER = TextE5Embedder()

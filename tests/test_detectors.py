@@ -228,6 +228,37 @@ class TestAutorunDetectors:
         )
         assert resp.status_code == 400
 
+    # -- autodetect toggle --
+
+    def test_set_autodetect_on_existing_detector(self, client):
+        det = self._export_detector(client)
+        self._post_autorun(client, "tog-det", det)
+
+        resp = client.put("/api/autorun-detectors/tog-det/autodetect", json={"autodetect": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["autodetect"] is True
+
+        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
+        d = next(d for d in detectors if d["name"] == "tog-det")
+        assert d["autodetect"] is True
+
+    def test_set_autodetect_true_on_nonexistent_detector_persists_to_settings(self, client, isolated_settings):
+        """Enabling autorun for a model-registry entry not yet in autorun_detectors must succeed."""
+        from vtsearch.settings import get_autorun_detector_names
+
+        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["autodetect"] is True
+        assert "ghost-model" in get_autorun_detector_names()
+
+    def test_set_autodetect_false_on_nonexistent_detector_returns_404(self, client):
+        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
+        assert resp.status_code == 404
+
+    def test_set_autodetect_missing_field_returns_400(self, client):
+        resp = client.put("/api/autorun-detectors/any/autodetect", json={})
+        assert resp.status_code == 400
+
     # -- import-pkl (detector JSON file) --
 
     def test_import_pkl_from_detector_json(self, client):

@@ -1,16 +1,20 @@
 """Media type, embedder, and clipper registries.
 
 Built-in media types, embedders, and clippers are **auto-discovered** at
-import time by scanning sub-packages of ``vtsearch.media`` for sentinel
-attributes:
+import time by scanning sub-packages of ``vtsearch.media``:
 
-- ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
-- ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances (may be empty).
-- ``CLIPPERS``  — a list of :class:`MediaClipper` instances (may be empty).
+- Each media-type sub-package (``audio/``, ``image/``, ...) exposes a
+  ``MEDIA_TYPE`` sentinel in its ``__init__.py`` (plus a ``CLIPPERS`` list).
+- Each embedder lives in its own module under the media-type package
+  (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) and exposes a
+  module-level ``EMBEDDER`` sentinel — one embedder per module.  Any
+  ``embedder*.py`` file found inside a media-type package is auto-loaded.
 
-To add a new media type (or embedder / clipper), create a sub-package under
-``vtsearch/media/`` with an ``__init__.py`` that exposes the relevant
-sentinels.  Symlinked directories are supported.
+To add a new embedder, drop an ``embedder_<name>.py`` file into the
+appropriate media-type package with an ``EMBEDDER`` sentinel at the bottom.
+Symlinked directories and symlinked embedder files are both supported, so
+custom embedders living outside the VTSearch tree can be wired in without
+editing any package ``__init__.py``.
 
 Third-party or project-specific types can still be registered manually::
 
@@ -22,6 +26,8 @@ Third-party or project-specific types can still be registered manually::
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import sys
 import warnings
 from pathlib import Path
 
@@ -240,14 +246,57 @@ def all_embedders_dict() -> list[dict]:
 # ------------------------------------------------------------------
 
 
+def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
+    """Scan a media-type sub-package for modules exposing an ``EMBEDDER`` sentinel.
+
+    Any ``embedder*.py`` file (excluding ``__init__.py``) is imported, and its
+    module-level ``EMBEDDER`` attribute is registered if present.  Symlinked
+    files are loaded via :func:`importlib.util.spec_from_file_location` so
+    that symlinks pointing outside the package are handled reliably (mirrors
+    the same approach used by :class:`vtsearch.utils.registry.PluginRegistry`).
+    """
+    for entry in sorted(media_type_dir.iterdir()):
+        if entry.name.startswith((".", "_")):
+            continue
+        if not entry.is_file() or entry.suffix != ".py":
+            continue
+        if not entry.name.startswith("embedder"):
+            continue
+        full_name = f"{package_name}.{entry.stem}"
+        try:
+            if entry.is_symlink():
+                resolved = entry.resolve()
+                spec = importlib.util.spec_from_file_location(full_name, str(resolved))
+                if spec is None or spec.loader is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[full_name] = mod
+                spec.loader.exec_module(mod)
+            else:
+                mod = importlib.import_module(full_name)
+        except Exception as exc:  # pragma: no cover
+            sys.modules.pop(full_name, None)
+            warnings.warn(
+                f"Failed to load embedder module '{full_name}': {exc}",
+                stacklevel=2,
+            )
+            continue
+        emb = getattr(mod, "EMBEDDER", None)
+        if emb is not None:
+            register_embedder(emb)
+
+
 def _discover_media_plugins() -> None:
     """Scan sub-packages of ``vtsearch.media`` for sentinel attributes.
 
-    Each sub-package (directory with ``__init__.py``) may expose:
+    Each media-type sub-package (directory with ``__init__.py``) may expose:
 
     - ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
-    - ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances.
     - ``CLIPPERS``  — a list of :class:`MediaClipper` instances.
+
+    Embedders are auto-discovered per module: every ``embedder*.py`` file
+    inside a media-type sub-package is scanned for an ``EMBEDDER`` sentinel
+    (see :func:`_discover_embedders_in`).
 
     Symlinked directories are followed (``entry.is_dir()`` resolves
     symlinks), so an external media-type package can be symlinked into
@@ -259,8 +308,9 @@ def _discover_media_plugins() -> None:
             continue
         if not entry.is_dir() or "." in entry.name or not (entry / "__init__.py").exists():
             continue
+        package_name = f"vtsearch.media.{entry.name}"
         try:
-            mod = importlib.import_module(f"vtsearch.media.{entry.name}")
+            mod = importlib.import_module(package_name)
         except Exception as exc:  # pragma: no cover
             warnings.warn(
                 f"Failed to load media sub-package '{entry.name}': {exc}",
@@ -271,10 +321,9 @@ def _discover_media_plugins() -> None:
         mt = getattr(mod, "MEDIA_TYPE", None)
         if mt is not None:
             register(mt)
-        for emb in getattr(mod, "EMBEDDERS", []):
-            register_embedder(emb)
         for clip in getattr(mod, "CLIPPERS", []):
             register_clipper(clip)
+        _discover_embedders_in(entry, package_name)
 
 
 _discover_media_plugins()
