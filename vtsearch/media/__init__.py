@@ -5,16 +5,20 @@ import time by scanning sub-packages of ``vtsearch.media``:
 
 - Each media-type sub-package (``audio/``, ``image/``, ...) exposes a
   ``MEDIA_TYPE`` sentinel in its ``__init__.py`` (plus a ``CLIPPERS`` list).
-- Each embedder lives in its own module under the media-type package
-  (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) and exposes a
-  module-level ``EMBEDDER`` sentinel — one embedder per module.  Any
-  ``embedder*.py`` file found inside a media-type package is auto-loaded.
+- Each embedder lives under the media-type package as either a flat
+  module (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) or a
+  sub-package (e.g. ``vtsearch/media/image/embedder_fancy/__init__.py``)
+  and exposes a module-level ``EMBEDDER`` sentinel — one embedder per
+  module or sub-package.  Any ``embedder*.py`` file or ``embedder*/``
+  directory with an ``__init__.py`` found inside a media-type package
+  is auto-loaded.
 
-To add a new embedder, drop an ``embedder_<name>.py`` file into the
-appropriate media-type package with an ``EMBEDDER`` sentinel at the bottom.
-Symlinked directories and symlinked embedder files are both supported, so
-custom embedders living outside the VTSearch tree can be wired in without
-editing any package ``__init__.py``.
+To add a new embedder, drop an ``embedder_<name>.py`` file — or an
+``embedder_<name>/`` sub-package containing an ``__init__.py`` — into
+the appropriate media-type package with an ``EMBEDDER`` sentinel at the
+module/package top level.  Symlinked directories and symlinked embedder
+files are both supported, so custom embedders living outside the
+VTSearch tree can be wired in without editing any package ``__init__.py``.
 
 Third-party or project-specific types can still be registered manually::
 
@@ -247,26 +251,46 @@ def all_embedders_dict() -> list[dict]:
 
 
 def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
-    """Scan a media-type sub-package for modules exposing an ``EMBEDDER`` sentinel.
+    """Scan a media-type sub-package for modules or sub-packages exposing an ``EMBEDDER``.
 
-    Any ``embedder*.py`` file (excluding ``__init__.py``) is imported, and its
-    module-level ``EMBEDDER`` attribute is registered if present.  Symlinked
-    files are loaded via :func:`importlib.util.spec_from_file_location` so
-    that symlinks pointing outside the package are handled reliably (mirrors
-    the same approach used by :class:`vtsearch.utils.registry.PluginRegistry`).
+    Any ``embedder*.py`` file **or** ``embedder*/`` sub-package (directory
+    containing an ``__init__.py``) is imported, and its module-level
+    ``EMBEDDER`` attribute is registered if present.  Symlinked files and
+    symlinked directories are both loaded via
+    :func:`importlib.util.spec_from_file_location` so that symlinks
+    pointing outside the package are handled reliably (mirrors the same
+    approach used by :class:`vtsearch.utils.registry.PluginRegistry`).
     """
     for entry in sorted(media_type_dir.iterdir()):
         if entry.name.startswith((".", "_")):
             continue
-        if not entry.is_file() or entry.suffix != ".py":
-            continue
         if not entry.name.startswith("embedder"):
             continue
-        full_name = f"{package_name}.{entry.stem}"
+
+        # Flat module: embedder_<name>.py
+        if entry.is_file() and entry.suffix == ".py":
+            module_stem = entry.stem
+            load_path = entry
+            is_package = False
+        # Sub-package: embedder_<name>/__init__.py.  Skip names containing
+        # dots — they aren't valid Python identifiers and would be
+        # misinterpreted as nested module paths by importlib.
+        elif entry.is_dir() and "." not in entry.name and (entry / "__init__.py").exists():
+            module_stem = entry.name
+            load_path = entry / "__init__.py"
+            is_package = True
+        else:
+            continue
+
+        full_name = f"{package_name}.{module_stem}"
         try:
             if entry.is_symlink():
-                resolved = entry.resolve()
-                spec = importlib.util.spec_from_file_location(full_name, str(resolved))
+                resolved = load_path.resolve()
+                spec = importlib.util.spec_from_file_location(
+                    full_name,
+                    str(resolved),
+                    submodule_search_locations=[str(resolved.parent)] if is_package else None,
+                )
                 if spec is None or spec.loader is None:
                     continue
                 mod = importlib.util.module_from_spec(spec)
