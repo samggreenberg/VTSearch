@@ -343,3 +343,134 @@ class TestChunkedLoaderBulkPerChunk:
         assert emb.embed_media_bulk.call_count == 2
         for call in emb.embed_media_bulk.call_args_list:
             assert len(call.args[0]) == 2
+
+
+# ---------------------------------------------------------------------------
+# embed_medias: dict-keyed convenience wrapper around embed_media_bulk
+# ---------------------------------------------------------------------------
+
+
+class TestEmbedMediasDictWrapper:
+    """``embed_medias`` is a sugar wrapper for callers that already have
+    medias keyed by ID (e.g. importers building the medias dict before
+    embedding).  It delegates to ``embed_media_bulk`` and pairs vectors
+    back to the original IDs."""
+
+    def test_returns_dict_keyed_by_input_ids(self):
+        from vtsearch.media.embedder import MediaEmbedder
+
+        class _Stub(MediaEmbedder):
+            @property
+            def name(self):
+                return "stub"
+
+            @property
+            def media_type_id(self):
+                return "audio"
+
+            def _load_models_impl(self):
+                self._model = True
+
+            def _embed_media_impl(self, media):
+                return np.array([float(media["tag"])], dtype=np.float32)
+
+        emb = _Stub()
+        emb._model = True
+
+        medias = {1: {"tag": 10}, 2: {"tag": 20}, 7: {"tag": 70}}
+        out = emb.embed_medias(medias)
+
+        assert set(out.keys()) == {1, 2, 7}
+        assert out[1][0] == 10.0
+        assert out[2][0] == 20.0
+        assert out[7][0] == 70.0
+
+    def test_handles_sparse_keys(self):
+        """Non-contiguous keys (e.g. post-collapse_duplicates) round-trip."""
+        from vtsearch.media.embedder import MediaEmbedder
+
+        class _Stub(MediaEmbedder):
+            @property
+            def name(self):
+                return "stub"
+
+            @property
+            def media_type_id(self):
+                return "audio"
+
+            def _load_models_impl(self):
+                self._model = True
+
+            def _embed_media_impl(self, media):
+                return np.array([float(media["tag"])], dtype=np.float32)
+
+        emb = _Stub()
+        emb._model = True
+
+        medias = {1: {"tag": 1}, 3: {"tag": 3}, 5: {"tag": 5}}
+        out = emb.embed_medias(medias)
+        assert list(out.keys()) == [1, 3, 5]
+        assert out[3][0] == 3.0
+
+    def test_propagates_none_for_failed_embeddings(self):
+        """A None vector from the underlying bulk call surfaces as None
+        at the matching key — no silent dropping like the loader does."""
+        from vtsearch.media.embedder import MediaEmbedder
+
+        class _Stub(MediaEmbedder):
+            @property
+            def name(self):
+                return "stub"
+
+            @property
+            def media_type_id(self):
+                return "audio"
+
+            def _load_models_impl(self):
+                self._model = True
+
+            def _embed_media_impl(self, media):
+                if media["tag"] == "skip":
+                    return None
+                return np.array([1.0], dtype=np.float32)
+
+        emb = _Stub()
+        emb._model = True
+
+        out = emb.embed_medias({1: {"tag": "ok"}, 2: {"tag": "skip"}, 3: {"tag": "ok"}})
+        assert out[1] is not None
+        assert out[2] is None
+        assert out[3] is not None
+
+    def test_empty_dict_returns_empty_dict(self):
+        from vtsearch.media.embedder import MediaEmbedder
+
+        class _Stub(MediaEmbedder):
+            @property
+            def name(self):
+                return "stub"
+
+            @property
+            def media_type_id(self):
+                return "audio"
+
+            def _load_models_impl(self):
+                self._model = True
+
+            def _embed_media_impl(self, media):
+                raise AssertionError("should not be called for empty dict")
+
+        emb = _Stub()
+        assert emb.embed_medias({}) == {}
+
+    def test_delegates_to_embed_media_bulk(self):
+        """The wrapper calls embed_media_bulk once with values in key order."""
+        emb = _make_bulk_embedder()
+        medias = {10: {"x": 1}, 20: {"x": 2}, 30: {"x": 3}}
+
+        out = emb.embed_medias(medias)
+
+        assert emb.embed_media_bulk.call_count == 1
+        sent = emb.embed_media_bulk.call_args.args[0]
+        assert sent == [{"x": 1}, {"x": 2}, {"x": 3}]
+        assert set(out.keys()) == {10, 20, 30}
