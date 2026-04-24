@@ -705,7 +705,10 @@ def load_registered_dataset(dataset_id: str):
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
-        task_id, entry.get("name", dataset_id), dataset_id=dataset_id, media_type=entry.get("media_type", ""),
+        task_id,
+        entry.get("name", dataset_id),
+        dataset_id=dataset_id,
+        media_type=entry.get("media_type", ""),
         embedder=entry.get("embedder", ""),
     )
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
@@ -724,7 +727,9 @@ def load_registered_dataset(dataset_id: str):
 
             # Set thread-local progress for the pickle loader.
             set_thread_progress(
-                lambda status, msg="", cur=0, tot=0: tracker.update(status, msg, cur, tot, step=1, total_steps=_LOAD_STEPS)
+                lambda status, msg="", cur=0, tot=0: tracker.update(
+                    status, msg, cur, tot, step=1, total_steps=_LOAD_STEPS
+                )
             )
             try:
                 load_dataset_from_pickle(Path(pkl_path), ctx.medias, on_progress=_pickle_progress)
@@ -736,9 +741,12 @@ def load_registered_dataset(dataset_id: str):
             def _dedup_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
                 tracker.update(
-                    "loading", "Removing duplicates…",
-                    current=current, total=total,
-                    step=2, total_steps=_LOAD_STEPS,
+                    "loading",
+                    "Removing duplicates…",
+                    current=current,
+                    total=total,
+                    step=2,
+                    total_steps=_LOAD_STEPS,
                 )
 
             _dedup_progress(0, 0)
@@ -760,7 +768,8 @@ def load_registered_dataset(dataset_id: str):
             _reg_add_loaded(dataset_id)
             # Update item count and dupe count in case they changed
             num_dupes = sum(
-                1 for m in ctx.medias.values()
+                1
+                for m in ctx.medias.values()
                 if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
             )
             _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
@@ -770,7 +779,9 @@ def load_registered_dataset(dataset_id: str):
             def _task_progress(status, message="", current=0, total=0, **kw):
                 tracker.update(status, message, current, total, **kw)
 
-            _load_embedder_for_clips_with_progress(ctx.medias, _task_progress, step=_LOAD_STEPS, total_steps=_LOAD_STEPS)
+            _load_embedder_for_clips_with_progress(
+                ctx.medias, _task_progress, step=_LOAD_STEPS, total_steps=_LOAD_STEPS
+            )
         except CancelledError:
             unregister_context(dataset_id)
             _reg_remove_loaded(dataset_id)
@@ -888,13 +899,15 @@ def get_dataset_stats(dataset_id: str):
     entry = _reg_get(dataset_id)
     if entry is None:
         return jsonify({"error": "Dataset not found"}), 404
-    return jsonify({
-        "num_items": entry.get("num_items", 0),
-        "num_dupes": entry.get("num_dupes", 0),
-        "file_type_counts": entry.get("file_type_counts", {}),
-        "ingest_started_at": entry.get("ingest_started_at"),
-        "ingest_finished_at": entry.get("ingest_finished_at"),
-    })
+    return jsonify(
+        {
+            "num_items": entry.get("num_items", 0),
+            "num_dupes": entry.get("num_dupes", 0),
+            "file_type_counts": entry.get("file_type_counts", {}),
+            "ingest_started_at": entry.get("ingest_started_at"),
+            "ingest_finished_at": entry.get("ingest_finished_at"),
+        }
+    )
 
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])

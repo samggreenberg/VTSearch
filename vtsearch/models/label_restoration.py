@@ -94,7 +94,8 @@ def restore_labels_from_trainable_model(tm_data: dict) -> int:
             else:
                 _log.debug(
                     "restore-labels: resolved %s but MD5 %s not in loaded dataset",
-                    resolved_path, resolved_md5,
+                    resolved_path,
+                    resolved_md5,
                 )
 
     return restored

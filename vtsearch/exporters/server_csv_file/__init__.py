@@ -35,6 +35,7 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     tmp.write_text(buf.getvalue(), encoding="utf-8", newline="")
     os.replace(tmp, path)
 
+
 # Characters that trigger formula execution in spreadsheet applications.
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
@@ -188,10 +189,12 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 if has_clip_box:
                     cb = hit.get("clip_box")
                     row.append(",".join(str(v) for v in cb) if cb else "")
-                row.extend([
-                    _sanitize_csv_cell(origin_str),
-                    _sanitize_csv_cell(hit.get("origin_name", "")),
-                ])
+                row.extend(
+                    [
+                        _sanitize_csv_cell(origin_str),
+                        _sanitize_csv_cell(hit.get("origin_name", "")),
+                    ]
+                )
                 writer.writerow(row)
                 total_hits += 1
 

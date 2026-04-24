@@ -193,12 +193,15 @@ class TestLabelImportEndpoint:
 
         model_dir = Path(get_trainable_models_dir())
         model_dir.mkdir(parents=True, exist_ok=True)
-        _write_model(model_dir / f"{tm_name}.json", {
-            "name": tm_name,
-            "media_type": "audio",
-            "examples": [],
-            "labelset": {"labels": []},
-        })
+        _write_model(
+            model_dir / f"{tm_name}.json",
+            {
+                "name": tm_name,
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": []},
+            },
+        )
 
         entry = register_model(
             name="Import Sync Test",

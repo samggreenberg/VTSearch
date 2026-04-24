@@ -94,13 +94,15 @@ class Video2ImageMediaConverter(MediaConverter):
                     img.save(buf, format="PNG")
                     png_bytes = buf.getvalue()
 
-                    results.append({
-                        "filename": f"{stem}_clip_{clip_num + 1}.png",
-                        "media_bytes": png_bytes,
-                        "duration": 0,
-                        "width": img.width,
-                        "height": img.height,
-                    })
+                    results.append(
+                        {
+                            "filename": f"{stem}_clip_{clip_num + 1}.png",
+                            "media_bytes": png_bytes,
+                            "duration": 0,
+                            "width": img.width,
+                            "height": img.height,
+                        }
+                    )
             finally:
                 cap.release()
         finally:

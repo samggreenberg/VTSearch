@@ -27,6 +27,7 @@ from vtsearch.datasets.loader import (
 class _ArbitraryObj:
     """A plain class with no __reduce__; used to test that arbitrary classes
     are rejected by the restricted unpickler."""
+
     pass
 
 

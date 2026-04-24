@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from vtsearch.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE
-from vtsearch.media.embedder import MediaEmbedder, embedder_load_setup, intercept_tqdm_progress, load_pretrained_local_first, timed_progress
+from vtsearch.media.embedder import (
+    MediaEmbedder,
+    embedder_load_setup,
+    intercept_tqdm_progress,
+    load_pretrained_local_first,
+    timed_progress,
+)
 
 if TYPE_CHECKING:
     from transformers import ClapModel, ClapProcessor
@@ -147,7 +153,7 @@ class AudioClapEmbedder(MediaEmbedder):
                 outputs = self._model.audio_model(**inputs)
                 embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
             return embedding[0]
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -166,7 +172,7 @@ class AudioClapEmbedder(MediaEmbedder):
                 outputs = self._model.text_model(**inputs)
                 text_vec = self._model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]
             return text_vec
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for audio")
             return None
 

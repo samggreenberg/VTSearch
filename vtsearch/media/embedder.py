@@ -178,8 +178,7 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
                 last_exc = exc
                 delay = _HF_RETRY_BACKOFF_BASE * (2**attempt)
                 _log.warning(
-                    "Transient HuggingFace Hub error (attempt %d/%d), "
-                    "retrying in %ds: %s",
+                    "Transient HuggingFace Hub error (attempt %d/%d), retrying in %ds: %s",
                     attempt + 1,
                     _HF_RETRY_COUNT,
                     delay,

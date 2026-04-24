@@ -62,7 +62,6 @@ from vtsearch.utils.registry import PluginBase, PluginField
 ProcessorImporterField = PluginField
 
 
-
 class ProcessorImporter(PluginBase):
     """Abstract base class for processor importers.
 

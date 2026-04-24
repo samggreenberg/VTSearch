@@ -698,9 +698,7 @@ class TestLoadingGates:
 
         # The gate should still show exactly one holder (the first load).
         # If the cancel wrongly released, active would drop to 0.
-        assert _download_gate.active == 1, (
-            "Cancelled task that never held the gate must not release it"
-        )
+        assert _download_gate.active == 1, "Cancelled task that never held the gate must not release it"
 
         # Clean up.
         first_proceed.set()

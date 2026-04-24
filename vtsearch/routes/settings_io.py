@@ -83,11 +83,13 @@ def run_settings_import(importer_name: str):
     # Apply imported settings through the settings API
     _apply_settings(imported_settings)
 
-    return jsonify({
-        "success": True,
-        "message": f"Imported {len(imported_settings)} setting(s) via {importer.display_name}.",
-        "keys": list(imported_settings.keys()),
-    })
+    return jsonify(
+        {
+            "success": True,
+            "message": f"Imported {len(imported_settings)} setting(s) via {importer.display_name}.",
+            "keys": list(imported_settings.keys()),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

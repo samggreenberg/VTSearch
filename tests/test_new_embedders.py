@@ -491,9 +491,7 @@ class TestEmbedderSentinelDiscovery:
         for mod in modules:
             sentinel = getattr(mod, "EMBEDDER", None)
             assert sentinel is not None, f"{mod.__name__} is missing an EMBEDDER sentinel"
-            assert isinstance(sentinel, MediaEmbedder), (
-                f"{mod.__name__}.EMBEDDER must be a MediaEmbedder instance"
-            )
+            assert isinstance(sentinel, MediaEmbedder), f"{mod.__name__}.EMBEDDER must be a MediaEmbedder instance"
 
     def test_sentinel_identity_matches_registry(self):
         """The registered embedder for each name should be the module's EMBEDDER sentinel."""
@@ -592,8 +590,7 @@ class TestEmbedderSentinelDiscovery:
         import sys
         from pathlib import Path
 
-        import vtsearch.media as media_pkg
-        from vtsearch.media import _discover_embedders_in, register_embedder
+        from vtsearch.media import _discover_embedders_in
         from vtsearch.media.embedder import MediaEmbedder
 
         # Create a throwaway media-type package under tmp_path with a single
@@ -747,6 +744,7 @@ class TestEmbedMediaLock:
             t2.start()
             # Give t2 a moment to hit the lock
             import time
+
             time.sleep(0.1)
             # t2 should be blocked on the lock — inside should still be set by t1 only
             assert not overlap_detected, "t2 entered _embed_media_impl while t1 was still inside"

@@ -70,15 +70,17 @@ def _list_all() -> list[dict]:
         if data is None:
             continue
         labels = data.get("labelset", {}).get("labels", [])
-        models.append({
-            "name": data["name"],
-            "text_query": data.get("text_query", ""),
-            "media_example": data.get("media_example", ""),
-            "media_type": data.get("media_type", ""),
-            "examples": data.get("examples", []),
-            "num_labels": len(labels),
-            "created_at": data.get("created_at", 0),
-        })
+        models.append(
+            {
+                "name": data["name"],
+                "text_query": data.get("text_query", ""),
+                "media_example": data.get("media_example", ""),
+                "media_type": data.get("media_type", ""),
+                "examples": data.get("examples", []),
+                "num_labels": len(labels),
+                "created_at": data.get("created_at", 0),
+            }
+        )
     return models
 
 
@@ -142,15 +144,17 @@ def create_trainable_model():
     }
     _write_model(path, model_data)
 
-    return jsonify({
-        "success": True,
-        "name": name,
-        "text_query": text_query,
-        "media_example": media_example,
-        "media_type": media_type,
-        "examples": examples or [],
-        "num_labels": 0,
-    }), 201
+    return jsonify(
+        {
+            "success": True,
+            "name": name,
+            "text_query": text_query,
+            "media_example": media_example,
+            "media_type": media_type,
+            "examples": examples or [],
+            "num_labels": 0,
+        }
+    ), 201
 
 
 # ---------------------------------------------------------------------------
@@ -292,11 +296,13 @@ def save_trainable_model_labels(name: str):
     if reg_entry:
         update_model(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
-    return jsonify({
-        "success": True,
-        "name": name,
-        "num_labels": len(labelset),
-    })
+    return jsonify(
+        {
+            "success": True,
+            "name": name,
+            "num_labels": len(labelset),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +336,13 @@ def import_labels_into_model(name: str, importer_name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes.helpers import extract_plugin_fields, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
+    from vtsearch.routes.helpers import (
+        extract_plugin_fields,
+        get_plugin_or_404,
+        run_plugin_or_error,
+        validate_filepath_field,
+        validate_required_fields,
+    )
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -403,7 +415,10 @@ def import_labels_into_model(name: str, importer_name: str):
         det_ctx = get_detector_context(reg_entry["id"])
         if det_ctx is not None:
             resolved, trained = _apply_and_retrain(
-                reg_entry["id"], det_ctx, new_entries, name,
+                reg_entry["id"],
+                det_ctx,
+                new_entries,
+                name,
             )
 
     msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
@@ -411,14 +426,16 @@ def import_labels_into_model(name: str, importer_name: str):
         msg += f" Resolved {resolved} into the loaded detector."
     if trained:
         msg += " Retrained MLP."
-    return jsonify({
-        "applied": applied,
-        "skipped": skipped,
-        "resolved": resolved,
-        "trained": trained,
-        "num_labels": len(existing_ls),
-        "message": msg,
-    })
+    return jsonify(
+        {
+            "applied": applied,
+            "skipped": skipped,
+            "resolved": resolved,
+            "trained": trained,
+            "num_labels": len(existing_ls),
+            "message": msg,
+        }
+    )
 
 
 # Canonical location: vtsearch.models.training_workflow
@@ -578,6 +595,7 @@ def load_model_route():
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
         if prev_id:
             from vtsearch.utils import unregister_detector_context
+
             unregister_detector_context(prev_id)
             remove_loaded_model_id(prev_id)
         set_find_mode(False)
@@ -601,7 +619,9 @@ def load_model_route():
     _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
     task_id = f"_modload_{model_id[:8]}"
     tracker = model_loading_tasks.create_task(
-        task_id, entry.get("name", model_id), model_id=model_id,
+        task_id,
+        entry.get("name", model_id),
+        model_id=model_id,
         media_type=entry.get("media_type", ""),
     )
     tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
@@ -610,6 +630,7 @@ def load_model_route():
     tm_name = entry.get("trainable_model_name", "")
     # Capture the dataset context so the thread can resolve medias.
     from vtsearch.utils import get_active_context
+
     _thread_ds_ctx = get_active_context()
 
     def load_task():
@@ -625,8 +646,12 @@ def load_model_route():
             if tm_name:
                 tracker.check_cancelled()
                 tracker.update(
-                    "loading", "Restoring labels…", 0, 0,
-                    step=1, total_steps=_LOAD_STEPS,
+                    "loading",
+                    "Restoring labels…",
+                    0,
+                    0,
+                    step=1,
+                    total_steps=_LOAD_STEPS,
                 )
                 tm_data = _read_model(_model_path(tm_name))
                 if tm_data:
@@ -634,12 +659,14 @@ def load_model_route():
 
                     tracker.check_cancelled()
                     tracker.update(
-                        "loading", "Seeding examples…", 0, 0,
-                        step=2, total_steps=_LOAD_STEPS,
+                        "loading",
+                        "Seeding examples…",
+                        0,
+                        0,
+                        step=2,
+                        total_steps=_LOAD_STEPS,
                     )
-                    _seed_good_votes_from_examples(
-                        tm_data.get("examples", [])
-                    )
+                    _seed_good_votes_from_examples(tm_data.get("examples", []))
 
                     # Train the MLP from restored votes so that Find can use
                     # det_ctx.model directly without re-resolving label origins.
@@ -648,8 +675,12 @@ def load_model_route():
 
                     if _gv and _bv:
                         tracker.update(
-                            "loading", "Training model…", 0, 0,
-                            step=3, total_steps=_LOAD_STEPS,
+                            "loading",
+                            "Training model…",
+                            0,
+                            0,
+                            step=3,
+                            total_steps=_LOAD_STEPS,
                         )
                         from vtsearch.models.detector_training import train_and_threshold
 
@@ -694,11 +725,13 @@ def load_model_route():
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify({
-        "ok": True,
-        "message": "Loading started",
-        "task_id": str(task_id),
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Loading started",
+            "task_id": str(task_id),
+        }
+    )
 
 
 @trainable_models_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])

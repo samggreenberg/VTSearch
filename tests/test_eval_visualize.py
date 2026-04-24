@@ -101,9 +101,7 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
                     "elapsed_seconds": elapsed,
                 }
             )
-    return pd.DataFrame(
-        rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
-    )
+    return pd.DataFrame(rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
 
 
 # ------------------------------------------------------------------

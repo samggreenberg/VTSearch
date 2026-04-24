@@ -46,10 +46,12 @@ _state_lock = threading.RLock()
 # as before, so existing code continues to work unchanged.
 # ---------------------------------------------------------------------------
 
+
 def _request_dataset_context():
     """Return the DatasetContext stashed on ``g`` by the before_request hook, or None."""
     try:
         from flask import g, has_request_context
+
         if has_request_context():
             return getattr(g, "_dataset_context", None)
     except ImportError:
@@ -61,6 +63,7 @@ def _request_detector_context():
     """Return the DetectorContext stashed on ``g`` by the before_request hook, or None."""
     try:
         from flask import g, has_request_context
+
         if has_request_context():
             return getattr(g, "_detector_context", None)
     except ImportError:
@@ -121,14 +124,13 @@ class DetectorContext:
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
-        "model",            # nn.Sequential | None — current trained MLP
-        "threshold",        # decision threshold
+        "model",  # nn.Sequential | None — current trained MLP
+        "threshold",  # decision threshold
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
 
-    def __init__(self, detector_id: str = "", *, name: str = "",
-                 media_type: str = "", embedder: str = "") -> None:
+    def __init__(self, detector_id: str = "", *, name: str = "", media_type: str = "", embedder: str = "") -> None:
         self.detector_id: str = detector_id
         self.name: str = name
         self.media_type: str = media_type

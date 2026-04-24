@@ -15,6 +15,7 @@ def load_model_and_wait(client, model_id, timeout=5.0):
     res = client.post("/api/models/registry/load", json={"model_id": model_id})
     if model_id is None:
         from vtsearch.utils.state_core import set_thread_detector_context
+
         set_thread_detector_context(None)
         return res
     deadline = time.monotonic() + timeout

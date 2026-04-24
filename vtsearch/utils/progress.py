@@ -154,16 +154,19 @@ class LoadingTasksTracker:
         self._tasks: dict[str, dict[str, Any]] = {}
 
     def create_task(
-        self, task_id: str, name: str = "", dataset_id: str = "", media_type: str = "",
-        model_id: str = "", embedder: str = "",
+        self,
+        task_id: str,
+        name: str = "",
+        dataset_id: str = "",
+        media_type: str = "",
+        model_id: str = "",
+        embedder: str = "",
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
         Returns the per-task :class:`ProgressTracker` instance.
         """
-        tracker = ProgressTracker(
-            extra_fields={"error": None, "step": None, "total_steps": None}
-        )
+        tracker = ProgressTracker(extra_fields={"error": None, "step": None, "total_steps": None})
         with self._lock:
             self._tasks[task_id] = {
                 "tracker": tracker,
@@ -308,9 +311,7 @@ sort_progress = ProgressTracker()
 eval_progress = ProgressTracker()
 
 #: Find progress (used by the /api/find multi-dataset×model scoring operation).
-find_progress = ProgressTracker(
-    extra_fields={"step": None, "total_steps": None, "error": None}
-)
+find_progress = ProgressTracker(extra_fields={"step": None, "total_steps": None, "error": None})
 
 
 # ---------------------------------------------------------------------------

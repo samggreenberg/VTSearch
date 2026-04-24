@@ -28,6 +28,7 @@ from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
 # TODO(dev): Implement the Holder client functions below.
 # ---------------------------------------------------------------------------
 
+
 def _holder_read_folder(holder_id: str, folder_name: str) -> list[dict[str, Any]]:
     """Read all entries from a folder in a Holder package.
 
@@ -47,6 +48,7 @@ def _holder_read_folder(holder_id: str, folder_name: str) -> list[dict[str, Any]
 # ---------------------------------------------------------------------------
 # Importer
 # ---------------------------------------------------------------------------
+
 
 class HolderLabelImporter(LabelImporter):
     """Import labels from a Holder package (Good / Bad folders)."""

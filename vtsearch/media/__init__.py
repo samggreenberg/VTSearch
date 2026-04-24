@@ -56,6 +56,7 @@ from vtsearch.media.processors import (
 
 _registry: dict[str, "MediaType"] = {}
 
+
 def normalize_type_id(type_id: str) -> str:
     """Validate that *type_id* is a known canonical type name.
 

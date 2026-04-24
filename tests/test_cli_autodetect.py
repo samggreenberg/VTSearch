@@ -66,14 +66,14 @@ class TestRunAutodetect:
 
     def test_returns_list(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         assert isinstance(hits, list)
 
     def test_hits_have_required_fields(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         for hit in hits:
@@ -84,7 +84,7 @@ class TestRunAutodetect:
 
     def test_scores_in_valid_range(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         for hit in hits:
@@ -92,7 +92,7 @@ class TestRunAutodetect:
 
     def test_hits_sorted_descending_by_score(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         scores = [h["score"] for h in hits]
@@ -100,7 +100,7 @@ class TestRunAutodetect:
 
     def test_all_hits_at_or_above_threshold(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         threshold = detector["threshold"]
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -112,7 +112,7 @@ class TestRunAutodetect:
         good_ids = [1, 2, 3]
         bad_ids = [18, 19, 20]
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,good_ids, bad_ids)
+        detector_path, _ = _make_detector_file(tmp_path, good_ids, bad_ids)
 
         # Score all medias by re-running with a threshold of 0 so every media is included
         detector_data = json.loads(detector_path.read_text())
@@ -128,7 +128,7 @@ class TestRunAutodetect:
         assert avg_good > avg_bad
 
     def test_dataset_file_not_found(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(FileNotFoundError, match="Dataset file not found"):
             run_autodetect("/nonexistent/dataset.pkl", str(detector_path))
 
@@ -140,7 +140,7 @@ class TestRunAutodetect:
     def test_empty_dataset_raises_error(self, client, tmp_path):
         empty_clips: dict = {}
         dataset_path = _make_dataset_file(tmp_path, empty_clips)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
 
         with pytest.raises(ValueError, match="No medias loaded"):
             run_autodetect(str(dataset_path), str(detector_path))
@@ -156,7 +156,7 @@ class TestRunAutodetect:
     def test_detector_with_weight_fallback_works(self, client, tmp_path):
         """When origin resolution fails, pre-computed weights in the file are used."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2], [3, 4])
 
         # The detector file has origins (that can't resolve) AND weights (fallback)
         hits = run_autodetect(str(dataset_path), str(detector_path))
@@ -164,7 +164,7 @@ class TestRunAutodetect:
 
     def test_hits_do_not_contain_embedding(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         for hit in hits:
@@ -172,7 +172,7 @@ class TestRunAutodetect:
 
     def test_hits_do_not_contain_raw_media(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         for hit in hits:
@@ -182,7 +182,7 @@ class TestRunAutodetect:
     def test_with_threshold_zero_returns_all_clips(self, client, tmp_path):
         """A threshold of 0 should return all medias since sigmoid output >= 0."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         detector["threshold"] = 0.0
         zero_path = tmp_path / "zero_threshold.json"
@@ -194,7 +194,7 @@ class TestRunAutodetect:
     def test_with_threshold_one_returns_few_or_none(self, client, tmp_path):
         """A threshold of 1.0 should return very few or no medias."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         detector["threshold"] = 1.0
         high_path = tmp_path / "high_threshold.json"
@@ -216,7 +216,7 @@ class TestRunAutodetectWithImporter:
     def test_pickle_importer_returns_same_as_legacy(self, client, tmp_path):
         """Using --importer pickle should produce the same results as --dataset."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         legacy_hits = run_autodetect(str(dataset_path), str(detector_path))
         importer_hits = run_autodetect_with_importer("pickle", {"file": str(dataset_path)}, str(detector_path))
@@ -227,22 +227,22 @@ class TestRunAutodetectWithImporter:
             assert lh["score"] == ih["score"]
 
     def test_pickle_importer_file_not_found(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(FileNotFoundError, match="Dataset file not found"):
             run_autodetect_with_importer("pickle", {"file": "/nonexistent.pkl"}, str(detector_path))
 
     def test_unknown_importer_raises_error(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(ValueError, match="Unknown importer"):
             run_autodetect_with_importer("nonexistent_importer", {}, str(detector_path))
 
     def test_missing_required_field_raises_error(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(ValueError, match="Missing required argument"):
             run_autodetect_with_importer("pickle", {}, str(detector_path))
 
     def test_folder_importer_nonexistent_path_raises(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(FileNotFoundError, match="Folder not found"):
             run_autodetect_with_importer(
                 "folder",
@@ -251,7 +251,7 @@ class TestRunAutodetectWithImporter:
             )
 
     def test_folder_importer_file_instead_of_dir_raises(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         # Create a file (not a directory)
         fake_file = tmp_path / "not_a_dir.txt"
         fake_file.write_text("not a directory")
@@ -263,7 +263,7 @@ class TestRunAutodetectWithImporter:
             )
 
     def test_http_archive_invalid_url_raises(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         with pytest.raises(ValueError, match="Invalid URL"):
             run_autodetect_with_importer(
                 "http_archive",
@@ -281,7 +281,7 @@ class TestScoreClipsWithDetectors:
     """Tests for the multi-detector scoring function."""
 
     def test_single_detector_returns_one_result(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        _, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
         results = _score_medias_with_detectors(app_module.medias, detectors)
 
@@ -291,8 +291,8 @@ class TestScoreClipsWithDetectors:
         assert isinstance(results["det_a"]["hits"], list)
 
     def test_two_detectors_return_two_results(self, client, tmp_path):
-        _, det_a = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20], name="det_a.json")
-        _, det_b = _make_detector_file(tmp_path,[5, 6, 7], [15, 16, 17], name="det_b.json")
+        _, det_a = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20], name="det_a.json")
+        _, det_b = _make_detector_file(tmp_path, [5, 6, 7], [15, 16, 17], name="det_b.json")
         detectors = {
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
@@ -304,7 +304,7 @@ class TestScoreClipsWithDetectors:
         assert "det_b" in results
 
     def test_hits_sorted_descending(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        _, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         detector["threshold"] = 0.0  # include all medias
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
         results = _score_medias_with_detectors(app_module.medias, detectors)
@@ -313,7 +313,7 @@ class TestScoreClipsWithDetectors:
         assert scores == sorted(scores, reverse=True)
 
     def test_hits_have_required_fields(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        _, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
         results = _score_medias_with_detectors(app_module.medias, detectors)
 
@@ -324,7 +324,7 @@ class TestScoreClipsWithDetectors:
             assert "score" in hit
 
     def test_empty_clips_raises_error(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        _, detector = _make_detector_file(tmp_path, [1, 2], [3, 4])
         detectors = {"det": {"weights": detector["weights"], "threshold": detector["threshold"]}}
 
         with pytest.raises(ValueError, match="No medias loaded"):
@@ -335,7 +335,7 @@ class TestScoreClipsWithDetectors:
             _score_medias_with_detectors(app_module.medias, {})
 
     def test_threshold_zero_returns_all_clips(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        _, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         detectors = {"det": {"weights": detector["weights"], "threshold": 0.0}}
         results = _score_medias_with_detectors(app_module.medias, detectors)
 
@@ -343,8 +343,8 @@ class TestScoreClipsWithDetectors:
 
     def test_different_detectors_may_flag_different_clips(self, client, tmp_path):
         """Two detectors trained on different goods should have different hit sets."""
-        _, det_a = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20], name="a.json")
-        _, det_b = _make_detector_file(tmp_path,[18, 19, 20], [1, 2, 3], name="b.json")
+        _, det_a = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20], name="a.json")
+        _, det_b = _make_detector_file(tmp_path, [18, 19, 20], [1, 2, 3], name="b.json")
         detectors = {
             "det_a": {"weights": det_a["weights"], "threshold": 0.0},
             "det_b": {"weights": det_b["weights"], "threshold": 0.0},
@@ -367,7 +367,7 @@ class TestBuildMultiResultsDict:
     """Tests for the _build_multi_results_dict helper."""
 
     def test_basic_structure(self, client, tmp_path):
-        _, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        _, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         detectors = {"det_a": {"weights": detector["weights"], "threshold": detector["threshold"]}}
         detector_results = _score_medias_with_detectors(app_module.medias, detectors)
         results = _build_multi_results_dict(detector_results, "audio")
@@ -378,8 +378,8 @@ class TestBuildMultiResultsDict:
         assert len(results["results"]) == 1
 
     def test_two_detectors(self, client, tmp_path):
-        _, det_a = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20], name="a.json")
-        _, det_b = _make_detector_file(tmp_path,[5, 6, 7], [15, 16, 17], name="b.json")
+        _, det_a = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20], name="a.json")
+        _, det_b = _make_detector_file(tmp_path, [5, 6, 7], [15, 16, 17], name="b.json")
         detectors = {
             "det_a": {"weights": det_a["weights"], "threshold": det_a["threshold"]},
             "det_b": {"weights": det_b["weights"], "threshold": det_b["threshold"]},
@@ -482,7 +482,7 @@ class TestAutodetectCLI:
 
     def test_autodetect_prints_output(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -504,7 +504,7 @@ class TestAutodetectCLI:
         assert "Predicted Good" in result.stdout or "No items predicted as Good" in result.stdout
 
     def test_autodetect_missing_dataset_flag(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -541,7 +541,7 @@ class TestAutodetectCLI:
         assert "No autorun processors" in result.stderr
 
     def test_autodetect_nonexistent_dataset(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -564,7 +564,7 @@ class TestAutodetectCLI:
 
     def test_autodetect_output_contains_names(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         # Use threshold 0 to ensure all medias appear
         detector["threshold"] = 0.0
@@ -593,7 +593,7 @@ class TestAutodetectCLI:
 
     def test_autodetect_no_hits_message(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         # Use threshold 1.0 to ensure no hits
         detector["threshold"] = 1.0
@@ -622,8 +622,8 @@ class TestAutodetectCLI:
     def test_autodetect_multiple_processors(self, client, tmp_path):
         """Multiple processors in settings should produce results from all."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        det_a_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20], name="det_a.json")
-        det_b_path, _ = _make_detector_file(tmp_path,[5, 6, 7], [15, 16, 17], name="det_b.json")
+        det_a_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20], name="det_a.json")
+        det_b_path, _ = _make_detector_file(tmp_path, [5, 6, 7], [15, 16, 17], name="det_b.json")
         settings_path = _make_settings_file(tmp_path, [det_a_path, det_b_path])
 
         output_file = tmp_path / "multi_output.json"
@@ -665,7 +665,7 @@ class TestAutodetectImporterCLI:
     def test_importer_pickle_via_cli(self, client, tmp_path):
         """--importer pickle --file <path> should work like --dataset <path>."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -689,7 +689,7 @@ class TestAutodetectImporterCLI:
         assert "Predicted Good" in result.stdout or "No items predicted as Good" in result.stdout
 
     def test_importer_unknown_name_fails(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -737,7 +737,7 @@ class TestAutodetectImporterCLI:
 
     def test_importer_missing_required_field_fails(self, client, tmp_path):
         """Omitting a required importer field should produce an error."""
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -760,7 +760,7 @@ class TestAutodetectImporterCLI:
         assert "Error" in result.stderr
 
     def test_importer_folder_nonexistent_path_fails(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -878,7 +878,7 @@ class TestBuildResultsDict:
 
     def test_basic_structure(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
@@ -889,7 +889,7 @@ class TestBuildResultsDict:
         assert len(results["results"]) == 1
 
     def test_detector_name_from_json(self, client, tmp_path):
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2], [3, 4])
 
         # Write a detector with an explicit name field
         detector["name"] = "my_detector"
@@ -900,7 +900,7 @@ class TestBuildResultsDict:
         assert "my_detector" in results["results"]
 
     def test_detector_name_falls_back_to_stem(self, client, tmp_path):
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2], [3, 4], name="bark_detector.json")
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2], [3, 4], name="bark_detector.json")
 
         # Remove name field if present
         detector.pop("name", None)
@@ -913,7 +913,7 @@ class TestBuildResultsDict:
 
     def test_hits_included_in_results(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path))
@@ -923,14 +923,14 @@ class TestBuildResultsDict:
         assert det_result["hits"] == hits
 
     def test_threshold_from_detector(self, client, tmp_path):
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2], [3, 4])
 
         results = _build_results_dict([], str(detector_path))
         det_result = list(results["results"].values())[0]
         assert det_result["threshold"] == detector["threshold"]
 
     def test_default_media_type_is_unknown(self, client, tmp_path):
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2], [3, 4])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2], [3, 4])
         results = _build_results_dict([], str(detector_path))
         assert results["media_type"] == "unknown"
 
@@ -960,7 +960,7 @@ class TestRunExporter:
 
     def test_file_exporter_creates_file(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
@@ -975,7 +975,7 @@ class TestRunExporter:
 
     def test_gui_exporter_prints_results(self, client, tmp_path, capsys):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, detector = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, detector = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         # Use threshold 0 to ensure hits
         detector["threshold"] = 0.0
@@ -1004,7 +1004,7 @@ class TestRunExporter:
         from unittest.mock import patch
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
 
@@ -1026,7 +1026,7 @@ class TestAutodetectMainWithExporter:
 
     def test_file_exporter_via_function(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "fn_export.json"
@@ -1045,7 +1045,7 @@ class TestAutodetectMainWithExporter:
 
     def test_no_exporter_uses_gui_default(self, client, tmp_path, capsys):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         from vtsearch.cli import autodetect_main
@@ -1061,8 +1061,8 @@ class TestAutodetectMainWithExporter:
     def test_multi_processor_file_export(self, client, tmp_path):
         """autodetect_main with two processors should produce two-detector results."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        det_a_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20], name="det_a.json")
-        det_b_path, _ = _make_detector_file(tmp_path,[5, 6, 7], [15, 16, 17], name="det_b.json")
+        det_a_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20], name="det_a.json")
+        det_b_path, _ = _make_detector_file(tmp_path, [5, 6, 7], [15, 16, 17], name="det_b.json")
         settings_path = _make_settings_file(tmp_path, [det_a_path, det_b_path])
 
         output_file = tmp_path / "multi_export.json"
@@ -1080,13 +1080,12 @@ class TestAutodetectMainWithExporter:
         assert saved["detectors_run"] == 2
         assert len(saved["results"]) == 2
 
-
     def test_exporter_oserror_exits_cleanly(self, client, tmp_path, capsys):
         """An OSError from an exporter should exit(1) with a clean error message, not a traceback."""
         from unittest.mock import patch
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         from vtsearch.cli import autodetect_main
@@ -1112,7 +1111,7 @@ class TestAutodetectMainWithExporter:
         from unittest.mock import patch
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         from vtsearch.cli import autodetect_main
@@ -1139,7 +1138,7 @@ class TestAutodetectImporterMainWithExporter:
 
     def test_pickle_importer_file_exporter(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "importer_export.json"
@@ -1163,7 +1162,7 @@ class TestAutodetectImporterMainWithExporter:
         from unittest.mock import patch
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         from vtsearch.cli import autodetect_importer_main
@@ -1197,7 +1196,7 @@ class TestAutodetectExporterCLI:
 
     def test_file_exporter_via_cli(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "cli_export.json"
@@ -1227,7 +1226,7 @@ class TestAutodetectExporterCLI:
 
     def test_file_exporter_with_importer_via_cli(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "cli_imp_export.json"
@@ -1259,7 +1258,7 @@ class TestAutodetectExporterCLI:
 
     def test_gui_exporter_via_cli(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -1290,7 +1289,7 @@ class TestAutodetectExporterCLI:
 
     def test_unknown_exporter_fails(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -1316,7 +1315,7 @@ class TestAutodetectExporterCLI:
     def test_missing_exporter_required_field_fails(self, client, tmp_path):
         """Omitting required email_smtp fields should produce an error."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         result = subprocess.run(
@@ -1343,7 +1342,7 @@ class TestAutodetectExporterCLI:
     def test_file_exporter_output_contains_media_type(self, client, tmp_path):
         """File exporter output should include the media_type from the dataset."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "media_type_test.json"
@@ -1373,7 +1372,7 @@ class TestAutodetectExporterCLI:
     def test_file_exporter_stdout_shows_confirmation(self, client, tmp_path):
         """The CLI should print the exporter's confirmation message."""
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
         settings_path = _make_settings_file(tmp_path, [detector_path])
 
         output_file = tmp_path / "confirm_test.json"

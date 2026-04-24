@@ -225,11 +225,13 @@ class TestFolderImporterConverterFields:
     def test_build_cli_args_with_converters(self):
         from vtsearch.datasets.importers.folder import IMPORTER
 
-        args = IMPORTER.build_cli_args({
-            "media_type": "image",
-            "path": "/data",
-            "converters": "video2image,document2image",
-        })
+        args = IMPORTER.build_cli_args(
+            {
+                "media_type": "image",
+                "path": "/data",
+                "converters": "video2image,document2image",
+            }
+        )
         assert "--converters video2image,document2image" in args
 
     def test_build_origin_without_converters(self):
@@ -242,11 +244,13 @@ class TestFolderImporterConverterFields:
     def test_build_origin_with_converters(self):
         from vtsearch.datasets.importers.folder import IMPORTER
 
-        origin = IMPORTER.build_origin({
-            "media_type": "image",
-            "path": "/data",
-            "converters": "video2image",
-        })
+        origin = IMPORTER.build_origin(
+            {
+                "media_type": "image",
+                "path": "/data",
+                "converters": "video2image",
+            }
+        )
         assert origin["params"]["converters"] == "video2image"
 
 
@@ -254,21 +258,25 @@ class TestHttpArchiveImporterConverterFields:
     def test_build_cli_args_with_converters(self):
         from vtsearch.datasets.importers.http_zip import IMPORTER
 
-        args = IMPORTER.build_cli_args({
-            "url": "https://example.com/a.zip",
-            "media_type": "image",
-            "converters": "video2image",
-        })
+        args = IMPORTER.build_cli_args(
+            {
+                "url": "https://example.com/a.zip",
+                "media_type": "image",
+                "converters": "video2image",
+            }
+        )
         assert "--converters video2image" in args
 
     def test_build_origin_with_converters(self):
         from vtsearch.datasets.importers.http_zip import IMPORTER
 
-        origin = IMPORTER.build_origin({
-            "url": "https://example.com/a.zip",
-            "media_type": "image",
-            "converters": "document2image",
-        })
+        origin = IMPORTER.build_origin(
+            {
+                "url": "https://example.com/a.zip",
+                "media_type": "image",
+                "converters": "document2image",
+            }
+        )
         assert origin["params"]["converters"] == "document2image"
 
 
@@ -300,9 +308,18 @@ class TestRunConvertersOnFolder:
         c.source_type = "video"
         c.target_type = "image"
         c.display_name = "Video \u2192 Images"
-        c.convert.return_value = overrides.pop("convert_return", [
-            {"filename": "clip_clip_1.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
-        ])
+        c.convert.return_value = overrides.pop(
+            "convert_return",
+            [
+                {
+                    "filename": "clip_clip_1.png",
+                    "media_bytes": _make_png_bytes(),
+                    "duration": 0,
+                    "width": 4,
+                    "height": 4,
+                },
+            ],
+        )
         for k, v in overrides.items():
             setattr(c, k, v)
         return c
@@ -405,9 +422,27 @@ class TestRunConvertersOnFolder:
         (tmp_path / "long_video.mp4").write_bytes(b"video-data")
 
         fake_outputs = [
-            {"filename": "long_video_clip_1.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
-            {"filename": "long_video_clip_2.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
-            {"filename": "long_video_clip_3.png", "media_bytes": _make_png_bytes(), "duration": 0, "width": 4, "height": 4},
+            {
+                "filename": "long_video_clip_1.png",
+                "media_bytes": _make_png_bytes(),
+                "duration": 0,
+                "width": 4,
+                "height": 4,
+            },
+            {
+                "filename": "long_video_clip_2.png",
+                "media_bytes": _make_png_bytes(),
+                "duration": 0,
+                "width": 4,
+                "height": 4,
+            },
+            {
+                "filename": "long_video_clip_3.png",
+                "media_bytes": _make_png_bytes(),
+                "duration": 0,
+                "width": 4,
+                "height": 4,
+            },
         ]
 
         mock_converter = self._mock_video2image_converter(convert_return=fake_outputs)
@@ -670,7 +705,10 @@ class TestFolderImporterWithConverters:
                 medias.update(mock_converter_medias)
 
         with (
-            patch("vtsearch.datasets.importers.folder.load_dataset_from_folder", side_effect=ValueError("No images files found")),
+            patch(
+                "vtsearch.datasets.importers.folder.load_dataset_from_folder",
+                side_effect=ValueError("No images files found"),
+            ),
             patch("vtsearch.datasets.importers.folder._run_selected_converters", side_effect=_fake_run_converters),
         ):
             medias: dict = {}

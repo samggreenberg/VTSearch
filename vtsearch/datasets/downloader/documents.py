@@ -101,10 +101,7 @@ def download_ucsf_documents(
                 on_progress("downloading", f"Cached {doc_id}.pdf", downloaded, total_docs)
                 continue
 
-            url = (
-                f"{_core.UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}"
-                f"/{doc_id}/{doc_id}.pdf"
-            )
+            url = f"{_core.UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}/{doc_id}/{doc_id}.pdf"
 
             try:
                 _core.download_file_with_progress(url, pdf_path, 0, on_progress)
