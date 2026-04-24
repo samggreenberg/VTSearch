@@ -12,6 +12,7 @@ from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
 # ── MediaItem ─────────────────────────────────────────────────────────
 
+
 class TestMediaItem:
     def test_fields(self):
         item = MediaItem(key="sub/file.wav", filename="file.wav", source_name="local_folder")
@@ -26,6 +27,7 @@ class TestMediaItem:
 
 
 # ── LocalFolderSource ─────────────────────────────────────────────────
+
 
 class TestLocalFolderSource:
     def _make_tree(self, tmp_path):
@@ -141,6 +143,7 @@ class TestLocalFolderSource:
 
 # ── HttpArchiveSource ─────────────────────────────────────────────────
 
+
 class TestHttpArchiveSource:
     def test_lazy_extraction(self, tmp_path):
         """HttpArchiveSource downloads and extracts only on first access."""
@@ -167,6 +170,7 @@ class TestHttpArchiveSource:
             assert result.name == "clip.wav"
         finally:
             import shutil
+
             shutil.rmtree(cached, ignore_errors=True)
 
     def test_delegates_to_local_folder(self, tmp_path):
@@ -188,6 +192,7 @@ class TestHttpArchiveSource:
             zf.extractall(extract_dir)
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = extract_dir
         source._inner = LocalFolderSource(extract_dir)
 
@@ -209,6 +214,7 @@ class TestHttpArchiveSource:
         (source_dir / "file.wav").write_bytes(b"data")
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = source_dir
         source._inner = LocalFolderSource(source_dir)
 
@@ -226,6 +232,7 @@ class TestHttpArchiveSource:
         (cached_dir / "file.wav").write_bytes(b"data")
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = cached_dir
         source._inner = LocalFolderSource(cached_dir)
 
@@ -235,6 +242,7 @@ class TestHttpArchiveSource:
 
 
 # ── get_source_for_origin ─────────────────────────────────────────────
+
 
 class TestGetSourceForOrigin:
     def test_folder_origin(self, tmp_path):
@@ -248,6 +256,7 @@ class TestGetSourceForOrigin:
 
     def test_http_archive_origin(self):
         from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+
         origin = {"importer": "http_archive", "params": {"url": "https://example.com/data.zip"}}
         source = get_source_for_origin(origin)
         assert source is not None
@@ -276,6 +285,7 @@ class TestGetSourceForOrigin:
 
 # ── Folder importer delegates to LocalFolderSource ────────────────────
 
+
 class TestFolderImporterDelegatesToSource:
     def test_resolve_file_uses_source(self, tmp_path):
         folder = tmp_path / "audio"
@@ -303,6 +313,7 @@ class TestFolderImporterDelegatesToSource:
 
 # ── Resolver uses sources ─────────────────────────────────────────────
 
+
 class TestResolverUsesSource:
     def test_resolve_via_source(self, tmp_path):
         """resolve_file_from_origin now tries sources before importers."""
@@ -318,6 +329,7 @@ class TestResolverUsesSource:
 
 
 # ── Ingest uses source fast-path ──────────────────────────────────────
+
 
 class TestIngestViaSource:
     def test_ingest_fetches_individually(self, tmp_path):
@@ -390,6 +402,7 @@ class TestIngestViaSource:
 
 
 # ── Example-sort-origin API endpoint ──────────────────────────────────
+
 
 class TestExampleSortOriginEndpoint:
     def test_missing_origin(self, client):

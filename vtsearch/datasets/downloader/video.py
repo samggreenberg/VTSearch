@@ -33,8 +33,7 @@ def _extract_rar(rar_path: Path, extract_to: Path) -> None:
         ) from None
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(
-            f"unrar timed out after {e.timeout}s while extracting {rar_path.name}. "
-            "The archive may be corrupt."
+            f"unrar timed out after {e.timeout}s while extracting {rar_path.name}. The archive may be corrupt."
         ) from None
 
 
@@ -242,8 +241,7 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
     # Already downloaded and extracted (all actions present).
     actions = _core.KTH_ACTIONS
     if video_dir.exists() and all(
-        (video_dir / action).exists() and any((video_dir / action).glob("*.avi"))
-        for action in actions
+        (video_dir / action).exists() and any((video_dir / action).glob("*.avi")) for action in actions
     ):
         return video_dir
 

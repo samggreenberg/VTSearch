@@ -128,10 +128,13 @@ def _run_selected_converters(
 
     from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
 
-    base_origin = {"importer": "http_archive", "params": {
-        "url": field_values.get("url", ""),
-        "media_type": media_type,
-    }}
+    base_origin = {
+        "importer": "http_archive",
+        "params": {
+            "url": field_values.get("url", ""),
+            "media_type": media_type,
+        },
+    }
     run_converters_on_folder(
         folder_path=folder,
         converter_names=converter_names,
@@ -231,7 +234,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         skip_emb = bool(field_values.get("skip_embedding"))
         try:
             load_dataset_from_folder(
-                extract_dir, media_type, medias, on_progress=progress, thin=thin, embedder_name=emb_name,
+                extract_dir,
+                media_type,
+                medias,
+                on_progress=progress,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
@@ -282,7 +290,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         return extract_dir
 
     def run_chunked(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         from vtsearch.datasets.loader import load_dataset_from_folder_chunked
 
@@ -292,7 +303,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
-                extract_dir, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                extract_dir,
+                media_type,
+                chunk_size,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
@@ -309,7 +324,10 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         url = field_values.get("url", "")
         if not url.startswith(("http://", "https://")):
@@ -330,7 +348,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             origin["params"]["converters"] = converters
         return origin
 
-
     def resolve_file(
         self,
         origin: dict[str, Any],
@@ -350,9 +367,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         return source.resolve_path(origin_name, filename)
 
 
-def _search_dir_for_file(
-    directory: Path, origin_name: str, filename: str
-) -> Path | None:
+def _search_dir_for_file(directory: Path, origin_name: str, filename: str) -> Path | None:
     """Search a directory for a file matching origin_name or filename."""
     for name in [origin_name, filename]:
         if not name:

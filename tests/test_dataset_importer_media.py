@@ -377,7 +377,9 @@ class TestImporterCustomMetadataMD5:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 content_md5s={"prio.wav": content_md5},
                 custom_metadata_map={"prio.wav": {"md5": cm_md5}},
                 on_progress=lambda *a: None,
@@ -397,7 +399,9 @@ class TestImporterCustomMetadataMD5:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map={"slim.wav": {"md5": cm_md5}},
                 on_progress=lambda *a: None,
                 thin=True,
@@ -456,7 +460,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map={"tone.wav": {"embedding": cm_vec, "source": "test"}},
                 on_progress=lambda *a: None,
             )
@@ -480,7 +486,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 content_vectors={"prio.wav": cv_vec},
                 custom_metadata_map={"prio.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
@@ -501,7 +509,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map={"slim.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
                 thin=True,
@@ -524,7 +534,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map={"both.wav": {"embedding": cm_vec, "md5": cm_md5}},
                 on_progress=lambda *a: None,
             )
@@ -549,7 +561,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map={"meta.wav": {"embedding": cm_vec}},
                 on_progress=lambda *a: None,
             )
@@ -569,11 +583,15 @@ class TestImporterCustomMetadataEmbedding:
         mt, emb = _make_mock_media_type()
 
         with _patch_media_registry(mt, emb):
-            chunks = list(load_dataset_from_folder_chunked(
-                tmp_path, "audio", chunk_size=10,
-                custom_metadata_map={"chunk.wav": {"embedding": cm_vec}},
-                on_progress=lambda *a: None,
-            ))
+            chunks = list(
+                load_dataset_from_folder_chunked(
+                    tmp_path,
+                    "audio",
+                    chunk_size=10,
+                    custom_metadata_map={"chunk.wav": {"embedding": cm_vec}},
+                    on_progress=lambda *a: None,
+                )
+            )
 
         all_medias = {}
         for chunk in chunks:
@@ -647,7 +665,9 @@ class TestImporterCustomMetadataEmbedding:
         medias: dict = {}
         with _patch_media_registry(mt, emb):
             load_dataset_from_folder(
-                tmp_path, "audio", medias,
+                tmp_path,
+                "audio",
+                medias,
                 custom_metadata_map=cm_map,
                 on_progress=lambda *a: None,
             )

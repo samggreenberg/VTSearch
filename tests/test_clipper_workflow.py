@@ -23,6 +23,7 @@ from vtsearch.utils import medias, good_votes, bad_votes
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str = "/data/audio") -> dict:
     """Create a fake audio media dict with WAV bytes and an embedding."""
     # Use 441Hz and 5.1s so that tile boundaries don't align with exact
@@ -695,6 +696,7 @@ class TestMultipleMediasClipped:
 # _apply_clipper — on_progress callback
 # ---------------------------------------------------------------------------
 
+
 class TestApplyClipperProgress:
     """Verify that _apply_clipper reports progress via the on_progress callback."""
 
@@ -706,8 +708,12 @@ class TestApplyClipperProgress:
             2: _make_audio_media(2, duration=4.1),
         }
         calls = []
-        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0},
-                       on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)))
+        _apply_clipper(
+            clips_dict,
+            "sound_tiling",
+            {"duration": 2.0},
+            on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)),
+        )
 
         clipping_calls = [c for c in calls if c[2] == "clipping"]
         embedding_calls = [c for c in calls if c[2] == "embedding"]
@@ -920,10 +926,22 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "a.wav", "category": "audio", "score": 0.9,
-                         "clip_start": 0.0, "clip_end": 2.0, "origin_name": "a.wav"},
-                        {"filename": "b.wav", "category": "audio", "score": 0.8,
-                         "clip_start": 2.0, "clip_end": 4.0, "origin_name": "b.wav"},
+                        {
+                            "filename": "a.wav",
+                            "category": "audio",
+                            "score": 0.9,
+                            "clip_start": 0.0,
+                            "clip_end": 2.0,
+                            "origin_name": "a.wav",
+                        },
+                        {
+                            "filename": "b.wav",
+                            "category": "audio",
+                            "score": 0.8,
+                            "clip_start": 2.0,
+                            "clip_end": 4.0,
+                            "origin_name": "b.wav",
+                        },
                     ],
                 }
             },
@@ -932,6 +950,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -951,8 +970,13 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "tile.png", "category": "image", "score": 0.9,
-                         "clip_box": [0, 0, 100, 100], "origin_name": "tile.png"},
+                        {
+                            "filename": "tile.png",
+                            "category": "image",
+                            "score": 0.9,
+                            "clip_box": [0, 0, 100, 100],
+                            "origin_name": "tile.png",
+                        },
                     ],
                 }
             },
@@ -961,6 +985,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -978,8 +1003,7 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "full.wav", "category": "audio", "score": 0.7,
-                         "origin_name": "full.wav"},
+                        {"filename": "full.wav", "category": "audio", "score": 0.7, "origin_name": "full.wav"},
                     ],
                 }
             },
@@ -988,6 +1012,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)

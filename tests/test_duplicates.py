@@ -269,8 +269,18 @@ class TestLabelExportExpandsDupes:
             "importer": "dupe_set",
             "params": {"name": "a.wav"},
             "members": [
-                {"origin": {"importer": "test", "params": {}}, "origin_name": "a.wav", "filename": "a.wav", "category": "c"},
-                {"origin": {"importer": "test", "params": {}}, "origin_name": "b.wav", "filename": "b.wav", "category": "c"},
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": "a.wav",
+                    "filename": "a.wav",
+                    "category": "c",
+                },
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": "b.wav",
+                    "filename": "b.wav",
+                    "category": "c",
+                },
             ],
         }
         app_module.medias[1] = rep
@@ -304,8 +314,18 @@ class TestLabelImportWithDupes:
             "importer": "dupe_set",
             "params": {"name": "a.wav"},
             "members": [
-                {"origin": {"importer": "test", "params": {}}, "origin_name": "a.wav", "filename": "a.wav", "category": "c"},
-                {"origin": {"importer": "test", "params": {}}, "origin_name": "b.wav", "filename": "b.wav", "category": "c"},
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": "a.wav",
+                    "filename": "a.wav",
+                    "category": "c",
+                },
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": "b.wav",
+                    "filename": "b.wav",
+                    "category": "c",
+                },
             ],
         }
         app_module.medias[1] = rep

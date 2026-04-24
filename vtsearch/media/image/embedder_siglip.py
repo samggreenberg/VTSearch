@@ -65,8 +65,9 @@ class ImageSiglipEmbedder(MediaEmbedder):
             from transformers import SiglipModel, SiglipProcessor  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading SigLIP model weights…")
-        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
-            self._on_progress, "Loading SigLIP model weights…"
+        with (
+            intercept_tqdm_progress(self._on_progress),
+            intercept_weight_loading_progress(self._on_progress, "Loading SigLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
                 SiglipModel.from_pretrained, SIGLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False

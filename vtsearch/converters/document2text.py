@@ -75,13 +75,15 @@ class Document2TextMediaConverter(MediaConverter):
             return []
 
         full_text = "\n\n".join(page_texts)
-        return [{
-            "filename": f"{stem}.txt",
-            "media_string": full_text,
-            "duration": 0,
-            "word_count": len(full_text.split()),
-            "character_count": len(full_text),
-        }]
+        return [
+            {
+                "filename": f"{stem}.txt",
+                "media_string": full_text,
+                "duration": 0,
+                "word_count": len(full_text.split()),
+                "character_count": len(full_text),
+            }
+        ]
 
 
 CONVERTER = Document2TextMediaConverter()

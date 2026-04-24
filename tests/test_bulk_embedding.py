@@ -66,8 +66,7 @@ class TestEmbedderDefaults:
 
         for emb in all_embedders():
             assert emb.supports_batch is False, (
-                f"{type(emb).__name__} reports supports_batch=True but has no overridden "
-                "_embed_media_batch_impl"
+                f"{type(emb).__name__} reports supports_batch=True but has no overridden _embed_media_batch_impl"
             )
 
     def test_default_batch_impl_loops_over_single(self, tmp_path):
@@ -144,8 +143,9 @@ class TestLoaderRoutesToBatch:
         emb = _make_batch_embedder(batch_size=32)
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -168,8 +168,9 @@ class TestLoaderRoutesToBatch:
         emb = _make_batch_embedder(batch_size=2)
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -192,8 +193,9 @@ class TestLoaderRoutesToBatch:
         cm_vec = np.array([42.0, 42.0, 42.0], dtype=np.float32)
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(
                 tmp_path,
@@ -225,12 +227,11 @@ class TestLoaderRoutesToBatch:
         emb = _make_batch_embedder(batch_size=32)
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
-            load_dataset_from_folder(
-                tmp_path, "audio", medias, on_progress=lambda *a: None, skip_embedding=True
-            )
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None, skip_embedding=True)
 
         emb.embed_media_batch.assert_not_called()
         emb.embed_media.assert_not_called()
@@ -252,16 +253,14 @@ class TestLoaderRoutesToBatch:
         emb.batch_size = 32
 
         def _batch(medias_in):
-            return [
-                None if Path(m["media_path"]).name == "bad.wav" else np.array([1.0, 2.0])
-                for m in medias_in
-            ]
+            return [None if Path(m["media_path"]).name == "bad.wav" else np.array([1.0, 2.0]) for m in medias_in]
 
         emb.embed_media_batch.side_effect = _batch
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -292,8 +291,9 @@ class TestNonBatchEmbedderUnchanged:
         emb.embed_media.return_value = np.array([1.0, 2.0])
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -323,13 +323,12 @@ class TestChunkedLoaderBatches:
         mt = _make_media_type_for_audio()
         emb = _make_batch_embedder(batch_size=10)
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt), mock.patch(
-            "vtsearch.media.embedders_for_type", return_value=[emb]
+        with (
+            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
         ):
             chunks = list(
-                load_dataset_from_folder_chunked(
-                    tmp_path, "audio", chunk_size=2, on_progress=lambda *a: None
-                )
+                load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, on_progress=lambda *a: None)
             )
 
         assert len(chunks) == 2

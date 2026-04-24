@@ -526,5 +526,3 @@ class TestSettingsAPI:
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
         assert "trainable_models_dir" not in data
-
-

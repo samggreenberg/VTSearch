@@ -298,8 +298,10 @@ class TestServerFileProcessorImporter:
     def test_run_defaults_media_type_to_audio(self, tmp_path):
         origins = self._fake_origins()
         payload = {
-            "good_origins": origins, "bad_origins": origins,
-            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5,
+            "good_origins": origins,
+            "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]]},
+            "threshold": 0.5,
         }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
@@ -309,8 +311,11 @@ class TestServerFileProcessorImporter:
     def test_run_includes_suggested_name(self, tmp_path):
         origins = self._fake_origins()
         payload = {
-            "good_origins": origins, "bad_origins": origins,
-            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5, "name": "my detector",
+            "good_origins": origins,
+            "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]]},
+            "threshold": 0.5,
+            "name": "my detector",
         }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
@@ -340,8 +345,10 @@ class TestServerFileProcessorImporter:
     def test_run_cli_delegates_to_run(self, tmp_path):
         origins = self._fake_origins()
         payload = {
-            "good_origins": origins, "bad_origins": origins,
-            "weights": {"0.weight": [[1.0]], "0.bias": [0.1]}, "threshold": 0.6,
+            "good_origins": origins,
+            "bad_origins": origins,
+            "weights": {"0.weight": [[1.0]], "0.bias": [0.1]},
+            "threshold": 0.6,
         }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))
@@ -469,8 +476,10 @@ class TestProcessorImportEndpoint:
     def test_detector_file_defaults_to_audio(self, client, tmp_path):
         fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
         payload = {
-            "good_origins": fake_o, "bad_origins": fake_o,
-            "weights": {"0.weight": [[1.0]]}, "threshold": 0.5,
+            "good_origins": fake_o,
+            "bad_origins": fake_o,
+            "weights": {"0.weight": [[1.0]]},
+            "threshold": 0.5,
         }
         p = tmp_path / "detector.json"
         p.write_text(json.dumps(payload))

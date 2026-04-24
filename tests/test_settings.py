@@ -701,5 +701,3 @@ class TestEnsureAutorunProcessorsImported:
 
         imported = settings_mod.ensure_autorun_processors_imported()
         assert imported == []
-
-

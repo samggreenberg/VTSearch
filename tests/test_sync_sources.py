@@ -275,10 +275,12 @@ class TestServerFileLabelsetSource:
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
 
-        ls = LabelSet([
-            LabeledElement(md5="abc", label="good"),
-            LabeledElement(md5="def", label="bad"),
-        ])
+        ls = LabelSet(
+            [
+                LabeledElement(md5="abc", label="good"),
+                LabeledElement(md5="def", label="bad"),
+            ]
+        )
         src.save(ls, {"filepath": str(filepath)})
 
         assert filepath.exists()
@@ -293,10 +295,12 @@ class TestServerFileLabelsetSource:
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
 
-        original = LabelSet([
-            LabeledElement(md5="abc", label="good"),
-            LabeledElement(md5="def", label="bad"),
-        ])
+        original = LabelSet(
+            [
+                LabeledElement(md5="abc", label="good"),
+                LabeledElement(md5="def", label="bad"),
+            ]
+        )
         src.save(original, {"filepath": str(filepath)})
 
         loaded = src.load({"filepath": str(filepath)})
@@ -679,9 +683,7 @@ class TestLabelsetSync:
             pytest.skip("Test media has no md5")
 
         filepath = tmp_path / "labels.json"
-        filepath.write_text(json.dumps({
-            "labels": [{"md5": first_md5, "label": "good"}]
-        }))
+        filepath.write_text(json.dumps({"labels": [{"md5": first_md5, "label": "good"}]}))
 
         ctx = DetectorContext("test_import", name="test_import")
         ctx.labelset_source = {

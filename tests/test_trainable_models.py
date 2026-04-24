@@ -319,7 +319,12 @@ class TestSaveLabels:
             "importer": "dupe_set",
             "params": {"name": original.get("filename", "a.wav")},
             "members": [
-                {"origin": {"importer": "test", "params": {}}, "origin_name": f"dup_{i}.wav", "filename": f"dup_{i}.wav", "category": "c"}
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": f"dup_{i}.wav",
+                    "filename": f"dup_{i}.wav",
+                    "category": "c",
+                }
                 for i in range(5)
             ],
         }
@@ -853,7 +858,9 @@ class TestSeedVotesFromExamples:
         assert res.status_code == 200
         labels = res.get_json()["labels"]
         example_labels = [
-            lbl for lbl in labels if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
+            lbl
+            for lbl in labels
+            if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
         ]
         assert len(example_labels) == 1
         assert example_labels[0]["label"] == "good"
@@ -1108,13 +1115,16 @@ class TestLoadModelCrossDatasetResolution:
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "cross-dataset-load"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Cross Load Test",
@@ -1183,13 +1193,16 @@ class TestLoadModelCrossDatasetResolution:
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "name-fallback"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Name Fallback Test",
@@ -1221,4 +1234,3 @@ class TestLoadModelCrossDatasetResolution:
                 medias.update(saved)
         finally:
             set_trainable_models_dir(original_dir)
-

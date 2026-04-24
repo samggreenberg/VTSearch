@@ -665,9 +665,7 @@ class TestDemoCacheEmbedderMismatch:
 
         # Write a fake cached pickle with a 'clip' sidecar
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(
-            pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
-        )
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}}))
         _write_embedder_sidecar(pkl_file, "clip")
 
         # Create a fake embedder whose name is 'siglip'
@@ -709,10 +707,12 @@ class TestDemoCacheEmbedderMismatch:
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
+                }
+            )
         )
         _write_embedder_sidecar(pkl_file, "clip")
 
@@ -749,10 +749,12 @@ class TestDemoCacheEmbedderMismatch:
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
+                }
+            )
         )
         # No sidecar written — simulates a legacy pickle
 

@@ -212,10 +212,16 @@ class TestSafeThresholdsEval:
 
         medias = self._make_clips()
         rows_off = simulate_voting_iterations(
-            medias, "target", seed=42, safe_thresholds=False,
+            medias,
+            "target",
+            seed=42,
+            safe_thresholds=False,
         )
         rows_on = simulate_voting_iterations(
-            medias, "target", seed=42, safe_thresholds=True,
+            medias,
+            "target",
+            seed=42,
+            safe_thresholds=True,
         )
         # Both should produce valid results
         assert len(rows_off) > 0
@@ -305,12 +311,8 @@ class TestCalibrationFractionCrossCalibration:
         X, y, dim = self._make_data(n=40, seed=123)
         rng1 = np.random.RandomState(42)
         rng2 = np.random.RandomState(42)
-        t_02 = calculate_cross_calibration_threshold(
-            X, y, dim, rng=rng1, calibrate_count=5, calibration_fraction=0.2
-        )
-        t_08 = calculate_cross_calibration_threshold(
-            X, y, dim, rng=rng2, calibrate_count=5, calibration_fraction=0.8
-        )
+        t_02 = calculate_cross_calibration_threshold(X, y, dim, rng=rng1, calibrate_count=5, calibration_fraction=0.2)
+        t_08 = calculate_cross_calibration_threshold(X, y, dim, rng=rng2, calibrate_count=5, calibration_fraction=0.8)
         # Both valid; they CAN be equal but checking both are valid floats
         assert isinstance(t_02, float)
         assert isinstance(t_08, float)
@@ -421,7 +423,10 @@ class TestCalibrationFractionEval:
 
         medias = self._make_clips()
         rows = simulate_voting_iterations(
-            medias, "target", seed=42, calibration_fraction=0.3,
+            medias,
+            "target",
+            seed=42,
+            calibration_fraction=0.3,
         )
         assert len(rows) > 0
         for row in rows:

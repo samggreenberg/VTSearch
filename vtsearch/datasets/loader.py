@@ -344,7 +344,13 @@ def load_dataset_from_folder(
     batch_embeddings: dict[Path, Any] = {}
     if use_batch:
         batch_embeddings = _batch_embed_files(
-            emb, media_files, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
+            emb,
+            media_files,
+            folder_path,
+            content_vectors,
+            custom_metadata_map,
+            on_progress,
+            media_type,
             origin=origin,
         )
 
@@ -387,9 +393,7 @@ def load_dataset_from_folder(
                 if use_batch:
                     embedding = batch_embeddings.get(file_path)
                 else:
-                    embedding = emb.embed_media(
-                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
-                    )
+                    embedding = emb.embed_media(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
                 if embedding is None:
                     continue
 
@@ -612,7 +616,13 @@ def load_dataset_from_folder_chunked(
         chunk_batch_embeddings: dict[Path, Any] = {}
         if use_batch:
             chunk_batch_embeddings = _batch_embed_files(
-                emb, batch, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
+                emb,
+                batch,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
                 origin=origin,
             )
 
@@ -652,9 +662,7 @@ def load_dataset_from_folder_chunked(
                 if use_batch:
                     embedding = chunk_batch_embeddings.get(file_path)
                 else:
-                    embedding = emb.embed_media(
-                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
-                    )
+                    embedding = emb.embed_media(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
                 if embedding is None:
                     continue
 
@@ -1299,7 +1307,11 @@ def load_demo_dataset(
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k not in ("media_bytes", "thumbnail_bytes")}
+                cid: {
+                    k: v.tolist() if isinstance(v, np.ndarray) else v
+                    for k, v in media.items()
+                    if k not in ("media_bytes", "thumbnail_bytes")
+                }
                 for cid, media in medias.items()
             },
             mt.dir_key: external_dir,

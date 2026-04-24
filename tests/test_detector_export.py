@@ -9,6 +9,7 @@ import pytest
 
 import app as app_module
 
+
 class TestServerDetectorExport:
     """Tests for the ServerFileProcessorExporter endpoints."""
 
@@ -240,4 +241,3 @@ class TestDetectorLabelsetExport:
         assert data["applied"] == 3
         assert set(app_module.good_votes) == {1, 3}
         assert set(app_module.bad_votes) == {2}
-

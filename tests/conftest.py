@@ -190,6 +190,7 @@ _patch_embed_audio.start()
 # Create a default dataset context so init_medias() has somewhere to write,
 # and a default detector context so vote proxies have somewhere to delegate.
 import vtsearch.utils.state_core as _state_core
+
 _startup_ctx = _state_core.DatasetContext("_startup")
 _state_core.register_context(_startup_ctx)
 _state_core.set_thread_dataset_context(_startup_ctx)
@@ -235,7 +236,12 @@ _patch_embed_audio.stop()
 # Grab the audio media-type singleton and the audio embedder so the per-test
 # fixture can patch embed_text/embed_media/load_models on both, preventing
 # CLAP from loading during /api/sort and similar calls.
-from vtsearch.media import all_embedders as _all_embedders, all_types as _all_types, get as _media_get, embedders_for_type as _embedders_for_type
+from vtsearch.media import (
+    all_embedders as _all_embedders,
+    all_types as _all_types,
+    get as _media_get,
+    embedders_for_type as _embedders_for_type,
+)
 
 _audio_mt = _media_get("audio")
 _audio_emb = _embedders_for_type("audio")[0]
@@ -303,7 +309,14 @@ def _stub_embedding_models():
 
 
 import vtsearch.utils.state_core as _core
-from vtsearch.utils.progress import dataset_progress as _dataset_progress, eval_progress as _eval_progress, find_progress as _find_progress, loading_tasks as _loading_tasks, model_loading_tasks as _model_loading_tasks, sort_progress as _sort_progress
+from vtsearch.utils.progress import (
+    dataset_progress as _dataset_progress,
+    eval_progress as _eval_progress,
+    find_progress as _find_progress,
+    loading_tasks as _loading_tasks,
+    model_loading_tasks as _model_loading_tasks,
+    sort_progress as _sort_progress,
+)
 from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
 from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
 from vtsearch.models.registry import reset_for_tests as _reset_model_reg

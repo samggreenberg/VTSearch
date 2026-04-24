@@ -101,7 +101,6 @@ def run_converters_on_folder(
     media_id = max(medias.keys(), default=0) + 1
 
     for converter in valid_converters:
-
         # Get the source media type to know which file extensions to scan.
         try:
             source_mt = media_get(converter.source_type)

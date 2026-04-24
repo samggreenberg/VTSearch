@@ -77,7 +77,10 @@ class PickleDatasetImporter(DatasetImporter):
         return True
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         """Yield chunks from a pickle file path (string)."""
         file_path = Path(field_values["file"])
