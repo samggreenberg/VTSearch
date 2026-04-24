@@ -518,6 +518,72 @@ class TestEmbedderSentinelDiscovery:
                 "embedders should be discovered via per-module EMBEDDER sentinels"
             )
 
+    def test_folder_embedder_auto_discovered(self, tmp_path):
+        """A new ``embedder_*/`` sub-package (directory with ``__init__.py``)
+        dropped into a media-type package should be auto-discovered, just
+        like a flat ``embedder_*.py`` module.
+        """
+        import importlib
+        import sys
+        from pathlib import Path
+
+        from vtsearch.media import _discover_embedders_in
+        from vtsearch.media.embedder import MediaEmbedder
+
+        # Fake media-type package containing an embedder *sub-package*
+        # (not a flat module) exposing the EMBEDDER sentinel from its
+        # __init__.py.
+        fake_pkg = tmp_path / "fakemedia_folder"
+        fake_pkg.mkdir()
+        (fake_pkg / "__init__.py").write_text("")
+
+        embedder_pkg = fake_pkg / "embedder_folder"
+        embedder_pkg.mkdir()
+        (embedder_pkg / "__init__.py").write_text(
+            "from vtsearch.media.embedder import MediaEmbedder\n"
+            "\n"
+            "class _FolderEmbedder(MediaEmbedder):\n"
+            "    @property\n"
+            "    def name(self):\n"
+            "        return 'folder_discoverable'\n"
+            "    @property\n"
+            "    def media_type_id(self):\n"
+            "        return 'fake'\n"
+            "    def _load_models_impl(self):\n"
+            "        pass\n"
+            "    def _embed_media_impl(self, media):\n"
+            "        return None\n"
+            "\n"
+            "EMBEDDER = _FolderEmbedder()\n"
+        )
+
+        package_name = "vtsearch.media._fakemedia_folder_test"
+        spec = importlib.util.spec_from_file_location(
+            package_name,
+            str(fake_pkg / "__init__.py"),
+            submodule_search_locations=[str(fake_pkg)],
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[package_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+            from vtsearch.media import _embedder_registry
+
+            saved = dict(_embedder_registry)
+            try:
+                _discover_embedders_in(Path(fake_pkg), package_name)
+                assert "folder_discoverable" in _embedder_registry
+                discovered = _embedder_registry["folder_discoverable"]
+                assert isinstance(discovered, MediaEmbedder)
+                assert discovered.media_type_id == "fake"
+            finally:
+                _embedder_registry.clear()
+                _embedder_registry.update(saved)
+        finally:
+            for key in list(sys.modules):
+                if key == package_name or key.startswith(package_name + "."):
+                    sys.modules.pop(key, None)
+
     def test_custom_embedder_auto_discovered(self, tmp_path, monkeypatch):
         """A new ``embedder_*.py`` file dropped into a media-type package
         should be auto-discovered with no ``__init__.py`` edits.
