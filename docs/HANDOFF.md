@@ -63,8 +63,11 @@ deployments. Runs locally or in Docker.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 bash install-cpu.sh
-python app.py --local        # binds to 0.0.0.0 (network-accessible)
+python app.py                # Flask dev server on 0.0.0.0:5000
 ```
+
+For production, run under gunicorn instead:
+`VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app`.
 
 ### Docker (recommended for deployment)
 

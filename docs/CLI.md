@@ -76,24 +76,32 @@ Items with origin information include the origin display string before the filen
 
 ## Web server modes
 
-**Default (production) mode** — binds to `127.0.0.1:5000` (localhost only):
+**Development (Flask dev server)** — bind to `0.0.0.0:5000`:
 
 ```bash
 python app.py
 ```
 
-**Local mode** (`--local`) — binds to `0.0.0.0:5000` (accessible from other
-devices on the network):
+A `--local` flag is accepted for historical reasons and only changes the
+banner text (`LOCAL` vs. `PRODUCTION`); the bind address is the same either
+way. This entry point uses Flask's built-in dev server and is not
+recommended for production.
+
+**Production (gunicorn)** — run the WSGI app under the bundled config:
 
 ```bash
-python app.py --local
+VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
-Both modes run the same startup sequence (model initialization, autoload
-preloading, settings source sync). The only difference is the network bind
-address.
+`VTSEARCH_SERVER_INIT=1` runs the same startup sequence (model
+initialization, autoload preloading, settings-source sync) that `python
+app.py` runs — gunicorn imports `app.py` rather than executing its
+`__main__` block, so the env var is what triggers initialization. The
+bundled Docker images already run gunicorn this way. See
+[DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
 
-**Authentication mode** (`--login`) — select the login provider:
+**Authentication mode** (`--login`) — select the login provider (dev
+server only; set up the provider in code when running under gunicorn):
 
 ```bash
 python app.py --login trivial    # multi-user mode with simple username auth
