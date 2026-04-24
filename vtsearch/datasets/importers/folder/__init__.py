@@ -211,7 +211,11 @@ class FolderDatasetImporter(DatasetImporter):
         has_regular = True
         try:
             load_dataset_from_folder(
-                folder, media_type, medias, thin=thin, embedder_name=emb_name,
+                folder,
+                media_type,
+                medias,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
@@ -244,7 +248,10 @@ class FolderDatasetImporter(DatasetImporter):
         return True
 
     def run_chunked(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "audio")
@@ -252,7 +259,11 @@ class FolderDatasetImporter(DatasetImporter):
         skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
-                folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                folder,
+                media_type,
+                chunk_size,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
@@ -275,7 +286,10 @@ class FolderDatasetImporter(DatasetImporter):
                 yield converter_chunk
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         if not folder.exists():

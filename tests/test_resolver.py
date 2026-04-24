@@ -620,8 +620,20 @@ class TestMultiFindCrossDatasetFallback:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                    {
+                        "md5": "g_md5",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "b_md5",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.wav",
+                        "filename": "bad.wav",
+                    },
                 ]
             },
         }
@@ -699,8 +711,20 @@ class TestMultiFindCrossDatasetFallback:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.jpg", "filename": "good.jpg"},
-                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.jpg", "filename": "bad.jpg"},
+                    {
+                        "md5": "g_md5",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.jpg",
+                        "filename": "good.jpg",
+                    },
+                    {
+                        "md5": "b_md5",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.jpg",
+                        "filename": "bad.jpg",
+                    },
                 ]
             },
         }
@@ -854,9 +878,27 @@ class TestFindCheckLabels:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "no_match_b1", "label": "bad", "origin": label_origin, "origin_name": "bad1.wav", "filename": "bad1.wav"},
-                    {"md5": "no_match_b2", "label": "bad", "origin": label_origin, "origin_name": "bad2.wav", "filename": "bad2.wav"},
+                    {
+                        "md5": "no_match_g",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "no_match_b1",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad1.wav",
+                        "filename": "bad1.wav",
+                    },
+                    {
+                        "md5": "no_match_b2",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad2.wav",
+                        "filename": "bad2.wav",
+                    },
                 ]
             },
         }
@@ -929,8 +971,20 @@ class TestFindCheckLabels:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "no_match_b", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                    {
+                        "md5": "no_match_g",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "no_match_b",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.wav",
+                        "filename": "bad.wav",
+                    },
                 ]
             },
         }
@@ -980,10 +1034,18 @@ class TestResolutionWarningLogs:
         import logging
 
         labels = [
-            {"label": "good", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "a.wav",
-             "filename": "a.wav"},
-            {"label": "bad", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "b.wav",
-             "filename": "b.wav"},
+            {
+                "label": "good",
+                "origin": {"importer": "nonexistent", "params": {}},
+                "origin_name": "a.wav",
+                "filename": "a.wav",
+            },
+            {
+                "label": "bad",
+                "origin": {"importer": "nonexistent", "params": {}},
+                "origin_name": "b.wav",
+                "filename": "b.wav",
+            },
         ]
         with caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"):
             result = resolve_label_embeddings(labels, "audio")
@@ -1002,8 +1064,12 @@ class TestResolutionWarningLogs:
 
         labels = [
             {"label": "good", "origin": None, "origin_name": "", "filename": ""},
-            {"label": "bad", "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
-             "origin_name": "found.wav", "filename": "found.wav"},
+            {
+                "label": "bad",
+                "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
+                "origin_name": "found.wav",
+                "filename": "found.wav",
+            },
         ]
 
         dummy_emb = np.zeros(10)

@@ -124,12 +124,6 @@ class TestDocumentMediaType:
         mt = DocumentMediaType()
         assert mt.demo_datasets == []
 
-    def test_embed_media_returns_none(self, tmp_path):
-        mt = DocumentMediaType()
-        pdf_path = tmp_path / "test.pdf"
-        pdf_path.write_bytes(_make_minimal_pdf())
-        assert mt.embed_media(pdf_path) is None
-
     def test_embed_text_returns_none(self):
         mt = DocumentMediaType()
         assert mt.embed_text("hello") is None

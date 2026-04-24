@@ -126,7 +126,7 @@ class TestDetectorContextStore:
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtsearch.models.progress import _cached_steps, clear_progress_cache
+        from vtsearch.models.progress import _cached_steps
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,
@@ -465,6 +465,7 @@ class TestLabelingStatusResetOnDetectorSwitch:
 
         # Add votes through apply_label so label_history is also populated
         from vtsearch.utils import apply_label
+
         for mid in [1, 2, 3, 4, 5]:
             apply_label(mid, "good")
         for mid in [16, 17, 18, 19, 20]:
@@ -500,9 +501,5 @@ class TestLabelingStatusResetOnDetectorSwitch:
         data = res.get_json()
 
         # With 0 good and 0 bad votes the indicators must NOT be green
-        assert data["smart"]["status"] == "red", (
-            f"smart should be red with 0 votes, got {data['smart']['status']}"
-        )
-        assert data["stable"]["status"] == "red", (
-            f"stable should be red with 0 votes, got {data['stable']['status']}"
-        )
+        assert data["smart"]["status"] == "red", f"smart should be red with 0 votes, got {data['smart']['status']}"
+        assert data["stable"]["status"] == "red", f"stable should be red with 0 votes, got {data['stable']['status']}"

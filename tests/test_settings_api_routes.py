@@ -11,7 +11,6 @@ import json
 import pytest
 
 import app as app_module  # noqa: F401 — triggers conftest media init
-from vtsearch import settings as settings_mod
 
 # Flask API routes
 # ---------------------------------------------------------------------------
@@ -177,7 +176,6 @@ class TestSettingsAPI:
         res = client.get("/api/settings")
         data = res.get_json()
         proc = next(p for p in data["autorun_processors"] if p["processor_name"] == "cmd_test")
-        import json
 
         parsed = json.loads(proc["settings_json"])
         assert parsed["processor_name"] == "cmd_test"
@@ -528,5 +526,3 @@ class TestSettingsAPI:
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
         assert "trainable_models_dir" not in data
-
-

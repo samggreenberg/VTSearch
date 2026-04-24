@@ -138,7 +138,7 @@ _ZIP_MAGIC = b"PK"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
 # but a simpler heuristic is that the file does NOT start with common
 # non-archive signatures (HTML, JSON, plain text error pages).
-_HTML_SIGNATURES = (b"<", b"<!",  b"{")
+_HTML_SIGNATURES = (b"<", b"<!", b"{")
 
 
 def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) -> None:
@@ -257,9 +257,7 @@ def _download_and_extract(
                 with tarfile.open(fileobj=raw_f, mode="r:*") as tar_ref:
                     for i, member in enumerate(tar_ref):
                         if i % 100 == 0:
-                            on_progress(
-                                "downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes
-                            )
+                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
                         tar_ref.extract(member, temp_extract, filter="data")
             on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
         elif suffix.endswith(".tar"):
@@ -268,9 +266,7 @@ def _download_and_extract(
                 with tarfile.open(fileobj=raw_f, mode="r:") as tar_ref:
                     for i, member in enumerate(tar_ref):
                         if i % 100 == 0:
-                            on_progress(
-                                "downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes
-                            )
+                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
                         tar_ref.extract(member, temp_extract, filter="data")
             on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
         elif suffix.endswith(".zip"):
@@ -279,9 +275,7 @@ def _download_and_extract(
                 total = len(members)
                 for i, member in enumerate(members):
                     if i % 100 == 0 or i == total - 1:
-                        on_progress(
-                            "downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total
-                        )
+                        on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
                     # Guard against path traversal in zip entries
                     member_path = Path(temp_extract) / member
                     if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):

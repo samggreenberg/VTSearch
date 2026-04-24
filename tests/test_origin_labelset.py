@@ -285,13 +285,7 @@ class TestLabelSet:
 
     def test_from_results_with_clips_fallback(self):
         """When hits don't have origin, look it up from medias dict."""
-        results = {
-            "results": {
-                "d1": {
-                    "hits": [{"id": 1, "filename": "a.wav", "score": 0.9, "md5": "h1"}]
-                }
-            }
-        }
+        results = {"results": {"d1": {"hits": [{"id": 1, "filename": "a.wav", "score": 0.9, "md5": "h1"}]}}}
         medias = {
             1: {
                 "md5": "h1",
@@ -442,8 +436,18 @@ class TestLabelExportOrigin:
 class TestBuildClipLookup:
     def test_origin_lookup_populated(self):
         medias = {
-            1: {"id": 1, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"},
-            2: {"id": 2, "md5": "h2", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "b.wav"},
+            1: {
+                "id": 1,
+                "md5": "h1",
+                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin_name": "a.wav",
+            },
+            2: {
+                "id": 2,
+                "md5": "h2",
+                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin_name": "b.wav",
+            },
         }
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
         assert len(origin_lookup) == 2
@@ -470,9 +474,24 @@ class TestBuildClipLookup:
 class TestResolveClipIds:
     def _make_lookups(self):
         medias = {
-            1: {"id": 1, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"},
-            2: {"id": 2, "md5": "h2", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "b.wav"},
-            3: {"id": 3, "md5": "h1", "origin": {"importer": "folder", "params": {"path": "/b"}}, "origin_name": "a.wav"},
+            1: {
+                "id": 1,
+                "md5": "h1",
+                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin_name": "a.wav",
+            },
+            2: {
+                "id": 2,
+                "md5": "h2",
+                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin_name": "b.wav",
+            },
+            3: {
+                "id": 3,
+                "md5": "h1",
+                "origin": {"importer": "folder", "params": {"path": "/b"}},
+                "origin_name": "a.wav",
+            },
         }
         return build_media_lookup(medias)
 

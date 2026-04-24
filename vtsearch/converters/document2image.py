@@ -82,13 +82,15 @@ class Document2ImageMediaConverter(MediaConverter):
                 img = Image.open(io.BytesIO(png_bytes))
                 width, height = img.width, img.height
 
-                results.append({
-                    "filename": f"{stem}_page_{page_num + 1}.png",
-                    "media_bytes": png_bytes,
-                    "duration": 0,
-                    "width": width,
-                    "height": height,
-                })
+                results.append(
+                    {
+                        "filename": f"{stem}_page_{page_num + 1}.png",
+                        "media_bytes": png_bytes,
+                        "duration": 0,
+                        "width": width,
+                        "height": height,
+                    }
+                )
         finally:
             doc.close()
 

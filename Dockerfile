@@ -43,8 +43,12 @@ EXPOSE 5000
 
 # OMP/MKL thread limits are already set in app.py; repeating here
 # ensures they apply even if someone imports vtsearch as a library.
+# VTSEARCH_SERVER_INIT=1 runs the model-load / preload / settings-sync
+# sequence when gunicorn imports app.py (since the __main__ block is
+# skipped under a WSGI server).
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    VTSEARCH_SERVER_INIT=1
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

@@ -332,16 +332,8 @@ class MediaType(ABC):
         their own model logic (legacy) can override this.
         """
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the media file at *file_path*.
-
-        Returns ``None`` by default.  Overridden by media types that have
-        inline embedding logic (legacy) or that delegate to an embedder.
-        """
-        return None
-
     def embed_text(self, text: str) -> Optional[np.ndarray]:
-        """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
+        """Return an embedding of *text* in the same vector space as the embedder.
 
         Returns ``None`` by default.
         """

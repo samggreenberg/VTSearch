@@ -30,7 +30,4 @@ def get_ffmpeg_exe() -> str:
     except ImportError:
         pass
 
-    raise FileNotFoundError(
-        "ffmpeg not found. Install it via your OS package manager "
-        "or 'pip install imageio-ffmpeg'."
-    )
+    raise FileNotFoundError("ffmpeg not found. Install it via your OS package manager or 'pip install imageio-ffmpeg'.")

@@ -218,7 +218,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 
 - [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Expose `MEDIA_TYPE`, `EMBEDDERS`, and `CLIPPERS` sentinels in `__init__.py`
+- [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module — see the embedder checklist below)
 - [ ] Add a `requirements.txt` in the plugin directory and run `bash install-plugin-deps.sh`
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
@@ -231,7 +231,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
 - [ ] Optionally set `description_wrappers` for enriched text embedding
-- [ ] Add to the `EMBEDDERS` list in the media type's `__init__.py`
+- [ ] Expose `EMBEDDER = YourEmbedder()` at module level — auto-discovery picks it up, no `__init__.py` edits needed (symlinked files are supported)
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist

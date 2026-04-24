@@ -380,33 +380,45 @@ class TestAutorunDetectorsContract:
         assert isinstance(data["detectors"], list)
 
     def test_create_returns_success(self, client):
-        resp = client.post("/api/autorun-detectors", json={
-            "name": "test_det",
-            "media_type": "audio",
-        })
+        resp = client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "test_det",
+                "media_type": "audio",
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
         assert data["name"] == "test_det"
 
     def test_delete_returns_success(self, client):
-        client.post("/api/autorun-detectors", json={
-            "name": "to_delete",
-            "media_type": "audio",
-        })
+        client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "to_delete",
+                "media_type": "audio",
+            },
+        )
         resp = client.delete("/api/autorun-detectors/to_delete")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
 
     def test_rename_returns_success(self, client):
-        client.post("/api/autorun-detectors", json={
-            "name": "old_name",
-            "media_type": "audio",
-        })
-        resp = client.put("/api/autorun-detectors/old_name/rename", json={
-            "new_name": "new_name",
-        })
+        client.post(
+            "/api/autorun-detectors",
+            json={
+                "name": "old_name",
+                "media_type": "audio",
+            },
+        )
+        resp = client.put(
+            "/api/autorun-detectors/old_name/rename",
+            json={
+                "new_name": "new_name",
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -498,12 +510,15 @@ class TestFillFromSortContract:
 
     def test_dry_run_returns_counts(self, client):
         sort_results = [{"id": i, "score": 0.9 if i <= 5 else 0.1} for i in range(1, 11)]
-        resp = client.post("/api/labels/fill-from-sort", json={
-            "sort_results": sort_results,
-            "threshold": 0.5,
-            "sides": "both",
-            "confirm": False,
-        })
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": sort_results,
+                "threshold": 0.5,
+                "sides": "both",
+                "confirm": False,
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "good_count" in data
@@ -511,12 +526,15 @@ class TestFillFromSortContract:
 
     def test_confirm_returns_applied_and_results(self, client):
         sort_results = [{"id": i, "score": 0.9 if i <= 3 else 0.1} for i in range(1, 11)]
-        resp = client.post("/api/labels/fill-from-sort", json={
-            "sort_results": sort_results,
-            "threshold": 0.5,
-            "sides": "both",
-            "confirm": True,
-        })
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": sort_results,
+                "threshold": 0.5,
+                "sides": "both",
+                "confirm": True,
+            },
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "good_applied" in data
@@ -609,9 +627,12 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_404_unknown_exporter_is_json(self, client):
-        resp = client.post("/api/exporters/export", json={
-            "exporter_name": "nonexistent_exporter",
-        })
+        resp = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "nonexistent_exporter",
+            },
+        )
         assert resp.status_code == 404
         data = resp.get_json()
         assert "error" in data

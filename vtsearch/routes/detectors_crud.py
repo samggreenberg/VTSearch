@@ -220,16 +220,18 @@ def set_autorun_detector_autodetect_route(name):
     if autodetect is None:
         return jsonify({"error": "autodetect is required"}), 400
 
-    if set_autorun_detector_autodetect(name, bool(autodetect)):
-        # Persist in settings so the flag survives restarts
-        from vtsearch.settings import add_autorun_detector_name, remove_autorun_detector_name
+    from vtsearch.settings import add_autorun_detector_name, remove_autorun_detector_name
 
-        if autodetect:
-            add_autorun_detector_name(name)
-        else:
-            remove_autorun_detector_name(name)
-        return jsonify({"success": True, "autodetect": bool(autodetect)})
-    return jsonify({"error": "Detector not found"}), 404
+    found_in_memory = set_autorun_detector_autodetect(name, bool(autodetect))
+    # Even if the detector isn't loaded in memory, persist the setting so it
+    # takes effect on next load / CLI autorun.
+    if autodetect:
+        add_autorun_detector_name(name)
+    else:
+        remove_autorun_detector_name(name)
+        if not found_in_memory:
+            return jsonify({"error": "Detector not found"}), 404
+    return jsonify({"success": True, "autodetect": bool(autodetect)})
 
 
 @detectors_crud_bp.route("/api/autorun-detectors/<name>/export", methods=["GET"])

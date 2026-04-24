@@ -158,7 +158,9 @@ def import_detector_labels():
         avail = embedders_for_type(media_type)
         if not avail:
             return None
-        return avail[0].embed_media(p)
+        from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+        return avail[0].embed_media(media_from_path(p))
 
     try:
         text = file.read().decode("utf-8")
@@ -493,12 +495,14 @@ def find_check_labels():
 
         failed = resolved.total_count - resolved.resolved_count
         if failed > 0:
-            warnings.append({
-                "model_name": m.get("name", tm_name),
-                "total_labels": resolved.total_count,
-                "resolved_labels": resolved.resolved_count,
-                "failed_labels": failed,
-            })
+            warnings.append(
+                {
+                    "model_name": m.get("name", tm_name),
+                    "total_labels": resolved.total_count,
+                    "resolved_labels": resolved.resolved_count,
+                    "failed_labels": failed,
+                }
+            )
 
     return jsonify({"warnings": warnings})
 
@@ -549,9 +553,12 @@ def multi_find():
 
     # -- Step 1/3: Preparing models --
     update_find_progress(
-        "running", "Preparing models…",
-        current=0, total=len(model_ids),
-        step=1, total_steps=_FIND_STEPS,
+        "running",
+        "Preparing models…",
+        current=0,
+        total=len(model_ids),
+        step=1,
+        total_steps=_FIND_STEPS,
     )
 
     # Resolve datasets and models from registries
@@ -582,9 +589,12 @@ def multi_find():
         tm_name = m.get("trainable_model_name", "")
 
         update_find_progress(
-            "running", f"Preparing model \"{m['name']}\"…",
-            current=mi + 1, total=len(models),
-            step=1, total_steps=_FIND_STEPS,
+            "running",
+            f'Preparing model "{m["name"]}"…',
+            current=mi + 1,
+            total=len(models),
+            step=1,
+            total_steps=_FIND_STEPS,
         )
 
         # Try loaded DetectorContext first (cached MLP — skip resolve + train)
@@ -649,14 +659,17 @@ def multi_find():
 
     for di, ds in enumerate(datasets):
         # -- Step 2/3: Loading dataset --
-        ds_label = f"Loading dataset \"{ds['name']}\""
+        ds_label = f'Loading dataset "{ds["name"]}"'
         if len(datasets) > 1:
             ds_label += f" ({di + 1}/{len(datasets)})"
         ds_label += "…"
         update_find_progress(
-            "running", ds_label,
-            current=di, total=len(datasets),
-            step=2, total_steps=_FIND_STEPS,
+            "running",
+            ds_label,
+            current=di,
+            total=len(datasets),
+            step=2,
+            total_steps=_FIND_STEPS,
         )
 
         # Load dataset from pkl
@@ -712,14 +725,17 @@ def multi_find():
 
         # -- Step 3/3: Scoring --
         for mc in model_configs:
-            score_label = f"Scoring with \"{mc['name']}\" on \"{ds['name']}\""
+            score_label = f'Scoring with "{mc["name"]}" on "{ds["name"]}"'
             if len(datasets) > 1 or len(model_configs) > 1:
                 score_label += f" ({scored_units}/{total_scoring_units} items)"
             score_label += "…"
             update_find_progress(
-                "running", score_label,
-                current=scored_units, total=total_scoring_units,
-                step=3, total_steps=_FIND_STEPS,
+                "running",
+                score_label,
+                current=scored_units,
+                total=total_scoring_units,
+                step=3,
+                total_steps=_FIND_STEPS,
             )
 
             if "live_model" in mc:
@@ -831,9 +847,12 @@ def multi_find():
 
             scored_units += len(all_ids)
             update_find_progress(
-                "running", f"Scored \"{mc['name']}\" on \"{ds['name']}\"",
-                current=scored_units, total=total_scoring_units,
-                step=3, total_steps=_FIND_STEPS,
+                "running",
+                f'Scored "{mc["name"]}" on "{ds["name"]}"',
+                current=scored_units,
+                total=total_scoring_units,
+                step=3,
+                total_steps=_FIND_STEPS,
             )
 
         # Collect positive and negative hits

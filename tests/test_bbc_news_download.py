@@ -11,6 +11,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_bbc_zip(tmp_path: Path, top_folder: str = "") -> Path:
     """Create a minimal BBC News zip fixture with 3 articles per category."""
     categories = ["business", "entertainment", "politics", "sport", "tech"]
@@ -30,6 +31,7 @@ def _make_bbc_zip(tmp_path: Path, top_folder: str = "") -> Path:
 # ---------------------------------------------------------------------------
 # _find_bbc_root
 # ---------------------------------------------------------------------------
+
 
 class TestFindBbcRoot:
     def test_flat_structure(self, tmp_path):
@@ -65,6 +67,7 @@ class TestFindBbcRoot:
 # download_bbc_news
 # ---------------------------------------------------------------------------
 
+
 class TestDownloadBbcNews:
     def test_returns_articles_by_category(self, tmp_path):
         """download_bbc_news returns a dict of category -> list[str] from a zip."""
@@ -79,7 +82,9 @@ class TestDownloadBbcNews:
 
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
-            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
+            patch.object(
+                dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)
+            ),
         ):
             result = dl_module.download_bbc_news(on_progress=fake_progress)
 
@@ -96,7 +101,9 @@ class TestDownloadBbcNews:
 
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
-            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)),
+            patch.object(
+                dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: zip_path.rename(dest)
+            ),
         ):
             result = dl_module.download_bbc_news(on_progress=lambda *a: None)
 
@@ -132,6 +139,7 @@ class TestDownloadBbcNews:
 # ---------------------------------------------------------------------------
 # load_demo_source — bbc_news branch
 # ---------------------------------------------------------------------------
+
 
 class TestLoadDemoSourceBbcNews:
     """TextMediaType.load_demo_source with source='bbc_news'."""

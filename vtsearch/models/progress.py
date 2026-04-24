@@ -213,9 +213,7 @@ def _compute_step_stability(
 
     labeled_ids = _cache_good_ids | _cache_bad_ids
     unlabeled_ids = [
-        cid
-        for cid in all_media_ids
-        if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
+        cid for cid in all_media_ids if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
     ]
 
     if not unlabeled_ids:
@@ -227,9 +225,7 @@ def _compute_step_stability(
     with torch.no_grad():
         scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).tolist()
 
-    predictions: dict[int, int] = {
-        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)
-    }
+    predictions: dict[int, int] = {cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)}
 
     stability: Optional[dict[str, Any]] = None
     if _cache_prev_predictions is not None:
@@ -340,7 +336,9 @@ def _ensure_cache(
         # would be the same — skip training and stability recording so the
         # line graph and Stable indicator only reflect genuine model updates.
         prev = _cached_steps[-1] if _cached_steps else None
-        training_data_changed = prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
+        training_data_changed = (
+            prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
+        )
 
         if training_data_changed:
             # Check whether train_and_score already produced a model for

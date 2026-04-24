@@ -36,9 +36,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     )
 
     media_examples = [
-        ex
-        for ex in examples
-        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
+        ex for ex in examples if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
     ]
     if not media_examples:
         return 0
@@ -95,7 +93,9 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
                     # No embedder available; skip remaining examples.
                     continue
 
-            embedding = embedder.embed_media(file_path)
+            from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+            embedding = embedder.embed_media(media_from_path(file_path))
             if embedding is None:
                 continue
 

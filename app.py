@@ -182,6 +182,41 @@ app.register_blueprint(trainable_models_bp)
 
 
 # ---------------------------------------------------------------------------
+# Server startup
+# ---------------------------------------------------------------------------
+
+
+def initialize_server(mode_label: str = "PRODUCTION") -> None:
+    """Load models, preload media types, and sync from settings source.
+
+    Called from ``__main__`` (when running ``python app.py``) and from
+    gunicorn via ``VTSEARCH_SERVER_INIT=1`` at import time. Idempotent: safe
+    to call multiple times; individual steps handle their own caching.
+    """
+    print(f"\U0001f680 Running in {mode_label} mode", flush=True)
+    initialize_models()
+    preloaded = preload_autoload_media_types()
+    if preloaded:
+        print(f"✅ Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+
+    from vtsearch.settings import sync_from_settings_source
+
+    imported = sync_from_settings_source()
+    if imported is not None:
+        print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
+
+    print("✅ VTSearch is ready!", flush=True)
+
+
+# When running under gunicorn (or any other WSGI server), ``app.py`` is
+# imported rather than executed, so the ``__main__`` block below never
+# runs. The Dockerfile sets ``VTSEARCH_SERVER_INIT=1`` to trigger the
+# same startup sequence at import time.
+if os.environ.get("VTSEARCH_SERVER_INIT") == "1":
+    initialize_server()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -316,24 +351,6 @@ if __name__ == "__main__":
             set_login_provider(TrivialLoginProvider())
             print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
 
-        # Common startup: models, autoload, settings source sync
-        mode_label = "LOCAL" if args.local else "PRODUCTION"
-        print(f"\U0001f680 Running in {mode_label} mode" + (" (accessible from other devices)" if args.local else ""), flush=True)
-        initialize_models()
-        preloaded = preload_autoload_media_types()
-        if preloaded:
-            print(f"\u2705 Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
-
-        # Auto-import from settings source (if configured)
-        from vtsearch.settings import sync_from_settings_source
-
-        imported = sync_from_settings_source()
-        if imported is not None:
-            print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
-
-        if args.local:
-            app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
-        else:
-            print("\u2705 VTSearch is ready!", flush=True)
-            print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
-            app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+        initialize_server(mode_label="LOCAL" if args.local else "PRODUCTION")
+        print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
