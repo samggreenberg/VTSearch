@@ -6,11 +6,7 @@ and symlinked folder import.
 
 from __future__ import annotations
 
-import io
-import tarfile
-import zipfile
 
-import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 

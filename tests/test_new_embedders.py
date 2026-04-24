@@ -592,8 +592,7 @@ class TestEmbedderSentinelDiscovery:
         import sys
         from pathlib import Path
 
-        import vtsearch.media as media_pkg
-        from vtsearch.media import _discover_embedders_in, register_embedder
+        from vtsearch.media import _discover_embedders_in
         from vtsearch.media.embedder import MediaEmbedder
 
         # Create a throwaway media-type package under tmp_path with a single

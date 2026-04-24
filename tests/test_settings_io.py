@@ -31,7 +31,7 @@ class TestSettingsImporterBase:
             imp.run({})
 
     def test_to_dict_contains_standard_keys(self):
-        from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
+        from vtsearch.settings_io.importers.base import SettingsImporter
 
         class Minimal(SettingsImporter):
             name = "minimal"

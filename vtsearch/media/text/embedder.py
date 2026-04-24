@@ -90,7 +90,7 @@ class TextE5Embedder(MediaEmbedder):
                 print(f"Warning: empty text file {file_path}")
                 return None
             return self._model.encode(f"passage: {text_content}", normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -102,7 +102,7 @@ class TextE5Embedder(MediaEmbedder):
             return None
         try:
             return self._model.encode(f"passage: {text}", normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding passage")
             return None
 
@@ -113,7 +113,7 @@ class TextE5Embedder(MediaEmbedder):
             return None
         try:
             return self._model.encode(f"query: {text}", normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for text")
             return None
 

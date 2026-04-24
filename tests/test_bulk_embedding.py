@@ -15,7 +15,6 @@ import unittest.mock as mock
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 

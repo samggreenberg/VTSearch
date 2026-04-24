@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 
@@ -632,9 +631,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_importer_custom_metadata_embedding_in_sorting(self, tmp_path):
         """Embeddings from custom_metadata_map should work in train_and_score."""
-        import torch
 
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
         from vtsearch.datasets.loader import load_dataset_from_folder
         from vtsearch.models.training import train_and_score
 
@@ -758,7 +755,6 @@ class TestImporterMediasInSorting:
 
     def test_train_and_score_uses_importer_embeddings(self, tmp_path):
         """train_and_score should work with importer-provided embeddings."""
-        import torch
 
         from vtsearch.models.training import train_and_score
 

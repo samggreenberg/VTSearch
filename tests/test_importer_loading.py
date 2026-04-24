@@ -7,8 +7,6 @@ and the resolve_file contract.
 
 from __future__ import annotations
 
-import io
-import tarfile
 import zipfile
 
 import pytest

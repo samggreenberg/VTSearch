@@ -126,7 +126,7 @@ class TestDetectorContextStore:
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtsearch.models.progress import _cached_steps, clear_progress_cache
+        from vtsearch.models.progress import _cached_steps
         from vtsearch.utils.state_core import (
             DetectorContext,
             register_detector_context,

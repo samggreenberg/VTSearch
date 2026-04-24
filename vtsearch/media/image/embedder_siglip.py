@@ -109,7 +109,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
 
             image = Image.open(file_path).convert("RGB")
             return self.embed_pil_image(image)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -130,7 +130,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
                 outputs = self._model.get_image_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image")
             return None
 
@@ -148,7 +148,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for image (SigLIP)")
             return None
 

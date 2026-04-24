@@ -306,7 +306,7 @@ class TextMediaType(MediaType):
                 continue
             try:
                 embedding = embedder.embed_text_passage(text_content)
-            except Exception as e:
+            except Exception:
                 logging.getLogger(__name__).exception("Error embedding paragraph")
                 continue
             if embedding is None:

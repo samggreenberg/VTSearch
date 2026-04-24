@@ -12,14 +12,11 @@ Validates:
 
 import hashlib
 import io
-import json
-import wave
 
 import numpy as np
-import pytest
 
 from vtsearch.audio import generate_wav
-from vtsearch.utils import medias, good_votes, bad_votes, snapshot_medias
+from vtsearch.utils import medias, good_votes, bad_votes
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +452,7 @@ class TestCrossDatasetClipEmbedding:
         # This should slice to [0, 2] seconds before embedding.
         # Won't have a real embedder in tests, so just verify it doesn't crash
         # and falls back gracefully.
-        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        _apply_clip_and_embed(wav_path, "audio", origin)
         # Result may be None if no embedder is loaded, which is fine.
         # The important thing is the function handles clip params without error.
 
@@ -479,7 +476,7 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        result = _apply_clip_and_embed(img_path, "image", origin)
+        _apply_clip_and_embed(img_path, "image", origin)
         # May be None without a real embedder.
 
     def test_apply_clip_and_embed_text(self, tmp_path):
@@ -499,7 +496,7 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        result = _apply_clip_and_embed(text_path, "text", origin)
+        _apply_clip_and_embed(text_path, "text", origin)
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
         """Without clipper params, behaves like normal embed_file."""
@@ -510,7 +507,7 @@ class TestCrossDatasetClipEmbedding:
         wav_path.write_bytes(wav)
 
         origin = {"importer": "folder", "params": {"path": str(tmp_path)}}
-        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        _apply_clip_and_embed(wav_path, "audio", origin)
 
 
 # ---------------------------------------------------------------------------

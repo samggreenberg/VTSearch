@@ -90,7 +90,7 @@ class TextBGEEmbedder(MediaEmbedder):
                 print(f"Warning: empty text file {file_path}")
                 return None
             return self._model.encode(text_content, normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -102,7 +102,7 @@ class TextBGEEmbedder(MediaEmbedder):
             return None
         try:
             return self._model.encode(text, normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding passage (BGE)")
             return None
 
@@ -113,7 +113,7 @@ class TextBGEEmbedder(MediaEmbedder):
             return None
         try:
             return self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for text (BGE)")
             return None
 

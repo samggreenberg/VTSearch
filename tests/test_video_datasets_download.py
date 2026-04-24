@@ -1,8 +1,6 @@
 """Tests for video dataset downloaders: HMDB51, UCF-101 full, and KTH Actions."""
 
-import io
 import shutil
-import tarfile
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch

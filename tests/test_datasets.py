@@ -703,8 +703,6 @@ class TestDemoCacheEmbedderMismatch:
         from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
-        demo_info = DEMO_DATASETS[demo_name]
-        media_type_id = demo_info.get("media_type", "audio")
 
         embeddings_dir = tmp_path / "embeddings"
         embeddings_dir.mkdir()

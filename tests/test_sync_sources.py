@@ -618,12 +618,11 @@ class TestLabelsetSync:
         from vtsearch.labels.sync import sync_to_labelset_source
         from vtsearch.utils.state_core import (
             DetectorContext,
-            get_active_detector_context,
             register_detector_context,
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.utils.state_core import medias, good_votes, bad_votes
+        from vtsearch.utils.state_core import medias, good_votes
 
         # Create and register a detector context with a labelset source
         ctx = DetectorContext("test_sync", name="test_sync")

@@ -2,7 +2,6 @@ import io
 import json
 
 import numpy as np
-import pytest
 
 import app as app_module
 from helpers import train_detector_from_votes
