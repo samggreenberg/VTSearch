@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ImporterInfo, MediaTypeInfo } from '../../../models/api.models';
+import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { ImporterField, ImporterInfo, MediaTypeInfo } from '../../../models/api.models';
 
 interface BrowseItem {
   key: string;
@@ -21,12 +23,23 @@ interface BrowseEntry {
   isDir: boolean;
 }
 
+interface LabelImporterInfo {
+  name: string;
+  display_name?: string;
+  description?: string;
+  icon?: string;
+  fields?: ImporterField[];
+  hidden_from_picker?: boolean;
+}
+
 type ModalView = 'main' | 'media-picker';
+type ModalTab = 'blank' | 'trained';
+type TrainedSubView = 'picker' | 'form';
 
 @Component({
   selector: 'vt-new-model-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent],
   templateUrl: './new-model-modal.component.html',
   styleUrl: './new-model-modal.component.scss',
 })
@@ -38,6 +51,7 @@ export class NewModelModalComponent implements OnInit {
   @Output() created = new EventEmitter<string>();
 
   view: ModalView = 'main';
+  tab: ModalTab = 'blank';
   name = '';
   mediaType = 'audio';
   pendingText = '';
@@ -65,10 +79,20 @@ export class NewModelModalComponent implements OnInit {
   fileBrowsing = false;
   fileLoading = false;
 
+  // "Trained" tab state
+  trainedView: TrainedSubView = 'picker';
+  labelImporters: LabelImporterInfo[] = [];
+  labelImportersLoading = false;
+  selectedLabelImporter: LabelImporterInfo | null = null;
+  labelImporterValues: Record<string, string> = {};
+  labelImporterFile: File | null = null;
+  labelImporterFileFieldKey: string | null = null;
+
   constructor(
     private modelsApi: TrainableModelsApiService,
     private datasetsApi: DatasetsApiService,
     private sortingApi: SortingApiService,
+    private labelImportersApi: LabelImportersApiService,
   ) {}
 
   @HostListener('document:click', ['$event'])
@@ -104,6 +128,11 @@ export class NewModelModalComponent implements OnInit {
     }
   }
 
+  get modalTitle(): string {
+    if (this.view === 'media-picker') return 'Select Media Example';
+    return 'New Model';
+  }
+
   get hasExample(): boolean {
     return this.exampleType === 'media' || !!this.pendingText.trim();
   }
@@ -116,8 +145,25 @@ export class NewModelModalComponent implements OnInit {
     return !!this.pendingText.trim();
   }
 
-  get canSubmit(): boolean {
+  get canSubmitBlank(): boolean {
     return !!this.name.trim() && this.hasExample && !this.submitting;
+  }
+
+  get canSubmitTrained(): boolean {
+    return (
+      !!this.name.trim() &&
+      !!this.selectedLabelImporter &&
+      this.trainedView === 'form' &&
+      !this.submitting
+    );
+  }
+
+  // --- Tab switching ---
+
+  setTab(tab: ModalTab): void {
+    if (this.submitting) return;
+    this.tab = tab;
+    this.error = '';
   }
 
   // --- Media example ---
@@ -298,9 +344,120 @@ export class NewModelModalComponent implements OnInit {
     this.pendingText = '';
   }
 
+  // --- Trained tab: label importers ---
+
+  private ensureLabelImportersLoaded(): void {
+    if (this.labelImporters.length > 0 || this.labelImportersLoading) return;
+    this.labelImportersLoading = true;
+    this.labelImportersApi.list().subscribe({
+      next: (list: any[]) => {
+        this.labelImporters = (list || []).filter((imp: LabelImporterInfo) => !imp.hidden_from_picker);
+        this.labelImportersLoading = false;
+      },
+      error: () => {
+        this.labelImportersLoading = false;
+        this.error = 'Failed to load label importers';
+      },
+    });
+  }
+
+  onSelectTrainedTab(): void {
+    this.setTab('trained');
+    this.ensureLabelImportersLoaded();
+  }
+
+  selectLabelImporter(importer: LabelImporterInfo): void {
+    this.selectedLabelImporter = importer;
+    this.labelImporterValues = {};
+    this.labelImporterFile = null;
+    this.labelImporterFileFieldKey = null;
+    this.error = '';
+    if (importer.fields) {
+      for (const field of importer.fields) {
+        if (field.default) this.labelImporterValues[field.key] = field.default;
+      }
+    }
+    this.trainedView = 'form';
+  }
+
+  backToImporterPicker(): void {
+    this.trainedView = 'picker';
+    this.selectedLabelImporter = null;
+    this.error = '';
+  }
+
+  onLabelImporterFileSelected(event: Event, fieldName: string): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.labelImporterFile = input.files[0];
+      this.labelImporterFileFieldKey = fieldName;
+      this.labelImporterValues[fieldName] = input.files[0].name;
+    }
+  }
+
+  submitTrained(): void {
+    const trimmedName = this.name.trim();
+    if (!trimmedName) {
+      this.error = 'Name is required';
+      return;
+    }
+    if (!this.selectedLabelImporter) {
+      this.error = 'A label importer is required';
+      return;
+    }
+
+    this.submitting = true;
+    this.error = '';
+
+    const params: Record<string, unknown> = {
+      name: trimmedName,
+      media_type: this.mediaType,
+      ...this.labelImporterValues,
+    };
+
+    this.modelsApi
+      .registerModelFromLabelset(
+        this.selectedLabelImporter.name,
+        params,
+        this.labelImporterFile ?? undefined,
+        this.labelImporterFileFieldKey ?? undefined,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          const newId = resp?.model?.id || '';
+          if (!newId) {
+            this.submitting = false;
+            this.error = 'Server did not return a model id';
+            return;
+          }
+          // Kick off loading so the detector becomes trainable in the grid.
+          this.modelsApi.loadModel(newId).subscribe({
+            next: () => {
+              this.submitting = false;
+              this.created.emit(newId);
+            },
+            error: () => {
+              // Model exists in registry even if load failed; still emit.
+              this.submitting = false;
+              this.created.emit(newId);
+            },
+          });
+        },
+        error: (err) => {
+          this.submitting = false;
+          this.error = err.error?.error || 'Failed to create model from labelset';
+        },
+      });
+  }
+
   // --- Submit ---
 
   submit(): void {
+    if (this.tab === 'trained') {
+      this.submitTrained();
+      return;
+    }
+
     const trimmedName = this.name.trim();
     if (!trimmedName) {
       this.error = 'Name is required';

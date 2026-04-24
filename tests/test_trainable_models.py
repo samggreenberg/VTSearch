@@ -1222,3 +1222,187 @@ class TestLoadModelCrossDatasetResolution:
         finally:
             set_trainable_models_dir(original_dir)
 
+
+class TestRegisterModelFromLabelset:
+    """Tests for POST /api/models/registry/from-labelset/<importer_name>.
+
+    This endpoint creates a trainable model seeded with labels produced by
+    a label importer in a single call: the importer runs, the trainable
+    model JSON is written with the full labelset, and a registry entry is
+    created.  The frontend then calls the load endpoint to resolve origins
+    and train the MLP.
+    """
+
+    def test_creates_model_with_imported_labels(self, client, tmp_path):
+        import app as app_module
+
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        payload = json.dumps({
+            "labels": [
+                {"md5": md5_good, "label": "good"},
+                {"md5": md5_bad, "label": "bad"},
+            ]
+        })
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={
+                "name": "From LS",
+                "media_type": "audio",
+                "filepath": str(labels_path),
+            },
+        )
+        assert res.status_code == 201, res.get_json()
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["applied"] == 2
+        assert data["skipped"] == 0
+        assert data["num_labels"] == 2
+        assert data["model"]["media_type"] == "audio"
+        assert data["model"]["trainable"] is True
+        assert data["model"]["num_training"] == 2
+
+        # Registry now has the model
+        reg_res = client.get("/api/models/registry")
+        names = [m["name"] for m in reg_res.get_json()["models"]]
+        assert "From LS" in names
+
+        # Trainable-model file has the labelset baked in
+        tm_res = client.get("/api/trainable-models/From%20LS")
+        tm_data = tm_res.get_json()
+        assert len(tm_data["labelset"]["labels"]) == 2
+        assert tm_data["text_query"] == ""
+        assert tm_data["media_example"] == ""
+        assert tm_data["examples"] == []
+
+    def test_missing_name_returns_400(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"media_type": "audio", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "name" in res.get_json()["error"]
+
+    def test_missing_media_type_returns_400(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "No Type", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
+    def test_rejects_any_media_type(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "Any Type", "media_type": "any", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
+
+    def test_unknown_importer_returns_404(self, client):
+        res = client.post(
+            "/api/models/registry/from-labelset/no_such_importer",
+            json={"name": "X", "media_type": "audio"},
+        )
+        assert res.status_code == 404
+        assert "no_such_importer" in res.get_json()["error"]
+
+    def test_duplicate_name_returns_409(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        # Create via the existing trainable-models endpoint to get a conflict
+        client.post(
+            "/api/trainable-models",
+            json={"name": "Dup", "media_type": "audio", "text_query": "dup"},
+        )
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "Dup", "media_type": "audio", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 409
+
+    def test_skips_invalid_label_values(self, client, tmp_path):
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps({
+            "labels": [
+                {"md5": md5, "label": "good"},
+                {"md5": md5, "label": "maybe"},  # invalid
+            ]
+        })
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={
+                "name": "SkipInvalid",
+                "media_type": "audio",
+                "filepath": str(labels_path),
+            },
+        )
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["applied"] == 1
+        assert data["skipped"] == 1
+        assert data["num_labels"] == 1
+
+    def test_loading_after_creation_restores_labels(self, client, tmp_path):
+        """Loading the newly-created model resolves labels into the active dataset."""
+        import app as app_module
+        from vtsearch.utils import bad_votes, good_votes
+
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        payload = json.dumps({
+            "labels": [
+                {"md5": md5_good, "label": "good"},
+                {"md5": md5_bad, "label": "bad"},
+            ]
+        })
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={
+                "name": "Loadable",
+                "media_type": "audio",
+                "filepath": str(labels_path),
+            },
+        )
+        model_id = res.get_json()["model"]["id"]
+        _load_model_and_wait(client, model_id)
+
+        # Labels resolved into the loaded detector's votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
+
+    def test_empty_labelset_still_creates_model(self, client, tmp_path):
+        """A labelset with no entries still produces a valid (empty) model."""
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={
+                "name": "Empty",
+                "media_type": "audio",
+                "filepath": str(labels_path),
+            },
+        )
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["applied"] == 0
+        assert data["skipped"] == 0
+        assert data["num_labels"] == 0
+        assert data["model"]["num_training"] == 0
+
