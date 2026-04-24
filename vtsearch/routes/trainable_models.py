@@ -543,9 +543,13 @@ def register_model_from_labelset(importer_name: str):
     or JSON.  Top-level fields read from the request:
 
       * ``name`` — trainable model name (required).
-      * ``media_type`` — specific media type, not ``"any"`` (required).
 
-    All remaining fields are treated as importer field values.
+    All remaining fields are treated as importer field values.  The media
+    type is inferred from the labels' origins: every origin that carries a
+    detectable type (folder origins with ``params.media_type``, demo
+    origins via ``DEMO_DATASETS``) must agree on the same type.  Returns
+    ``400`` if no origins carry a type (e.g. legacy md5-only labelsets) or
+    if the origins disagree.
 
     Returns ``201`` with::
 
@@ -557,6 +561,7 @@ def register_model_from_labelset(importer_name: str):
             "num_labels": <int>,
         }
     """
+    from vtsearch.datasets.ingest import _media_type_from_origin
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer, list_label_importers
     from vtsearch.models.registry import register_model, update_model
@@ -577,12 +582,9 @@ def register_model_from_labelset(importer_name: str):
 
     has_file_fields = any(f.field_type == "file" for f in importer.fields)
     name = get_request_field("name", has_file_fields).strip()
-    media_type = get_request_field("media_type", has_file_fields).strip()
 
     if not name:
         return jsonify({"error": "name is required"}), 400
-    if not media_type or media_type == "any":
-        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
     tm_path = _model_path(name)
     if tm_path.exists():
@@ -603,6 +605,7 @@ def register_model_from_labelset(importer_name: str):
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     elements: list[LabeledElement] = []
+    detected_types: set[str] = set()
     applied = 0
     skipped = 0
     for entry in label_entries:
@@ -610,9 +613,32 @@ def register_model_from_labelset(importer_name: str):
         if label not in ("good", "bad"):
             skipped += 1
             continue
+        origin = entry.get("origin")
+        if isinstance(origin, dict):
+            mt = _media_type_from_origin(origin)
+            if mt:
+                detected_types.add(mt)
         elements.append(LabeledElement.from_dict(entry))
         applied += 1
 
+    if not detected_types:
+        return jsonify({
+            "error": (
+                "Could not infer media type from the imported labels — none of "
+                "the entries carry origin information with a detectable type. "
+                "Re-export the labels with origin metadata, or use a different "
+                "importer."
+            ),
+        }), 400
+    if len(detected_types) > 1:
+        return jsonify({
+            "error": (
+                f"Imported labels span multiple media types: {sorted(detected_types)}. "
+                "A model must be for a single media type."
+            ),
+        }), 400
+
+    media_type = next(iter(detected_types))
     labelset = LabelSet(elements)
 
     model_data = {

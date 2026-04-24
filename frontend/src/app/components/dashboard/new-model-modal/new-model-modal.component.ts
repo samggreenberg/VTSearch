@@ -411,7 +411,6 @@ export class NewModelModalComponent implements OnInit {
 
     const params: Record<string, unknown> = {
       name: trimmedName,
-      media_type: this.mediaType,
       ...this.labelImporterValues,
     };
 
