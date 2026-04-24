@@ -333,20 +333,20 @@ def load_dataset_from_folder(
     # pre-computed vector.  Subclasses that override ``_embed_media_bulk_impl``
     # can batch internally; the default impl loops per item and emits
     # per-item progress so the UI stays responsive.
-    bulk_embeddings: dict[Path, Any] = {}
-    if emb is not None and not skip_embedding:
-        bulk_embeddings = _bulk_embed_files(
-            emb,
-            media_files,
-            folder_path,
-            content_vectors,
-            custom_metadata_map,
-            on_progress,
-            media_type,
-            origin=origin,
-        )
-
     try:
+        bulk_embeddings: dict[Path, Any] = {}
+        if emb is not None and not skip_embedding:
+            bulk_embeddings = _bulk_embed_files(
+                emb,
+                media_files,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
+                origin=origin,
+            )
+
         for i, file_path in enumerate(media_files):
             # Preserve relative path from the import root so that files in
             # different subdirectories with the same basename stay distinct.

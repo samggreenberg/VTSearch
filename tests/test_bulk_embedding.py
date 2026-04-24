@@ -211,7 +211,7 @@ class TestLoaderRoutesToBulk:
 
         events: list[tuple] = []
 
-        def loader_progress(status, msg, cur, tot):
+        def loader_progress(status, msg="", cur=0, tot=0):
             events.append((status, msg, cur, tot))
 
         medias: dict = {}
