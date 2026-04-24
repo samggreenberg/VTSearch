@@ -209,7 +209,7 @@ npm start
 
 ## Running the app
 
-Start the server:
+For local development, start the Flask dev server:
 
 ```bash
 python app.py
@@ -218,14 +218,20 @@ python app.py
 You should see output like:
 
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://0.0.0.0:5000
 ```
 
-Open that URL in your browser. Use `--local` mode to bind to `0.0.0.0:5000` (accessible from other devices on the network) instead of localhost only:
+Open `http://localhost:5000` in your browser. The server binds to `0.0.0.0:5000`, so it is also reachable from other devices on the network.
+
+`python app.py` uses Flask's built-in dev server — fine for development but **not recommended for production**. For production, run under gunicorn using the bundled config:
 
 ```bash
-python app.py --local
+VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
+
+`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads — VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
+
+The Docker images already use this configuration (see [Docker](#docker) below).
 
 ## Docker
 
@@ -347,8 +353,12 @@ VTSearch reads several optional environment variables:
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn — triggers model init / settings sync at import time |
+| `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
+| `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
+| `VTSEARCH_TIMEOUT` | `120` | Gunicorn worker timeout in seconds |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration, including the full env-var reference and gunicorn tuning.
 
 ## Next steps
 

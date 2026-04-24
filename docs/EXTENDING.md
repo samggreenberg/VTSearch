@@ -70,13 +70,21 @@ class MyProvider(LoginProvider):
 `DefaultLoginProvider` (the default) returns `"default"` for every request,
 is always authenticated, and uses the shared `data/` directory.
 
-### Current limitations
+### Current scope
 
-In-memory state (votes, medias, labels, settings) is globally shared.
-The auth infrastructure supports ownership tracking (`created_by`) and
-per-user data directories, but full runtime state isolation is not yet
-implemented. Custom providers should be aware that votes and loaded
-datasets are shared across all users.
+Per-dataset runtime state (`medias`, diversity tree, display name) is
+isolated in `DatasetContext` objects, and per-detector state (votes,
+label history, click times, learned scores, inclusion, labelset source)
+is isolated in `DetectorContext` objects. The frontend sends
+`X-Dataset-Id` / `X-Model-Id` headers, and a `before_request`
+middleware resolves the active contexts per request — so multiple users
+can work with different datasets/models simultaneously.
+
+The auth infrastructure supports ownership tracking (`created_by` on
+detectors, datasets, and trainable models) and per-user data
+directories via `get_user_data_dir(username, base)`. **Settings remain
+globally shared** across all users — there is no per-user settings
+isolation yet.
 
 ---
 
