@@ -148,3 +148,12 @@
     }
   }
 </vt-modal>
+
+@if (pendingFile) {
+  <vt-media-crop-modal
+    [file]="pendingFile"
+    [mediaType]="pendingFileMediaType"
+    (confirmed)="onCropConfirmed($event)"
+    (cancelled)="onCropCancelled()">
+  </vt-media-crop-modal>
+}
