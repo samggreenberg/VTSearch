@@ -5,7 +5,7 @@ import wave
 
 import pytest
 
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.media.clipper import MediaClipper
 
 
@@ -1173,7 +1173,7 @@ class TestApplyClipperWithParams:
     """Test _apply_clipper with custom clipper_params."""
 
     def test_apply_clipper_with_custom_duration(self):
-        from vtsearch.audio import generate_wav
+        from vtsearch.utils.audio_generator import generate_wav
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         # Generate a 10s audio clip
@@ -1191,7 +1191,7 @@ class TestApplyClipperWithParams:
         assert len(clips) == 5
 
     def test_apply_clipper_with_overridden_duration(self):
-        from vtsearch.audio import generate_wav
+        from vtsearch.utils.audio_generator import generate_wav
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         wav = generate_wav(440, 10.0)
@@ -1208,7 +1208,7 @@ class TestApplyClipperWithParams:
         assert len(clips) == 2
 
     def test_apply_clipper_params_none_uses_defaults(self):
-        from vtsearch.audio import generate_wav
+        from vtsearch.utils.audio_generator import generate_wav
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         wav = generate_wav(440, 10.0)
@@ -1224,7 +1224,7 @@ class TestApplyClipperWithParams:
         assert len(clips) == 5  # default 2s → 5 tiles
 
     def test_apply_clipper_with_min_overlap(self):
-        from vtsearch.audio import generate_wav
+        from vtsearch.utils.audio_generator import generate_wav
         from vtsearch.routes.datasets_loading import _apply_clipper
 
         wav = generate_wav(440, 10.0)

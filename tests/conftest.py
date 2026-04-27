@@ -196,9 +196,9 @@ _state_core.set_thread_detector_context(_startup_det)
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.audio.generator import GENERATOR_SAMPLE_RATE
+from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
 from vtsearch.medias import NUM_MEDIAS
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
 from vtsearch.utils import (

@@ -628,7 +628,7 @@ class TestHttpArchiveExtractDirIsolation:
         """Each run() call should create a uniquely-named extract directory."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         dirs_used = []
@@ -638,18 +638,18 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.validate_url",
+                "vtsearch.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
                 side_effect=capture_load,
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+                "vtsearch.datasets.importers.http_archive.DATA_DIR", tmp_path,
             ),
         ):
             imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
@@ -663,23 +663,23 @@ class TestHttpArchiveExtractDirIsolation:
         """The old fixed name 'http_archive_extract' must no longer appear."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.validate_url",
+                "vtsearch.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+                "vtsearch.datasets.importers.http_archive.DATA_DIR", tmp_path,
             ),
         ):
             imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
@@ -691,23 +691,23 @@ class TestHttpArchiveExtractDirIsolation:
         """The unique extract directory should be removed after run() completes."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.validate_url",
+                "vtsearch.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+                "vtsearch.datasets.importers.http_archive.DATA_DIR", tmp_path,
             ),
         ):
             imp.run({"url": "http://example.com/a.zip", "media_type": "audio"}, {})
@@ -720,24 +720,24 @@ class TestHttpArchiveExtractDirIsolation:
         """The extract directory should still be cleaned up if loading fails."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.validate_url",
+                "vtsearch.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.load_dataset_from_folder",
+                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
                 side_effect=RuntimeError("boom"),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+                "vtsearch.datasets.importers.http_archive.DATA_DIR", tmp_path,
             ),
         ):
             with pytest.raises(RuntimeError, match="boom"):
@@ -750,27 +750,27 @@ class TestHttpArchiveExtractDirIsolation:
         """run_chunked() should clean up its extract directory after iteration."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.validate_url",
+                "vtsearch.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.download_file_with_progress",
+                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip._extract_archive",
+                "vtsearch.datasets.importers.http_archive._extract_archive",
             ),
             mock.patch(
                 "vtsearch.datasets.loader.load_dataset_from_folder_chunked",
                 return_value=iter([{1: {"test": True}}]),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_zip.DATA_DIR", tmp_path,
+                "vtsearch.datasets.importers.http_archive.DATA_DIR", tmp_path,
             ),
         ):
             chunks = list(imp.run_chunked({"url": "http://example.com/a.zip", "media_type": "audio"}, 10))

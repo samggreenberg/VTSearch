@@ -650,7 +650,7 @@ class TestImporterConverterMetadata:
             assert "video2image" in names
 
     def test_http_archive_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         importer = HttpArchiveDatasetImporter()
         d = importer.to_dict()

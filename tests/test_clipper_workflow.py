@@ -18,7 +18,7 @@ import wave
 import numpy as np
 import pytest
 
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.utils import medias, good_votes, bad_votes, snapshot_medias
 
 

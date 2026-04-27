@@ -155,7 +155,7 @@ class TestHttpArchiveImporterSSRF:
     """Verify that the HTTP archive importer validates URLs before downloading."""
 
     def test_run_rejects_private_url(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
@@ -166,14 +166,14 @@ class TestHttpArchiveImporterSSRF:
                 imp.run({"url": "http://localhost:8080/secret.zip", "media_type": "audio"}, {})
 
     def test_run_rejects_non_http_scheme(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with pytest.raises(ValueError, match="http or https"):
             imp.run({"url": "file:///etc/passwd", "media_type": "audio"}, {})
 
     def test_download_and_extract_rejects_private_url(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(

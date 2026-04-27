@@ -5,7 +5,7 @@ import os
 
 import numpy as np
 
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.config import DATA_DIR
 from vtsearch.media.audio.media_type import generate_waveform_thumbnail
 
